@@ -1,6 +1,6 @@
-# Unare IA — Prototipo Frontend
+# FEROMAP — Prototipo Frontend
 
-Prototipo de demostración para el **Sistema Basado en Inteligencia Artificial para la Optimización Dinámica de Rutas de Recolección de Desechos** en la parroquia Unare, Ciudad Guayana (trabajo de grado UNEXPO 2025–2026).
+Prototipo de demostración para el **Sistema Basado en Inteligencia Artificial para la Optimización Dinámica de Rutas de Recolección de Desechos** en la parroquia Unare, Ciudad Guayana (trabajo de grado UNEG 2025–2026).
 
 ## Stack
 
@@ -64,4 +64,4 @@ src/
 
 ## Autores
 
-Victor Astudillo · Mariana Mora — Ingeniería en Informática, UNEXPO Puerto Ordaz
+Victor Astudillo · Mariana Mora — Ingeniería en Informática, UNEG Puerto Ordaz
