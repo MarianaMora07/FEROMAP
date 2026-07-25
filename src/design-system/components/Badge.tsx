@@ -57,13 +57,21 @@ export function Badge(props: BadgeProps) {
 export function StatusBadge(props: { status: string; class?: string }) {
   const statusMap: Record<string, { variant: BadgeVariant; label: string }> = {
     activo: { variant: 'success', label: 'Activo' },
-    'en-ruta': { variant: 'info', label: 'En ruta' },
+    'en-ruta': { variant: 'success', label: 'En ruta' },
     mantenimiento: { variant: 'warning', label: 'Mantenimiento' },
-    lleno: { variant: 'danger', label: 'Lleno' },
+    'fuera-de-servicio': { variant: 'danger', label: 'Fuera de servicio' },
+    lleno: { variant: 'warning', label: 'Lleno' },
     critico: { variant: 'danger', label: 'Crítico' },
+    normal: { variant: 'success', label: 'Normal' },
+    parcial: { variant: 'default', label: 'Parcial' },
     inactivo: { variant: 'default', label: 'Inactivo' },
     disponible: { variant: 'success', label: 'Disponible' },
     ocupado: { variant: 'warning', label: 'Ocupado' },
+    detenido: { variant: 'danger', label: 'Detenido' },
+    nueva: { variant: 'danger', label: 'Nueva' },
+    'en-progreso': { variant: 'warning', label: 'En progreso' },
+    informativa: { variant: 'info', label: 'Informativa' },
+    resuelta: { variant: 'success', label: 'Resuelta' },
   };
 
   const config = () => statusMap[props.status] ?? { variant: 'default' as BadgeVariant, label: props.status };

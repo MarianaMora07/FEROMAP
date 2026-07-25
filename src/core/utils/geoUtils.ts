@@ -5,14 +5,14 @@ import type { ContainerPriority } from '../../data/types/geo';
 export function fillLevelColor(level: number): string {
   if (level >= 80) return '#ef4444';
   if (level >= 60) return '#f59e0b';
-  if (level >= 40) return '#eab308';
-  return '#22c55e';
+  if (level >= 40) return '#94a3b8';
+  return '#34D634';
 }
 
 export function fillLevelLabel(level: number): string {
   if (level >= 80) return 'Crítico';
-  if (level >= 60) return 'Alto';
-  if (level >= 40) return 'Medio';
+  if (level >= 60) return 'Lleno';
+  if (level >= 40) return 'Parcial';
   return 'Normal';
 }
 

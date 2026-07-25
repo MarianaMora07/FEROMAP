@@ -1,6 +1,6 @@
 import { type JSX, Show, splitProps } from 'solid-js';
 
-type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'outline';
+type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'outline' | 'gradient';
 type ButtonSize = 'sm' | 'md' | 'lg';
 
 interface ButtonProps extends JSX.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -16,6 +16,8 @@ const variantClasses: Record<ButtonVariant, string> = {
   danger: 'bg-red-500 text-white hover:bg-red-600 active:bg-red-700 shadow-sm',
   ghost: 'bg-transparent text-text-secondary hover:bg-surface-hover active:bg-surface-active',
   outline: 'bg-transparent text-text-primary border border-border hover:bg-surface-hover active:bg-surface-active',
+  gradient:
+    'bg-linear-to-r from-fero-green-dark via-fero-green-mid to-fero-green text-white hover:brightness-105 active:brightness-95 shadow-sm',
 };
 
 const sizeClasses: Record<ButtonSize, string> = {

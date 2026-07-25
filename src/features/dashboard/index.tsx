@@ -1,47 +1,389 @@
-import { LayoutDashboard, TrendingUp, Truck, AlertTriangle } from 'lucide-solid';
-import { PageHeader } from '../../design-system/layout/AppShell';
-import { Card } from '../../design-system/components';
-import { KpiCard } from '../../design-system/components';
+import { For, onMount, type JSX } from 'solid-js';
+import { A } from '@solidjs/router';
+import {
+  Chart,
+  ArcElement,
+  BarElement,
+  CategoryScale,
+  LinearScale,
+  Tooltip,
+  Legend,
+} from 'chart.js';
+import { Bar, Doughnut } from 'solid-chartjs';
+import {
+  Trash2,
+  Truck,
+  AlertTriangle,
+  Layers,
+  Maximize2,
+  Plus,
+  Minus,
+  Crosshair,
+  TrafficCone,
+  CirclePause,
+  ArrowRight,
+} from 'lucide-solid';
+import {
+  Badge,
+  Card,
+  CardHeader,
+  KpiCard,
+  ProgressBar,
+} from '../../design-system/components';
+import {
+  activeRoutes,
+  dashboardKpis,
+  fleetStatus,
+  recentAlerts,
+  sectorFillLevels,
+  weeklyTons,
+} from '../../data/mock/dashboard';
+import { UNARE_CENTER } from '../../data/types/geo';
 
-export default function DashboardPage() {
+const alertIcon: Record<(typeof recentAlerts)[number]['tone'], () => JSX.Element> = {
+  danger: () => <AlertTriangle size={16} />,
+  warning: () => <TrafficCone size={16} />,
+  info: () => <CirclePause size={16} />,
+};
+
+const alertToneClass = {
+  danger: 'bg-red-50 text-red-600',
+  warning: 'bg-amber-50 text-amber-600',
+  info: 'bg-fero-blue/10 text-fero-blue',
+};
+
+type LegendItem =
+  | { label: string; kind: 'truck' }
+  | { label: string; kind: 'line'; class: string }
+  | { label: string; kind: 'bin'; class: string };
+
+const legendItems: LegendItem[] = [
+  { label: 'Vehículos activos', kind: 'truck' },
+  { label: 'Ruta en ejecución', kind: 'line', class: 'bg-fero-green-dark' },
+  { label: 'Completada', kind: 'line', class: 'bg-fero-blue' },
+  { label: 'Programada', kind: 'line', class: 'h-0! border-t-2 border-dashed border-slate-400 rounded-none bg-transparent' },
+  { label: 'Normal', kind: 'bin', class: 'text-fero-green-dark' },
+  { label: 'Lleno', kind: 'bin', class: 'text-amber-500' },
+  { label: 'Crítico', kind: 'bin', class: 'text-red-500' },
+];
+
+function LegendSwatch(props: { item: LegendItem }) {
+  switch (props.item.kind) {
+    case 'truck':
+      return (
+        <span class="flex h-4 w-5 shrink-0 items-center justify-center text-fero-green-dark">
+          <Truck size={14} />
+        </span>
+      );
+    case 'line':
+      return <span class={`h-1 w-5 shrink-0 rounded-full ${props.item.class}`} />;
+    case 'bin':
+      return (
+        <span class={`flex h-4 w-5 shrink-0 items-center justify-center ${props.item.class}`}>
+          <Trash2 size={14} />
+        </span>
+      );
+  }
+}
+
+function ViewAllLink(props: { href: string; children: string }) {
   return (
-    <div class="space-y-6">
-      <PageHeader
-        title="Dashboard"
-        subtitle="Resumen de KPIs, estado de la flota y puntos críticos"
-      />
+    <A
+      href={props.href}
+      class="mt-3 inline-flex items-center gap-1 text-sm font-medium text-fero-blue hover:underline"
+    >
+      {props.children}
+      <ArrowRight size={14} />
+    </A>
+  );
+}
 
-      <div class="grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard title="Vehículos activos" value="3" unit="/ 5" icon={<Truck size={20} />} />
-        <KpiCard title="Rutas hoy" value="12" icon={<LayoutDashboard size={20} />} />
-        <KpiCard title="Eficiencia" value="87" unit="%" trend={{ value: 4, direction: 'up' }} icon={<TrendingUp size={20} />} />
-        <KpiCard title="Alertas críticas" value="2" icon={<AlertTriangle size={20} />} />
+function OperationsMap() {
+  const [lng, lat] = UNARE_CENTER;
+  const delta = 0.035;
+  const bbox = `${lng - delta}%2C${lat - delta}%2C${lng + delta}%2C${lat + delta}`;
+
+  return (
+    <Card padding={false} class="overflow-hidden">
+      <div class="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+        <h3 class="font-heading font-semibold text-text-primary dark:text-white">
+          Mapa de operaciones en tiempo real
+        </h3>
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            class="hidden items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-text-secondary sm:inline-flex"
+          >
+            <Layers size={14} />
+            Todas las capas
+          </button>
+          <button
+            type="button"
+            class="flex h-8 w-8 items-center justify-center rounded-md border border-border text-text-secondary"
+            aria-label="Pantalla completa"
+          >
+            <Maximize2 size={14} />
+          </button>
+        </div>
       </div>
 
-      <div class="grid gap-4" style={{ 'grid-template-columns': '70% 30%' }}>
-        <Card class="min-h-[400px] flex items-center justify-center">
-          <div class="text-center text-text-muted">
-            <div class="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-fero-blue/10">
-              <LayoutDashboard size={24} class="text-fero-blue" />
-            </div>
-            <p class="font-heading font-semibold text-text-primary dark:text-white">Mapa del Dashboard</p>
-            <p class="text-sm mt-1">Vista general del mapa con rutas activas</p>
-          </div>
-        </Card>
-        <div class="space-y-4">
-          <Card class="min-h-[190px] flex items-center justify-center">
-            <div class="text-center text-text-muted">
-              <p class="font-heading font-semibold text-sm text-text-primary dark:text-white">Estado de Vehículos</p>
-              <p class="text-xs mt-1">Disponible · En ruta · Mantenimiento</p>
-            </div>
-          </Card>
-          <Card class="min-h-[190px] flex items-center justify-center">
-            <div class="text-center text-text-muted">
-              <p class="font-heading font-semibold text-sm text-text-primary dark:text-white">Puntos Críticos</p>
-              <p class="text-xs mt-1">Contenedores con nivel ≥ 80%</p>
-            </div>
-          </Card>
+      <div class="relative h-[340px] bg-slate-100 dark:bg-slate-900 lg:h-[380px]">
+        <iframe
+          title="Mapa de operaciones Unare"
+          class="h-full w-full border-0"
+          loading="lazy"
+          referrerpolicy="no-referrer-when-downgrade"
+          src={`https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat}%2C${lng}`}
+        />
+
+        <div class="absolute bottom-3 left-3 max-w-55 rounded-md border border-border bg-surface/95 p-3 text-xs shadow-md backdrop-blur-sm dark:bg-dark-surface/95">
+          <p class="mb-2 font-semibold text-text-primary dark:text-white">Leyenda</p>
+          <ul class="space-y-1.5 text-text-secondary">
+            <For each={legendItems}>
+              {(item) => (
+                <li class="flex items-center gap-2">
+                  <LegendSwatch item={item} />
+                  {item.label}
+                </li>
+              )}
+            </For>
+          </ul>
         </div>
+
+        <div class="absolute right-3 top-3 flex flex-col overflow-hidden rounded-md border border-border bg-surface shadow-sm dark:bg-dark-surface">
+          <button type="button" class="flex h-8 w-8 items-center justify-center text-text-secondary hover:bg-surface-hover" aria-label="Acercar">
+            <Plus size={14} />
+          </button>
+          <button type="button" class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover" aria-label="Alejar">
+            <Minus size={14} />
+          </button>
+          <button type="button" class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover" aria-label="Centrar">
+            <Crosshair size={14} />
+          </button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function FleetDonut() {
+  const data = {
+    labels: fleetStatus.items.map((i) => i.label),
+    datasets: [
+      {
+        data: fleetStatus.items.map((i) => i.count),
+        backgroundColor: fleetStatus.items.map((i) => i.color),
+        borderWidth: 0,
+        cutout: '72%',
+      },
+    ],
+  };
+
+  return (
+    <Card>
+      <CardHeader title="Estado de la flota" />
+      <div class="flex flex-col items-center gap-4 sm:flex-row sm:items-center">
+        <div class="relative h-36 w-36 shrink-0">
+          <Doughnut
+            data={data}
+            options={{
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { display: false }, tooltip: { enabled: true } },
+            }}
+          />
+          <div class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+            <span class="font-heading text-2xl font-bold text-text-primary dark:text-white">
+              {fleetStatus.total}
+            </span>
+            <span class="text-xs text-text-muted">Total</span>
+          </div>
+        </div>
+        <ul class="w-full space-y-2">
+          <For each={fleetStatus.items}>
+            {(item) => (
+              <li class="flex items-center justify-between gap-2 text-sm">
+                <span class="flex items-center gap-2 text-text-secondary">
+                  <span class="h-2.5 w-2.5 rounded-full" style={{ 'background-color': item.color }} />
+                  {item.label}
+                </span>
+                <span class="font-medium text-text-primary dark:text-white">
+                  {item.count} <span class="text-xs text-text-muted">({item.pct}%)</span>
+                </span>
+              </li>
+            )}
+          </For>
+        </ul>
+      </div>
+    </Card>
+  );
+}
+
+function FillLevels() {
+  return (
+    <Card>
+      <CardHeader title="Nivel de llenado (promedio)" />
+      <ul class="space-y-3">
+        <For each={sectorFillLevels}>
+          {(sector) => (
+            <li>
+              <div class="mb-1 flex items-center justify-between text-sm">
+                <span class="text-text-secondary">{sector.name}</span>
+                <span class="font-semibold text-text-primary dark:text-white">{sector.pct}%</span>
+              </div>
+              <ProgressBar value={sector.pct} size="sm" />
+            </li>
+          )}
+        </For>
+      </ul>
+      <ViewAllLink href="/collection-points">Ver todos los sectores</ViewAllLink>
+    </Card>
+  );
+}
+
+function WeeklyChart() {
+  const data = {
+    labels: weeklyTons.labels,
+    datasets: [
+      {
+        label: 'Toneladas',
+        data: weeklyTons.values,
+        backgroundColor: '#56E93D',
+        borderRadius: 6,
+        maxBarThickness: 28,
+      },
+    ],
+  };
+
+  return (
+    <Card class="min-h-[280px]">
+      <CardHeader title="Toneladas recolectadas (últimos 7 días)" />
+      <div class="h-48">
+        <Bar
+          data={data}
+          options={{
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { grid: { display: false } },
+              y: { beginAtZero: true, grid: { color: 'rgba(148,163,184,0.25)' } },
+            },
+          }}
+        />
+      </div>
+    </Card>
+  );
+}
+
+export default function DashboardPage() {
+  onMount(() => {
+    Chart.register(ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
+  });
+
+  const { wasteTons, routes, vehicles, alerts } = dashboardKpis;
+
+  return (
+    <div class="space-y-4 md:space-y-5">
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard
+          title="Residuos recolectados hoy"
+          value={wasteTons.value}
+          unit={wasteTons.unit}
+          icon={<Trash2 size={28} />}
+          iconTone="green"
+          trend={{ value: wasteTons.trend, direction: 'up' }}
+          trendLabel="vs ayer"
+        />
+        <KpiCard
+          title="Rutas completadas"
+          value={`${routes.done} de ${routes.total}`}
+          icon={<Truck size={28} />}
+          iconTone="green"
+          footer={<ProgressBar value={routes.done} max={routes.total} color="green" size="sm" />}
+        />
+        <KpiCard
+          title="Vehículos activos"
+          value={`${vehicles.active} de ${vehicles.total}`}
+          icon={<Truck size={28} />}
+          iconTone="blue"
+          footer={<ProgressBar value={vehicles.active} max={vehicles.total} color="blue" size="sm" />}
+        />
+        <KpiCard
+          title="Alertas activas"
+          value={`${alerts.count} alertas`}
+          icon={<AlertTriangle size={28} />}
+          iconTone="purple"
+          footer={
+            <A href="/alerts" class="text-sm font-medium text-fero-blue underline-offset-2 hover:underline">
+              Requieren atención
+            </A>
+          }
+        />
+      </div>
+
+      <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <div class="xl:col-span-2">
+          <OperationsMap />
+        </div>
+        <div class="space-y-4">
+          <FleetDonut />
+          <FillLevels />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
+        <WeeklyChart />
+
+        <Card class="w-full">
+          <CardHeader title="Rutas en ejecución" />
+          <ul class="space-y-4">
+            <For each={activeRoutes}>
+              {(route) => (
+                <li class="space-y-2">
+                  <div class="flex items-start justify-between gap-2">
+                    <div>
+                      <Badge variant={route.tone}>{route.id}</Badge>
+                      <p class="mt-1.5 text-sm text-text-secondary">
+                        {route.driver} · {route.vehicle}
+                      </p>
+                    </div>
+                    <span class="text-sm font-semibold text-text-primary dark:text-white">
+                      {route.progress}%
+                    </span>
+                  </div>
+                  <ProgressBar value={route.progress} color="green" size="sm" />
+                </li>
+              )}
+            </For>
+          </ul>
+          <ViewAllLink href="/optimization">Ver todas las rutas</ViewAllLink>
+        </Card>
+
+        <Card class="w-full">
+          <CardHeader title="Alertas recientes" />
+          <ul class="space-y-3">
+            <For each={recentAlerts}>
+              {(alert) => (
+                <li class="flex gap-3">
+                  <span
+                    class={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${alertToneClass[alert.tone]}`}
+                  >
+                    {alertIcon[alert.tone]()}
+                  </span>
+                  <div class="min-w-0 flex-1">
+                    <div class="flex items-start justify-between gap-2">
+                      <p class="text-sm font-semibold text-text-primary dark:text-white">{alert.title}</p>
+                      <span class="shrink-0 text-[11px] text-text-muted">{alert.time}</span>
+                    </div>
+                    <p class="text-xs text-text-muted">{alert.detail}</p>
+                  </div>
+                </li>
+              )}
+            </For>
+          </ul>
+          <ViewAllLink href="/alerts">Ver todas las alertas</ViewAllLink>
+        </Card>
       </div>
     </div>
   );
