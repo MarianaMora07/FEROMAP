@@ -1,0 +1,18 @@
+# API
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.10.0
+pydantic-settings>=2.6.0
+
+# Base de datos
+sqlalchemy>=2.0.36
+geoalchemy2>=0.15.0
+psycopg[binary]>=3.2.0
+alembic>=1.14.0
+
+# Optimización / GIS (motor de tesis)
+numpy>=2.0.0
+networkx>=3.4.0
+osmnx>=2.0.0
+shapely>=2.0.0
+scikit-learn>=1.5.0

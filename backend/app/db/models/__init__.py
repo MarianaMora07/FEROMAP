@@ -1,0 +1,28 @@
+from app.db.models.collection_point import CollectionPoint
+from app.db.models.driver import Driver
+from app.db.models.optimized_route import OptimizedRoute
+from app.db.models.parish import Parish
+from app.db.models.road_node import RoadNode
+from app.db.models.road_segment import RoadSegment
+from app.db.models.route_waypoint import RouteWaypoint
+from app.db.models.sector import Sector
+from app.db.models.simulation import Simulation
+from app.db.models.user import User, UserRole
+from app.db.models.vehicle import Vehicle
+from app.db.models.vehicle_incident import VehicleIncident
+
+__all__ = [
+    "Parish",
+    "Sector",
+    "RoadNode",
+    "RoadSegment",
+    "CollectionPoint",
+    "Vehicle",
+    "Driver",
+    "OptimizedRoute",
+    "RouteWaypoint",
+    "Simulation",
+    "User",
+    "UserRole",
+    "VehicleIncident",
+]
