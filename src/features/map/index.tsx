@@ -1,5 +1,5 @@
-import { For, Show, createSignal, createEffect, onCleanup, onMount, type JSX } from 'solid-js';
-import { A } from '@solidjs/router';
+import { For, Show, createEffect, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { A, useSearchParams } from '@solidjs/router';
 import maplibregl, { type Map as MapLibreMap, type Marker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import {
@@ -76,6 +76,14 @@ export default function MapPage() {
   let mapContainer!: HTMLDivElement;
   const mapRef: { current?: MapLibreMap } = {};
   const markers: Marker[] = [];
+  const [searchParams] = useSearchParams();
+
+  const focusVehicleId = () => {
+    const value = searchParams.vehicle;
+    if (typeof value === 'string' && value.trim()) return value.trim().toUpperCase();
+    if (Array.isArray(value) && value[0]) return value[0].trim().toUpperCase();
+    return undefined;
+  };
 
   const [layersOpen, setLayersOpen] = createSignal(true);
   const [legendOpen, setLegendOpen] = createSignal(true);
@@ -218,12 +226,18 @@ export default function MapPage() {
     }
 
     if (state.vehicles) {
+      const focusedId = focusVehicleId();
       for (const feature of mapVehicles.features) {
         const statusKey = `veh-${feature.properties.status}`;
         if (!state[statusKey]) continue;
         const color = feature.properties.color;
+        const isFocused = focusedId === feature.properties.id;
         const el = createPinEl(color, truckSvg('#fff'));
         el.title = feature.properties.id;
+        if (isFocused) {
+          el.style.transform = 'scale(1.2)';
+          el.style.zIndex = '10';
+        }
         const marker = new maplibregl.Marker({ element: el })
           .setLngLat(feature.geometry.coordinates)
           .setPopup(
@@ -232,6 +246,14 @@ export default function MapPage() {
             ),
           )
           .addTo(map);
+        if (isFocused) {
+          map.flyTo({
+            center: feature.geometry.coordinates,
+            zoom: Math.max(map.getZoom(), 14),
+            essential: true,
+          });
+          marker.togglePopup();
+        }
         markers.push(marker);
       }
     }
@@ -326,6 +348,11 @@ export default function MapPage() {
     const ro = new ResizeObserver(() => resizeMap());
     ro.observe(mapContainer);
     onCleanup(() => ro.disconnect());
+  });
+
+  createEffect(() => {
+    focusVehicleId();
+    if (getMap()?.isStyleLoaded()) syncOverlayLayers();
   });
 
   createEffect(() => {

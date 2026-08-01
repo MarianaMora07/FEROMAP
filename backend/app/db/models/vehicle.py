@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, Integer, Numeric, String, func
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -16,6 +16,7 @@ class Vehicle(Base):
     max_capacity_kg: Mapped[Decimal] = mapped_column(Numeric(8, 2), nullable=False)
     fuel_consumption_rate: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
     ideal_operators_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    default_driver_id: Mapped[int | None] = mapped_column(ForeignKey("drivers.id"), nullable=True)
     status: Mapped[str] = mapped_column(String(50), nullable=False, server_default="available")
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(
@@ -25,3 +26,4 @@ class Vehicle(Base):
 
     routes: Mapped[list["OptimizedRoute"]] = relationship(back_populates="vehicle")
     incidents: Mapped[list["VehicleIncident"]] = relationship(back_populates="vehicle")
+    default_driver: Mapped["Driver | None"] = relationship(foreign_keys=[default_driver_id])

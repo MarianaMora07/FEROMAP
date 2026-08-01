@@ -1,6 +1,7 @@
 import { For, Show, createMemo, createResource, createSignal, type JSX } from 'solid-js';
 import { A } from '@solidjs/router';
 import {
+  ArrowRight,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -10,7 +11,6 @@ import {
   Fuel,
   Gauge,
   MapPin,
-  MoreVertical,
   Pencil,
   Phone,
   Plus,
@@ -29,24 +29,43 @@ import {
   KpiCard,
   ProgressBar,
   StatusBadge,
+  ToastContainer,
+  createToastStore,
 } from '../../design-system/components';
 import {
   vehicleDetailTabs,
   vehicleStatusOptions,
   vehicleTypeOptions,
-  vehiclesKpis,
-  vehiclesList,
   type Vehicle,
   type VehicleDetailTabId,
   type VehicleStatus,
 } from '../../data/mock/vehicles';
-import { fetchVehicles, computeVehiclesKpis } from '../../core/api/vehicles';
+import {
+  computeVehiclesKpisFromSummary,
+  countAssignableVehicles,
+  enrichVehiclesWithOptimization,
+  fetchVehicles,
+  fetchVehiclesOptimizationContext,
+  fetchVehiclesSummary,
+  fetchVehicleIncidents,
+  formatCapacityKg,
+  isAssignableVehicle,
+  updateVehicleStatus,
+} from '../../core/api/vehicles';
+import { ApiError } from '../../core/api/client';
+import { canManageVehicles, canOptimize } from '../../core/auth/permissions';
+import { buildVehicleMapHref } from '../../core/utils/vehiclesOptimization';
+import { buildVehiclesExportFilename, downloadVehiclesCsv } from '../../core/utils/vehiclesUtils';
+import { authUser } from '../../core/stores/authStore';
+import { VehicleActionsMenu } from './VehicleActionsMenu';
+import { VehicleMaintenancePanel } from './VehicleMaintenancePanel';
+import { VehicleOptimizationBadges } from './VehicleOptimizationBadges';
 
-const kpiIcon: Record<(typeof vehiclesKpis)[number]['icon'], () => JSX.Element> = {
+const kpiIcon = {
   truck: () => <Truck size={24} />,
   wrench: () => <Wrench size={24} />,
   flag: () => <Flag size={24} />,
-};
+} as const;
 
 function fuelBarColor(pct: number): 'green' | 'amber' | 'red' {
   if (pct >= 50) return 'green';
@@ -54,10 +73,27 @@ function fuelBarColor(pct: number): 'green' | 'amber' | 'red' {
   return 'red';
 }
 
-function capacityBarColor(pct: number): 'green' | 'amber' | 'red' {
-  if (pct >= 85) return 'red';
-  if (pct >= 65) return 'amber';
-  return 'green';
+function KpiSkeleton() {
+  return (
+    <div class="animate-pulse rounded-lg border border-border bg-surface p-4 dark:border-dark-border dark:bg-dark-surface">
+      <div class="mb-3 h-3 w-28 rounded bg-slate-200 dark:bg-slate-700" />
+      <div class="h-8 w-16 rounded bg-slate-200 dark:bg-slate-700" />
+    </div>
+  );
+}
+
+function TableRowSkeleton() {
+  return (
+    <tr class="animate-pulse">
+      <td class="px-4 py-3"><div class="h-10 w-36 rounded bg-slate-200 dark:bg-slate-700" /></td>
+      <td class="px-4 py-3"><div class="h-3 w-16 rounded bg-slate-200 dark:bg-slate-700" /></td>
+      <td class="px-4 py-3"><div class="h-5 w-20 rounded-full bg-slate-200 dark:bg-slate-700" /></td>
+      <td class="px-4 py-3"><div class="h-3 w-24 rounded bg-slate-200 dark:bg-slate-700" /></td>
+      <td class="px-4 py-3"><div class="h-3 w-20 rounded bg-slate-200 dark:bg-slate-700" /></td>
+      <td class="px-4 py-3"><div class="h-3 w-16 rounded bg-slate-200 dark:bg-slate-700" /></td>
+      <td class="px-4 py-3"><div class="h-8 w-20 rounded bg-slate-200 dark:bg-slate-700" /></td>
+    </tr>
+  );
 }
 
 function VehicleThumb(props: { vehicle: Vehicle; size?: 'sm' | 'lg' }) {
@@ -75,7 +111,10 @@ function VehicleThumb(props: { vehicle: Vehicle; size?: 'sm' | 'lg' }) {
   );
 }
 
-function MetricBar(props: { value: number; color: 'green' | 'amber' | 'red' }) {
+function MetricBar(props: { value: number | null; color: 'green' | 'amber' | 'red' }) {
+  if (props.value === null) {
+    return <span class="text-xs text-text-muted">Sin dato</span>;
+  }
   return (
     <div class="flex min-w-24 max-w-32 flex-col gap-1">
       <span class="text-xs font-semibold text-text-primary dark:text-white">{props.value}%</span>
@@ -88,21 +127,49 @@ export default function VehiclesPage() {
   const [search, setSearch] = createSignal('');
   const [statusFilter, setStatusFilter] = createSignal('');
   const [typeFilter, setTypeFilter] = createSignal('');
+  const [assignableOnly, setAssignableOnly] = createSignal(false);
   const [page, setPage] = createSignal(1);
   const [pageSize, setPageSize] = createSignal(8);
   const [selectedId, setSelectedId] = createSignal<string | null>('TR-08');
   const [detailTab, setDetailTab] = createSignal<VehicleDetailTabId>('info');
-  const [apiVehicles] = createResource(fetchVehicles);
-  const allVehicles = createMemo(() => apiVehicles() ?? []);
-  const vehiclesKpisData = createMemo(() =>
-    allVehicles().length ? computeVehiclesKpis(allVehicles()) : vehiclesKpis,
+  const [statusUpdating, setStatusUpdating] = createSignal(false);
+  const [exporting, setExporting] = createSignal(false);
+  const { toasts, addToast, removeToast } = createToastStore();
+  const [apiVehicles, { refetch: refetchVehicles }] = createResource(fetchVehicles);
+  const [apiSummary, { refetch: refetchSummary }] = createResource(fetchVehiclesSummary);
+  const [optimizationContext, { refetch: refetchOptimizationContext }] = createResource(
+    apiVehicles,
+    (vehicles) => fetchVehiclesOptimizationContext(vehicles ?? []),
   );
+  const allVehicles = createMemo(() => {
+    const vehicles = apiVehicles() ?? [];
+    const context = optimizationContext();
+    if (!context) return vehicles;
+    return enrichVehiclesWithOptimization(vehicles, context);
+  });
+  const vehiclesLoading = () => apiVehicles.loading || apiSummary.loading;
+  const vehiclesError = () => apiVehicles.error;
+  const vehiclesKpisData = createMemo(() => {
+    const summary = apiSummary();
+    if (summary) return computeVehiclesKpisFromSummary(summary);
+    return [];
+  });
+  const assignableCount = createMemo(() => apiSummary()?.assignableCount ?? countAssignableVehicles(allVehicles()));
+  const canGoToSimulation = () => canOptimize(authUser()?.role);
+  const canManage = () => canManageVehicles(authUser()?.role);
+
+  const simulationHref = createMemo(() => {
+    const count = assignableCount();
+    return count > 0 ? `/simulation?vehicles=${count}` : '/simulation';
+  });
 
   const filtered = createMemo(() => {
     const q = search().trim().toLowerCase();
     const status = statusFilter();
     const type = typeFilter();
+    const onlyAssignable = assignableOnly();
     return allVehicles().filter((v) => {
+      if (onlyAssignable && !isAssignableVehicle(v.status)) return false;
       if (status && v.status !== status) return false;
       if (type && v.type !== type) return false;
       if (!q) return true;
@@ -138,6 +205,15 @@ export default function VehiclesPage() {
     return allVehicles().find((v) => v.id === id);
   });
 
+  const [vehicleIncidents] = createResource(
+    () => {
+      const id = selectedId();
+      if (!id || detailTab() !== 'maintenance') return null;
+      return id;
+    },
+    (id) => (id ? fetchVehicleIncidents(id) : Promise.resolve([])),
+  );
+
   const selectVehicle = (v: Vehicle) => {
     setSelectedId(v.id);
     setDetailTab('info');
@@ -145,23 +221,124 @@ export default function VehiclesPage() {
 
   const closeDetail = () => setSelectedId(null);
 
+  const refreshFleet = async () => {
+    await Promise.all([refetchVehicles(), refetchSummary(), refetchOptimizationContext()]);
+  };
+
+  const handleSetMaintenance = async (vehicle: Vehicle) => {
+    setStatusUpdating(true);
+    try {
+      await updateVehicleStatus(vehicle.id, 'maintenance');
+      addToast(`${vehicle.id} marcado en mantenimiento`, 'success');
+      await refreshFleet();
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'No se pudo actualizar el vehículo';
+      addToast(message, 'error');
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
+
+  const handleSetAvailable = async (vehicle: Vehicle) => {
+    setStatusUpdating(true);
+    try {
+      await updateVehicleStatus(vehicle.id, 'available');
+      addToast(`${vehicle.id} marcado como disponible`, 'success');
+      await refreshFleet();
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'No se pudo actualizar el vehículo';
+      addToast(message, 'error');
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
+
+  const handleExport = () => {
+    const vehicles = filtered();
+    if (vehicles.length === 0) {
+      addToast('No hay vehículos para exportar con los filtros actuales', 'warning');
+      return;
+    }
+
+    setExporting(true);
+    try {
+      downloadVehiclesCsv(
+        vehicles,
+        buildVehiclesExportFilename({
+          status: statusFilter(),
+          assignableOnly: assignableOnly(),
+          search: search(),
+        }),
+      );
+      addToast(`Exportados ${vehicles.length} vehículos a CSV`, 'success');
+    } catch {
+      addToast('No se pudo generar el archivo CSV', 'error');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div class="space-y-5">
+      <ToastContainer toasts={toasts()} onDismiss={removeToast} />
+      <Show when={vehiclesError()}>
+        <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900/50 dark:bg-red-950/30">
+          <p class="text-sm font-semibold text-red-700 dark:text-red-300">
+            No se pudieron cargar los vehículos
+          </p>
+          <p class="mt-1 text-sm text-red-600 dark:text-red-400">
+            {vehiclesError() instanceof Error ? vehiclesError()!.message : 'Error de conexión con la API'}
+          </p>
+          <button
+            type="button"
+            class="mt-2 text-sm font-medium text-red-700 underline dark:text-red-300"
+            onClick={() => void refetchVehicles()}
+          >
+            Reintentar
+          </button>
+        </div>
+      </Show>
+
       <div class="flex flex-col gap-4 xl:flex-row xl:items-center">
         <div class="grid flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <For each={vehiclesKpisData()}>
-            {(kpi) => (
-              <KpiCard
-                title={kpi.title}
-                value={kpi.value}
-                unit={kpi.unit}
-                iconTone={kpi.iconTone}
-                icon={kpiIcon[kpi.icon]()}
-              />
-            )}
-          </For>
+          <Show
+            when={!vehiclesLoading()}
+            fallback={
+              <For each={Array.from({ length: 4 })}>{() => <KpiSkeleton />}</For>
+            }
+          >
+            <For each={vehiclesKpisData()}>
+              {(kpi) => (
+                <KpiCard
+                  title={kpi.title}
+                  value={kpi.value}
+                  unit={kpi.unit}
+                  iconTone={kpi.iconTone}
+                  icon={kpiIcon[kpi.icon]()}
+                  class={
+                    kpi.highlight
+                      ? 'border-fero-green/40 bg-fero-green/5 ring-1 ring-fero-green/20'
+                      : undefined
+                  }
+                />
+              )}
+            </For>
+          </Show>
         </div>
-        <div class="flex shrink-0">
+        <div class="flex shrink-0 flex-wrap gap-2">
+          <Show when={canGoToSimulation()}>
+            <A href={simulationHref()}>
+              <Button
+                variant="outline"
+                class="w-full gap-2 px-5 py-2.5 xl:w-auto"
+                icon={<ArrowRight size={17} />}
+              >
+                {assignableCount() > 0
+                  ? `Ir a Simulación (${assignableCount()} asignables)`
+                  : 'Ir a Simulación'}
+              </Button>
+            </A>
+          </Show>
           <Button variant="primary" class="w-full gap-2 px-5 py-2.5 xl:w-auto" icon={<Plus size={17} />}>
             Nuevo vehículo
             <ChevronDown size={15} class="opacity-80" />
@@ -210,6 +387,23 @@ export default function VehiclesPage() {
 
             <button
               type="button"
+              class={`inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm transition-colors ${
+                assignableOnly()
+                  ? 'border-fero-green bg-fero-green/10 text-fero-green-dark'
+                  : 'border-border text-text-secondary hover:bg-surface-hover'
+              }`}
+              onClick={() => {
+                setAssignableOnly((value) => !value);
+                setStatusFilter('');
+                setPage(1);
+              }}
+            >
+              <Truck size={16} />
+              Asignables
+            </button>
+
+            <button
+              type="button"
               class="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm text-text-secondary hover:bg-surface-hover"
             >
               <SlidersHorizontal size={16} />
@@ -218,8 +412,10 @@ export default function VehiclesPage() {
 
             <button
               type="button"
-              class="ml-auto flex h-9 w-9 items-center justify-center rounded-md border border-border text-text-secondary hover:bg-surface-hover"
+              class="ml-auto flex h-9 w-9 items-center justify-center rounded-md border border-border text-text-secondary hover:bg-surface-hover disabled:opacity-50"
               aria-label="Exportar"
+              disabled={exporting()}
+              onClick={handleExport}
             >
               <Download size={16} />
             </button>
@@ -234,17 +430,27 @@ export default function VehiclesPage() {
                   <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-muted">Estado</th>
                   <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-muted">Conductor</th>
                   <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-muted">Combustible</th>
-                  <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-muted">Capacidad</th>
+                  <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-muted">Capacidad máx.</th>
                   <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-muted">Acciones</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-border dark:divide-dark-border">
+                <Show
+                  when={!vehiclesLoading()}
+                  fallback={
+                    <For each={Array.from({ length: 6 })}>{() => <TableRowSkeleton />}</For>
+                  }
+                >
                 <For
                   each={pageItems()}
                   fallback={
                     <tr>
                       <td colSpan={7} class="px-4 py-10 text-center text-sm text-text-muted">
-                        No se encontraron vehículos
+                        {vehiclesError()
+                          ? 'No se pudo cargar el listado de vehículos.'
+                          : assignableOnly()
+                            ? 'No hay vehículos asignables con los filtros actuales.'
+                            : 'No se encontraron vehículos'}
                       </td>
                     </tr>
                   }
@@ -262,6 +468,10 @@ export default function VehiclesPage() {
                           <div>
                             <p class="text-sm font-semibold text-text-primary dark:text-white">{v.id}</p>
                             <p class="text-xs text-text-muted">{v.type}</p>
+                            <VehicleOptimizationBadges
+                              usedInLastOptimization={v.usedInLastOptimization}
+                              compact
+                            />
                           </div>
                         </div>
                       </td>
@@ -271,10 +481,13 @@ export default function VehiclesPage() {
                       </td>
                       <td class="px-4 py-3 text-sm text-text-secondary">{v.driver}</td>
                       <td class="px-4 py-3">
-                        <MetricBar value={v.fuelPct} color={fuelBarColor(v.fuelPct)} />
+                        <MetricBar
+                          value={v.fuelPct}
+                          color={v.fuelPct === null ? 'amber' : fuelBarColor(v.fuelPct)}
+                        />
                       </td>
-                      <td class="px-4 py-3">
-                        <MetricBar value={v.capacityPct} color={capacityBarColor(v.capacityPct)} />
+                      <td class="px-4 py-3 text-sm font-semibold text-text-primary dark:text-white">
+                        {formatCapacityKg(v.maxCapacityKg ?? Math.round(v.capacityM3 * 1000))}
                       </td>
                       <td class="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <div class="flex items-center gap-0.5">
@@ -293,18 +506,20 @@ export default function VehiclesPage() {
                           >
                             <Pencil size={16} />
                           </button>
-                          <button
-                            type="button"
-                            class="flex h-8 w-8 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover hover:text-text-secondary"
-                            aria-label="Más"
-                          >
-                            <MoreVertical size={16} />
-                          </button>
+                          <Show when={canManage()}>
+                            <VehicleActionsMenu
+                              vehicle={v}
+                              disabled={statusUpdating()}
+                              onSetMaintenance={handleSetMaintenance}
+                              onSetAvailable={handleSetAvailable}
+                            />
+                          </Show>
                         </div>
                       </td>
                     </tr>
                   )}
                 </For>
+                </Show>
               </tbody>
             </table>
           </div>
@@ -392,6 +607,7 @@ export default function VehiclesPage() {
                       </div>
                       <p class="text-sm text-text-secondary">{v().type}</p>
                       <p class="mt-0.5 text-xs font-medium text-text-muted">Placa {v().plate}</p>
+                      <VehicleOptimizationBadges usedInLastOptimization={v().usedInLastOptimization} />
                     </div>
                   </div>
 
@@ -417,25 +633,31 @@ export default function VehiclesPage() {
                     <ul class="space-y-3.5">
                       <DetailRow icon={<Truck size={16} />} label="Modelo" value={v().model} />
                       <DetailRow icon={<Calendar size={16} />} label="Año" value={String(v().year)} />
-                      <DetailRow icon={<Gauge size={16} />} label="Capacidad" value={`${v().capacityM3} m³`} />
+                      <DetailRow icon={<Gauge size={16} />} label="Capacidad máxima" value={formatCapacityKg(v().maxCapacityKg ?? Math.round(v().capacityM3 * 1000))} />
+                      <DetailRow icon={<Gauge size={16} />} label="Volumen útil" value={`${v().capacityM3} m³`} />
                       <li class="flex gap-3">
                         <span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-text-muted dark:bg-dark-surface-hover">
                           <Fuel size={16} />
                         </span>
                         <div class="min-w-0 flex-1">
                           <p class="text-xs text-text-muted">Combustible</p>
-                          <p class="text-sm font-semibold text-text-primary dark:text-white">
-                            {v().fuelPct}%
-                            <Show when={v().fuelLiters}>
-                              <span class="font-medium text-text-muted"> ({v().fuelLiters} L)</span>
-                            </Show>
-                          </p>
-                          <ProgressBar
-                            value={v().fuelPct}
-                            color={fuelBarColor(v().fuelPct)}
-                            size="sm"
-                            class="mt-1.5"
-                          />
+                          <Show
+                            when={v().fuelPct !== null}
+                            fallback={<p class="text-sm font-medium text-text-muted">Sin dato de telemetría</p>}
+                          >
+                            <p class="text-sm font-semibold text-text-primary dark:text-white">
+                              {v().fuelPct}%
+                              <Show when={v().fuelLiters}>
+                                <span class="font-medium text-text-muted"> ({v().fuelLiters} L)</span>
+                              </Show>
+                            </p>
+                            <ProgressBar
+                              value={v().fuelPct!}
+                              color={fuelBarColor(v().fuelPct!)}
+                              size="sm"
+                              class="mt-1.5"
+                            />
+                          </Show>
                         </div>
                       </li>
                       <DetailRow
@@ -469,15 +691,49 @@ export default function VehiclesPage() {
                     </ul>
                   </Show>
 
-                  <Show when={detailTab() !== 'info'}>
+                  <Show when={detailTab() === 'maintenance'}>
+                    <VehicleMaintenancePanel
+                      incidents={vehicleIncidents() ?? []}
+                      loading={vehicleIncidents.loading}
+                      error={vehicleIncidents.error}
+                    />
+                  </Show>
+
+                  <Show when={detailTab() !== 'info' && detailTab() !== 'maintenance'}>
                     <p class="py-8 text-center text-sm text-text-muted">
                       Contenido de {vehicleDetailTabs.find((t) => t.id === detailTab())?.label.toLowerCase()} próximamente.
                     </p>
                   </Show>
                 </div>
 
-                <div class="border-t border-border p-4 dark:border-dark-border">
-                  <A href="/map" class="block">
+                <div class="space-y-2 border-t border-border p-4 dark:border-dark-border">
+                  <Show when={canManage()}>
+                    <div class="flex flex-wrap gap-2">
+                      <Show when={v().status === 'disponible' || v().status === 'en-ruta'}>
+                        <Button
+                          variant="outline"
+                          class="flex-1"
+                          icon={<Wrench size={16} />}
+                          disabled={statusUpdating()}
+                          onClick={() => void handleSetMaintenance(v())}
+                        >
+                          Mantenimiento
+                        </Button>
+                      </Show>
+                      <Show when={v().status === 'mantenimiento'}>
+                        <Button
+                          variant="outline"
+                          class="flex-1"
+                          icon={<Truck size={16} />}
+                          disabled={statusUpdating()}
+                          onClick={() => void handleSetAvailable(v())}
+                        >
+                          Disponible
+                        </Button>
+                      </Show>
+                    </div>
+                  </Show>
+                  <A href={buildVehicleMapHref(v().id)} class="block">
                     <Button variant="primary" class="w-full" icon={<MapPin size={16} />}>
                       Ver en mapa
                     </Button>

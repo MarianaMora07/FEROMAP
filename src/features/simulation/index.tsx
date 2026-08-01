@@ -243,6 +243,12 @@ export default function SimulationPage() {
     const parsed = Number(raw);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
   };
+  const vehiclesFromFleet = () => {
+    const value = params.vehicles;
+    const raw = Array.isArray(value) ? value[0] : value;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  };
 
   const [monitoringData] = createResource(fetchMonitoringStatus);
   const fleetForBreakdown = () =>
@@ -396,6 +402,17 @@ export default function SimulationPage() {
 
   return (
     <div class="space-y-5">
+      <Show when={vehiclesFromFleet() > 0}>
+        <div class="rounded-xl border border-fero-green/40 bg-fero-green/10 px-4 py-3">
+          <p class="text-sm font-semibold text-fero-green-dark">
+            {vehiclesFromFleet()} vehículo{vehiclesFromFleet() === 1 ? '' : 's'} asignable
+            {vehiclesFromFleet() === 1 ? '' : 's'} desde la flota
+          </p>
+          <p class="mt-1 text-sm text-text-secondary">
+            La optimización usará camiones disponibles o en ruta, excluyendo mantenimiento.
+          </p>
+        </div>
+      </Show>
       <Show when={criticalFromPoints() > 0}>
         <div class="rounded-xl border border-amber-300/60 bg-amber-50 px-4 py-3 dark:border-amber-700/50 dark:bg-amber-950/20">
           <p class="text-sm font-semibold text-amber-800 dark:text-amber-300">

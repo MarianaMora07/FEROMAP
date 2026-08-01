@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
@@ -9,51 +8,6 @@ from sqlalchemy.orm import Session
 from app.db.models import CollectionPoint, User, UserRole, Vehicle
 from app.services.operations_service import active_routes_view, alerts_from_db, live_fleet_view
 from app.services.seed_loader import load_seed
-
-STATUS_TO_UI = {
-    "in_route": "en-ruta",
-    "available": "disponible",
-    "maintenance": "mantenimiento",
-    "inactive": "fuera-de-servicio",
-}
-
-
-DEFAULT_VEHICLE_IMAGE = (
-    "https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&w=480&h=320&q=80"
-)
-VEHICLE_TYPES = ("Compactador", "Volteo", "Recolector")
-
-
-def list_vehicles(db: Session) -> list[dict[str, Any]]:
-    seed_rows = {row["code"]: row for row in load_seed("vehicles.json")}
-    vehicles = db.scalars(select(Vehicle).order_by(Vehicle.code)).all()
-    result = []
-    for index, vehicle in enumerate(vehicles):
-        seed = seed_rows.get(vehicle.code, {})
-        capacity_m3 = float(vehicle.max_capacity_kg) / 1000
-        result.append(
-            {
-                "id": vehicle.code,
-                "plate": vehicle.license_plate,
-                "status": STATUS_TO_UI.get(vehicle.status, vehicle.status),
-                "maxCapacityKg": float(vehicle.max_capacity_kg),
-                "fuelConsumptionRate": float(vehicle.fuel_consumption_rate or 0),
-                "driver": seed.get("driverName"),
-                "driverPhone": seed.get("driverPhone"),
-                "type": VEHICLE_TYPES[index % len(VEHICLE_TYPES)],
-                "fuelPct": max(25, 100 - index * 7),
-                "capacityPct": min(95, 15 + index * 8),
-                "capacityM3": capacity_m3,
-                "model": "Camión de recolección",
-                "year": 2020 + (index % 5),
-                "mileageKm": 12000 + index * 1500,
-                "base": "Base Unare",
-                "updatedAt": datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M"),
-                "image": DEFAULT_VEHICLE_IMAGE,
-                "idealOperatorsCount": vehicle.ideal_operators_count,
-            }
-        )
-    return result
 
 
 def list_alerts(db: Session) -> list[dict[str, Any]]:

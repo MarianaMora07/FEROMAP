@@ -13,10 +13,11 @@ export interface Vehicle {
   status: VehicleStatus;
   driver: string;
   driverPhone?: string;
-  fuelPct: number;
+  fuelPct: number | null;
   fuelLiters?: number;
-  capacityPct: number;
+  capacityPct: number | null;
   capacityM3: number;
+  maxCapacityKg?: number;
   model: string;
   year: number;
   mileageKm: number;
@@ -24,6 +25,7 @@ export interface Vehicle {
   currentRoute?: string;
   updatedAt: string;
   image: string;
+  usedInLastOptimization?: boolean;
 }
 
 const truckImages = {
