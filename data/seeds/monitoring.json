@@ -1,0 +1,111 @@
+{
+  "kpis": [
+    {
+      "id": "vehicles",
+      "title": "Vehículos en ruta",
+      "value": "12 / 18",
+      "progress": 66,
+      "iconTone": "blue",
+      "icon": "truck"
+    },
+    {
+      "id": "collections",
+      "title": "Recolecciones hoy",
+      "value": "186 / 248",
+      "progress": 75,
+      "iconTone": "green",
+      "icon": "trash"
+    },
+    {
+      "id": "tons",
+      "title": "Toneladas recolectadas",
+      "value": "28.6 / 40 t",
+      "progress": 71,
+      "iconTone": "green",
+      "icon": "scale"
+    },
+    {
+      "id": "incidents",
+      "title": "Incidencias activas",
+      "value": "3",
+      "linkLabel": "ver detalles",
+      "iconTone": "red",
+      "icon": "shield"
+    },
+    {
+      "id": "drivers",
+      "title": "Conductores conectados",
+      "value": "12 / 14",
+      "progress": 86,
+      "iconTone": "green",
+      "icon": "user"
+    }
+  ],
+  "liveFleet": [
+    {
+      "id": "TR-08",
+      "status": "en-ruta",
+      "driver": "Juan Pérez",
+      "route": "Ruta Norte 01",
+      "progress": 68,
+      "speedKmh": 45,
+      "nextPoint": "Av. Principal con Calle Sucre",
+      "color": "#34D634",
+      "image": "https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&w=160&h=120&q=80",
+      "lng": -62.72,
+      "lat": 8.297
+    },
+    {
+      "id": "TR-04",
+      "status": "en-ruta",
+      "driver": "Luis Méndez",
+      "route": "Ruta Centro 02",
+      "progress": 82,
+      "speedKmh": 38,
+      "nextPoint": "Calle Comercio",
+      "color": "#1143F3",
+      "image": "https://images.unsplash.com/photo-1519003722824-194d4455a60c?auto=format&fit=crop&w=160&h=120&q=80",
+      "lng": -62.712,
+      "lat": 8.293
+    },
+    {
+      "id": "TR-11",
+      "status": "mantenimiento",
+      "driver": "Ana Pérez",
+      "route": "—",
+      "progress": 0,
+      "speedKmh": null,
+      "nextPoint": "Taller Central",
+      "color": "#f59e0b",
+      "image": "https://images.unsplash.com/photo-1566576721346-d4a3b4eaeb55?auto=format&fit=crop&w=160&h=120&q=80",
+      "lng": -62.728,
+      "lat": 8.29
+    },
+    {
+      "id": "TR-02",
+      "status": "en-ruta",
+      "driver": "María Gómez",
+      "route": "Ruta Sur 01",
+      "progress": 54,
+      "speedKmh": 32,
+      "nextPoint": "Plaza Bolívar Sur",
+      "color": "#7c3aed",
+      "image": "https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&w=160&h=120&q=80",
+      "lng": -62.716,
+      "lat": 8.286
+    },
+    {
+      "id": "TR-06",
+      "status": "detenido",
+      "driver": "Sofía Díaz",
+      "route": "Ruta Oeste 03",
+      "progress": 40,
+      "speedKmh": 0,
+      "nextPoint": "Av. Atlántico km 1",
+      "color": "#ef4444",
+      "image": "https://images.unsplash.com/photo-1519003722824-194d4455a60c?auto=format&fit=crop&w=160&h=120&q=80",
+      "lng": -62.725,
+      "lat": 8.295
+    }
+  ]
+}

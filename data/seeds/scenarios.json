@@ -1,0 +1,30 @@
+[
+  {
+    "id": "normal",
+    "label": "Tráfico normal",
+    "description": "Condiciones habituales en horario matutino de recolección.",
+    "trafficMultiplier": 1,
+    "fillLevelBoost": 0
+  },
+  {
+    "id": "peak_traffic",
+    "label": "Tráfico pico",
+    "description": "Congestión en Av. Guayana y Av. Atlántico durante hora pico.",
+    "trafficMultiplier": 1.35,
+    "fillLevelBoost": 5
+  },
+  {
+    "id": "rain",
+    "label": "Lluvia intensa",
+    "description": "Velocidad reducida y rutas alternativas por calles inundadas.",
+    "trafficMultiplier": 1.2,
+    "fillLevelBoost": 3
+  },
+  {
+    "id": "saturated",
+    "label": "Contenedores saturados",
+    "description": "Más del 60% de contenedores superan el 80% de llenado.",
+    "trafficMultiplier": 1.05,
+    "fillLevelBoost": 15
+  }
+]

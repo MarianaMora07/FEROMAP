@@ -1,0 +1,30 @@
+[
+  {
+    "message": "Inicializando grafo vial de la parroquia Unare…",
+    "type": "info"
+  },
+  {
+    "message": "Cargando 20 puntos de recolección activos",
+    "type": "info"
+  },
+  {
+    "message": "Aplicando algoritmo ACO (Colonia de Hormigas)…",
+    "type": "info"
+  },
+  {
+    "message": "Evaluando 150 soluciones candidatas (VRP dinámico)",
+    "type": "info"
+  },
+  {
+    "message": "Re-priorizando 6 contenedores críticos (>80% llenado)",
+    "type": "warning"
+  },
+  {
+    "message": "Optimización convergente en iteración 47",
+    "type": "success"
+  },
+  {
+    "message": "Ruta optimizada: -29% distancia, -31% tiempo estimado",
+    "type": "success"
+  }
+]

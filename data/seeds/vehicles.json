@@ -1,0 +1,92 @@
+[
+  {
+    "code": "TR-08",
+    "licensePlate": "A12BC3D",
+    "maxCapacityKg": 15000,
+    "fuelConsumptionRate": 0.35,
+    "status": "in_route",
+    "driverName": "Juan Pérez",
+    "driverPhone": "+58 414-555-0192"
+  },
+  {
+    "code": "TR-03",
+    "licensePlate": "B45DE6F",
+    "maxCapacityKg": 12000,
+    "fuelConsumptionRate": 0.35,
+    "status": "available",
+    "driverName": "Carlos Rivas",
+    "driverPhone": "+58 424-555-0144"
+  },
+  {
+    "code": "TR-11",
+    "licensePlate": "C78GH9I",
+    "maxCapacityKg": 15000,
+    "fuelConsumptionRate": 0.35,
+    "status": "in_route",
+    "driverName": "Ana Pérez",
+    "driverPhone": "+58 412-555-0177"
+  },
+  {
+    "code": "TR-07",
+    "licensePlate": "D01JK2L",
+    "maxCapacityKg": 8000,
+    "fuelConsumptionRate": 0.35,
+    "status": "maintenance",
+    "driverName": null,
+    "driverPhone": null
+  },
+  {
+    "code": "TR-04",
+    "licensePlate": "E34MN5O",
+    "maxCapacityKg": 15000,
+    "fuelConsumptionRate": 0.35,
+    "status": "available",
+    "driverName": "Luis Méndez",
+    "driverPhone": "+58 416-555-0108"
+  },
+  {
+    "code": "TR-15",
+    "licensePlate": "F67PQ8R",
+    "maxCapacityKg": 12000,
+    "fuelConsumptionRate": 0.35,
+    "status": "inactive",
+    "driverName": null,
+    "driverPhone": null
+  },
+  {
+    "code": "TR-02",
+    "licensePlate": "G90ST1U",
+    "maxCapacityKg": 8000,
+    "fuelConsumptionRate": 0.35,
+    "status": "in_route",
+    "driverName": "María Gómez",
+    "driverPhone": "+58 426-555-0133"
+  },
+  {
+    "code": "TR-19",
+    "licensePlate": "H23VW4X",
+    "maxCapacityKg": 18000,
+    "fuelConsumptionRate": 0.35,
+    "status": "maintenance",
+    "driverName": "Pedro Silva",
+    "driverPhone": "+58 414-555-0166"
+  },
+  {
+    "code": "TR-06",
+    "licensePlate": "I56YZ7A",
+    "maxCapacityKg": 10000,
+    "fuelConsumptionRate": 0.35,
+    "status": "available",
+    "driverName": "Sofía Díaz",
+    "driverPhone": "+58 424-555-0199"
+  },
+  {
+    "code": "TR-12",
+    "licensePlate": "J89BC0D",
+    "maxCapacityKg": 8000,
+    "fuelConsumptionRate": 0.35,
+    "status": "in_route",
+    "driverName": "Diego Torres",
+    "driverPhone": "+58 412-555-0121"
+  }
+]

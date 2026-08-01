@@ -1,0 +1,50 @@
+[
+  {
+    "scenarioId": "normal",
+    "scenarioName": "Tráfico normal",
+    "parameters": {
+      "trafficMultiplier": 1,
+      "fillLevelBoost": 0,
+      "description": "Condiciones habituales en horario matutino de recolección."
+    },
+    "kpiTotalDistanceHistorical": 28.4,
+    "kpiTotalDistanceOptimized": 20.1,
+    "kpiSavingPercentage": 29.23
+  },
+  {
+    "scenarioId": "peak_traffic",
+    "scenarioName": "Tráfico pico",
+    "parameters": {
+      "trafficMultiplier": 1.35,
+      "fillLevelBoost": 5,
+      "description": "Congestión en Av. Guayana y Av. Atlántico durante hora pico."
+    },
+    "kpiTotalDistanceHistorical": 28.4,
+    "kpiTotalDistanceOptimized": 19.8,
+    "kpiSavingPercentage": 30.28
+  },
+  {
+    "scenarioId": "rain",
+    "scenarioName": "Lluvia intensa",
+    "parameters": {
+      "trafficMultiplier": 1.2,
+      "fillLevelBoost": 3,
+      "description": "Velocidad reducida y rutas alternativas por calles inundadas."
+    },
+    "kpiTotalDistanceHistorical": 28.4,
+    "kpiTotalDistanceOptimized": 20.5,
+    "kpiSavingPercentage": 27.82
+  },
+  {
+    "scenarioId": "saturated",
+    "scenarioName": "Contenedores saturados",
+    "parameters": {
+      "trafficMultiplier": 1.05,
+      "fillLevelBoost": 15,
+      "description": "Más del 60% de contenedores superan el 80% de llenado."
+    },
+    "kpiTotalDistanceHistorical": 28.4,
+    "kpiTotalDistanceOptimized": 17.7,
+    "kpiSavingPercentage": 37.68
+  }
+]

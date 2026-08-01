@@ -1,0 +1,266 @@
+[
+  {
+    "name": "Unare I",
+    "parishName": "Unare",
+    "population": 4200,
+    "avgWasteKg": 180,
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            -62.728,
+            8.302
+          ],
+          [
+            -62.718,
+            8.302
+          ],
+          [
+            -62.718,
+            8.292
+          ],
+          [
+            -62.728,
+            8.292
+          ],
+          [
+            -62.728,
+            8.302
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "name": "Unare II",
+    "parishName": "Unare",
+    "population": 5100,
+    "avgWasteKg": 195,
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            -62.718,
+            8.302
+          ],
+          [
+            -62.708,
+            8.302
+          ],
+          [
+            -62.708,
+            8.292
+          ],
+          [
+            -62.718,
+            8.292
+          ],
+          [
+            -62.718,
+            8.302
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "name": "Unare III",
+    "parishName": "Unare",
+    "population": 3800,
+    "avgWasteKg": 170,
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            -62.728,
+            8.292
+          ],
+          [
+            -62.708,
+            8.292
+          ],
+          [
+            -62.708,
+            8.282
+          ],
+          [
+            -62.728,
+            8.282
+          ],
+          [
+            -62.728,
+            8.292
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "name": "Río Caura",
+    "parishName": "Unare",
+    "population": 2900,
+    "avgWasteKg": 160,
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            -62.738,
+            8.302
+          ],
+          [
+            -62.728,
+            8.302
+          ],
+          [
+            -62.728,
+            8.288
+          ],
+          [
+            -62.738,
+            8.288
+          ],
+          [
+            -62.738,
+            8.302
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "name": "Ventuari",
+    "parishName": "Unare",
+    "population": 2200,
+    "avgWasteKg": 145,
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            -62.708,
+            8.302
+          ],
+          [
+            -62.698,
+            8.302
+          ],
+          [
+            -62.698,
+            8.288
+          ],
+          [
+            -62.708,
+            8.288
+          ],
+          [
+            -62.708,
+            8.302
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "name": "Curagua",
+    "parishName": "Unare",
+    "population": 1800,
+    "avgWasteKg": 130,
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            -62.738,
+            8.288
+          ],
+          [
+            -62.728,
+            8.288
+          ],
+          [
+            -62.728,
+            8.278
+          ],
+          [
+            -62.738,
+            8.278
+          ],
+          [
+            -62.738,
+            8.288
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "name": "El Caimito",
+    "parishName": "Unare",
+    "population": 3500,
+    "avgWasteKg": 175,
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            -62.708,
+            8.288
+          ],
+          [
+            -62.698,
+            8.288
+          ],
+          [
+            -62.698,
+            8.278
+          ],
+          [
+            -62.708,
+            8.278
+          ],
+          [
+            -62.708,
+            8.288
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "name": "Villa Ikabarú",
+    "parishName": "Unare",
+    "population": 4100,
+    "avgWasteKg": 190,
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            -62.728,
+            8.282
+          ],
+          [
+            -62.698,
+            8.282
+          ],
+          [
+            -62.698,
+            8.272
+          ],
+          [
+            -62.728,
+            8.272
+          ],
+          [
+            -62.728,
+            8.282
+          ]
+        ]
+      ]
+    }
+  }
+]
