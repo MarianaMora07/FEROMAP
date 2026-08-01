@@ -37,7 +37,7 @@ import { dashboardSummary } from '../../core/stores/dashboardStore';
 import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
 import { fillLevelColor } from '../../core/utils/geoUtils';
 import { buildContainerPopupHtml } from '../../core/utils/popupHtml';
-import { mapStylesById } from '../../core/utils/mapStyle';
+import { mapStylesById, mapStyleForTheme, themeBaseStyleId } from '../../core/utils/mapStyle';
 import {
   mapBaseStyles,
   mapExtraRoutes,
@@ -79,7 +79,9 @@ export default function MapPage() {
 
   const [layersOpen, setLayersOpen] = createSignal(true);
   const [legendOpen, setLegendOpen] = createSignal(true);
-  const [baseStyle, setBaseStyle] = createSignal<MapBaseStyleId>('claro');
+  const [baseStyle, setBaseStyle] = createSignal<MapBaseStyleId>(
+    themeBaseStyleId(appState.darkMode),
+  );
   const [coords, setCoords] = createSignal({ lng: UNARE_CENTER[0], lat: UNARE_CENTER[1], zoom: UNARE_ZOOM });
   const [layerState, setLayerState] = createSignal<Record<string, boolean>>(initialLayerState());
   const [mapReady, setMapReady] = createSignal(false);
@@ -129,7 +131,9 @@ export default function MapPage() {
     });
 
     if (enablingSatellite) changeBaseStyle('satelital');
-    if (disablingSatellite && baseStyle() === 'satelital') changeBaseStyle('claro');
+    if (disablingSatellite && baseStyle() === 'satelital') {
+      changeBaseStyle(themeBaseStyleId(appState.darkMode));
+    }
   };
 
   const containerBucket = (fill: number) => {
@@ -296,7 +300,7 @@ export default function MapPage() {
     void initAppData();
     const map = new maplibregl.Map({
       container: mapContainer,
-      style: mapStylesById.claro,
+      style: mapStyleForTheme(appState.darkMode),
       center: UNARE_CENTER,
       zoom: UNARE_ZOOM,
       attributionControl: false,
@@ -352,6 +356,15 @@ export default function MapPage() {
     if (map?.getSource('routes')) {
       (map.getSource('routes') as maplibregl.GeoJSONSource).setData(routes);
     }
+  });
+
+  createEffect(() => {
+    const dark = appState.darkMode;
+    if (!mapReady()) return;
+    const style = baseStyle();
+    if (style === 'satelital' || style === 'terreno') return;
+    const next = themeBaseStyleId(dark);
+    if (style !== next) changeBaseStyle(next);
   });
 
   onCleanup(() => {

@@ -32,7 +32,8 @@ import {
   KpiCard,
   ProgressBar,
 } from '../../design-system/components';
-import { osmMapStyle } from '../../core/utils/mapStyle';
+import { bindMapTheme, mapStyleForTheme } from '../../core/utils/mapStyle';
+import { appState } from '../../core/stores/appStore';
 import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
 import { fetchAnalyticsSummary } from '../../core/api/analytics';
 import {
@@ -129,40 +130,8 @@ export default function AnalyticsPage() {
   const [analyticsEfficiencyIndicators, setAnalyticsEfficiencyIndicators] = createSignal(mockEfficiency);
   const [analyticsInsights, setAnalyticsInsights] = createSignal(mockInsights);
 
-  onMount(() => {
-    void fetchAnalyticsSummary().then((summary) => {
-      setKpis(summary.kpis);
-      setEvolutionSeries(summary.evolutionSeries);
-      setAnalyticsWasteTypes(summary.wasteTypes);
-      setAnalyticsRoutePerformance(summary.routePerformance);
-      setHourlyDistribution(summary.hourlyDistribution);
-      setAnalyticsEfficiencyIndicators(summary.efficiencyIndicators);
-      setAnalyticsInsights(summary.insights);
-    });
-    Chart.register(
-      ArcElement,
-      BarElement,
-      CategoryScale,
-      LinearScale,
-      LineElement,
-      PointElement,
-      Filler,
-      Tooltip,
-      Legend,
-    );
-
-    const map = new maplibregl.Map({
-      container: mapContainer,
-      style: osmMapStyle,
-      center: UNARE_CENTER,
-      zoom: UNARE_ZOOM - 0.4,
-      attributionControl: false,
-    });
-    mapRef.current = map;
-    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
-
-    map.on('load', () => {
-      map.resize();
+  const setupAnalyticsHeatmap = (map: MapLibreMap) => {
+    if (!map.getSource('heat')) {
       map.addSource('heat', { type: 'geojson', data: heatmapPoints });
       map.addLayer({
         id: 'heat-layer',
@@ -190,6 +159,50 @@ export default function AnalyticsPage() {
           ],
         },
       });
+    }
+  };
+
+  bindMapTheme(
+    () => mapRef.current,
+    mapReady,
+    () => setupAnalyticsHeatmap(mapRef.current!),
+  );
+
+  onMount(() => {
+    void fetchAnalyticsSummary().then((summary) => {
+      setKpis(summary.kpis);
+      setEvolutionSeries(summary.evolutionSeries);
+      setAnalyticsWasteTypes(summary.wasteTypes);
+      setAnalyticsRoutePerformance(summary.routePerformance);
+      setHourlyDistribution(summary.hourlyDistribution);
+      setAnalyticsEfficiencyIndicators(summary.efficiencyIndicators);
+      setAnalyticsInsights(summary.insights);
+    });
+    Chart.register(
+      ArcElement,
+      BarElement,
+      CategoryScale,
+      LinearScale,
+      LineElement,
+      PointElement,
+      Filler,
+      Tooltip,
+      Legend,
+    );
+
+    const map = new maplibregl.Map({
+      container: mapContainer,
+      style: mapStyleForTheme(appState.darkMode),
+      center: UNARE_CENTER,
+      zoom: UNARE_ZOOM - 0.4,
+      attributionControl: false,
+    });
+    mapRef.current = map;
+    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
+
+    map.on('load', () => {
+      map.resize();
+      setupAnalyticsHeatmap(map);
       setMapReady(true);
     });
 

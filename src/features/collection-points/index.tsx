@@ -39,7 +39,7 @@ import {
   ProgressBar,
   StatusBadge,
 } from '../../design-system/components';
-import { osmMapStyle } from '../../core/utils/mapStyle';
+import { bindMapTheme, mapStyleForTheme } from '../../core/utils/mapStyle';
 import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
 import {
   collectionPointSectorOptions,
@@ -55,6 +55,7 @@ import {
 } from '../../data/mock/collectionPoints';
 import { fetchCollectionPointsList } from '../../core/api/collectionPoints';
 import { authUser } from '../../core/stores/authStore';
+import { appState } from '../../core/stores/appStore';
 
 function trashSvg(color: string) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>`;
@@ -153,12 +154,18 @@ export default function CollectionPointsPage() {
     openSelectedPopup();
   };
 
+  bindMapTheme(
+    () => mapRef.current,
+    mapReady,
+    () => syncMapMarkers(),
+  );
+
   onMount(() => {
     Chart.register(ArcElement, CategoryScale, LinearScale, LineElement, PointElement, Filler, Tooltip, Legend);
 
     const map = new maplibregl.Map({
       container: mapContainer,
-      style: osmMapStyle,
+      style: mapStyleForTheme(appState.darkMode),
       center: UNARE_CENTER,
       zoom: UNARE_ZOOM,
       attributionControl: false,

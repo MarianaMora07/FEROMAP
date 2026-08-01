@@ -28,7 +28,7 @@ import {
   Card,
   CardHeader,
 } from '../../design-system/components';
-import { osmMapStyle } from '../../core/utils/mapStyle';
+import { bindMapTheme, mapStyleForTheme } from '../../core/utils/mapStyle';
 import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
 import { runOptimization, setScenario, simulationState, initSimulationData, currentKpis, kpiImpactRows, kpiSavingsSummary } from '../../core/stores/simulationStore';
 import { canOptimize } from '../../core/auth/permissions';
@@ -295,20 +295,8 @@ export default function SimulationPage() {
     }
   };
 
-  onMount(() => {
-    void initSimulationData();
-    const map = new maplibregl.Map({
-      container: mapContainer,
-      style: osmMapStyle,
-      center: UNARE_CENTER,
-      zoom: UNARE_ZOOM - 0.3,
-      attributionControl: false,
-    });
-    mapRef.current = map;
-    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
-
-    map.on('load', () => {
-      map.resize();
+  const setupSimulationMap = (map: MapLibreMap) => {
+    if (!map.getSource('sim-routes')) {
       map.addSource('sim-routes', { type: 'geojson', data: simulationMapRoutes });
       map.addLayer({
         id: 'sim-current',
@@ -341,13 +329,51 @@ export default function SimulationPage() {
           'line-opacity': 0.9,
         },
       });
+    } else if (hasResults()) {
+      const features = appState.routes.features.map((feature) => ({
+        ...feature,
+        properties: {
+          ...feature.properties,
+          kind: feature.properties.type,
+        },
+      }));
+      (map.getSource('sim-routes') as maplibregl.GeoJSONSource).setData({
+        type: 'FeatureCollection',
+        features,
+      });
+    }
 
-      for (const p of simulationMapPoints) {
-        const marker = new maplibregl.Marker({ element: createMarkerEl(p.status) })
-          .setLngLat([p.lng, p.lat])
-          .addTo(map);
-        markers.push(marker);
-      }
+    markers.forEach((m) => m.remove());
+    markers.length = 0;
+    for (const p of simulationMapPoints) {
+      const marker = new maplibregl.Marker({ element: createMarkerEl(p.status) })
+        .setLngLat([p.lng, p.lat])
+        .addTo(map);
+      markers.push(marker);
+    }
+  };
+
+  bindMapTheme(
+    () => mapRef.current,
+    mapReady,
+    () => setupSimulationMap(mapRef.current!),
+  );
+
+  onMount(() => {
+    void initSimulationData();
+    const map = new maplibregl.Map({
+      container: mapContainer,
+      style: mapStyleForTheme(appState.darkMode),
+      center: UNARE_CENTER,
+      zoom: UNARE_ZOOM - 0.3,
+      attributionControl: false,
+    });
+    mapRef.current = map;
+    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
+
+    map.on('load', () => {
+      map.resize();
+      setupSimulationMap(map);
       setMapReady(true);
     });
 

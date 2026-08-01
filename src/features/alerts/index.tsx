@@ -38,7 +38,8 @@ import {
   KpiCard,
   StatusBadge,
 } from '../../design-system/components';
-import { osmMapStyle } from '../../core/utils/mapStyle';
+import { bindMapTheme, mapStyleForTheme } from '../../core/utils/mapStyle';
+import { appState } from '../../core/stores/appStore';
 import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
 import {
   alertCategoryOptions,
@@ -142,12 +143,36 @@ export default function AlertsPage() {
   const [mapReady, setMapReady] = createSignal(false);
   const pageSize = 5;
 
+  const syncAlertMarkers = () => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+    markers.forEach((m) => m.remove());
+    markers.length = 0;
+    for (const a of alertsListData()) {
+      const marker = new maplibregl.Marker({ element: createAlertPin(priorityColor[a.priority]) })
+        .setLngLat([a.lng, a.lat])
+        .setPopup(
+          new maplibregl.Popup({ offset: 16, maxWidth: '240px' }).setHTML(
+            `<strong style="font-size:13px;">${a.title}</strong><br/><span style="font-size:12px;color:#64748b">${a.source} · ${a.location}</span>`,
+          ),
+        )
+        .addTo(map);
+      markers.push(marker);
+    }
+  };
+
+  bindMapTheme(
+    () => mapRef.current,
+    mapReady,
+    () => syncAlertMarkers(),
+  );
+
   onMount(() => {
     Chart.register(ArcElement, CategoryScale, LinearScale, LineElement, PointElement, Tooltip, Legend);
 
     const map = new maplibregl.Map({
       container: mapContainer,
-      style: osmMapStyle,
+      style: mapStyleForTheme(appState.darkMode),
       center: UNARE_CENTER,
       zoom: UNARE_ZOOM - 0.3,
       attributionControl: false,
@@ -157,17 +182,7 @@ export default function AlertsPage() {
 
     map.on('load', () => {
       map.resize();
-      for (const a of alertsListData()) {
-        const marker = new maplibregl.Marker({ element: createAlertPin(priorityColor[a.priority]) })
-          .setLngLat([a.lng, a.lat])
-          .setPopup(
-            new maplibregl.Popup({ offset: 16, maxWidth: '240px' }).setHTML(
-              `<strong style="font-size:13px;">${a.title}</strong><br/><span style="font-size:12px;color:#64748b">${a.source} · ${a.location}</span>`,
-            ),
-          )
-          .addTo(map);
-        markers.push(marker);
-      }
+      syncAlertMarkers();
       setMapReady(true);
     });
 

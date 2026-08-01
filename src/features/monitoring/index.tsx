@@ -33,10 +33,11 @@ import {
   fetchMonitoringStatus,
   type MonitoringKpi,
 } from '../../core/api/monitoring';
+import { appState } from '../../core/stores/appStore';
 import { canAdvanceFleet } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
 import { BreakdownReporter, ContingencyResultBanner } from '../contingency/BreakdownReporter';
-import { osmMapStyle } from '../../core/utils/mapStyle';
+import { bindMapTheme, mapStyleForTheme } from '../../core/utils/mapStyle';
 import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
 import {
   currentConditions,
@@ -210,19 +211,8 @@ export default function MonitoringPage() {
     }
   };
 
-  onMount(() => {
-    const map = new maplibregl.Map({
-      container: mapContainer,
-      style: osmMapStyle,
-      center: UNARE_CENTER,
-      zoom: UNARE_ZOOM - 0.2,
-      attributionControl: false,
-    });
-    mapRef.current = map;
-    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
-
-    map.on('load', () => {
-      map.resize();
+  const setupMonitoringMap = (map: MapLibreMap) => {
+    if (!map.getSource('live-routes')) {
       map.addSource('live-routes', { type: 'geojson', data: monitoringMapRoutes });
       map.addLayer({
         id: 'live-routes-line',
@@ -234,31 +224,42 @@ export default function MonitoringPage() {
           'line-opacity': 0.9,
         },
       });
+    }
 
-      for (const b of monitoringBins) {
-        const m = new maplibregl.Marker({
-          element: createPin(binColor[b.status], trashSvg('#fff'), 24),
-        })
-          .setLngLat([b.lng, b.lat])
-          .addTo(map);
-        binMarkers.push(m);
-      }
+    binMarkers.forEach((m) => m.remove());
+    binMarkers.length = 0;
+    for (const b of monitoringBins) {
+      const m = new maplibregl.Marker({
+        element: createPin(binColor[b.status], trashSvg('#fff'), 24),
+      })
+        .setLngLat([b.lng, b.lat])
+        .addTo(map);
+      binMarkers.push(m);
+    }
 
-      for (const v of liveFleet()) {
-        const el = createPin(v.color, truckSvg('#fff'), 30);
-        el.addEventListener('click', (e) => {
-          e.stopPropagation();
-          setSelectedId(v.id);
-        });
-        const marker = new maplibregl.Marker({ element: el })
-          .setLngLat([v.lng, v.lat])
-          .setPopup(
-            new maplibregl.Popup({ offset: 18, maxWidth: '280px' }).setHTML(buildVehiclePopup(v)),
-          )
-          .addTo(map);
-        markersById.set(v.id, marker);
-      }
+    syncFleetMarkers(liveFleet());
+  };
 
+  bindMapTheme(
+    () => mapRef.current,
+    mapReady,
+    () => setupMonitoringMap(mapRef.current!),
+  );
+
+  onMount(() => {
+    const map = new maplibregl.Map({
+      container: mapContainer,
+      style: mapStyleForTheme(appState.darkMode),
+      center: UNARE_CENTER,
+      zoom: UNARE_ZOOM - 0.2,
+      attributionControl: false,
+    });
+    mapRef.current = map;
+    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
+
+    map.on('load', () => {
+      map.resize();
+      setupMonitoringMap(map);
       setMapReady(true);
       const first = liveFleet()[0];
       if (first) openVehiclePopup(first.id);
