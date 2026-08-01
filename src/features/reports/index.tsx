@@ -32,18 +32,19 @@ import {
   KpiCard,
 } from '../../design-system/components';
 import {
-  periodComparison,
-  performanceSeries,
+  periodComparison as mockPeriodComparison,
+  performanceSeries as mockPerformanceSeries,
   reportPeriodOptions,
   reportTypeOptions,
-  reportsKpis,
-  routePerformance,
-  savedReports,
-  wasteTypeDistribution,
+  reportsKpis as mockReportsKpis,
+  routePerformance as mockRoutePerformance,
+  savedReports as mockSavedReports,
+  wasteTypeDistribution as mockWasteTypeDistribution,
 } from '../../data/mock/reports';
+import { downloadReport, fetchReportsSummary } from '../../core/api/reports';
 
-function KpiIcon(props: { name: (typeof reportsKpis)[number]['icon'] }) {
-  const map: Record<(typeof reportsKpis)[number]['icon'], () => JSX.Element> = {
+function KpiIcon(props: { name: (typeof mockReportsKpis)[number]['icon'] }) {
+  const map: Record<(typeof mockReportsKpis)[number]['icon'], () => JSX.Element> = {
     trash: () => <Trash2 size={22} />,
     truck: () => <Truck size={22} />,
     route: () => <Route size={22} />,
@@ -61,17 +62,34 @@ export default function ReportsPage() {
   const [endDate, setEndDate] = createSignal('2026-06-25');
   const [format, setFormat] = createSignal<'pdf' | 'excel'>('pdf');
   const [generating, setGenerating] = createSignal(false);
+  const [loading, setLoading] = createSignal(true);
+  const [kpis, setKpis] = createSignal(mockReportsKpis);
+  const [performanceSeries, setPerformanceSeries] = createSignal(mockPerformanceSeries);
+  const [wasteTypeDistribution, setWasteTypeDistribution] = createSignal(mockWasteTypeDistribution);
+  const [routePerformance, setRoutePerformance] = createSignal(mockRoutePerformance);
+  const [periodComparison, setPeriodComparison] = createSignal(mockPeriodComparison);
+  const [savedReports, setSavedReports] = createSignal(mockSavedReports);
 
   onMount(() => {
     Chart.register(ArcElement, CategoryScale, LinearScale, LineElement, PointElement, Filler, Tooltip, Legend);
+    void fetchReportsSummary()
+      .then((summary) => {
+        setKpis(summary.kpis);
+        setPerformanceSeries(summary.performanceSeries);
+        setWasteTypeDistribution(summary.wasteTypeDistribution);
+        setRoutePerformance(summary.routePerformance);
+        setPeriodComparison(summary.periodComparison);
+        setSavedReports(summary.savedReports);
+      })
+      .finally(() => setLoading(false));
   });
 
-  const lineData = {
-    labels: performanceSeries.labels,
+  const lineData = () => ({
+    labels: performanceSeries().labels,
     datasets: [
       {
         label: 'Recolecciones',
-        data: performanceSeries.collections,
+        data: performanceSeries().collections,
         borderColor: '#34D634',
         backgroundColor: 'rgba(52, 214, 52, 0.08)',
         tension: 0.35,
@@ -80,7 +98,7 @@ export default function ReportsPage() {
       },
       {
         label: 'Toneladas (t)',
-        data: performanceSeries.tons,
+        data: performanceSeries().tons,
         borderColor: '#1143F3',
         backgroundColor: 'transparent',
         tension: 0.35,
@@ -89,7 +107,7 @@ export default function ReportsPage() {
       },
       {
         label: 'Distancia (km)',
-        data: performanceSeries.distance,
+        data: performanceSeries().distance,
         borderColor: '#f59e0b',
         backgroundColor: 'transparent',
         tension: 0.35,
@@ -98,7 +116,7 @@ export default function ReportsPage() {
       },
       {
         label: 'Eficiencia (%)',
-        data: performanceSeries.efficiency,
+        data: performanceSeries().efficiency,
         borderColor: '#7c3aed',
         backgroundColor: 'transparent',
         tension: 0.35,
@@ -106,32 +124,38 @@ export default function ReportsPage() {
         yAxisID: 'y1',
       },
     ],
-  };
+  });
 
-  const donutData = {
-    labels: wasteTypeDistribution.items.map((i) => i.label),
+  const donutData = () => ({
+    labels: wasteTypeDistribution().items.map((i) => i.label),
     datasets: [
       {
-        data: wasteTypeDistribution.items.map((i) => i.pct),
-        backgroundColor: wasteTypeDistribution.items.map((i) => i.color),
+        data: wasteTypeDistribution().items.map((i) => i.pct),
+        backgroundColor: wasteTypeDistribution().items.map((i) => i.color),
         borderWidth: 0,
         cutout: '72%',
       },
     ],
-  };
+  });
 
-  const maxRouteTons = Math.max(...routePerformance.map((r) => r.tons));
+  const maxRouteTons = () => Math.max(...routePerformance().map((r) => r.tons), 1);
 
   const handleGenerate = async () => {
     setGenerating(true);
-    await new Promise((r) => setTimeout(r, 900));
-    setGenerating(false);
+    try {
+      await downloadReport(format() === 'pdf' ? 'pdf' : 'csv');
+    } finally {
+      setGenerating(false);
+    }
   };
 
   return (
     <div class="space-y-5">
+      <Show when={loading()}>
+        <div class="text-sm text-text-muted">Cargando reportes...</div>
+      </Show>
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        <For each={reportsKpis}>
+        <For each={kpis()}>
           {(kpi) => (
             <KpiCard
               title={kpi.title}
@@ -177,7 +201,7 @@ export default function ReportsPage() {
           </div>
           <div class="h-64 sm:h-72">
             <Line
-              data={lineData}
+              data={lineData()}
               options={{
                 responsive: true,
                 maintainAspectRatio: false,
@@ -317,7 +341,7 @@ export default function ReportsPage() {
           <div class="flex flex-col items-center gap-4 sm:flex-row">
             <div class="relative h-36 w-36 shrink-0">
               <Doughnut
-                data={donutData}
+                data={donutData()}
                 options={{
                   responsive: true,
                   maintainAspectRatio: false,
@@ -326,13 +350,13 @@ export default function ReportsPage() {
               />
               <div class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                 <span class="font-heading text-lg font-bold text-text-primary dark:text-white">
-                  {wasteTypeDistribution.totalLabel}
+                  {wasteTypeDistribution().totalLabel}
                 </span>
                 <span class="text-xs text-text-muted">Total</span>
               </div>
             </div>
             <ul class="w-full space-y-2">
-              <For each={wasteTypeDistribution.items}>
+              <For each={wasteTypeDistribution().items}>
                 {(item) => (
                   <li class="flex items-center justify-between gap-2 text-sm">
                     <span class="flex items-center gap-2 text-text-secondary">
@@ -350,7 +374,7 @@ export default function ReportsPage() {
         <Card>
           <CardHeader title="Rendimiento por ruta" />
           <ul class="space-y-3.5">
-            <For each={routePerformance}>
+            <For each={routePerformance()}>
               {(r) => (
                 <li>
                   <div class="mb-1 flex items-center justify-between gap-2 text-sm">
@@ -361,7 +385,7 @@ export default function ReportsPage() {
                     <div
                       class="h-full rounded-full"
                       style={{
-                        width: `${(r.tons / maxRouteTons) * 100}%`,
+                        width: `${(r.tons / maxRouteTons()) * 100}%`,
                         'background-color': r.color,
                       }}
                     />
@@ -385,7 +409,7 @@ export default function ReportsPage() {
                 </tr>
               </thead>
               <tbody class="divide-y divide-border dark:divide-dark-border">
-                <For each={periodComparison}>
+                <For each={periodComparison()}>
                   {(row) => (
                     <tr>
                       <td class="py-2.5 pr-2 text-text-secondary">{row.metric}</td>
@@ -421,7 +445,7 @@ export default function ReportsPage() {
               </tr>
             </thead>
             <tbody class="divide-y divide-border dark:divide-dark-border">
-              <For each={savedReports}>
+              <For each={savedReports()}>
                 {(row) => (
                   <tr>
                     <td class="py-3 pr-3 font-medium text-text-primary dark:text-white">{row.name}</td>
@@ -444,7 +468,12 @@ export default function ReportsPage() {
                     <td class="py-3 pr-3 text-xs text-text-muted">{row.generatedAt}</td>
                     <td class="py-3">
                       <div class="flex items-center gap-0.5">
-                        <button type="button" class="flex h-8 w-8 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover hover:text-fero-blue" aria-label="Descargar">
+                        <button
+                          type="button"
+                          class="flex h-8 w-8 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover hover:text-fero-blue"
+                          aria-label="Descargar"
+                          onClick={() => void downloadReport('csv')}
+                        >
                           <Download size={15} />
                         </button>
                         <button type="button" class="flex h-8 w-8 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover" aria-label="Ver">

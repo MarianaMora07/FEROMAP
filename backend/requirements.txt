@@ -3,6 +3,8 @@ fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 pydantic>=2.10.0
 pydantic-settings>=2.6.0
+PyJWT>=2.10.0
+email-validator>=2.2.0
 
 # Base de datos
 sqlalchemy>=2.0.36
@@ -16,3 +18,11 @@ networkx>=3.4.0
 osmnx>=2.0.0
 shapely>=2.0.0
 scikit-learn>=1.5.0
+
+# Reportes
+fpdf2>=2.8.0
+
+# Tests
+pytest>=8.3.0
+pytest-cov>=6.0.0
+httpx>=0.28.0

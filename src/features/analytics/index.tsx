@@ -34,21 +34,22 @@ import {
 } from '../../design-system/components';
 import { osmMapStyle } from '../../core/utils/mapStyle';
 import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
+import { fetchAnalyticsSummary } from '../../core/api/analytics';
 import {
-  analyticsEfficiencyIndicators,
-  analyticsInsights,
-  analyticsKpis,
-  analyticsRoutePerformance,
-  analyticsWasteTypes,
-  evolutionSeries,
+  analyticsEfficiencyIndicators as mockEfficiency,
+  analyticsInsights as mockInsights,
+  analyticsKpis as mockKpis,
+  analyticsRoutePerformance as mockRoutePerformance,
+  analyticsWasteTypes as mockWasteTypes,
+  evolutionSeries as mockEvolution,
   heatmapPoints,
-  hourlyDistribution,
+  hourlyDistribution as mockHourly,
   hourlyMetricOptions,
   type HourlyMetricId,
 } from '../../data/mock/analytics';
 
-function KpiIcon(props: { name: (typeof analyticsKpis)[number]['icon'] }) {
-  const map: Record<(typeof analyticsKpis)[number]['icon'], () => JSX.Element> = {
+function KpiIcon(props: { name: (typeof mockKpis)[number]['icon'] }) {
+  const map: Record<(typeof mockKpis)[number]['icon'], () => JSX.Element> = {
     trash: () => <Trash2 size={22} />,
     truck: () => <Truck size={22} />,
     route: () => <Route size={22} />,
@@ -86,14 +87,14 @@ function Sparkline(props: { values: number[]; color: string }) {
   );
 }
 
-const sparkColor: Record<(typeof analyticsKpis)[number]['iconTone'], string> = {
+const sparkColor: Record<(typeof mockKpis)[number]['iconTone'], string> = {
   green: '#34D634',
   blue: '#1143F3',
   amber: '#f59e0b',
   purple: '#7c3aed',
 };
 
-function InsightIcon(props: { icon: (typeof analyticsInsights)[number]['icon']; tone: string }) {
+function InsightIcon(props: { icon: (typeof mockInsights)[number]['icon']; tone: string }) {
   const cls = props.tone;
   switch (props.icon) {
     case 'trend':
@@ -120,8 +121,24 @@ export default function AnalyticsPage() {
   const [granularity, setGranularity] = createSignal('daily');
   const [hourlyMetric, setHourlyMetric] = createSignal<HourlyMetricId>('toneladas');
   const [mapReady, setMapReady] = createSignal(false);
+  const [kpis, setKpis] = createSignal(mockKpis);
+  const [evolutionSeries, setEvolutionSeries] = createSignal(mockEvolution);
+  const [analyticsWasteTypes, setAnalyticsWasteTypes] = createSignal(mockWasteTypes);
+  const [analyticsRoutePerformance, setAnalyticsRoutePerformance] = createSignal(mockRoutePerformance);
+  const [hourlyDistribution, setHourlyDistribution] = createSignal(mockHourly);
+  const [analyticsEfficiencyIndicators, setAnalyticsEfficiencyIndicators] = createSignal(mockEfficiency);
+  const [analyticsInsights, setAnalyticsInsights] = createSignal(mockInsights);
 
   onMount(() => {
+    void fetchAnalyticsSummary().then((summary) => {
+      setKpis(summary.kpis);
+      setEvolutionSeries(summary.evolutionSeries);
+      setAnalyticsWasteTypes(summary.wasteTypes);
+      setAnalyticsRoutePerformance(summary.routePerformance);
+      setHourlyDistribution(summary.hourlyDistribution);
+      setAnalyticsEfficiencyIndicators(summary.efficiencyIndicators);
+      setAnalyticsInsights(summary.insights);
+    });
     Chart.register(
       ArcElement,
       BarElement,
@@ -185,12 +202,12 @@ export default function AnalyticsPage() {
     });
   });
 
-  const lineData = {
-    labels: evolutionSeries.labels,
+  const lineData = () => ({
+    labels: evolutionSeries().labels,
     datasets: [
       {
         label: 'Recolecciones',
-        data: evolutionSeries.collections,
+        data: evolutionSeries().collections,
         borderColor: '#34D634',
         backgroundColor: 'rgba(52, 214, 52, 0.1)',
         tension: 0.35,
@@ -200,7 +217,7 @@ export default function AnalyticsPage() {
       },
       {
         label: 'Toneladas (t)',
-        data: evolutionSeries.tons,
+        data: evolutionSeries().tons,
         borderColor: '#1143F3',
         backgroundColor: 'transparent',
         tension: 0.35,
@@ -208,25 +225,25 @@ export default function AnalyticsPage() {
         yAxisID: 'y1',
       },
     ],
-  };
+  });
 
-  const donutData = {
-    labels: analyticsWasteTypes.items.map((i) => i.label),
+  const donutData = () => ({
+    labels: analyticsWasteTypes().items.map((i) => i.label),
     datasets: [
       {
-        data: analyticsWasteTypes.items.map((i) => i.pct),
-        backgroundColor: analyticsWasteTypes.items.map((i) => i.color),
+        data: analyticsWasteTypes().items.map((i) => i.pct),
+        backgroundColor: analyticsWasteTypes().items.map((i) => i.color),
         borderWidth: 0,
         cutout: '72%',
       },
     ],
-  };
+  });
 
   const hourlyData = () => ({
-    labels: hourlyDistribution.labels,
+    labels: hourlyDistribution().labels,
     datasets: [
       {
-        data: hourlyDistribution[hourlyMetric()],
+        data: hourlyDistribution()[hourlyMetric()],
         backgroundColor: '#7c3aed',
         borderRadius: 6,
         maxBarThickness: 28,
@@ -234,12 +251,12 @@ export default function AnalyticsPage() {
     ],
   });
 
-  const maxTons = Math.max(...analyticsRoutePerformance.map((r) => r.tons));
+  const maxTons = () => Math.max(...analyticsRoutePerformance().map((r) => r.tons), 1);
 
   return (
     <div class="space-y-5">
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        <For each={analyticsKpis}>
+        <For each={kpis()}>
           {(kpi) => (
             <KpiCard
               title={kpi.title}
@@ -280,7 +297,7 @@ export default function AnalyticsPage() {
           </div>
           <div class="h-64">
             <Line
-              data={lineData}
+              data={lineData()}
               options={{
                 responsive: true,
                 maintainAspectRatio: false,
@@ -312,7 +329,7 @@ export default function AnalyticsPage() {
           <div class="flex flex-col items-center gap-4 sm:flex-row">
             <div class="relative h-36 w-36 shrink-0">
               <Doughnut
-                data={donutData}
+                data={donutData()}
                 options={{
                   responsive: true,
                   maintainAspectRatio: false,
@@ -321,13 +338,13 @@ export default function AnalyticsPage() {
               />
               <div class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                 <span class="font-heading text-lg font-bold text-text-primary dark:text-white">
-                  {analyticsWasteTypes.totalLabel}
+                  {analyticsWasteTypes().totalLabel}
                 </span>
                 <span class="text-xs text-text-muted">Total</span>
               </div>
             </div>
             <ul class="w-full space-y-2">
-              <For each={analyticsWasteTypes.items}>
+              <For each={analyticsWasteTypes().items}>
                 {(item) => (
                   <li class="flex items-center justify-between gap-2 text-sm">
                     <span class="flex items-center gap-2 text-text-secondary">
@@ -356,7 +373,7 @@ export default function AnalyticsPage() {
                 </tr>
               </thead>
               <tbody class="divide-y divide-border dark:divide-dark-border">
-                <For each={analyticsRoutePerformance}>
+                <For each={analyticsRoutePerformance()}>
                   {(r) => (
                     <tr>
                       <td class="py-2.5 pr-2 font-medium text-text-primary dark:text-white">{r.label}</td>
@@ -366,7 +383,7 @@ export default function AnalyticsPage() {
                           <div class="h-1.5 min-w-12 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                             <div
                               class="h-full rounded-full bg-fero-green-dark"
-                              style={{ width: `${(r.tons / maxTons) * 100}%` }}
+                              style={{ width: `${(r.tons / maxTons()) * 100}%` }}
                             />
                           </div>
                         </div>
@@ -416,7 +433,7 @@ export default function AnalyticsPage() {
                     grid: { display: false },
                     ticks: {
                       font: { size: 10 },
-                      callback: (_v: string | number, i: number) => `${hourlyDistribution.labels[i]}:00`,
+                      callback: (_v: string | number, i: number) => `${hourlyDistribution().labels[i]}:00`,
                     },
                   },
                 },
@@ -428,7 +445,7 @@ export default function AnalyticsPage() {
         <Card>
           <CardHeader title="Indicadores de eficiencia" />
           <ul class="space-y-4">
-            <For each={analyticsEfficiencyIndicators}>
+            <For each={analyticsEfficiencyIndicators()}>
               {(ind) => (
                 <li>
                   <div class="mb-1.5 flex items-center justify-between gap-2 text-sm">
@@ -482,7 +499,7 @@ export default function AnalyticsPage() {
             action={<Lightbulb size={18} class="text-amber-500" />}
           />
           <ul class="space-y-3">
-            <For each={analyticsInsights}>
+            <For each={analyticsInsights()}>
               {(item) => (
                 <li class="flex gap-3 rounded-lg border border-border p-3 dark:border-dark-border">
                   <span class={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${insightToneBg[item.tone]}`}>

@@ -1,4 +1,4 @@
-import { For, Show, createSignal, type JSX } from 'solid-js';
+import { For, Show, createSignal, onMount, type JSX } from 'solid-js';
 import {
   Calendar,
   Camera,
@@ -21,13 +21,13 @@ import {
   SelectField,
   TextField,
 } from '../../design-system/components';
+import { fetchProfile, updateProfile } from '../../core/api/profile';
 import {
   profileDefaultViewOptions,
   profileLanguageOptions,
   profilePageSizeOptions,
   profilePreferencesDefaults,
   profileReportFrequencyOptions,
-  profileRoleOptions,
   profileSecurity,
   profileThemeOptions,
   profileUser,
@@ -115,19 +115,52 @@ function SecurityRow(props: {
 
 export default function ProfilePage() {
   const [editing, setEditing] = createSignal(false);
+  const [loading, setLoading] = createSignal(true);
   const [form, setForm] = createSignal({
-    fullName: profileUser.fullName,
-    username: profileUser.username,
-    email: profileUser.email,
-    role: profileUser.role,
-    phone: profileUser.phone,
+    firstName: '',
+    lastName: '',
+    email: '',
+    role: '',
+    phone: '',
     language: profileUser.language,
     address: profileUser.address,
+  });
+  const [meta, setMeta] = createSignal({
+    registeredAt: '—',
+    lastAccess: '—',
+    sectorName: '',
   });
   const [prefs, setPrefs] = createSignal({ ...profilePreferencesDefaults });
   const [avatarPreview, setAvatarPreview] = createSignal(profileUser.avatarUrl);
   const [photoName, setPhotoName] = createSignal('');
   const [flash, setFlash] = createSignal<string | null>(null);
+
+  onMount(() => {
+    void fetchProfile()
+      .then((profile) => {
+        setForm({
+          firstName: profile.firstName,
+          lastName: profile.lastName,
+          email: profile.email,
+          role: profile.roleLabel,
+          phone: profile.phone ?? '',
+          language: profileUser.language,
+          address: profile.sectorName ? `Sector ${profile.sectorName}` : profileUser.address,
+        });
+        setMeta({
+          registeredAt: profile.createdAt
+            ? new Date(profile.createdAt).toLocaleDateString('es-VE')
+            : '—',
+          lastAccess: profile.lastLoginAt
+            ? new Date(profile.lastLoginAt).toLocaleString('es-VE')
+            : '—',
+          sectorName: profile.sectorName ?? '',
+        });
+      })
+      .finally(() => setLoading(false));
+  });
+
+  const fullName = () => `${form().firstName} ${form().lastName}`.trim();
 
   const patchForm = (partial: Partial<ReturnType<typeof form>>) => {
     setForm((prev) => ({ ...prev, ...partial }));
@@ -152,6 +185,10 @@ export default function ProfilePage() {
 
   return (
     <div class="space-y-5">
+      <Show when={loading()}>
+        <div class="text-sm text-text-muted">Cargando perfil...</div>
+      </Show>
+
       <Show when={flash()}>
         <div class="rounded-md border border-fero-green-dark/30 bg-fero-green/10 px-3 py-2 text-sm text-fero-green-dark">
           {flash()}
@@ -165,7 +202,7 @@ export default function ProfilePage() {
             <div class="relative mb-4">
               <img
                 src={avatarPreview()}
-                alt={form().fullName}
+                alt={fullName()}
                 class="h-28 w-28 rounded-full object-cover ring-4 ring-fero-green/20"
               />
               <button
@@ -179,7 +216,7 @@ export default function ProfilePage() {
             </div>
 
             <h2 class="font-heading text-xl font-bold text-text-primary dark:text-white">
-              {form().fullName}
+              {fullName()}
             </h2>
             <p class="mt-0.5 text-sm font-medium text-fero-green-dark">{form().role}</p>
             <p class="mt-1 break-all text-sm text-text-muted">{form().email}</p>
@@ -193,18 +230,25 @@ export default function ProfilePage() {
             <MetaRow
               icon={<Calendar size={15} />}
               label="Fecha de registro"
-              value={profileUser.registeredAt}
+              value={meta().registeredAt}
             />
             <MetaRow
               icon={<Clock size={15} />}
               label="Último acceso"
-              value={profileUser.lastAccess}
+              value={meta().lastAccess}
             />
             <MetaRow
               icon={<Monitor size={15} />}
               label="Dirección IP"
               value={profileUser.ipAddress}
             />
+            <Show when={meta().sectorName}>
+              <MetaRow
+                icon={<MapPin size={15} />}
+                label="Sector"
+                value={meta().sectorName}
+              />
+            </Show>
             <MetaRow
               icon={<MapPin size={15} />}
               label="Zona horaria"
@@ -250,28 +294,26 @@ export default function ProfilePage() {
           <fieldset disabled={!editing()} class="disabled:opacity-90">
             <div class="grid gap-x-5 gap-y-4 sm:grid-cols-2">
               <TextField
-                label="Nombre completo"
-                value={form().fullName}
-                onInput={(e) => patchForm({ fullName: e.currentTarget.value })}
+                label="Nombre"
+                value={form().firstName}
+                onInput={(e) => patchForm({ firstName: e.currentTarget.value })}
               />
               <TextField
-                label="Nombre de usuario"
-                value={form().username}
-                onInput={(e) => patchForm({ username: e.currentTarget.value })}
+                label="Apellido"
+                value={form().lastName}
+                onInput={(e) => patchForm({ lastName: e.currentTarget.value })}
               />
               <TextField
                 label="Correo electrónico"
                 type="email"
                 value={form().email}
-                onInput={(e) => patchForm({ email: e.currentTarget.value })}
+                disabled
               />
-              <SelectField
+              <TextField
                 label="Rol"
                 value={form().role}
-                onChange={(e) => patchForm({ role: e.currentTarget.value })}
-              >
-                <For each={profileRoleOptions}>{(o) => <option value={o.value}>{o.label}</option>}</For>
-              </SelectField>
+                disabled
+              />
               <TextField
                 label="Teléfono"
                 value={form().phone}
@@ -345,8 +387,22 @@ export default function ProfilePage() {
               icon={<Check size={14} />}
               disabled={!editing()}
               onClick={() => {
-                setEditing(false);
-                showFlash('Información personal guardada.');
+                void updateProfile({
+                  firstName: form().firstName,
+                  lastName: form().lastName,
+                  phone: form().phone || null,
+                })
+                  .then((profile) => {
+                    setForm((prev) => ({
+                      ...prev,
+                      firstName: profile.firstName,
+                      lastName: profile.lastName,
+                      phone: profile.phone ?? '',
+                    }));
+                    setEditing(false);
+                    showFlash('Información personal guardada.');
+                  })
+                  .catch(() => showFlash('No se pudo guardar el perfil.'));
               }}
             >
               Guardar cambios

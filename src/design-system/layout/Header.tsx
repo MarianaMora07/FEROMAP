@@ -29,6 +29,10 @@ const pageMeta: Record<string, PageMeta> = {
   '/monitoring': monitoringPageMeta,
   '/reports': reportsPageMeta,
   '/analytics': analyticsPageMeta,
+  '/resident': {
+    title: 'Mi Recolección',
+    subtitle: 'Consulta el horario y estado de recolección en tu sector.',
+  },
   '/alerts': alertsPageMeta,
   '/admin': adminPageMeta,
   '/profile': profilePageMeta,
