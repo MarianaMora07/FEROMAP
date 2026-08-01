@@ -12,6 +12,17 @@ dist
 dist-ssr
 *.local
 
+# Entorno e infra
+.env
+postgres_data/
+data/cache/
+
+# Python (backend)
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.pytest_cache/
+backend/.venv/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -22,3 +33,4 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+backend/cache/
