@@ -46,6 +46,25 @@ export-seeds:
 # Reinicio completo: borra BD, levanta stack, migra y seed.
 db-reset: down-volumes up wait-db migrate seed
 
+# Demo de defensa (Fase 0): BD limpia + verificación automática del flujo.
+demo: db-reset demo-verify
+
+# Verifica API + optimización + dashboard (tras `just up` y `just seed`).
+demo-verify: _check
+    bash ./scripts/demo-verify.sh
+
+# Verificación completa pre-defensa: health + auth + optimize (+ Nginx en prod).
+defense-verify: _check
+    bash ./scripts/defense-verify.sh
+
+# Ejecuta tests unitarios del motor y contingencias (en contenedor api).
+test: _check
+    {{compose}} exec -T api pytest tests/ -v --tb=short
+
+# Tests en el host (requiere pip install -r backend/requirements.txt).
+test-local:
+    cd backend && python -m pytest tests/ -v --tb=short
+
 # Muestra COMPOSE_ENV, credenciales y URLs de los servicios.
 env-info: _check
     @echo "COMPOSE_ENV={{env_var_or_default('COMPOSE_ENV', 'dev')}}  →  compose.yml + compose.{{env_var_or_default('COMPOSE_ENV', 'dev')}}.yml"
@@ -60,7 +79,15 @@ env-info: _check
 
 # Crea .env desde .env.example si aún no existe.
 init-env:
-    @test -f .env && echo "ℹ️  .env ya existe; no se modificó." || cp .env.example .env && echo "✅ Creado .env desde .env.example"
+    @if [ ! -f .env ]; then \
+      if [ "{{env_var_or_default('COMPOSE_ENV', 'dev')}}" = "prod" ] && [ -f .env.prod.example ]; then \
+        cp .env.prod.example .env && echo "✅ Creado .env desde .env.prod.example"; \
+      else \
+        cp .env.example .env && echo "✅ Creado .env desde .env.example"; \
+      fi \
+    else \
+      echo "ℹ️  .env ya existe; no se modificó."; \
+    fi
 
 # Sigue los logs de todos los servicios en tiempo real.
 logs: _check
@@ -86,14 +113,15 @@ up-prod:
     @echo "🌐 UI (Nginx) en http://localhost:{{env_var_or_default('FRONTEND_PORT', '8080')}}"
     @echo "🔌 API directa en http://localhost:{{api_port}}/health"
 
-# Primera vez en producción: rebuild + migrate + seed + health.
+# Primera vez en producción: rebuild + migrate + seed + health + verificación.
 setup-prod:
-    COMPOSE_ENV=prod just init-env
+    @test -f .env || cp .env.prod.example .env
     COMPOSE_ENV=prod just rebuild-prod
     COMPOSE_ENV=prod just wait-db
     COMPOSE_ENV=prod just migrate
     COMPOSE_ENV=prod just seed
     COMPOSE_ENV=prod just health
+    COMPOSE_ENV=prod just defense-verify
     @echo "✅ Producción lista — http://localhost:{{env_var_or_default('FRONTEND_PORT', '8080')}}"
 
 # Primera vez: init-env + contenedores + espera a PostgreSQL + verificación de salud.

@@ -21,6 +21,21 @@ Prototipo y sistema para el **Sistema Basado en Inteligencia Artificial para la 
 - [just](https://github.com/casey/just)
 - Node.js 20+ (solo si desarrollas el frontend fuera de contenedores)
 
+## Credenciales demo (autenticación)
+
+Tras `just seed`, puedes iniciar sesión en `/login` con cualquiera de estas cuentas (contraseña común para todas):
+
+| Email | Rol | Uso en la demo |
+|-------|-----|----------------|
+| `admin@fero.com` | Administrador | Acceso completo, administración |
+| `plan@fero.com` | Planificador | Optimización, reportes, simulación |
+| `conductor@fero.com` | Conductor | Monitoreo, avance de ruta, averías |
+| `residente@fero.com` | Residente | Mi recolección, puntos de su sector |
+
+**Contraseña:** `123456789`
+
+Variables opcionales para scripts de verificación: `DEMO_EMAIL`, `DEMO_PASSWORD`.
+
 ## Inicio rápido (desarrollo)
 
 ```bash
@@ -80,8 +95,20 @@ Con `VITE_USE_MOCKS=false` y el stack levantado:
 Atajo de verificación:
 
 ```bash
+just defense-verify
+```
+
+Equivalente manual:
+
+```bash
+just health
 curl http://localhost:8000/health
+curl -X POST http://localhost:8000/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"plan@fero.com","password":"123456789"}'
+# Usar accessToken en Authorization: Bearer …
 curl -X POST http://localhost:8000/api/v1/simulations/optimize \
+  -H 'Authorization: Bearer <token>' \
   -H 'Content-Type: application/json' \
   -d '{"scenarioId":"normal"}'
 ```
@@ -91,7 +118,11 @@ curl -X POST http://localhost:8000/api/v1/simulations/optimize \
 | Comando | Descripción |
 |---------|-------------|
 | `just setup` | Primera vez (dev): `.env`, contenedores, DB, health |
-| `just setup-prod` | Primera vez (prod): rebuild, migrate, seed, health |
+| `just setup-prod` | Primera vez (prod): rebuild, migrate, seed, health, `defense-verify` |
+| `just defense-verify` | Pre-defensa: health + login + optimize (+ Nginx si `COMPOSE_ENV=prod`) |
+| `just demo-verify` | Flujo demo rápido (GIS + optimización) |
+| `just test` | Tests unitarios (motor ACO + contingencias) en contenedor API |
+| `just test-local` | Tests en el host (`pip install -r backend/requirements.txt`) |
 | `just up` | Levanta stack según `COMPOSE_ENV` en `.env` |
 | `just up-prod` | `COMPOSE_ENV=prod just up` |
 | `just down` | Detiene contenedores (conserva PostgreSQL) |
@@ -124,7 +155,18 @@ Copia la plantilla: `just init-env` (dev) o `cp .env.prod.example .env` (prod).
 | `VITE_API_URL` | `http://localhost:8000` (build) | **vacío** (mismo origen vía Nginx) |
 | `VITE_API_PROXY_TARGET` | `http://api:8000` (proxy Vite) | no aplica |
 | `CORS_ORIGINS` | `http://localhost:5173` | `http://localhost:8080` |
+| `JWT_SECRET` | `feromap-dev-secret-…` | **Cambiar en prod** |
+| `JWT_EXPIRE_MINUTES` | `1440` | `1440` |
 | `COMPOSE_PROJECT_NAME` | `feromap` | `feromap` |
+
+## Tests (Fase 5)
+
+```bash
+just test          # dentro del contenedor api (recomendado)
+just test-local    # en el host, desde backend/
+```
+
+Cubre el motor ACO/VRP (`test_optimization_engine.py`) y el servicio de contingencias por avería (`test_contingency_service.py`).
 
 ## Solo frontend (sin contenedores)
 
@@ -157,7 +199,9 @@ Coordenadas base: `[-62.715, 8.295]` (Parroquia Unare, Puerto Ordaz).
 | GET | `/api/v1/routes/optimized` | Última ruta optimizada |
 | GET | `/api/v1/dashboard/summary` | Resumen operativo |
 | GET | `/api/v1/scenarios` | Escenarios de simulación |
-| POST | `/api/v1/simulations/optimize` | Motor ACO/VRP (`{"scenarioId":"normal"}`) |
+| POST | `/api/v1/auth/login` | Inicio de sesión (JWT) |
+| GET | `/api/v1/auth/me` | Usuario autenticado |
+| POST | `/api/v1/simulations/optimize` | Motor ACO/VRP (requiere planificador/admin) |
 | GET | `/api/v1/simulations/{id}` | Detalle de simulación |
 | GET | `/api/v1/kpis?scenario=` | KPIs por escenario |
 | GET | `/api/v1/vehicles` | Flota |
