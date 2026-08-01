@@ -97,6 +97,25 @@ export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export async function apiDelete<T>(path: string): Promise<T> {
+  const res = await fetch(resolveUrl(path), {
+    method: 'DELETE',
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    let message = await res.text();
+    try {
+      const json = JSON.parse(message) as { detail?: string };
+      if (typeof json.detail === 'string') message = json.detail;
+    } catch {
+      // keep raw text
+    }
+    throw new ApiError(message, res.status);
+  }
+  return res.json() as Promise<T>;
+}
+
 export async function apiDownload(path: string, filename: string): Promise<void> {
   const res = await fetch(resolveUrl(path), {
     headers: authHeaders(),

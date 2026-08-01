@@ -71,6 +71,10 @@ export function canOptimize(role: UserRole | undefined): boolean {
   return role === 'administrador' || role === 'planificador';
 }
 
+export function canManageCollectionPoints(role: UserRole | undefined): boolean {
+  return role === 'administrador' || role === 'planificador';
+}
+
 export function canAdvanceFleet(role: UserRole | undefined): boolean {
   return role === 'administrador' || role === 'planificador' || role === 'conductor';
 }

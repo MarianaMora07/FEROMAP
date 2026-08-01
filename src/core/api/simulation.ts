@@ -15,6 +15,7 @@ export interface OptimizeResponse {
     optimized: RouteCollection;
   };
   logs: SimulationLogEntry[];
+  servedPointCodes?: string[];
 }
 
 function mockOptimizeResponse(scenarioId: ScenarioId): OptimizeResponse {

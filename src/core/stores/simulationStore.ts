@@ -8,6 +8,7 @@ import { loadDashboardData } from './dashboardStore';
 import { kpiByScenario, optimizationLogMessages, scenarios as mockScenarios } from '../../data/mock/kpis';
 import { getScenarioRoutes } from '../../data/mock/routes';
 import { loadRoutesWithRoadSnapping, showOptimizedRoute } from './appStore';
+import { writeLastOptimizedCodes } from '../utils/collectionPointsOptimization';
 
 interface SimulationState {
   scenarioId: ScenarioId;
@@ -125,6 +126,9 @@ export async function runOptimization(): Promise<void> {
       kpis: result.kpis,
       lastSimulationId: result.simulationId,
     });
+    if (result.servedPointCodes?.length) {
+      writeLastOptimizedCodes(result.servedPointCodes);
+    }
     await loadDashboardData();
   }
 

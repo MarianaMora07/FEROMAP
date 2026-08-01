@@ -19,6 +19,8 @@ export interface CollectionPoint {
   frequency: string;
   lng: number;
   lat: number;
+  usedInLastOptimization?: boolean;
+  priorityBoost?: boolean;
 }
 
 export function fillStatusFromLevel(level: number, outOfService = false): FillStatus {

@@ -1,5 +1,5 @@
 import { For, Show, createResource, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
-import { A } from '@solidjs/router';
+import { A, useSearchParams } from '@solidjs/router';
 import maplibregl, { type Map as MapLibreMap, type Marker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import {
@@ -236,6 +236,13 @@ export default function SimulationPage() {
   let mapContainer!: HTMLDivElement;
   const mapRef: { current?: MapLibreMap } = {};
   const markers: Marker[] = [];
+  const [params] = useSearchParams();
+  const criticalFromPoints = () => {
+    const value = params.critical;
+    const raw = Array.isArray(value) ? value[0] : value;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  };
 
   const [monitoringData] = createResource(fetchMonitoringStatus);
   const fleetForBreakdown = () =>
@@ -389,6 +396,17 @@ export default function SimulationPage() {
 
   return (
     <div class="space-y-5">
+      <Show when={criticalFromPoints() > 0}>
+        <div class="rounded-xl border border-amber-300/60 bg-amber-50 px-4 py-3 dark:border-amber-700/50 dark:bg-amber-950/20">
+          <p class="text-sm font-semibold text-amber-800 dark:text-amber-300">
+            {criticalFromPoints()} punto{criticalFromPoints() === 1 ? '' : 's'} crítico
+            {criticalFromPoints() === 1 ? '' : 's'} desde Puntos de Recolección
+          </p>
+          <p class="mt-1 text-sm text-text-secondary">
+            Ejecuta la optimización para incorporar los contenedores más urgentes en la ruta.
+          </p>
+        </div>
+      </Show>
       <ContingencyResultBanner />
       <BreakdownReporter vehicles={fleetForBreakdown()} />
 

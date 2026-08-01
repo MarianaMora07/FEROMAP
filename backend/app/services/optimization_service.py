@@ -500,6 +500,7 @@ def run_optimization_engine(
 
     points = db.scalars(
         select(CollectionPoint)
+        .where(CollectionPoint.deleted_at.is_(None), CollectionPoint.status == "active")
         .options(joinedload(CollectionPoint.sector))
         .order_by(CollectionPoint.code)
     ).all()
@@ -515,6 +516,9 @@ def run_optimization_engine(
         pct = fill_level_pct(point)
         boosted_pct = min(100, pct + int(fill_boost))
         demand = float(point.current_fill_level_kg) * (1 + fill_boost / 100)
+        if bool(getattr(point, "priority_boost", False)):
+            boosted_pct = min(100, boosted_pct + 25)
+            demand = max(demand, float(point.max_capacity_kg) * 0.85)
         if demand <= 0:
             demand = float(point.max_capacity_kg) * boosted_pct / 100
         customers.append(
@@ -679,4 +683,5 @@ def run_optimization_engine(
         "logs": logs,
         "dispatch": dispatch,
         "contingency": contingency_meta,
+        "servedPointCodes": sorted(served_codes),
     }

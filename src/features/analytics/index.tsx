@@ -1,4 +1,5 @@
-import { For, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { For, Show, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { useSearchParams } from '@solidjs/router';
 import {
   Chart,
   ArcElement,
@@ -119,6 +120,12 @@ const insightToneBg = {
 export default function AnalyticsPage() {
   let mapContainer!: HTMLDivElement;
   const mapRef: { current?: MapLibreMap } = {};
+  const [params] = useSearchParams();
+  const focusCollectionPoints = () => params.focus === 'collection-points';
+  const focusSector = () => {
+    const sector = params.sector;
+    return typeof sector === 'string' && sector.length > 0 ? sector : '';
+  };
   const [granularity, setGranularity] = createSignal('daily');
   const [hourlyMetric, setHourlyMetric] = createSignal<HourlyMetricId>('toneladas');
   const [mapReady, setMapReady] = createSignal(false);
@@ -268,6 +275,19 @@ export default function AnalyticsPage() {
 
   return (
     <div class="space-y-5">
+      <Show when={focusCollectionPoints()}>
+        <div class="rounded-xl border border-fero-blue/30 bg-fero-blue/10 px-4 py-3">
+          <p class="text-sm font-semibold text-fero-blue">Análisis de puntos de recolección</p>
+          <p class="mt-1 text-sm text-text-secondary">
+            Vista enfocada en contenedores y niveles de llenado
+            <Show when={focusSector()}>
+              {' '}
+              · Sector <span class="font-semibold text-text-primary dark:text-white">{focusSector()}</span>
+            </Show>
+            .
+          </p>
+        </div>
+      </Show>
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <For each={kpis()}>
           {(kpi) => (
@@ -338,7 +358,13 @@ export default function AnalyticsPage() {
         </Card>
 
         <Card class="xl:col-span-2">
-          <CardHeader title="Recolección por tipo de residuo" />
+          <CardHeader
+            title={
+              focusCollectionPoints()
+                ? `Recolección por tipo de residuo${focusSector() ? ` — ${focusSector()}` : ''}`
+                : 'Recolección por tipo de residuo'
+            }
+          />
           <div class="flex flex-col items-center gap-4 sm:flex-row">
             <div class="relative h-36 w-36 shrink-0">
               <Doughnut
@@ -478,6 +504,11 @@ export default function AnalyticsPage() {
           <div class="border-b border-border px-4 py-3 dark:border-dark-border">
             <h3 class="font-heading font-semibold text-text-primary dark:text-white">
               Mapa de calor de recolecciones
+              <Show when={focusCollectionPoints()}>
+                <span class="ml-2 text-sm font-normal text-fero-blue">
+                  (enfoque: puntos de recolección)
+                </span>
+              </Show>
             </h3>
           </div>
           <div class="relative min-h-72 flex-1 bg-slate-100 dark:bg-slate-900">

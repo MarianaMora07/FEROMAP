@@ -16,14 +16,12 @@ import maplibregl, { type Map as MapLibreMap, type Marker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import {
   ArrowRight,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Crosshair,
   Download,
   Eye,
   Minus,
-  MoreVertical,
   Pencil,
   Plus,
   Search,
@@ -35,27 +33,54 @@ import {
   Button,
   Card,
   CardHeader,
+  Drawer,
   KpiCard,
   ProgressBar,
   StatusBadge,
+  ToastContainer,
+  createToastStore,
 } from '../../design-system/components';
 import { bindMapTheme, mapStyleForTheme } from '../../core/utils/mapStyle';
 import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
 import {
-  collectionPointSectorOptions,
   collectionPointStatusOptions,
-  collectionPointsKpis,
-  collectionPointsList,
-  fillDistribution,
-  fillHistory7d,
   fillStatusBarColor,
   fillStatusColor,
   mapFillLegend,
   type CollectionPoint,
 } from '../../data/mock/collectionPoints';
-import { fetchCollectionPointsList } from '../../core/api/collectionPoints';
+import {
+  apiDistributionToFillDistribution,
+  buildAnalyticsHref,
+  buildSectorFilterOptions,
+  computeCollectionPointsKpis,
+  computeFillDistribution,
+  createCollectionPoint,
+  deleteCollectionPoint,
+  detailToCollectionPoint,
+  downloadCollectionPointsCsv,
+  enrichCollectionPointsWithOptimization,
+  fetchCollectionPointDetail,
+  fetchCollectionPointFillHistory,
+  fetchCollectionPointsList,
+  fetchCollectionPointsOptimizationContext,
+  fetchCollectionPointsSummary,
+  fetchSectorOptions,
+  summaryKpisToCards,
+  updateCollectionPoint,
+} from '../../core/api/collectionPoints';
+import { toggleLocalPriorityBoost } from '../../core/utils/collectionPointsOptimization';
+import { ApiError } from '../../core/api/client';
+import { fetchSectors } from '../../core/api/sectors';
+import { canManageCollectionPoints } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
 import { appState } from '../../core/stores/appStore';
+import { CollectionPointActionsMenu } from './CollectionPointActionsMenu';
+import { CollectionPointOptimizationBadges } from './CollectionPointOptimizationBadges';
+import {
+  CollectionPointFormModal,
+  type CollectionPointFormValues,
+} from './CollectionPointFormModal';
 
 function trashSvg(color: string) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>`;
@@ -114,6 +139,29 @@ function LevelBar(props: { point: CollectionPoint }) {
   );
 }
 
+function KpiSkeleton() {
+  return (
+    <div class="animate-pulse rounded-xl border border-border bg-surface p-4 dark:border-dark-border dark:bg-dark-surface">
+      <div class="mb-3 h-3 w-24 rounded bg-slate-200 dark:bg-slate-700" />
+      <div class="mb-2 h-8 w-16 rounded bg-slate-200 dark:bg-slate-700" />
+      <div class="h-3 w-20 rounded bg-slate-200 dark:bg-slate-700" />
+    </div>
+  );
+}
+
+function TableRowSkeleton() {
+  return (
+    <tr class="animate-pulse">
+      <td class="px-3 py-3"><div class="h-3 w-14 rounded bg-slate-200 dark:bg-slate-700" /></td>
+      <td class="px-3 py-3"><div class="h-3 w-28 rounded bg-slate-200 dark:bg-slate-700" /></td>
+      <td class="px-3 py-3"><div class="h-3 w-16 rounded bg-slate-200 dark:bg-slate-700" /></td>
+      <td class="px-3 py-3"><div class="h-3 w-20 rounded bg-slate-200 dark:bg-slate-700" /></td>
+      <td class="px-3 py-3"><div class="h-5 w-16 rounded-full bg-slate-200 dark:bg-slate-700" /></td>
+      <td class="px-3 py-3"><div class="h-7 w-20 rounded bg-slate-200 dark:bg-slate-700" /></td>
+    </tr>
+  );
+}
+
 export default function CollectionPointsPage() {
   let mapContainer!: HTMLDivElement;
   const mapRef: { current?: MapLibreMap } = {};
@@ -124,17 +172,114 @@ export default function CollectionPointsPage() {
   const [sectorFilter, setSectorFilter] = createSignal('');
   const [page, setPage] = createSignal(1);
   const [pageSize] = createSignal(8);
-  const [selectedId, setSelectedId] = createSignal('CNT-001');
+  const [selectedId, setSelectedId] = createSignal('');
   const [mapReady, setMapReady] = createSignal(false);
-  const [apiPoints] = createResource(fetchCollectionPointsList);
-  const allPoints = createMemo(() => apiPoints() ?? []);
+  const [mapFiltersOpen, setMapFiltersOpen] = createSignal(false);
+  const [historyDrawerOpen, setHistoryDrawerOpen] = createSignal(false);
+  const [formOpen, setFormOpen] = createSignal(false);
+  const [formMode, setFormMode] = createSignal<'create' | 'edit'>('create');
+  const [draftCoords, setDraftCoords] = createSignal<{ lat: number; lng: number } | null>(null);
+  const [placeMode, setPlaceMode] = createSignal(false);
+  const [submitting, setSubmitting] = createSignal(false);
+  const [exporting, setExporting] = createSignal(false);
+  const { toasts, addToast, removeToast } = createToastStore();
+  const [apiPoints, { refetch: refetchPoints }] = createResource(fetchCollectionPointsList);
+  const [pointsSummary, { refetch: refetchSummary }] = createResource(fetchCollectionPointsSummary);
+  const [pointDetail, { refetch: refetchDetail }] = createResource(selectedId, (id) =>
+    id ? fetchCollectionPointDetail(id) : Promise.resolve(null),
+  );
+  const [fillHistory] = createResource(selectedId, (id) =>
+    id ? fetchCollectionPointFillHistory(id, 7) : Promise.resolve(null),
+  );
+  const [sectorsGeo] = createResource(fetchSectors);
+  const [sectorOptionsResource] = createResource(
+    () => (canManageCollectionPoints(authUser()?.role) ? true : null),
+    () => fetchSectorOptions(),
+  );
+  const [optimizationContext, { refetch: refetchOptimizationContext }] = createResource(
+    apiPoints,
+    (points) => fetchCollectionPointsOptimizationContext(points ?? []),
+  );
+  const allPoints = createMemo(() => {
+    const points = apiPoints() ?? [];
+    const context = optimizationContext();
+    if (!context) return points;
+    return enrichCollectionPointsWithOptimization(points, context);
+  });
+  const canManage = () => canManageCollectionPoints(authUser()?.role);
+  const pointsLoading = () => apiPoints.loading;
+  const pointsError = () => apiPoints.error;
+  const summaryLoading = () => pointsSummary.loading;
+
+  const analyticsHref = createMemo(() =>
+    buildAnalyticsHref({
+      sector: sectorFilter() || undefined,
+    }),
+  );
+
+  const criticalCount = createMemo(() => {
+    const context = optimizationContext();
+    if (context) return context.criticalCount;
+    return allPoints().filter((point) => point.status === 'critico').length;
+  });
+
+  const simulationHref = createMemo(() => {
+    const count = criticalCount();
+    return count > 0 ? `/simulation?critical=${count}` : '/simulation';
+  });
+
+  const hasActiveFilters = createMemo(
+    () => Boolean(search().trim() || statusFilter() || sectorFilter()),
+  );
+
+  const sectorOptions = createMemo(() => {
+    const summary = pointsSummary();
+    if (summary?.sectors.length) {
+      return buildSectorFilterOptions(summary.sectors);
+    }
+    const fromApi = (sectorsGeo()?.features ?? []).map((f) => f.properties.name);
+    const fromPoints = allPoints().map((p) => p.sector);
+    const names = fromApi.length > 0 ? fromApi : fromPoints;
+    return buildSectorFilterOptions(names);
+  });
+
+  const filtered = createMemo(() => {
+    const q = search().trim().toLowerCase();
+    const status = statusFilter();
+    const sector = sectorFilter();
+    return allPoints().filter((p) => {
+      if (status && p.status !== status) return false;
+      if (sector && p.sector !== sector) return false;
+      if (!q) return true;
+      return (
+        p.id.toLowerCase().includes(q) ||
+        p.label.toLowerCase().includes(q) ||
+        p.address.toLowerCase().includes(q) ||
+        p.sector.toLowerCase().includes(q)
+      );
+    });
+  });
+
+  const kpisData = createMemo(() => {
+    const summary = pointsSummary();
+    if (summary) return summaryKpisToCards(summary.kpis);
+    return computeCollectionPointsKpis(allPoints());
+  });
+
+  const fillDistributionData = createMemo(() => {
+    if (hasActiveFilters()) return computeFillDistribution(filtered());
+    const summary = pointsSummary();
+    if (summary) return apiDistributionToFillDistribution(summary);
+    return computeFillDistribution(allPoints());
+  });
 
   const syncMapMarkers = () => {
     const map = mapRef.current;
-    const points = allPoints();
-    if (!map || !map.isStyleLoaded() || points.length === 0) return;
+    const points = filtered();
+    if (!map || !map.isStyleLoaded()) return;
     markersById.forEach((m) => m.remove());
     markersById.clear();
+    if (points.length === 0) return;
     for (const point of points) {
       const el = createPinEl(fillStatusColor(point.status));
       el.addEventListener('click', (e) => {
@@ -184,7 +329,10 @@ export default function CollectionPointsPage() {
       const btn = target?.closest?.('.popup-ver-detalles') as HTMLElement | null;
       if (!btn) return;
       const id = btn.dataset.pointId;
-      if (id) setSelectedId(id);
+      if (id) {
+        setSelectedId(id);
+        scrollToDetailPanel();
+      }
     };
     document.addEventListener('click', onPopupClick);
 
@@ -202,8 +350,17 @@ export default function CollectionPointsPage() {
   });
 
   createEffect(() => {
-    allPoints();
+    filtered();
     if (mapReady()) syncMapMarkers();
+  });
+
+  createEffect(() => {
+    const points = allPoints();
+    if (points.length === 0) return;
+    const current = selectedId();
+    if (!current || !points.some((p) => p.id === current)) {
+      setSelectedId(points[0].id);
+    }
   });
 
   const openSelectedPopup = () => {
@@ -211,7 +368,7 @@ export default function CollectionPointsPage() {
     const marker = markersById.get(id);
     const map = mapRef.current;
     if (!marker || !map) return;
-    const point = allPoints().find((p) => p.id === id);
+    const point = filtered().find((p) => p.id === id) ?? allPoints().find((p) => p.id === id);
     if (!point) return;
     map.flyTo({ center: [point.lng, point.lat], zoom: Math.max(map.getZoom(), 14), essential: true });
     markersById.forEach((m, mid) => {
@@ -224,23 +381,6 @@ export default function CollectionPointsPage() {
   createEffect(() => {
     selectedId();
     if (mapReady()) openSelectedPopup();
-  });
-
-  const filtered = createMemo(() => {
-    const q = search().trim().toLowerCase();
-    const status = statusFilter();
-    const sector = sectorFilter();
-    return allPoints().filter((p) => {
-      if (status && p.status !== status) return false;
-      if (sector && p.sector !== sector) return false;
-      if (!q) return true;
-      return (
-        p.id.includes(q) ||
-        p.label.toLowerCase().includes(q) ||
-        p.address.toLowerCase().includes(q) ||
-        p.sector.toLowerCase().includes(q)
-      );
-    });
   });
 
   const total = () => filtered().length;
@@ -261,12 +401,215 @@ export default function CollectionPointsPage() {
 
   const selected = createMemo(() => allPoints().find((p) => p.id === selectedId()));
 
-  const selectPoint = (p: CollectionPoint) => setSelectedId(p.id);
+  const displayPoint = createMemo(() => {
+    const detail = pointDetail();
+    if (detail) return detailToCollectionPoint(detail);
+    return selected();
+  });
+
+  const scrollToDetailPanel = () => {
+    requestAnimationFrame(() => {
+      document.getElementById('collection-point-detail')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    });
+  };
+
+  const selectPoint = (p: CollectionPoint) => {
+    setSelectedId(p.id);
+    scrollToDetailPanel();
+  };
+
+  const sectorOptionsForForm = createMemo(() => sectorOptionsResource() ?? []);
+
+  const refreshData = async (keepSelection?: string) => {
+    await Promise.all([refetchPoints(), refetchSummary(), refetchOptimizationContext()]);
+    if (keepSelection) {
+      await refetchDetail();
+    }
+  };
+
+  const openCreateForm = (coords?: { lat: number; lng: number } | null) => {
+    setFormMode('create');
+    setDraftCoords(coords ?? null);
+    setFormOpen(true);
+    setPlaceMode(false);
+  };
+
+  const openEditForm = (point?: CollectionPoint) => {
+    const target = point ?? displayPoint();
+    if (!target) return;
+    setSelectedId(target.id);
+    setFormMode('edit');
+    setDraftCoords(null);
+    setFormOpen(true);
+  };
+
+  const formValuesToPayload = (values: CollectionPointFormValues) => {
+    const currentFillLevelKg = (values.fillLevelPct / 100) * values.maxCapacityKg;
+    return {
+      sectorId: values.sectorId,
+      latitude: values.latitude,
+      longitude: values.longitude,
+      maxCapacityKg: values.maxCapacityKg,
+      currentFillLevelKg: Math.round(currentFillLevelKg * 100) / 100,
+      status: values.status,
+    };
+  };
+
+  const handleFormSubmit = async (values: CollectionPointFormValues) => {
+    setSubmitting(true);
+    try {
+      const payload = formValuesToPayload(values);
+      if (formMode() === 'create') {
+        const created = await createCollectionPoint({ ...payload, code: values.code.trim().toUpperCase() });
+        addToast(`Punto ${created.code} creado correctamente`, 'success');
+        setFormOpen(false);
+        setDraftCoords(null);
+        await refreshData(created.code);
+        setSelectedId(created.code);
+      } else {
+        const code = values.code || selectedId();
+        const updated = await updateCollectionPoint(code, payload);
+        addToast(`Punto ${updated.code} actualizado`, 'success');
+        setFormOpen(false);
+        await refreshData(updated.code);
+      }
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'No se pudo guardar el punto';
+      addToast(message, 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleOutOfService = async (point: CollectionPoint) => {
+    setSubmitting(true);
+    try {
+      await updateCollectionPoint(point.id, { status: 'inactive' });
+      addToast(`Punto ${point.id} marcado fuera de servicio`, 'success');
+      await refreshData(point.id);
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'No se pudo actualizar el punto';
+      addToast(message, 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeletePoint = async (point: CollectionPoint) => {
+    if (!window.confirm(`¿Eliminar el punto ${point.id}? Esta acción no se puede deshacer.`)) return;
+    setSubmitting(true);
+    try {
+      await deleteCollectionPoint(point.id);
+      addToast(`Punto ${point.id} eliminado`, 'success');
+      const remaining = allPoints().filter((p) => p.id !== point.id);
+      setSelectedId(remaining[0]?.id ?? '');
+      await refreshData();
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'No se pudo eliminar el punto';
+      addToast(message, 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleToggleOptimization = async (point: CollectionPoint, enabled: boolean) => {
+    setSubmitting(true);
+    try {
+      if (canManage()) {
+        await updateCollectionPoint(point.id, { priorityBoost: enabled });
+      } else {
+        toggleLocalPriorityBoost(point.id, enabled);
+      }
+      addToast(
+        enabled
+          ? `Punto ${point.id} marcado para la próxima optimización`
+          : `Punto ${point.id} quitado de la próxima optimización`,
+        'success',
+      );
+      await refreshData(point.id);
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'No se pudo actualizar la prioridad';
+      addToast(message, 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  createEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady()) return;
+
+    const handler = (event: maplibregl.MapMouseEvent) => {
+      if (!placeMode()) return;
+      const { lng, lat } = event.lngLat;
+      openCreateForm({ lat, lng });
+    };
+
+    if (placeMode()) {
+      map.getCanvas().style.cursor = 'crosshair';
+      map.on('click', handler);
+    } else {
+      map.getCanvas().style.cursor = '';
+    }
+
+    onCleanup(() => {
+      map.off('click', handler);
+      if (!placeMode()) map.getCanvas().style.cursor = '';
+    });
+  });
+
+  const fillHistoryChart = createMemo(() => {
+    const history = fillHistory();
+    if (!history) return null;
+    return {
+      labels: history.labels,
+      datasets: [
+        {
+          data: history.values,
+          borderColor: '#ef4444',
+          backgroundColor: 'rgba(239, 68, 68, 0.12)',
+          pointBackgroundColor: '#ef4444',
+          pointBorderColor: '#fff',
+          pointBorderWidth: 2,
+          pointRadius: 4,
+          tension: 0.35,
+          fill: true,
+        },
+      ],
+    };
+  });
+
+  const fillHistorySourceLabel = () => {
+    const history = fillHistory();
+    if (!history) return 'Cargando...';
+    return history.source === 'waypoints' ? 'Basado en recolecciones' : 'Estimación simulada';
+  };
+
+  const lineChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      y: {
+        min: 0,
+        max: 100,
+        ticks: { callback: (v: string | number) => `${v}%`, font: { size: 10 } },
+        grid: { color: 'rgba(148,163,184,0.2)' },
+      },
+      x: {
+        ticks: { font: { size: 10 } },
+        grid: { display: false },
+      },
+    },
+  } as const;
 
   const zoomIn = () => mapRef.current?.zoomIn();
   const zoomOut = () => mapRef.current?.zoomOut();
   const recenter = () => {
-    const point = selected();
+    const point = displayPoint();
     if (point) {
       mapRef.current?.flyTo({ center: [point.lng, point.lat], zoom: 14 });
     } else {
@@ -274,33 +617,48 @@ export default function CollectionPointsPage() {
     }
   };
 
-  const lineData = {
-    labels: fillHistory7d.labels,
-    datasets: [
-      {
-        data: fillHistory7d.values,
-        borderColor: '#ef4444',
-        backgroundColor: 'rgba(239, 68, 68, 0.12)',
-        pointBackgroundColor: '#ef4444',
-        pointBorderColor: '#fff',
-        pointBorderWidth: 2,
-        pointRadius: 4,
-        tension: 0.35,
-        fill: true,
-      },
-    ],
+  const donutData = createMemo(() => {
+    const distribution = fillDistributionData();
+    return {
+      labels: distribution.items.map((i) => i.label),
+      datasets: [
+        {
+          data: distribution.items.map((i) => i.count),
+          backgroundColor: distribution.items.map((i) => i.color),
+          borderWidth: 0,
+          cutout: '72%',
+        },
+      ],
+    };
+  });
+
+  const applyFilters = (patch: { search?: string; status?: string; sector?: string }) => {
+    if (patch.search !== undefined) setSearch(patch.search);
+    if (patch.status !== undefined) setStatusFilter(patch.status);
+    if (patch.sector !== undefined) setSectorFilter(patch.sector);
+    setPage(1);
   };
 
-  const donutData = {
-    labels: fillDistribution.items.map((i) => i.label),
-    datasets: [
-      {
-        data: fillDistribution.items.map((i) => i.count),
-        backgroundColor: fillDistribution.items.map((i) => i.color),
-        borderWidth: 0,
-        cutout: '72%',
-      },
-    ],
+  const handleExport = () => {
+    const points = filtered();
+    if (points.length === 0) {
+      addToast('No hay puntos para exportar con los filtros actuales', 'warning');
+      return;
+    }
+
+    setExporting(true);
+    try {
+      const suffix = [
+        sectorFilter() || 'todos-sectores',
+        statusFilter() || 'todos-estados',
+      ].join('-');
+      downloadCollectionPointsCsv(points, `feromap-puntos-${suffix}.csv`);
+      addToast(`Exportados ${points.length} puntos a CSV`, 'success');
+    } catch {
+      addToast('No se pudo generar el archivo CSV', 'error');
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -313,9 +671,32 @@ export default function CollectionPointsPage() {
           </p>
         </div>
       </Show>
+      <Show when={pointsError()}>
+        <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900/50 dark:bg-red-950/30">
+          <p class="text-sm font-semibold text-red-700 dark:text-red-300">
+            No se pudieron cargar los puntos de recolección
+          </p>
+          <p class="mt-1 text-sm text-red-600 dark:text-red-400">
+            {pointsError() instanceof Error ? pointsError()!.message : 'Error de conexión con la API'}
+          </p>
+          <button
+            type="button"
+            class="mt-2 text-sm font-medium text-red-700 underline dark:text-red-300"
+            onClick={() => void refetchPoints()}
+          >
+            Reintentar
+          </button>
+        </div>
+      </Show>
       <div class="flex flex-col gap-4 xl:flex-row xl:items-center">
         <div class="grid flex-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          <For each={collectionPointsKpis}>
+          <Show
+            when={!pointsLoading() && !summaryLoading()}
+            fallback={
+              <For each={Array.from({ length: 5 })}>{() => <KpiSkeleton />}</For>
+            }
+          >
+            <For each={kpisData()}>
             {(kpi) => (
               <KpiCard
                 title={kpi.title}
@@ -326,12 +707,39 @@ export default function CollectionPointsPage() {
               />
             )}
           </For>
+          </Show>
         </div>
-        <div class="flex shrink-0">
-          <Button variant="primary" class="w-full gap-2 px-5 py-2.5 xl:w-auto" icon={<Plus size={17} />}>
-            Nuevo punto
-          </Button>
-        </div>
+        <Show when={canManage()}>
+          <div class="flex shrink-0 flex-wrap gap-2">
+            <A href={simulationHref()}>
+              <Button
+                variant="outline"
+                class="w-full gap-2 px-5 py-2.5 xl:w-auto"
+                icon={<ArrowRight size={17} />}
+              >
+                {criticalCount() > 0
+                  ? `Ir a optimizar (${criticalCount()} críticos)`
+                  : 'Ir a Simulación'}
+              </Button>
+            </A>
+            <Button
+              variant="primary"
+              class="w-full gap-2 px-5 py-2.5 xl:w-auto"
+              icon={<Plus size={17} />}
+              onClick={() => openCreateForm()}
+            >
+              Nuevo punto
+            </Button>
+            <Button
+              variant="outline"
+              class={`w-full gap-2 px-5 py-2.5 xl:w-auto ${placeMode() ? 'border-fero-blue text-fero-blue' : ''}`}
+              icon={<Crosshair size={17} />}
+              onClick={() => setPlaceMode((active) => !active)}
+            >
+              {placeMode() ? 'Clic en el mapa…' : 'Colocar en mapa'}
+            </Button>
+          </div>
+        </Show>
       </div>
 
       <div class="grid gap-4 xl:grid-cols-5">
@@ -344,21 +752,56 @@ export default function CollectionPointsPage() {
               <Search size={14} class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
               <input
                 type="search"
-                placeholder="Buscar dirección..."
+                placeholder="Buscar punto..."
+                value={search()}
+                onInput={(e) => applyFilters({ search: e.currentTarget.value })}
                 class="w-full rounded-md border border-border bg-surface py-1.5 pl-8 pr-2 text-xs text-text-primary placeholder:text-text-muted focus:border-fero-blue focus:outline-none dark:bg-dark-surface-hover dark:border-dark-border dark:text-white"
               />
             </div>
             <button
               type="button"
-              class="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-text-secondary hover:bg-surface-hover"
+              class={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition-colors ${
+                mapFiltersOpen()
+                  ? 'border-fero-blue bg-fero-blue/10 text-fero-blue'
+                  : 'border-border text-text-secondary hover:bg-surface-hover'
+              }`}
+              onClick={() => setMapFiltersOpen((open) => !open)}
             >
               <SlidersHorizontal size={14} />
               Filtros
             </button>
           </div>
 
+          <Show when={mapFiltersOpen()}>
+            <div class="flex flex-wrap items-center gap-2 border-b border-border bg-slate-50/80 px-3 py-2.5 dark:border-dark-border dark:bg-dark-surface-hover/40 sm:px-4">
+              <select
+                value={statusFilter()}
+                onChange={(e) => applyFilters({ status: e.currentTarget.value })}
+                class="rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-text-secondary dark:bg-dark-surface-hover dark:border-dark-border"
+              >
+                <For each={collectionPointStatusOptions}>
+                  {(o) => <option value={o.value}>{o.label}</option>}
+                </For>
+              </select>
+              <select
+                value={sectorFilter()}
+                onChange={(e) => applyFilters({ sector: e.currentTarget.value })}
+                class="rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-text-secondary dark:bg-dark-surface-hover dark:border-dark-border"
+              >
+                <For each={sectorOptions()}>{(o) => <option value={o.value}>{o.label}</option>}</For>
+              </select>
+              <p class="text-xs text-text-muted">{filtered().length} puntos visibles en el mapa</p>
+            </div>
+          </Show>
+
           <div class="relative h-80 bg-slate-100 dark:bg-slate-900 lg:h-105">
             <div ref={mapContainer} class="absolute inset-0 h-full w-full" />
+
+            <Show when={placeMode()}>
+              <div class="absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full border border-fero-blue/40 bg-fero-blue/10 px-3 py-1.5 text-xs font-medium text-fero-blue shadow-sm backdrop-blur-sm">
+                Haz clic en el mapa para ubicar el nuevo punto
+              </div>
+            </Show>
 
             <div class="absolute right-3 top-3 z-10 flex flex-col overflow-hidden rounded-md border border-border bg-surface/95 shadow-sm backdrop-blur-sm dark:bg-dark-surface/95">
               <button type="button" class="flex h-8 w-8 items-center justify-center text-text-secondary hover:bg-surface-hover disabled:opacity-40" onClick={zoomIn} disabled={!mapReady()} aria-label="Acercar">
@@ -399,37 +842,31 @@ export default function CollectionPointsPage() {
                 type="search"
                 placeholder="Buscar punto..."
                 value={search()}
-                onInput={(e) => {
-                  setSearch(e.currentTarget.value);
-                  setPage(1);
-                }}
+                onInput={(e) => applyFilters({ search: e.currentTarget.value })}
                 class="w-full rounded-md border border-border bg-surface py-1.5 pl-8 pr-2 text-xs text-text-primary placeholder:text-text-muted focus:border-fero-blue focus:outline-none dark:bg-dark-surface-hover dark:border-dark-border dark:text-white"
               />
             </div>
             <select
               value={statusFilter()}
-              onChange={(e) => {
-                setStatusFilter(e.currentTarget.value);
-                setPage(1);
-              }}
+              onChange={(e) => applyFilters({ status: e.currentTarget.value })}
               class="rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-text-secondary dark:bg-dark-surface-hover dark:border-dark-border"
             >
               <For each={collectionPointStatusOptions}>{(o) => <option value={o.value}>{o.label}</option>}</For>
             </select>
             <select
               value={sectorFilter()}
-              onChange={(e) => {
-                setSectorFilter(e.currentTarget.value);
-                setPage(1);
-              }}
+              onChange={(e) => applyFilters({ sector: e.currentTarget.value })}
               class="rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-text-secondary dark:bg-dark-surface-hover dark:border-dark-border"
             >
-              <For each={collectionPointSectorOptions}>{(o) => <option value={o.value}>{o.label}</option>}</For>
+              <For each={sectorOptions()}>{(o) => <option value={o.value}>{o.label}</option>}</For>
             </select>
             <button
               type="button"
-              class="flex h-8 w-8 items-center justify-center rounded-md border border-border text-text-secondary hover:bg-surface-hover"
+              class="flex h-8 w-8 items-center justify-center rounded-md border border-border text-text-secondary hover:bg-surface-hover disabled:opacity-40"
               aria-label="Exportar"
+              title="Exportar CSV"
+              disabled={exporting() || pointsLoading()}
+              onClick={handleExport}
             >
               <Download size={14} />
             </button>
@@ -448,12 +885,22 @@ export default function CollectionPointsPage() {
                 </tr>
               </thead>
               <tbody class="divide-y divide-border dark:divide-dark-border">
+                <Show
+                  when={!pointsLoading()}
+                  fallback={
+                    <For each={Array.from({ length: 6 })}>{() => <TableRowSkeleton />}</For>
+                  }
+                >
                 <For
                   each={pageItems()}
                   fallback={
                     <tr>
                       <td colSpan={6} class="px-3 py-8 text-center text-sm text-text-muted">
-                        No se encontraron puntos
+                        {pointsError()
+                          ? 'No se pudo cargar el listado de puntos.'
+                          : hasActiveFilters()
+                            ? 'No hay puntos que coincidan con los filtros activos.'
+                            : 'No se encontraron puntos de recolección.'}
                       </td>
                     </tr>
                   }
@@ -474,24 +921,43 @@ export default function CollectionPointsPage() {
                         <LevelBar point={p} />
                       </td>
                       <td class="px-3 py-2.5">
-                        <StatusBadge status={p.status} />
+                        <div class="space-y-1">
+                          <StatusBadge status={p.status} />
+                          <CollectionPointOptimizationBadges
+                            usedInLastOptimization={p.usedInLastOptimization}
+                            priorityBoost={p.priorityBoost}
+                            compact
+                          />
+                        </div>
                       </td>
                       <td class="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                         <div class="flex items-center gap-0.5">
                           <button type="button" class="flex h-7 w-7 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover hover:text-fero-blue" aria-label="Ver" onClick={() => selectPoint(p)}>
                             <Eye size={14} />
                           </button>
-                          <button type="button" class="flex h-7 w-7 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover" aria-label="Editar">
-                            <Pencil size={14} />
-                          </button>
-                          <button type="button" class="flex h-7 w-7 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover" aria-label="Más">
-                            <MoreVertical size={14} />
-                          </button>
+                          <Show when={canManage()}>
+                            <button
+                              type="button"
+                              class="flex h-7 w-7 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover"
+                              aria-label="Editar"
+                              onClick={() => openEditForm(p)}
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <CollectionPointActionsMenu
+                              point={p}
+                              disabled={submitting()}
+                              onOutOfService={handleOutOfService}
+                              onDelete={handleDeletePoint}
+                              onToggleOptimization={canManage() ? handleToggleOptimization : undefined}
+                            />
+                          </Show>
                         </div>
                       </td>
                     </tr>
                   )}
                 </For>
+                </Show>
               </tbody>
             </table>
           </div>
@@ -523,9 +989,9 @@ export default function CollectionPointsPage() {
         </section>
       </div>
 
-      <Show when={selected()}>
+      <Show when={displayPoint()}>
         {(p) => (
-          <div class="grid gap-4 lg:grid-cols-3">
+          <div id="collection-point-detail" class="grid gap-4 lg:grid-cols-3">
             <Card>
               <CardHeader title="Detalle del punto seleccionado" />
               <div class="mb-4 flex items-start gap-3">
@@ -543,6 +1009,10 @@ export default function CollectionPointsPage() {
                     <h4 class="font-heading text-lg font-bold text-text-primary dark:text-white">{p().label}</h4>
                     <StatusBadge status={p().status} />
                   </div>
+                  <CollectionPointOptimizationBadges
+                    usedInLastOptimization={p().usedInLastOptimization}
+                    priorityBoost={p().priorityBoost}
+                  />
                   <p class="text-sm text-text-secondary">{p().address}</p>
                   <p class="text-xs text-text-muted">Sector {p().sector}</p>
                 </div>
@@ -584,86 +1054,100 @@ export default function CollectionPointsPage() {
               </dl>
 
               <div class="flex flex-wrap gap-2">
-                <Button variant="primary" size="sm">
+                <Button variant="primary" size="sm" onClick={() => setHistoryDrawerOpen(true)}>
                   Ver historial
                 </Button>
-                <Button variant="outline" size="sm" icon={<Pencil size={14} />}>
-                  Editar
-                </Button>
-                <Button variant="outline" size="sm">
-                  Más acciones
-                  <ChevronDown size={14} class="opacity-70" />
-                </Button>
+                <Show when={canManage()}>
+                  <Button variant="outline" size="sm" icon={<Pencil size={14} />} onClick={() => openEditForm()}>
+                    Editar
+                  </Button>
+                  <CollectionPointActionsMenu
+                    point={p()}
+                    variant="button"
+                    disabled={submitting()}
+                    onOutOfService={handleOutOfService}
+                    onDelete={handleDeletePoint}
+                    onToggleOptimization={canManage() ? handleToggleOptimization : undefined}
+                  />
+                </Show>
               </div>
             </Card>
 
             <Card>
               <CardHeader
                 title="Historial de llenado"
-                action={<span class="text-xs text-text-muted">Últimos 7 días</span>}
+                action={<span class="text-xs text-text-muted">{fillHistorySourceLabel()}</span>}
               />
-              <div class="mx-auto h-52 w-full max-w-md">
-                <Line
-                  data={lineData}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                      y: {
-                        min: 0,
-                        max: 100,
-                        ticks: { callback: (v: string | number) => `${v}%`, font: { size: 10 } },
-                        grid: { color: 'rgba(148,163,184,0.2)' },
-                      },
-                      x: {
-                        ticks: { font: { size: 10 } },
-                        grid: { display: false },
-                      },
-                    },
-                  }}
-                />
-              </div>
+              <Show
+                when={fillHistoryChart()}
+                fallback={
+                  <div class="flex h-52 items-center justify-center text-sm text-text-muted">
+                    Cargando historial...
+                  </div>
+                }
+              >
+                {(chart) => (
+                  <div class="mx-auto h-52 w-full max-w-md">
+                    <Line data={chart()} options={lineChartOptions} />
+                  </div>
+                )}
+              </Show>
             </Card>
 
             <Card>
-              <CardHeader title="Distribución por nivel de llenado" />
-              <div class="mx-auto flex w-full max-w-sm flex-col items-center justify-center gap-4 sm:flex-row">
-                <div class="relative h-36 w-36 shrink-0">
-                  <Doughnut
-                    data={donutData}
-                    options={{
-                      responsive: true,
-                      maintainAspectRatio: false,
-                      plugins: { legend: { display: false }, tooltip: { enabled: true } },
-                    }}
-                  />
-                  <div class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                    <span class="font-heading text-2xl font-bold text-text-primary dark:text-white">
-                      {fillDistribution.total}
-                    </span>
-                    <span class="text-xs text-text-muted">Total</span>
+              <CardHeader
+                title="Distribución por nivel de llenado"
+                action={
+                  <span class="text-xs text-text-muted">
+                    {hasActiveFilters() ? 'Según filtros activos' : 'Resumen del servidor'}
+                  </span>
+                }
+              />
+              <Show
+                when={fillDistributionData().items.length > 0}
+                fallback={
+                  <p class="py-10 text-center text-sm text-text-muted">
+                    No hay puntos que coincidan con los filtros actuales.
+                  </p>
+                }
+              >
+                <div class="mx-auto flex w-full max-w-sm flex-col items-center justify-center gap-4 sm:flex-row">
+                  <div class="relative h-36 w-36 shrink-0">
+                    <Doughnut
+                      data={donutData()}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false }, tooltip: { enabled: true } },
+                      }}
+                    />
+                    <div class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                      <span class="font-heading text-2xl font-bold text-text-primary dark:text-white">
+                        {fillDistributionData().total}
+                      </span>
+                      <span class="text-xs text-text-muted">Total</span>
+                    </div>
                   </div>
+                  <ul class="w-full max-w-44 space-y-2">
+                    <For each={fillDistributionData().items}>
+                      {(item) => (
+                        <li class="flex items-center justify-between gap-2 text-sm">
+                          <span class="flex items-center gap-2 text-text-secondary">
+                            <span class="h-2.5 w-2.5 rounded-full" style={{ 'background-color': item.color }} />
+                            {item.label}
+                          </span>
+                          <span class="font-medium text-text-primary dark:text-white">
+                            {item.count} <span class="text-xs text-text-muted">({item.pct}%)</span>
+                          </span>
+                        </li>
+                      )}
+                    </For>
+                  </ul>
                 </div>
-                <ul class="w-full max-w-44 space-y-2">
-                  <For each={fillDistribution.items}>
-                    {(item) => (
-                      <li class="flex items-center justify-between gap-2 text-sm">
-                        <span class="flex items-center gap-2 text-text-secondary">
-                          <span class="h-2.5 w-2.5 rounded-full" style={{ 'background-color': item.color }} />
-                          {item.label}
-                        </span>
-                        <span class="font-medium text-text-primary dark:text-white">
-                          {item.count} <span class="text-xs text-text-muted">({item.pct}%)</span>
-                        </span>
-                      </li>
-                    )}
-                  </For>
-                </ul>
-              </div>
+              </Show>
               <div class="mt-4 flex justify-center">
                 <A
-                  href="/analytics"
+                  href={analyticsHref()}
                   class="inline-flex items-center gap-1 text-sm font-medium text-fero-blue hover:underline"
                 >
                   Ver análisis detallado
@@ -674,6 +1158,57 @@ export default function CollectionPointsPage() {
           </div>
         )}
       </Show>
+
+      <Drawer
+        open={historyDrawerOpen()}
+        onClose={() => setHistoryDrawerOpen(false)}
+        title={displayPoint() ? `Historial — ${displayPoint()!.label}` : 'Historial de llenado'}
+      >
+        <Show
+          when={fillHistoryChart()}
+          fallback={<p class="text-sm text-text-muted">Cargando historial del punto seleccionado...</p>}
+        >
+          {(chart) => (
+            <div class="space-y-4">
+              <p class="text-sm text-text-secondary">{fillHistorySourceLabel()} · últimos 7 días</p>
+              <div class="h-64 w-full">
+                <Line data={chart()} options={lineChartOptions} />
+              </div>
+              <Show when={pointDetail()}>
+                {(detail) => (
+                  <dl class="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <dt class="text-xs text-text-muted">Nivel actual</dt>
+                      <dd class="font-semibold text-text-primary dark:text-white">{detail().fillLevel}%</dd>
+                    </div>
+                    <div>
+                      <dt class="text-xs text-text-muted">Última recolección</dt>
+                      <dd class="font-semibold text-text-primary dark:text-white">{detail().lastCollection}</dd>
+                    </div>
+                  </dl>
+                )}
+              </Show>
+            </div>
+          )}
+        </Show>
+      </Drawer>
+
+      <CollectionPointFormModal
+        open={formOpen()}
+        mode={formMode()}
+        initial={pointDetail()}
+        sectorOptions={sectorOptionsForForm()}
+        draftCoords={draftCoords()}
+        submitting={submitting()}
+        onClose={() => {
+          setFormOpen(false);
+          setDraftCoords(null);
+          setPlaceMode(false);
+        }}
+        onSubmit={handleFormSubmit}
+      />
+
+      <ToastContainer toasts={toasts()} onDismiss={removeToast} />
     </div>
   );
 }
