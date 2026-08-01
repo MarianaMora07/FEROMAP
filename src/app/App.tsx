@@ -1,6 +1,7 @@
 import { Route, Router } from '@solidjs/router';
 import { Suspense, lazy } from 'solid-js';
 import { AppShell } from '../design-system/layout/AppShell';
+import { AuthGate, GuestGate, RoleGate } from '../core/auth/AuthGate';
 
 const DashboardPage = lazy(() => import('../features/dashboard'));
 const OptimizationPage = lazy(() => import('../features/optimization'));
@@ -13,6 +14,7 @@ const AnalyticsPage = lazy(() => import('../features/analytics'));
 const ReportsPage = lazy(() => import('../features/reports'));
 const AlertsPage = lazy(() => import('../features/alerts'));
 const AdminPage = lazy(() => import('../features/admin'));
+const ResidentPage = lazy(() => import('../features/resident'));
 const ProfilePage = lazy(() => import('../features/profile'));
 const LoginPage = lazy(() => import('../features/auth'));
 
@@ -24,19 +26,31 @@ function PageFallback() {
   );
 }
 
+function ProtectedShell(props: { children: unknown }) {
+  return (
+    <AuthGate>
+      <RoleGate>
+        <AppShell>
+          <Suspense fallback={<PageFallback />}>{props.children}</Suspense>
+        </AppShell>
+      </RoleGate>
+    </AuthGate>
+  );
+}
+
 export default function App() {
   return (
     <Router>
       <Suspense fallback={<PageFallback />}>
-        <Route path="/login" component={LoginPage} />
         <Route
-          path="/"
-          component={(props) => (
-            <AppShell>
-              <Suspense fallback={<PageFallback />}>{props.children}</Suspense>
-            </AppShell>
+          path="/login"
+          component={() => (
+            <GuestGate>
+              <LoginPage />
+            </GuestGate>
           )}
-        >
+        />
+        <Route path="/" component={ProtectedShell}>
           <Route path="/" component={DashboardPage} />
           <Route path="/optimization" component={OptimizationPage} />
           <Route path="/map" component={MapPage} />
@@ -46,6 +60,7 @@ export default function App() {
           <Route path="/monitoring" component={MonitoringPage} />
           <Route path="/analytics" component={AnalyticsPage} />
           <Route path="/reports" component={ReportsPage} />
+          <Route path="/resident" component={ResidentPage} />
           <Route path="/alerts" component={AlertsPage} />
           <Route path="/admin" component={AdminPage} />
           <Route path="/profile" component={ProfilePage} />

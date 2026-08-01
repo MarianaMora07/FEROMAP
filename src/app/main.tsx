@@ -3,7 +3,9 @@ import { render } from 'solid-js/web';
 import App from './App';
 import { initRoadSnappedRoutes } from '../core/stores/appStore';
 import { initSimulationData } from '../core/stores/simulationStore';
+import { initAuth } from '../core/stores/authStore';
 
+void initAuth();
 void initRoadSnappedRoutes();
 void initSimulationData();
 

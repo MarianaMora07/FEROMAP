@@ -1,5 +1,5 @@
-import { For, Show } from 'solid-js';
-import { A, useLocation } from '@solidjs/router';
+import { For, Show, createMemo } from 'solid-js';
+import { A, useLocation, useNavigate } from '@solidjs/router';
 import {
   LayoutDashboard,
   Map,
@@ -16,34 +16,34 @@ import {
   Moon,
   Sun,
   ChevronDown,
+  LogOut,
 } from 'lucide-solid';
 import { appState, toggleDarkMode } from '../../core/stores/appStore';
 import { dashboardSummary } from '../../core/stores/dashboardStore';
+import {
+  authUser,
+  logout,
+  userDisplayName,
+  userInitials,
+  userRoleLabel,
+} from '../../core/stores/authStore';
+import { navItemsForRole } from '../../core/auth/permissions';
 
-interface NavItem {
-  href: string;
-  label: string;
-  icon: typeof LayoutDashboard;
-  separator?: boolean;
-}
-
-const navItems: NavItem[] = [
-  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/optimization', label: 'Optimización de Rutas', icon: Map },
-  { href: '/map', label: 'Mapa GIS', icon: MapPin },
-  { href: '/vehicles', label: 'Vehículos', icon: Truck },
-  { href: '/collection-points', label: 'Puntos de Recolección', icon: Trash2 },
-  { href: '/simulation', label: 'Simulación', icon: Brain },
-  { href: '/monitoring', label: 'Monitoreo en Tiempo Real', icon: Radio },
-  { href: '/reports', label: 'Reportes', icon: FileText },
-  { href: '/analytics', label: 'Analítica', icon: BarChart3 },
-  { href: '/alerts', label: 'Alertas', icon: AlertTriangle, separator: true },
-];
-
-const bottomItems: NavItem[] = [
-  { href: '/admin', label: 'Administración', icon: Settings },
-  { href: '/profile', label: 'Perfil', icon: User },
-];
+const NAV_ICONS: Record<string, typeof LayoutDashboard> = {
+  '/': LayoutDashboard,
+  '/optimization': Map,
+  '/map': MapPin,
+  '/vehicles': Truck,
+  '/collection-points': Trash2,
+  '/simulation': Brain,
+  '/monitoring': Radio,
+  '/reports': FileText,
+  '/analytics': BarChart3,
+  '/resident': Trash2,
+  '/alerts': AlertTriangle,
+  '/admin': Settings,
+  '/profile': User,
+};
 
 function navClass(active: boolean) {
   return `flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
@@ -59,7 +59,15 @@ interface SidebarProps {
 
 export function Sidebar(props: SidebarProps) {
   const location = useLocation();
+  const navigate = useNavigate();
   const isActive = (href: string) => location.pathname === href;
+
+  const nav = createMemo(() => navItemsForRole(authUser()?.role));
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login', { replace: true });
+  };
 
   return (
     <aside
@@ -68,11 +76,7 @@ export function Sidebar(props: SidebarProps) {
       }`}
     >
       <div class="flex items-start gap-3 border-b border-white/10 px-4 py-4">
-        <img
-          src="/feromap-logo.png"
-          alt="FEROMAP"
-          class="h-16 w-16 shrink-0 object-contain"
-        />
+        <img src="/feromap-logo.png" alt="FEROMAP" class="h-16 w-16 shrink-0 object-contain" />
         <div class="min-w-0 pt-0.5">
           <p class="font-heading text-xl font-extrabold tracking-tight leading-none">
             <span class="text-white">FERO</span>
@@ -85,18 +89,21 @@ export function Sidebar(props: SidebarProps) {
       </div>
 
       <nav class="flex-1 space-y-1 overflow-y-auto px-3 py-3">
-        <For each={navItems}>
-          {(item) => (
-            <>
-              <Show when={item.separator}>
-                <div class="my-3 border-t border-white/10" />
-              </Show>
-              <A href={item.href} class={navClass(isActive(item.href))}>
-                <item.icon size={18} />
-                <span class="truncate">{item.label}</span>
-              </A>
-            </>
-          )}
+        <For each={nav().main}>
+          {(item) => {
+            const Icon = NAV_ICONS[item.href] ?? LayoutDashboard;
+            return (
+              <>
+                <Show when={item.href === '/alerts'}>
+                  <div class="my-3 border-t border-white/10" />
+                </Show>
+                <A href={item.href} class={navClass(isActive(item.href))}>
+                  <Icon size={18} />
+                  <span class="truncate">{item.label}</span>
+                </A>
+              </>
+            );
+          }}
         </For>
       </nav>
 
@@ -114,13 +121,16 @@ export function Sidebar(props: SidebarProps) {
           </div>
         </div>
 
-        <For each={bottomItems}>
-          {(item) => (
-            <A href={item.href} class={navClass(isActive(item.href))}>
-              <item.icon size={18} />
-              {item.label}
-            </A>
-          )}
+        <For each={nav().bottom}>
+          {(item) => {
+            const Icon = NAV_ICONS[item.href] ?? User;
+            return (
+              <A href={item.href} class={navClass(isActive(item.href))}>
+                <Icon size={18} />
+                {item.label}
+              </A>
+            );
+          }}
         </For>
 
         <button
@@ -132,16 +142,25 @@ export function Sidebar(props: SidebarProps) {
           {appState.darkMode ? 'Modo claro' : 'Modo oscuro'}
         </button>
 
+        <button
+          type="button"
+          onClick={() => void handleLogout()}
+          class="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-white/65 transition-all duration-200 hover:bg-white/10 hover:text-white"
+        >
+          <LogOut size={18} />
+          Cerrar sesión
+        </button>
+
         <A
           href="/profile"
           class="flex items-center gap-3 rounded-md px-2 py-2 transition-colors hover:bg-white/10"
         >
           <div class="flex h-9 w-9 items-center justify-center rounded-full bg-fero-green-mid text-xs font-bold text-white">
-            {dashboardSummary().user.initials}
+            {userInitials()}
           </div>
           <div class="min-w-0 flex-1">
-            <p class="truncate text-sm font-semibold text-white">{dashboardSummary().user.name}</p>
-            <p class="truncate text-xs text-white/50">{dashboardSummary().user.role}</p>
+            <p class="truncate text-sm font-semibold text-white">{userDisplayName()}</p>
+            <p class="truncate text-xs text-white/50">{userRoleLabel()}</p>
           </div>
           <ChevronDown size={16} class="shrink-0 text-white/40" />
         </A>

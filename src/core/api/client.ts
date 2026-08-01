@@ -5,6 +5,16 @@ const apiBase = import.meta.env.PROD
   ? (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
   : '';
 
+let authToken: string | null = null;
+
+export function setAuthToken(token: string | null) {
+  authToken = token;
+}
+
+export function getAuthToken() {
+  return authToken;
+}
+
 export function resolveUrl(path: string): string {
   if (path.startsWith('http://') || path.startsWith('https://')) return path;
   if (apiBase) return `${apiBase}${path}`;
@@ -21,10 +31,28 @@ export class ApiError extends Error {
   }
 }
 
+function authHeaders(): HeadersInit {
+  const headers: Record<string, string> = {};
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+  return headers;
+}
+
 export async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(resolveUrl(path));
+  const res = await fetch(resolveUrl(path), {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
   if (!res.ok) {
-    throw new ApiError(await res.text(), res.status);
+    let message = await res.text();
+    try {
+      const json = JSON.parse(message) as { detail?: string };
+      if (typeof json.detail === 'string') message = json.detail;
+    } catch {
+      // keep raw text
+    }
+    throw new ApiError(message, res.status);
   }
   return res.json() as Promise<T>;
 }
@@ -32,13 +60,65 @@ export async function apiGet<T>(path: string): Promise<T> {
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(resolveUrl(path), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    credentials: 'include',
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    throw new ApiError(await res.text(), res.status);
+    let message = await res.text();
+    try {
+      const json = JSON.parse(message) as { detail?: string };
+      if (typeof json.detail === 'string') message = json.detail;
+    } catch {
+      // keep raw text
+    }
+    throw new ApiError(message, res.status);
   }
   return res.json() as Promise<T>;
+}
+
+export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(resolveUrl(path), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    credentials: 'include',
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let message = await res.text();
+    try {
+      const json = JSON.parse(message) as { detail?: string };
+      if (typeof json.detail === 'string') message = json.detail;
+    } catch {
+      // keep raw text
+    }
+    throw new ApiError(message, res.status);
+  }
+  return res.json() as Promise<T>;
+}
+
+export async function apiDownload(path: string, filename: string): Promise<void> {
+  const res = await fetch(resolveUrl(path), {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    let message = await res.text();
+    try {
+      const json = JSON.parse(message) as { detail?: string };
+      if (typeof json.detail === 'string') message = json.detail;
+    } catch {
+      // keep raw text
+    }
+    throw new ApiError(message, res.status);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 export async function withMockFallback<T>(

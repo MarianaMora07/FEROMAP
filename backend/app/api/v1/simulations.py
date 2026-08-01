@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
 
-from app.api.deps import DbSession
+from app.api.deps import DbSession, OperationsStaff, OptionalUser, PlannerOrAdmin
 from app.schemas.simulation import OptimizeRequest
 from app.services.dashboard_service import (
     get_kpis,
@@ -27,7 +27,7 @@ def get_scenario_kpis(scenario: str = Query(default="normal")):
 
 
 @router.post("/simulations/optimize")
-def optimize_simulation(body: OptimizeRequest, db: DbSession):
+def optimize_simulation(body: OptimizeRequest, db: DbSession, _: PlannerOrAdmin):
     try:
         return run_optimization(db, body.scenario_id)
     except ValueError as exc:

@@ -1,7 +1,9 @@
 import { Show, createSignal, type JSX } from 'solid-js';
-import { useNavigate } from '@solidjs/router';
+import { useNavigate, useSearchParams } from '@solidjs/router';
 import { LogIn, Eye, EyeOff, Mail, Lock, Shield } from 'lucide-solid';
 import { Button, TextField } from '../../design-system/components';
+import { login, authError, authLoading } from '../../core/stores/authStore';
+import { DEMO_USERS, DEMO_PASSWORD } from '../../core/types/auth';
 
 const BANNER_SRC = '/login-banner.png';
 
@@ -27,9 +29,7 @@ function MicrosoftIcon() {
   );
 }
 
-/** Left panel (desktop): full brand artwork. */
 function BrandSide() {
-  // Alto mínimo del panel: min-h-160 ≈ 40rem. Sube a min-h-180 / min-h-200 si hace falta.
   return (
     <aside class="relative hidden min-h-180 w-[46%] shrink-0 overflow-hidden lg:block">
       <img
@@ -41,7 +41,6 @@ function BrandSide() {
   );
 }
 
-/** Bottom strip (mobile/tablet): illustration portion of the same banner. */
 function BannerStrip() {
   return (
     <div
@@ -59,30 +58,45 @@ function BannerStrip() {
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const [showPassword, setShowPassword] = createSignal(false);
+  const [email, setEmail] = createSignal('admin@fero.com');
 
-  const onSubmit: JSX.EventHandler<HTMLFormElement, SubmitEvent> = (e) => {
+  const onSubmit: JSX.EventHandler<HTMLFormElement, SubmitEvent> = async (e) => {
     e.preventDefault();
-    navigate('/');
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+    const emailValue = String(formData.get('email') ?? '');
+    const passwordValue = String(formData.get('password') ?? '');
+    try {
+      const home = await login(emailValue, passwordValue);
+      const redirect = typeof params.redirect === 'string' ? params.redirect : home;
+      navigate(redirect || home, { replace: true });
+    } catch {
+      // error shown via authError()
+    }
+  };
+
+  const fillDemo = (demoEmail: string) => {
+    setEmail(demoEmail);
+    const input = document.querySelector<HTMLInputElement>('input[name="password"]');
+    if (input) input.value = DEMO_PASSWORD;
   };
 
   return (
     <div class="flex min-h-screen flex-col bg-surface">
       <div class="flex flex-1 items-center justify-center p-4 sm:p-6 lg:p-8">
-        {/* Tamaño de la tarjeta: cambia max-w-* (móvil) y lg:max-w-* (desktop).
-            Escala Tailwind: 5xl=64rem · 6xl=72rem · 7xl=80rem */}
         <div class="flex w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-xl lg:max-w-7xl lg:flex-row">
           <BrandSide />
 
           <main class="flex flex-1 flex-col justify-center px-6 py-8 sm:px-10 lg:px-12 lg:py-12">
-            {/* Ancho del formulario dentro de la tarjeta */}
             <div class="mx-auto w-full max-w-md">
               <p class="text-sm font-semibold text-fero-green-dark">¡Bienvenido de vuelta!</p>
               <h2 class="font-heading mt-1 text-2xl font-bold tracking-tight text-text-primary sm:text-3xl">
                 Inicia sesión en tu cuenta
               </h2>
               <p class="mt-2 text-sm text-text-muted">
-                Accede para gestionar y optimizar la recolección de residuos de manera inteligente.
+                Accede con uno de los 4 usuarios demo del capítulo 4 (clave: {DEMO_PASSWORD}).
               </p>
 
               <form class="mt-8 space-y-5" onSubmit={onSubmit}>
@@ -91,8 +105,10 @@ export default function LoginPage() {
                   type="email"
                   name="email"
                   autocomplete="email"
-                  placeholder="ejemplo@correo.com"
+                  placeholder="admin@fero.com"
                   required
+                  value={email()}
+                  onInput={(e) => setEmail(e.currentTarget.value)}
                   leadingIcon={<Mail size={18} />}
                 />
 
@@ -118,12 +134,13 @@ export default function LoginPage() {
                       </button>
                     }
                   />
-                  <div class="mt-2 flex justify-end">
-                    <a href="#" class="text-sm font-medium text-fero-blue hover:underline">
-                      ¿Olvidaste tu contraseña?
-                    </a>
-                  </div>
                 </div>
+
+                <Show when={authError()}>
+                  <p class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                    {authError()}
+                  </p>
+                </Show>
 
                 <Button
                   type="submit"
@@ -131,10 +148,28 @@ export default function LoginPage() {
                   size="lg"
                   class="w-full font-semibold"
                   icon={<LogIn size={18} />}
+                  disabled={authLoading()}
                 >
-                  Iniciar sesión
+                  {authLoading() ? 'Iniciando sesión…' : 'Iniciar sesión'}
                 </Button>
               </form>
+
+              <div class="mt-6 rounded-lg border border-border bg-slate-50/80 p-3 dark:bg-dark-surface-hover">
+                <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
+                  Usuarios demo
+                </p>
+                <div class="flex flex-wrap gap-2">
+                  {DEMO_USERS.map((demo) => (
+                    <button
+                      type="button"
+                      class="rounded-md border border-border bg-surface px-2.5 py-1 text-xs font-medium text-text-secondary hover:border-fero-green-dark hover:text-fero-green-dark"
+                      onClick={() => fillDemo(demo.email)}
+                    >
+                      {demo.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               <div class="my-6 flex items-center gap-3">
                 <div class="h-px flex-1 bg-border" />
@@ -143,20 +178,13 @@ export default function LoginPage() {
               </div>
 
               <div class="grid grid-cols-2 gap-3">
-                <Button type="button" variant="outline" class="w-full font-medium" icon={<GoogleIcon />}>
+                <Button type="button" variant="outline" class="w-full font-medium" icon={<GoogleIcon />} disabled>
                   Google
                 </Button>
-                <Button type="button" variant="outline" class="w-full font-medium" icon={<MicrosoftIcon />}>
+                <Button type="button" variant="outline" class="w-full font-medium" icon={<MicrosoftIcon />} disabled>
                   Microsoft
                 </Button>
               </div>
-
-              <p class="mt-8 text-center text-sm text-text-secondary">
-                ¿No tienes cuenta?{' '}
-                <a href="#" class="font-semibold text-fero-blue hover:underline">
-                  Solicita acceso
-                </a>
-              </p>
             </div>
           </main>
 
