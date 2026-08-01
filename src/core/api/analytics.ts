@@ -5,8 +5,11 @@ import {
   analyticsRoutePerformance,
   analyticsWasteTypes,
   evolutionSeries,
+  heatmapPoints,
   hourlyDistribution,
 } from '../../data/mock/analytics';
+import type { AnalyticsFilters, AnalyticsHeatmapGeoJson } from '../types/analytics';
+import { buildAnalyticsQuery } from '../utils/analyticsFilters';
 import { apiGet, withMockFallback } from './client';
 
 export interface AnalyticsSummary {
@@ -33,10 +36,11 @@ function mapAnalyticsSummary(raw: AnalyticsSummary): AnalyticsSummary {
   };
 }
 
-export function fetchAnalyticsSummary(): Promise<AnalyticsSummary> {
+export function fetchAnalyticsSummary(filters?: AnalyticsFilters): Promise<AnalyticsSummary> {
+  const query = buildAnalyticsQuery(filters);
   return withMockFallback(
     'analytics-summary',
-    async () => mapAnalyticsSummary(await apiGet<AnalyticsSummary>('/api/v1/analytics/summary')),
+    async () => mapAnalyticsSummary(await apiGet<AnalyticsSummary>(`/api/v1/analytics/summary${query}`)),
     mapAnalyticsSummary({
       kpis: analyticsKpis,
       evolutionSeries,
@@ -46,5 +50,19 @@ export function fetchAnalyticsSummary(): Promise<AnalyticsSummary> {
       efficiencyIndicators: analyticsEfficiencyIndicators,
       insights: analyticsInsights,
     }),
+  );
+}
+
+export function fetchAnalyticsHeatmap(filters?: AnalyticsFilters): Promise<AnalyticsHeatmapGeoJson> {
+  const heatmapFilters: AnalyticsFilters = {
+    from: filters?.from,
+    to: filters?.to,
+    sector: filters?.sector,
+  };
+  const query = buildAnalyticsQuery(heatmapFilters);
+  return withMockFallback(
+    'analytics-heatmap',
+    () => apiGet<AnalyticsHeatmapGeoJson>(`/api/v1/analytics/heatmap${query}`),
+    heatmapPoints,
   );
 }

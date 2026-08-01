@@ -1,10 +1,11 @@
-import { vehiclesList, type Vehicle, type VehicleStatus } from '../../data/mock/vehicles';
+import { vehiclesList } from '../../data/mock/vehicles';
+import type { Vehicle, VehicleStatus } from '../types/vehicle';
 import {
   buildMockVehiclesOptimizationContext,
   enrichVehiclesWithOptimization,
   type VehicleOptimizationContext,
 } from '../utils/vehiclesOptimization';
-import { apiGet, apiPatch, withMockFallback } from './client';
+import { apiDownload, apiGet, apiPatch, withMockFallback } from './client';
 
 const DEFAULT_IMAGE =
   'https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&w=480&h=320&q=80';
@@ -19,6 +20,8 @@ export interface ApiVehicle {
   fuelConsumptionRate: number;
   driver: string | null;
   driverPhone: string | null;
+  defaultDriverId?: number | null;
+  driverId?: number | null;
   type?: string;
   fuelPct?: number | null;
   capacityPct?: number | null;
@@ -74,6 +77,8 @@ function mapApiVehicle(row: ApiVehicle, index: number): Vehicle {
     status: row.status,
     driver: row.driver ?? '—',
     driverPhone: row.driverPhone ?? undefined,
+    defaultDriverId: row.defaultDriverId ?? null,
+    driverId: row.driverId ?? null,
     fuelPct: row.fuelPct ?? null,
     capacityPct: row.capacityPct ?? null,
     capacityM3,
@@ -212,11 +217,23 @@ export function formatCapacityKg(value: number): string {
 
 export type VehicleStatusUpdate = 'available' | 'maintenance';
 
+export interface VehicleUpdatePayload {
+  status?: VehicleStatusUpdate;
+  defaultDriverId?: number | null;
+}
+
 export function updateVehicleStatus(
   code: string,
   status: VehicleStatusUpdate,
 ): Promise<Vehicle & { maxCapacityKg: number }> {
-  return apiPatch<ApiVehicle>(`/api/v1/vehicles/${encodeURIComponent(code)}`, { status }).then((row) =>
+  return updateVehicle(code, { status });
+}
+
+export function updateVehicle(
+  code: string,
+  payload: VehicleUpdatePayload,
+): Promise<Vehicle & { maxCapacityKg: number }> {
+  return apiPatch<ApiVehicle>(`/api/v1/vehicles/${encodeURIComponent(code)}`, payload).then((row) =>
     mapApiVehicle(row, 0),
   );
 }
@@ -285,6 +302,23 @@ export function fetchVehicleIncidents(code: string): Promise<VehicleIncident[]> 
     () => apiGet<VehicleIncident[]>(`/api/v1/vehicles/${encodeURIComponent(code)}/incidents`),
     MOCK_VEHICLE_INCIDENTS[code] ?? [],
   );
+}
+
+export interface VehiclesExportFilters {
+  status?: string;
+  assignableOnly?: boolean;
+  q?: string;
+}
+
+export function downloadVehiclesExport(
+  filters?: VehiclesExportFilters,
+  filename = 'feromap-vehiculos.csv',
+): Promise<void> {
+  const params = new URLSearchParams({ format: 'csv' });
+  if (filters?.status) params.set('status', filters.status);
+  if (filters?.assignableOnly) params.set('assignable', 'true');
+  if (filters?.q?.trim()) params.set('q', filters.q.trim());
+  return apiDownload(`/api/v1/vehicles/export?${params.toString()}`, filename);
 }
 
 export { enrichVehiclesWithOptimization, type VehicleOptimizationContext };

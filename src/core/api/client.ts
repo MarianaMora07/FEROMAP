@@ -1,3 +1,5 @@
+import { notifyMockFallback } from './mockFallback';
+
 export const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
 
 /** En dev las peticiones van por el proxy de Vite (`/api` → backend) y evitan CORS. */
@@ -145,14 +147,15 @@ export async function withMockFallback<T>(
   fetcher: () => Promise<T>,
   fallback: T,
 ): Promise<T> {
-  if (useMocks) return fallback;
+  if (useMocks) {
+    notifyMockFallback(label, new Error('VITE_USE_MOCKS=true'), 'forced');
+    return fallback;
+  }
 
   try {
     return await fetcher();
   } catch (error) {
-    if (import.meta.env.DEV) {
-      console.warn(`[FEROMAP] API falló (${label}); usando mock.`, error);
-    }
+    notifyMockFallback(label, error, 'api-error');
     return fallback;
   }
 }

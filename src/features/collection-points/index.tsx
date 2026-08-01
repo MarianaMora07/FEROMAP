@@ -59,6 +59,7 @@ import {
   deleteCollectionPoint,
   detailToCollectionPoint,
   downloadCollectionPointsCsv,
+  downloadCollectionPointsExport,
   enrichCollectionPointsWithOptimization,
   fetchCollectionPointDetail,
   fetchCollectionPointFillHistory,
@@ -70,7 +71,7 @@ import {
   updateCollectionPoint,
 } from '../../core/api/collectionPoints';
 import { toggleLocalPriorityBoost } from '../../core/utils/collectionPointsOptimization';
-import { ApiError } from '../../core/api/client';
+import { ApiError, useMocks } from '../../core/api/client';
 import { fetchSectors } from '../../core/api/sectors';
 import { canManageCollectionPoints } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
@@ -639,23 +640,32 @@ export default function CollectionPointsPage() {
     setPage(1);
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     const points = filtered();
     if (points.length === 0) {
       addToast('No hay puntos para exportar con los filtros actuales', 'warning');
       return;
     }
 
+    const suffix = [sectorFilter() || 'todos-sectores', statusFilter() || 'todos-estados'].join('-');
+    const filename = `feromap-puntos-${suffix}.csv`;
+
     setExporting(true);
     try {
-      const suffix = [
-        sectorFilter() || 'todos-sectores',
-        statusFilter() || 'todos-estados',
-      ].join('-');
-      downloadCollectionPointsCsv(points, `feromap-puntos-${suffix}.csv`);
+      if (useMocks) {
+        downloadCollectionPointsCsv(points, filename);
+      } else {
+        await downloadCollectionPointsExport(
+          {
+            sector: sectorFilter() || undefined,
+            status: statusFilter() || undefined,
+          },
+          filename,
+        );
+      }
       addToast(`Exportados ${points.length} puntos a CSV`, 'success');
     } catch {
-      addToast('No se pudo generar el archivo CSV', 'error');
+      addToast('No se pudo descargar el archivo CSV del servidor', 'error');
     } finally {
       setExporting(false);
     }

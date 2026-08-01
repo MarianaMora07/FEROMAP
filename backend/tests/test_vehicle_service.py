@@ -189,6 +189,46 @@ def test_update_vehicle_sets_maintenance_status():
     assert result["status"] == "mantenimiento"
 
 
+def test_update_vehicle_sets_default_driver(monkeypatch):
+    default_driver = _driver(driver_id=3)
+    vehicle = _vehicle("TR-03", status="available")
+    db = MagicMock()
+    db.scalar.side_effect = [vehicle, vehicle]
+    db.scalars.side_effect = [
+        MagicMock(all=MagicMock(return_value=[vehicle])),
+        MagicMock(unique=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))),
+    ]
+    monkeypatch.setattr(
+        "app.services.vehicle_service.validate_driver_assignment",
+        lambda _db, driver_id: default_driver if driver_id == 3 else None,
+    )
+
+    from app.schemas.vehicle import VehicleUpdate
+
+    result = update_vehicle(db, "TR-03", VehicleUpdate(default_driver_id=3))
+
+    assert vehicle.default_driver_id == 3
+    assert result["defaultDriverId"] == 3
+
+
+def test_update_vehicle_clears_default_driver():
+    default_driver = _driver(driver_id=3)
+    vehicle = _vehicle("TR-03", status="available", default_driver=default_driver)
+    db = MagicMock()
+    db.scalar.side_effect = [vehicle, vehicle]
+    db.scalars.side_effect = [
+        MagicMock(all=MagicMock(return_value=[vehicle])),
+        MagicMock(unique=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))),
+    ]
+
+    from app.schemas.vehicle import VehicleUpdate
+
+    result = update_vehicle(db, "TR-03", VehicleUpdate(default_driver_id=None))
+
+    assert vehicle.default_driver_id is None
+    assert result["defaultDriverId"] is None
+
+
 def test_update_vehicle_rejects_invalid_status():
     vehicle = _vehicle("TR-03")
     db = MagicMock()

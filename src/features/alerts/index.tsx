@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createResource, createSignal, onCleanup, onMount } from 'solid-js';
+import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from 'solid-js';
 import { A } from '@solidjs/router';
 import {
   Chart,
@@ -48,14 +48,15 @@ import {
   alertsList,
   mapAlertLegend,
   priorityColor,
-  recentAlertActivity,
   type AlertPriority,
 } from '../../data/mock/alerts';
 import {
   computeAlertsByCategory,
   computeAlertsDistribution,
-  computeAlertsKpis,
+  fetchAlertActivity,
   fetchAlerts,
+  statsToKpis,
+  updateAlertStatus,
 } from '../../core/api/alerts';
 
 function KpiIcon(props: { name: (typeof alertsKpis)[number]['icon'] }) {
@@ -126,14 +127,33 @@ export default function AlertsPage() {
   const mapRef: { current?: MapLibreMap } = {};
   const markers: Marker[] = [];
 
-  const [alertsData] = createResource(fetchAlerts);
-  const alertsListData = () => alertsData() ?? alertsList;
+  const [refreshToken, setRefreshToken] = createSignal(0);
+  const [alertsData] = createResource(refreshToken, () => fetchAlerts());
+  const [activityData] = createResource(refreshToken, () => fetchAlertActivity());
+  const [actionLoading, setActionLoading] = createSignal<string | null>(null);
+  const [openMenuId, setOpenMenuId] = createSignal<string | null>(null);
+
+  const alertsListData = () => alertsData()?.alerts ?? alertsList.filter((a) => a.status !== 'resuelta');
   const alertsKpisData = () =>
-    alertsData() ? computeAlertsKpis(alertsData()!) : alertsKpis;
+    alertsData()?.stats ? statsToKpis(alertsData()!.stats) : alertsKpis;
+  const recentActivity = () => activityData() ?? [];
   const alertsDistribution = () =>
-    alertsData() ? computeAlertsDistribution(alertsData()!) : { total: 0, items: [] };
+    alertsListData().length ? computeAlertsDistribution(alertsListData()) : { total: 0, items: [] };
   const alertsByCategory = () =>
-    alertsData() ? computeAlertsByCategory(alertsData()!) : [];
+    alertsListData().length ? computeAlertsByCategory(alertsListData()) : [];
+
+  const refetchAlerts = () => setRefreshToken((value) => value + 1);
+
+  const runAlertAction = async (alertId: string, status: 'acknowledged' | 'resolved') => {
+    setActionLoading(alertId);
+    setOpenMenuId(null);
+    try {
+      await updateAlertStatus(alertId, status);
+      refetchAlerts();
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   const [search, setSearch] = createSignal('');
   const [categoryFilter, setCategoryFilter] = createSignal('');
@@ -167,8 +187,21 @@ export default function AlertsPage() {
     () => syncAlertMarkers(),
   );
 
+  createEffect(() => {
+    alertsListData();
+    syncAlertMarkers();
+  });
+
   onMount(() => {
     Chart.register(ArcElement, CategoryScale, LinearScale, LineElement, PointElement, Tooltip, Legend);
+
+    const closeMenu = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest('[data-alert-menu]')) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener('click', closeMenu);
 
     const map = new maplibregl.Map({
       container: mapContainer,
@@ -189,6 +222,7 @@ export default function AlertsPage() {
     const ro = new ResizeObserver(() => mapRef.current?.resize());
     ro.observe(mapContainer);
     onCleanup(() => {
+      document.removeEventListener('click', closeMenu);
       ro.disconnect();
       markers.forEach((m) => m.remove());
       mapRef.current?.remove();
@@ -370,13 +404,50 @@ export default function AlertsPage() {
                         <StatusBadge status={a.status} />
                       </td>
                       <td class="px-3 py-2.5">
-                        <div class="flex items-center gap-0.5">
-                          <button type="button" class="flex h-7 w-7 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover hover:text-fero-blue" aria-label="Ver">
+                        <div class="relative flex items-center gap-0.5" data-alert-menu>
+                          <button
+                            type="button"
+                            class="flex h-7 w-7 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover hover:text-fero-blue disabled:opacity-40"
+                            aria-label="Marcar como vista"
+                            disabled={actionLoading() === a.id || a.status === 'resuelta'}
+                            onClick={() => void runAlertAction(a.id, 'acknowledged')}
+                          >
                             <Eye size={14} />
                           </button>
-                          <button type="button" class="flex h-7 w-7 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover" aria-label="Más">
+                          <button
+                            type="button"
+                            class="flex h-7 w-7 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover disabled:opacity-40"
+                            aria-label="Más acciones"
+                            disabled={actionLoading() === a.id}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setOpenMenuId((current) => (current === a.id ? null : a.id));
+                            }}
+                          >
                             <MoreVertical size={14} />
                           </button>
+                          <Show when={openMenuId() === a.id}>
+                            <div class="absolute right-0 top-8 z-20 min-w-40 rounded-md border border-border bg-surface py-1 shadow-lg dark:border-dark-border dark:bg-dark-surface">
+                              <button
+                                type="button"
+                                class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-text-secondary hover:bg-surface-hover disabled:opacity-40"
+                                disabled={a.status === 'resuelta'}
+                                onClick={() => void runAlertAction(a.id, 'acknowledged')}
+                              >
+                                <Eye size={13} />
+                                Marcar como vista
+                              </button>
+                              <button
+                                type="button"
+                                class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-fero-green-dark hover:bg-surface-hover disabled:opacity-40"
+                                disabled={a.status === 'resuelta'}
+                                onClick={() => void runAlertAction(a.id, 'resolved')}
+                              >
+                                <CheckCircle2 size={13} />
+                                Resolver alerta
+                              </button>
+                            </div>
+                          </Show>
                         </div>
                       </td>
                     </tr>
@@ -520,7 +591,7 @@ export default function AlertsPage() {
         <Card>
           <CardHeader title="Actividad reciente" />
           <ul class="space-y-3">
-            <For each={recentAlertActivity}>
+            <For each={recentActivity()}>
               {(a) => (
                 <li class="flex gap-3">
                   <div class="min-w-0 flex-1">

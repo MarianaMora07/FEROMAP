@@ -50,6 +50,7 @@ def get_current_user(
     try:
         payload = decode_access_token(token)
         user_id = int(payload["sub"])
+        session_id = payload.get("sid")
     except (PyJWTError, KeyError, TypeError, ValueError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -64,7 +65,28 @@ def get_current_user(
             detail="Usuario no disponible",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    if session_id:
+        from app.services.profile_service import validate_session
+
+        validate_session(db, session_id, user.id)
+
     return user
+
+
+def get_current_session_id(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer_scheme)],
+) -> str | None:
+    token = _extract_token(request, credentials)
+    if not token:
+        return None
+    try:
+        payload = decode_access_token(token)
+        sid = payload.get("sid")
+        return str(sid) if sid else None
+    except (PyJWTError, KeyError, TypeError, ValueError):
+        return None
 
 
 def get_current_user_optional(
@@ -87,6 +109,7 @@ def get_current_user_optional(
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+CurrentSessionId = Annotated[str | None, Depends(get_current_session_id)]
 OptionalUser = Annotated[User | None, Depends(get_current_user_optional)]
 
 
@@ -104,6 +127,7 @@ def require_roles(*roles: UserRole) -> Callable[..., User]:
     return _checker
 
 
+AdminOnly = Annotated[User, Depends(require_roles(UserRole.administrador))]
 PlannerOrAdmin = Annotated[User, Depends(require_roles(UserRole.administrador, UserRole.planificador))]
 OperationsStaff = Annotated[
     User,

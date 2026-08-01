@@ -116,6 +116,19 @@ export function toggleDarkMode() {
   });
 }
 
+export function applyThemePreference(theme: 'light' | 'dark' | 'system') {
+  const prefersDark =
+    theme === 'dark' ||
+    (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  setState('darkMode', prefersDark);
+  document.documentElement.classList.toggle('dark', prefersDark);
+}
+
+export async function refreshAppRoutes(): Promise<void> {
+  const routes = await fetchAllRoutes();
+  setState('routes', routes);
+}
+
 export function setRoutes(routes: RouteCollection) {
   setState('routes', routes);
 }

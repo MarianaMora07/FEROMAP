@@ -43,6 +43,10 @@ seed: _check
 export-seeds:
     npm run export-seeds
 
+# Entorno reproducible para integración: seeds + migraciones + población BD.
+integration-setup: export-seeds migrate seed
+    @echo "✅ Entorno de integración listo (seeds + migrate + seed)"
+
 # Reinicio completo: borra BD, levanta stack, migra y seed.
 db-reset: down-volumes up wait-db migrate seed
 

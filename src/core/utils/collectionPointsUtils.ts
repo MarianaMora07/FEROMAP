@@ -2,7 +2,7 @@ import {
   fillStatusColor,
   type CollectionPoint,
   type FillStatus,
-} from '../../data/mock/collectionPoints';
+} from '../types/collectionPoint';
 
 export type CollectionPointKpiTone = 'green' | 'amber' | 'red' | 'slate';
 

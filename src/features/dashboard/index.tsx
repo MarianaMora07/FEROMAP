@@ -14,11 +14,6 @@ import {
   Trash2,
   Truck,
   AlertTriangle,
-  Layers,
-  Maximize2,
-  Plus,
-  Minus,
-  Crosshair,
   TrafficCone,
   CirclePause,
   ArrowRight,
@@ -39,7 +34,7 @@ import {
   weeklyTons as mockWeeklyTons,
 } from '../../data/mock/dashboard';
 import { dashboardView, loadDashboardData } from '../../core/stores/dashboardStore';
-import { UNARE_CENTER } from '../../data/types/geo';
+import { DashboardMiniMap } from './DashboardMiniMap';
 
 const alertIcon: Record<'danger' | 'warning' | 'info', () => JSX.Element> = {
   danger: () => <AlertTriangle size={16} />,
@@ -53,40 +48,6 @@ const alertToneClass = {
   info: 'bg-fero-blue/10 text-fero-blue',
 };
 
-type LegendItem =
-  | { label: string; kind: 'truck' }
-  | { label: string; kind: 'line'; class: string }
-  | { label: string; kind: 'bin'; class: string };
-
-const legendItems: LegendItem[] = [
-  { label: 'Vehículos activos', kind: 'truck' },
-  { label: 'Ruta en ejecución', kind: 'line', class: 'bg-fero-green-dark' },
-  { label: 'Completada', kind: 'line', class: 'bg-fero-blue' },
-  { label: 'Programada', kind: 'line', class: 'h-0! border-t-2 border-dashed border-slate-400 rounded-none bg-transparent' },
-  { label: 'Normal', kind: 'bin', class: 'text-fero-green-dark' },
-  { label: 'Lleno', kind: 'bin', class: 'text-amber-500' },
-  { label: 'Crítico', kind: 'bin', class: 'text-red-500' },
-];
-
-function LegendSwatch(props: { item: LegendItem }) {
-  switch (props.item.kind) {
-    case 'truck':
-      return (
-        <span class="flex h-4 w-5 shrink-0 items-center justify-center text-fero-green-dark">
-          <Truck size={14} />
-        </span>
-      );
-    case 'line':
-      return <span class={`h-1 w-5 shrink-0 rounded-full ${props.item.class}`} />;
-    case 'bin':
-      return (
-        <span class={`flex h-4 w-5 shrink-0 items-center justify-center ${props.item.class}`}>
-          <Trash2 size={14} />
-        </span>
-      );
-  }
-}
-
 function ViewAllLink(props: { href: string; children: string }) {
   return (
     <A
@@ -96,74 +57,6 @@ function ViewAllLink(props: { href: string; children: string }) {
       {props.children}
       <ArrowRight size={14} />
     </A>
-  );
-}
-
-function OperationsMap() {
-  const [lng, lat] = UNARE_CENTER;
-  const delta = 0.035;
-  const bbox = `${lng - delta}%2C${lat - delta}%2C${lng + delta}%2C${lat + delta}`;
-
-  return (
-    <Card padding={false} class="overflow-hidden">
-      <div class="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-        <h3 class="font-heading font-semibold text-text-primary dark:text-white">
-          Mapa de operaciones en tiempo real
-        </h3>
-        <div class="flex items-center gap-2">
-          <button
-            type="button"
-            class="hidden items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-text-secondary sm:inline-flex"
-          >
-            <Layers size={14} />
-            Todas las capas
-          </button>
-          <button
-            type="button"
-            class="flex h-8 w-8 items-center justify-center rounded-md border border-border text-text-secondary"
-            aria-label="Pantalla completa"
-          >
-            <Maximize2 size={14} />
-          </button>
-        </div>
-      </div>
-
-      <div class="relative h-[340px] bg-slate-100 dark:bg-slate-900 lg:h-[380px]">
-        <iframe
-          title="Mapa de operaciones Unare"
-          class="h-full w-full border-0"
-          loading="lazy"
-          referrerpolicy="no-referrer-when-downgrade"
-          src={`https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat}%2C${lng}`}
-        />
-
-        <div class="absolute bottom-3 left-3 max-w-55 rounded-md border border-border bg-surface/95 p-3 text-xs shadow-md backdrop-blur-sm dark:bg-dark-surface/95">
-          <p class="mb-2 font-semibold text-text-primary dark:text-white">Leyenda</p>
-          <ul class="space-y-1.5 text-text-secondary">
-            <For each={legendItems}>
-              {(item) => (
-                <li class="flex items-center gap-2">
-                  <LegendSwatch item={item} />
-                  {item.label}
-                </li>
-              )}
-            </For>
-          </ul>
-        </div>
-
-        <div class="absolute right-3 top-3 flex flex-col overflow-hidden rounded-md border border-border bg-surface shadow-sm dark:bg-dark-surface">
-          <button type="button" class="flex h-8 w-8 items-center justify-center text-text-secondary hover:bg-surface-hover" aria-label="Acercar">
-            <Plus size={14} />
-          </button>
-          <button type="button" class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover" aria-label="Alejar">
-            <Minus size={14} />
-          </button>
-          <button type="button" class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover" aria-label="Centrar">
-            <Crosshair size={14} />
-          </button>
-        </div>
-      </div>
-    </Card>
   );
 }
 
@@ -358,7 +251,7 @@ export default function DashboardPage() {
 
       <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <div class="xl:col-span-2">
-          <OperationsMap />
+          <DashboardMiniMap />
         </div>
         <div class="space-y-4">
           <FleetDonut />

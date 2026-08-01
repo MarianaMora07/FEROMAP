@@ -6,15 +6,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import CollectionPoint, User, UserRole, Vehicle
-from app.services.operations_service import active_routes_view, alerts_from_db, live_fleet_view
+from app.services.geo_service import fill_level_pct
+from app.services.map_context_service import map_operational_context
+from app.services.alert_service import list_alerts as list_persisted_alerts
+from app.services.operations_service import active_routes_view, live_fleet_view
 from app.services.seed_loader import load_seed
 
 
 def list_alerts(db: Session) -> list[dict[str, Any]]:
-    dynamic = alerts_from_db(db)
-    if dynamic:
-        return dynamic
-    return load_seed("alerts.json")
+    return list_persisted_alerts(db, active_only=True)
 
 
 def monitoring_status(db: Session, *, current_user: User | None = None) -> dict[str, Any]:
@@ -73,12 +73,14 @@ def monitoring_status(db: Session, *, current_user: User | None = None) -> dict[
         },
     ]
 
-    live_fleet = live_fleet_view(db, driver_id=_driver_filter(current_user))
+    driver_id = _driver_filter(current_user)
+    map_context = map_operational_context(db, driver_id=driver_id)
+    live_fleet = map_context["vehicles"]
     if not live_fleet:
         live_fleet = data.get("liveFleet", [])
 
     route_progress = []
-    for route in active_routes_view(db, driver_id=_driver_filter(current_user)):
+    for route in active_routes_view(db, driver_id=driver_id):
         route_progress.append(
             {
                 "label": route["id"],
@@ -90,7 +92,7 @@ def monitoring_status(db: Session, *, current_user: User | None = None) -> dict[
         )
 
     monitoring_alerts = []
-    for alert in alerts_from_db(db)[:4]:
+    for alert in list_persisted_alerts(db, active_only=True)[:4]:
         monitoring_alerts.append(
             {
                 "title": alert["title"],
@@ -112,6 +114,11 @@ def monitoring_status(db: Session, *, current_user: User | None = None) -> dict[
             "maintenance": sum(1 for v in vehicles if v.status == "maintenance"),
             "inactive": sum(1 for v in vehicles if v.status == "inactive"),
         },
+        "routes": map_context["routes"],
+        "containers": map_context["containers"],
+        "mapMetrics": map_context["mapMetrics"],
+        "liveActivities": map_context["liveActivities"],
+        "updatedAt": map_context["updatedAt"],
     }
 
 

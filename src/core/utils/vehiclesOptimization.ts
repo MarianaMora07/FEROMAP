@@ -1,4 +1,4 @@
-import type { Vehicle } from '../../data/mock/vehicles';
+import type { Vehicle } from '../types/vehicle';
 import { isAssignableVehicle } from '../api/vehicles';
 
 export interface VehicleOptimizationContext {

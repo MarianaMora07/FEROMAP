@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -13,6 +13,7 @@ from sqlalchemy import delete, select
 from app.config import settings
 from app.core.security import hash_password
 from app.db.models import (
+    AlertActivity,
     CollectionPoint,
     Driver,
     OptimizedRoute,
@@ -20,12 +21,17 @@ from app.db.models import (
     RouteWaypoint,
     Sector,
     Simulation,
+    SystemAlert,
     User,
+    UserPreferences,
     UserRole,
     Vehicle,
     VehicleIncident,
 )
 from app.db.session import SessionLocal
+from app.services.alert_service import seed_alerts_from_json
+from app.services.admin_service import ensure_default_settings
+from app.services.profile_service import ensure_user_preferences
 
 SEEDS_DIR = Path(settings.data_dir) / "seeds"
 DEMO_PASSWORD = "123456789"
@@ -59,6 +65,8 @@ def nearest_collection_point_id(
 
 
 def clear_tables(session) -> None:
+    session.execute(delete(AlertActivity))
+    session.execute(delete(SystemAlert))
     session.execute(delete(RouteWaypoint))
     session.execute(delete(VehicleIncident))
     session.execute(delete(OptimizedRoute))
@@ -305,16 +313,25 @@ def seed() -> None:
                 )
             )
 
-        for row in simulations_data:
+        for index, row in enumerate(simulations_data):
+            executed_at = datetime.now(timezone.utc) - timedelta(days=len(simulations_data) - index)
             session.add(
                 Simulation(
                     scenario_name=row["scenarioName"],
+                    executed_at=executed_at,
                     parameters_json=json.dumps(row.get("parameters", {}), ensure_ascii=False),
                     kpi_total_distance_historical=Decimal(str(row["kpiTotalDistanceHistorical"])),
                     kpi_total_distance_optimized=Decimal(str(row["kpiTotalDistanceOptimized"])),
                     kpi_saving_percentage=Decimal(str(row["kpiSavingPercentage"])),
                 )
             )
+
+        alerts_count = seed_alerts_from_json(session)
+
+        for user in session.scalars(select(User)).all():
+            ensure_user_preferences(session, user)
+
+        ensure_default_settings(session)
 
         session.commit()
 
@@ -335,6 +352,7 @@ def seed() -> None:
         print(f"   clave demo: {DEMO_PASSWORD}")
         print(f"   optimized_routes: {len(routes_data)}")
         print(f"   simulations: {len(simulations_data)}")
+        print(f"   system_alerts: {alerts_count}")
 
 
 if __name__ == "__main__":

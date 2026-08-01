@@ -1,4 +1,4 @@
-import { For, Show, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import { useSearchParams } from '@solidjs/router';
 import {
   Chart,
@@ -13,7 +13,7 @@ import {
   Legend,
 } from 'chart.js';
 import { Bar, Doughnut, Line } from 'solid-chartjs';
-import maplibregl, { type Map as MapLibreMap } from 'maplibre-gl';
+import maplibregl, { type GeoJSONSource, type Map as MapLibreMap } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import {
   Clock,
@@ -36,7 +36,9 @@ import {
 import { bindMapTheme, mapStyleForTheme } from '../../core/utils/mapStyle';
 import { appState } from '../../core/stores/appStore';
 import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
-import { fetchAnalyticsSummary } from '../../core/api/analytics';
+import { fetchAnalyticsHeatmap, fetchAnalyticsSummary } from '../../core/api/analytics';
+import type { AnalyticsGranularity, AnalyticsHeatmapGeoJson } from '../../core/types/analytics';
+import { defaultDateRange } from '../../core/utils/analyticsFilters';
 import {
   analyticsEfficiencyIndicators as mockEfficiency,
   analyticsInsights as mockInsights,
@@ -44,7 +46,6 @@ import {
   analyticsRoutePerformance as mockRoutePerformance,
   analyticsWasteTypes as mockWasteTypes,
   evolutionSeries as mockEvolution,
-  heatmapPoints,
   hourlyDistribution as mockHourly,
   hourlyMetricOptions,
   type HourlyMetricId,
@@ -126,7 +127,10 @@ export default function AnalyticsPage() {
     const sector = params.sector;
     return typeof sector === 'string' && sector.length > 0 ? sector : '';
   };
-  const [granularity, setGranularity] = createSignal('daily');
+  const defaultRange = defaultDateRange();
+  const [granularity, setGranularity] = createSignal<AnalyticsGranularity>('daily');
+  const [dateFrom, setDateFrom] = createSignal(defaultRange.from);
+  const [dateTo, setDateTo] = createSignal(defaultRange.to);
   const [hourlyMetric, setHourlyMetric] = createSignal<HourlyMetricId>('toneladas');
   const [mapReady, setMapReady] = createSignal(false);
   const [kpis, setKpis] = createSignal(mockKpis);
@@ -137,9 +141,24 @@ export default function AnalyticsPage() {
   const [analyticsEfficiencyIndicators, setAnalyticsEfficiencyIndicators] = createSignal(mockEfficiency);
   const [analyticsInsights, setAnalyticsInsights] = createSignal(mockInsights);
 
+  const filters = createMemo(() => ({
+    from: dateFrom(),
+    to: dateTo(),
+    granularity: granularity(),
+    sector: focusSector() || undefined,
+  }));
+
+  const applyHeatmapData = (data: AnalyticsHeatmapGeoJson) => {
+    const source = mapRef.current?.getSource('heat') as GeoJSONSource | undefined;
+    source?.setData(data);
+  };
+
   const setupAnalyticsHeatmap = (map: MapLibreMap) => {
     if (!map.getSource('heat')) {
-      map.addSource('heat', { type: 'geojson', data: heatmapPoints });
+      map.addSource('heat', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
       map.addLayer({
         id: 'heat-layer',
         type: 'heatmap',
@@ -175,8 +194,9 @@ export default function AnalyticsPage() {
     () => setupAnalyticsHeatmap(mapRef.current!),
   );
 
-  onMount(() => {
-    void fetchAnalyticsSummary().then((summary) => {
+  createEffect(() => {
+    const activeFilters = filters();
+    void fetchAnalyticsSummary(activeFilters).then((summary) => {
       setKpis(summary.kpis);
       setEvolutionSeries(summary.evolutionSeries);
       setAnalyticsWasteTypes(summary.wasteTypes);
@@ -185,6 +205,14 @@ export default function AnalyticsPage() {
       setAnalyticsEfficiencyIndicators(summary.efficiencyIndicators);
       setAnalyticsInsights(summary.insights);
     });
+    void fetchAnalyticsHeatmap(activeFilters).then((geojson) => {
+      if (mapReady()) {
+        applyHeatmapData(geojson);
+      }
+    });
+  });
+
+  onMount(() => {
     Chart.register(
       ArcElement,
       BarElement,
@@ -211,6 +239,7 @@ export default function AnalyticsPage() {
       map.resize();
       setupAnalyticsHeatmap(map);
       setMapReady(true);
+      void fetchAnalyticsHeatmap(filters()).then(applyHeatmapData);
     });
 
     const ro = new ResizeObserver(() => mapRef.current?.resize());
@@ -288,6 +317,44 @@ export default function AnalyticsPage() {
           </p>
         </div>
       </Show>
+      <div class="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-surface px-4 py-3 dark:border-dark-border dark:bg-dark-surface">
+        <div>
+          <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+            Desde
+          </label>
+          <input
+            type="date"
+            value={dateFrom()}
+            onInput={(e) => setDateFrom(e.currentTarget.value)}
+            class="rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs dark:border-dark-border dark:bg-dark-surface-hover dark:text-white"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+            Hasta
+          </label>
+          <input
+            type="date"
+            value={dateTo()}
+            onInput={(e) => setDateTo(e.currentTarget.value)}
+            class="rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs dark:border-dark-border dark:bg-dark-surface-hover dark:text-white"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+            Granularidad
+          </label>
+          <select
+            value={granularity()}
+            onChange={(e) => setGranularity(e.currentTarget.value as AnalyticsGranularity)}
+            class="rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-text-secondary dark:bg-dark-surface-hover dark:border-dark-border"
+          >
+            <option value="daily">Diario</option>
+            <option value="weekly">Semanal</option>
+            <option value="monthly">Mensual</option>
+          </select>
+        </div>
+      </div>
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <For each={kpis()}>
           {(kpi) => (
@@ -309,15 +376,7 @@ export default function AnalyticsPage() {
           <CardHeader
             title="Evolución de recolecciones y toneladas"
             action={
-              <select
-                value={granularity()}
-                onChange={(e) => setGranularity(e.currentTarget.value)}
-                class="rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-text-secondary dark:bg-dark-surface-hover dark:border-dark-border"
-              >
-                <option value="daily">Diario</option>
-                <option value="weekly">Semanal</option>
-                <option value="monthly">Mensual</option>
-              </select>
+              <span class="text-xs text-text-muted">Granularidad: {granularity()}</span>
             }
           />
           <div class="mb-2 flex flex-wrap gap-3 text-xs text-text-secondary">

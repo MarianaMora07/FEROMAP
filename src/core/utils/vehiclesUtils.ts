@@ -1,4 +1,4 @@
-import type { Vehicle, VehicleStatus } from '../../data/mock/vehicles';
+import type { Vehicle, VehicleStatus } from '../types/vehicle';
 import { downloadCsvContent } from './collectionPointsUtils';
 
 const EXPORT_STATUS_LABELS: Record<VehicleStatus, string> = {

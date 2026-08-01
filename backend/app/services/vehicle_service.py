@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import Driver, OptimizedRoute, Vehicle, VehicleIncident
 from app.schemas.vehicle import VehicleUpdate
+from app.services.driver_service import validate_driver_assignment
 
 STATUS_TO_UI = {
     "in_route": "en-ruta",
@@ -96,6 +97,7 @@ def _serialize_vehicle(
 ) -> dict[str, Any]:
     capacity_m3 = float(vehicle.max_capacity_kg) / 1000
     driver_name, driver_phone = _resolve_driver(active_route, vehicle)
+    effective_driver_id = resolve_vehicle_driver_id(vehicle, active_route=active_route)
     current_route: str | None = None
     if vehicle.status == "in_route" and active_route is not None:
         current_route = f"Ruta optimizada {vehicle.code}"
@@ -108,6 +110,8 @@ def _serialize_vehicle(
         "fuelConsumptionRate": float(vehicle.fuel_consumption_rate or 0),
         "driver": driver_name,
         "driverPhone": driver_phone,
+        "defaultDriverId": vehicle.default_driver_id,
+        "driverId": effective_driver_id,
         "type": VEHICLE_TYPES[index % len(VEHICLE_TYPES)],
         "fuelPct": None,
         "capacityPct": None,
@@ -199,6 +203,14 @@ def update_vehicle(db: Session, code: str, payload: VehicleUpdate) -> dict[str, 
                 detail=f"Estado de vehículo inválido: {next_status}",
             )
         vehicle.status = next_status
+
+    if "default_driver_id" in payload.model_fields_set:
+        driver_id = data.get("default_driver_id")
+        if driver_id is None:
+            vehicle.default_driver_id = None
+        else:
+            validate_driver_assignment(db, driver_id)
+            vehicle.default_driver_id = driver_id
 
     db.flush()
     return vehicle_detail(db, code)

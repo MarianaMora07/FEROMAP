@@ -1,4 +1,4 @@
-import { For, Show, createSignal, onMount, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onMount, type JSX } from 'solid-js';
 import { A } from '@solidjs/router';
 import {
   Chart,
@@ -42,6 +42,12 @@ import {
   wasteTypeDistribution as mockWasteTypeDistribution,
 } from '../../data/mock/reports';
 import { downloadReport, fetchReportsSummary } from '../../core/api/reports';
+import type { AnalyticsGranularity } from '../../core/types/analytics';
+import {
+  defaultDateRange,
+  resolvePeriodRange,
+  type ReportPeriodPreset,
+} from '../../core/utils/analyticsFilters';
 
 function KpiIcon(props: { name: (typeof mockReportsKpis)[number]['icon'] }) {
   const map: Record<(typeof mockReportsKpis)[number]['icon'], () => JSX.Element> = {
@@ -55,11 +61,12 @@ function KpiIcon(props: { name: (typeof mockReportsKpis)[number]['icon'] }) {
 }
 
 export default function ReportsPage() {
-  const [granularity, setGranularity] = createSignal('daily');
+  const initialRange = defaultDateRange();
+  const [granularity, setGranularity] = createSignal<AnalyticsGranularity>('daily');
   const [reportType, setReportType] = createSignal('performance');
-  const [period, setPeriod] = createSignal('custom');
-  const [startDate, setStartDate] = createSignal('2026-06-01');
-  const [endDate, setEndDate] = createSignal('2026-06-25');
+  const [period, setPeriod] = createSignal<ReportPeriodPreset>('month');
+  const [startDate, setStartDate] = createSignal(initialRange.from);
+  const [endDate, setEndDate] = createSignal(initialRange.to);
   const [format, setFormat] = createSignal<'pdf' | 'excel'>('pdf');
   const [generating, setGenerating] = createSignal(false);
   const [loading, setLoading] = createSignal(true);
@@ -70,18 +77,43 @@ export default function ReportsPage() {
   const [periodComparison, setPeriodComparison] = createSignal(mockPeriodComparison);
   const [savedReports, setSavedReports] = createSignal(mockSavedReports);
 
+  const filters = createMemo(() => {
+    const range = resolvePeriodRange(period(), startDate(), endDate());
+    return {
+      from: range.from,
+      to: range.to,
+      granularity: granularity(),
+    };
+  });
+
+  const loadSummary = () =>
+    fetchReportsSummary(filters()).then((summary) => {
+      setKpis(summary.kpis);
+      setPerformanceSeries(summary.performanceSeries);
+      setWasteTypeDistribution(summary.wasteTypeDistribution);
+      setRoutePerformance(summary.routePerformance);
+      setPeriodComparison(summary.periodComparison);
+      setSavedReports(summary.savedReports);
+    });
+
+  createEffect(() => {
+    filters();
+    setLoading(true);
+    void loadSummary().finally(() => setLoading(false));
+  });
+
+  const handlePeriodChange = (value: string) => {
+    const next = value as ReportPeriodPreset;
+    setPeriod(next);
+    if (next !== 'custom') {
+      const range = resolvePeriodRange(next);
+      setStartDate(range.from);
+      setEndDate(range.to);
+    }
+  };
+
   onMount(() => {
     Chart.register(ArcElement, CategoryScale, LinearScale, LineElement, PointElement, Filler, Tooltip, Legend);
-    void fetchReportsSummary()
-      .then((summary) => {
-        setKpis(summary.kpis);
-        setPerformanceSeries(summary.performanceSeries);
-        setWasteTypeDistribution(summary.wasteTypeDistribution);
-        setRoutePerformance(summary.routePerformance);
-        setPeriodComparison(summary.periodComparison);
-        setSavedReports(summary.savedReports);
-      })
-      .finally(() => setLoading(false));
   });
 
   const lineData = () => ({
@@ -143,7 +175,7 @@ export default function ReportsPage() {
   const handleGenerate = async () => {
     setGenerating(true);
     try {
-      await downloadReport(format() === 'pdf' ? 'pdf' : 'csv');
+      await downloadReport(format() === 'pdf' ? 'pdf' : 'csv', filters());
     } finally {
       setGenerating(false);
     }
@@ -176,7 +208,7 @@ export default function ReportsPage() {
             action={
               <select
                 value={granularity()}
-                onChange={(e) => setGranularity(e.currentTarget.value)}
+                onChange={(e) => setGranularity(e.currentTarget.value as AnalyticsGranularity)}
                 class="rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-text-secondary dark:bg-dark-surface-hover dark:border-dark-border"
               >
                 <option value="daily">Diario</option>
@@ -258,7 +290,7 @@ export default function ReportsPage() {
               </label>
               <select
                 value={period()}
-                onChange={(e) => setPeriod(e.currentTarget.value)}
+                onChange={(e) => handlePeriodChange(e.currentTarget.value)}
                 class="w-full rounded-md border border-border bg-surface px-3 py-2.5 text-sm dark:bg-dark-surface-hover dark:border-dark-border dark:text-white"
               >
                 <For each={reportPeriodOptions}>{(o) => <option value={o.value}>{o.label}</option>}</For>
@@ -472,7 +504,7 @@ export default function ReportsPage() {
                           type="button"
                           class="flex h-8 w-8 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover hover:text-fero-blue"
                           aria-label="Descargar"
-                          onClick={() => void downloadReport('csv')}
+                          onClick={() => void downloadReport('csv', filters())}
                         >
                           <Download size={15} />
                         </button>

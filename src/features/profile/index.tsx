@@ -13,6 +13,7 @@ import {
   Shield,
   Smartphone,
   Sun,
+  Trash2,
 } from 'lucide-solid';
 import {
   Badge,
@@ -21,17 +22,43 @@ import {
   SelectField,
   TextField,
 } from '../../design-system/components';
-import { fetchProfile, updateProfile } from '../../core/api/profile';
+import {
+  changePassword,
+  deleteProfileSession,
+  fetchProfile,
+  fetchProfileSessions,
+  resolveAvatarUrl,
+  updateProfile,
+  updateProfilePreferences,
+  uploadProfileAvatar,
+  type ProfileDetail,
+  type ProfilePreferences,
+  type ProfileSession,
+} from '../../core/api/profile';
+import { applyThemePreference } from '../../core/stores/appStore';
+import { logout, userInitials } from '../../core/stores/authStore';
 import {
   profileDefaultViewOptions,
   profileLanguageOptions,
   profilePageSizeOptions,
-  profilePreferencesDefaults,
   profileReportFrequencyOptions,
-  profileSecurity,
   profileThemeOptions,
-  profileUser,
+  profileTimezoneOptions,
+  profileUnitsOptions,
 } from '../../data/mock/profile';
+
+const defaultPrefs: ProfilePreferences = {
+  theme: 'light',
+  language: 'es',
+  units: 'metric',
+  defaultView: 'dashboard',
+  reportFrequency: 'daily',
+  pageSize: 20,
+  emailNotifications: true,
+  systemNotifications: true,
+  address: '',
+  timezone: 'America/Caracas',
+};
 
 function ToggleSwitch(props: {
   checked: boolean;
@@ -113,51 +140,110 @@ function SecurityRow(props: {
   );
 }
 
+interface ProfileFormState {
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: string;
+  phone: string;
+  language: string;
+  address: string;
+}
+
+interface ProfileMetaState {
+  registeredAt: string;
+  lastAccess: string;
+  sectorName: string;
+  ipAddress: string;
+  timezone: string;
+}
+
+function applyProfileToState(
+  profile: ProfileDetail,
+  setters: {
+    setForm: (v: ProfileFormState) => void;
+    setMeta: (v: ProfileMetaState) => void;
+    setPrefs: (v: ProfilePreferences) => void;
+    setAvatarPreview: (v: string | null) => void;
+    setSecurity: (v: { activeSessions: number; twoFactorEnabled: boolean }) => void;
+  },
+) {
+  setters.setForm({
+    firstName: profile.firstName,
+    lastName: profile.lastName,
+    email: profile.email,
+    role: profile.roleLabel,
+    phone: profile.phone ?? '',
+    language: profile.preferences.language,
+    address: profile.preferences.address ?? '',
+  });
+  setters.setMeta({
+    registeredAt: profile.createdAt
+      ? new Date(profile.createdAt).toLocaleDateString('es-VE')
+      : '—',
+    lastAccess: profile.lastLoginAt
+      ? new Date(profile.lastLoginAt).toLocaleString('es-VE')
+      : '—',
+    sectorName: profile.sectorName ?? '',
+    ipAddress: profile.lastIpAddress ?? '—',
+    timezone:
+      profileTimezoneOptions.find((o) => o.value === profile.preferences.timezone)?.label ??
+      profile.preferences.timezone,
+  });
+  setters.setPrefs(profile.preferences);
+  setters.setAvatarPreview(resolveAvatarUrl(profile.avatarUrl));
+  setters.setSecurity(profile.security);
+  applyThemePreference(profile.preferences.theme);
+}
+
 export default function ProfilePage() {
   const [editing, setEditing] = createSignal(false);
   const [loading, setLoading] = createSignal(true);
+  const [savingPrefs, setSavingPrefs] = createSignal(false);
   const [form, setForm] = createSignal({
     firstName: '',
     lastName: '',
     email: '',
     role: '',
     phone: '',
-    language: profileUser.language,
-    address: profileUser.address,
+    language: 'es',
+    address: '',
   });
   const [meta, setMeta] = createSignal({
     registeredAt: '—',
     lastAccess: '—',
     sectorName: '',
+    ipAddress: '—',
+    timezone: '—',
   });
-  const [prefs, setPrefs] = createSignal({ ...profilePreferencesDefaults });
-  const [avatarPreview, setAvatarPreview] = createSignal(profileUser.avatarUrl);
+  const [prefs, setPrefs] = createSignal<ProfilePreferences>({ ...defaultPrefs });
+  const [security, setSecurity] = createSignal({ activeSessions: 0, twoFactorEnabled: false });
+  const [avatarPreview, setAvatarPreview] = createSignal<string | null>(null);
+  const [pendingAvatarFile, setPendingAvatarFile] = createSignal<File | null>(null);
   const [photoName, setPhotoName] = createSignal('');
   const [flash, setFlash] = createSignal<string | null>(null);
+  const [showPasswordForm, setShowPasswordForm] = createSignal(false);
+  const [showSessions, setShowSessions] = createSignal(false);
+  const [sessions, setSessions] = createSignal<ProfileSession[]>([]);
+  const [passwordForm, setPasswordForm] = createSignal({
+    current: '',
+    next: '',
+    confirm: '',
+  });
+
+  const loadProfile = () =>
+    fetchProfile().then((profile) => {
+      applyProfileToState(profile, {
+        setForm,
+        setMeta,
+        setPrefs,
+        setAvatarPreview,
+        setSecurity,
+      });
+    });
 
   onMount(() => {
-    void fetchProfile()
-      .then((profile) => {
-        setForm({
-          firstName: profile.firstName,
-          lastName: profile.lastName,
-          email: profile.email,
-          role: profile.roleLabel,
-          phone: profile.phone ?? '',
-          language: profileUser.language,
-          address: profile.sectorName ? `Sector ${profile.sectorName}` : profileUser.address,
-        });
-        setMeta({
-          registeredAt: profile.createdAt
-            ? new Date(profile.createdAt).toLocaleDateString('es-VE')
-            : '—',
-          lastAccess: profile.lastLoginAt
-            ? new Date(profile.lastLoginAt).toLocaleString('es-VE')
-            : '—',
-          sectorName: profile.sectorName ?? '',
-        });
-      })
-      .finally(() => setLoading(false));
+    void loadProfile().finally(() => setLoading(false));
   });
 
   const fullName = () => `${form().firstName} ${form().lastName}`.trim();
@@ -166,21 +252,38 @@ export default function ProfilePage() {
     setForm((prev) => ({ ...prev, ...partial }));
   };
 
-  const patchPrefs = (partial: Partial<ReturnType<typeof prefs>>) => {
+  const patchPrefs = (partial: Partial<ProfilePreferences>) => {
     setPrefs((prev) => ({ ...prev, ...partial }));
   };
 
   const showFlash = (message: string) => {
     setFlash(message);
-    window.setTimeout(() => setFlash(null), 2000);
+    window.setTimeout(() => setFlash(null), 2500);
   };
 
   const onPhotoChange = (fileList: FileList | null) => {
     const file = fileList?.[0];
     if (!file) return;
+    setPendingAvatarFile(file);
     setPhotoName(file.name);
-    const url = URL.createObjectURL(file);
-    setAvatarPreview(url);
+    setAvatarPreview(URL.createObjectURL(file));
+  };
+
+  const openSessions = () => {
+    void fetchProfileSessions().then(setSessions);
+    setShowSessions(true);
+  };
+
+  const handleRevokeSession = async (sessionId: string) => {
+    const result = await deleteProfileSession(sessionId);
+    setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+    setSecurity((prev) => ({ ...prev, activeSessions: Math.max(0, prev.activeSessions - 1) }));
+    if (result.currentSessionRevoked) {
+      await logout();
+      window.location.href = '/login';
+      return;
+    }
+    showFlash('Sesión cerrada.');
   };
 
   return (
@@ -196,15 +299,23 @@ export default function ProfilePage() {
       </Show>
 
       <div class="grid items-stretch gap-5 lg:grid-cols-[minmax(280px,380px)_minmax(0,1fr)]">
-        {/* User summary */}
         <Card padding={false} class="flex h-full flex-col p-5 md:p-6">
           <div class="flex flex-col items-center text-center">
             <div class="relative mb-4">
-              <img
-                src={avatarPreview()}
-                alt={fullName()}
-                class="h-28 w-28 rounded-full object-cover ring-4 ring-fero-green/20"
-              />
+              <Show
+                when={avatarPreview()}
+                fallback={
+                  <div class="flex h-28 w-28 items-center justify-center rounded-full bg-fero-green/15 text-2xl font-bold text-fero-green-dark ring-4 ring-fero-green/20">
+                    {userInitials()}
+                  </div>
+                }
+              >
+                <img
+                  src={avatarPreview()!}
+                  alt={fullName()}
+                  class="h-28 w-28 rounded-full object-cover ring-4 ring-fero-green/20"
+                />
+              </Show>
               <button
                 type="button"
                 class="absolute bottom-0.5 right-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-fero-green-dark text-white shadow-sm ring-2 ring-white"
@@ -227,33 +338,13 @@ export default function ProfilePage() {
           </div>
 
           <div class="mt-6 space-y-3 border-t border-border pt-5 dark:border-dark-border">
-            <MetaRow
-              icon={<Calendar size={15} />}
-              label="Fecha de registro"
-              value={meta().registeredAt}
-            />
-            <MetaRow
-              icon={<Clock size={15} />}
-              label="Último acceso"
-              value={meta().lastAccess}
-            />
-            <MetaRow
-              icon={<Monitor size={15} />}
-              label="Dirección IP"
-              value={profileUser.ipAddress}
-            />
+            <MetaRow icon={<Calendar size={15} />} label="Fecha de registro" value={meta().registeredAt} />
+            <MetaRow icon={<Clock size={15} />} label="Último acceso" value={meta().lastAccess} />
+            <MetaRow icon={<Monitor size={15} />} label="Dirección IP" value={meta().ipAddress} />
             <Show when={meta().sectorName}>
-              <MetaRow
-                icon={<MapPin size={15} />}
-                label="Sector"
-                value={meta().sectorName}
-              />
+              <MetaRow icon={<MapPin size={15} />} label="Sector" value={meta().sectorName} />
             </Show>
-            <MetaRow
-              icon={<MapPin size={15} />}
-              label="Zona horaria"
-              value={profileUser.timezone}
-            />
+            <MetaRow icon={<MapPin size={15} />} label="Zona horaria" value={meta().timezone} />
           </div>
 
           <div class="mt-auto flex justify-center pt-6">
@@ -263,14 +354,57 @@ export default function ProfilePage() {
               size="sm"
               class="border-fero-blue text-fero-blue hover:bg-fero-blue/5"
               icon={<Lock size={14} />}
-              onClick={() => showFlash('Flujo de cambio de contraseña (demo).')}
+              onClick={() => setShowPasswordForm((v) => !v)}
             >
               Cambiar contraseña
             </Button>
           </div>
+
+          <Show when={showPasswordForm()}>
+            <div class="mt-4 space-y-3 rounded-md border border-border p-3 dark:border-dark-border">
+              <TextField
+                label="Contraseña actual"
+                type="password"
+                value={passwordForm().current}
+                onInput={(e) => setPasswordForm((p) => ({ ...p, current: e.currentTarget.value }))}
+              />
+              <TextField
+                label="Nueva contraseña"
+                type="password"
+                value={passwordForm().next}
+                onInput={(e) => setPasswordForm((p) => ({ ...p, next: e.currentTarget.value }))}
+              />
+              <TextField
+                label="Confirmar contraseña"
+                type="password"
+                value={passwordForm().confirm}
+                onInput={(e) => setPasswordForm((p) => ({ ...p, confirm: e.currentTarget.value }))}
+              />
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                class="w-full"
+                onClick={() => {
+                  if (passwordForm().next !== passwordForm().confirm) {
+                    showFlash('Las contraseñas no coinciden.');
+                    return;
+                  }
+                  void changePassword(passwordForm().current, passwordForm().next)
+                    .then(() => {
+                      setPasswordForm({ current: '', next: '', confirm: '' });
+                      setShowPasswordForm(false);
+                      showFlash('Contraseña actualizada.');
+                    })
+                    .catch(() => showFlash('No se pudo cambiar la contraseña.'));
+                }}
+              >
+                Guardar contraseña
+              </Button>
+            </div>
+          </Show>
         </Card>
 
-        {/* Personal information */}
         <Card padding={false} class="flex h-full flex-col p-5 md:p-6">
           <div class="mb-5 flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -303,17 +437,8 @@ export default function ProfilePage() {
                 value={form().lastName}
                 onInput={(e) => patchForm({ lastName: e.currentTarget.value })}
               />
-              <TextField
-                label="Correo electrónico"
-                type="email"
-                value={form().email}
-                disabled
-              />
-              <TextField
-                label="Rol"
-                value={form().role}
-                disabled
-              />
+              <TextField label="Correo electrónico" type="email" value={form().email} disabled />
+              <TextField label="Rol" value={form().role} disabled />
               <TextField
                 label="Teléfono"
                 value={form().phone}
@@ -329,7 +454,7 @@ export default function ProfilePage() {
                 </For>
               </SelectField>
 
-              <div>
+              <div class="sm:col-span-2">
                 <label
                   for="profile-address"
                   class="mb-1.5 block text-sm font-semibold text-text-primary dark:text-white"
@@ -338,7 +463,7 @@ export default function ProfilePage() {
                 </label>
                 <textarea
                   id="profile-address"
-                  rows={4}
+                  rows={3}
                   value={form().address}
                   onInput={(e) => patchForm({ address: e.currentTarget.value })}
                   class="w-full resize-none rounded-md border border-border bg-surface px-4 py-3 text-sm leading-relaxed text-text-primary transition-colors focus:border-fero-blue focus:outline-none focus:ring-2 focus:ring-fero-blue/20 dark:border-dark-border dark:bg-dark-surface-hover dark:text-white"
@@ -387,22 +512,34 @@ export default function ProfilePage() {
               icon={<Check size={14} />}
               disabled={!editing()}
               onClick={() => {
-                void updateProfile({
-                  firstName: form().firstName,
-                  lastName: form().lastName,
-                  phone: form().phone || null,
-                })
-                  .then((profile) => {
-                    setForm((prev) => ({
-                      ...prev,
-                      firstName: profile.firstName,
-                      lastName: profile.lastName,
-                      phone: profile.phone ?? '',
-                    }));
+                void (async () => {
+                  try {
+                    let profile = await updateProfile({
+                      firstName: form().firstName,
+                      lastName: form().lastName,
+                      phone: form().phone || null,
+                    });
+                    if (pendingAvatarFile()) {
+                      profile = await uploadProfileAvatar(pendingAvatarFile()!);
+                      setPendingAvatarFile(null);
+                    }
+                    await updateProfilePreferences({
+                      language: form().language,
+                      address: form().address || null,
+                    });
+                    applyProfileToState(profile, {
+                      setForm,
+                      setMeta,
+                      setPrefs,
+                      setAvatarPreview,
+                      setSecurity,
+                    });
                     setEditing(false);
                     showFlash('Información personal guardada.');
-                  })
-                  .catch(() => showFlash('No se pudo guardar el perfil.'));
+                  } catch {
+                    showFlash('No se pudo guardar el perfil.');
+                  }
+                })();
               }}
             >
               Guardar cambios
@@ -410,7 +547,6 @@ export default function ProfilePage() {
           </div>
         </Card>
 
-        {/* Security */}
         <Card padding={false} class="flex h-full flex-col p-5 md:p-6">
           <div class="mb-2">
             <h3 class="font-heading text-base font-semibold text-text-primary dark:text-white">
@@ -425,35 +561,68 @@ export default function ProfilePage() {
             <SecurityRow
               icon={<Shield size={16} />}
               label="Autenticación en dos pasos"
-              value={profileSecurity.twoFactorEnabled ? 'Activada' : 'Desactivada'}
+              value={security().twoFactorEnabled ? 'Activada' : 'Desactivada'}
               valueTone="green"
-              onClick={() => showFlash('Configuración de 2FA (demo).')}
+              onClick={() => showFlash('2FA estará disponible en una versión futura.')}
             />
             <SecurityRow
               icon={<Monitor size={16} />}
               label="Sesiones activas"
-              value={`${profileSecurity.activeSessions} sesiones`}
+              value={`${security().activeSessions} sesiones`}
               valueTone="blue"
-              onClick={() => showFlash('Listado de sesiones (demo).')}
+              onClick={openSessions}
             />
             <SecurityRow
               icon={<Smartphone size={16} />}
               label="Dispositivos registrados"
-              value={`${profileSecurity.registeredDevices} dispositivos`}
+              value={`${security().activeSessions} dispositivos`}
               valueTone="blue"
-              onClick={() => showFlash('Dispositivos registrados (demo).')}
+              onClick={openSessions}
             />
             <SecurityRow
               icon={<History size={16} />}
               label="Actividad reciente"
               value="Ver actividad"
               valueTone="blue"
-              onClick={() => showFlash('Historial de actividad (demo).')}
+              onClick={openSessions}
             />
           </div>
+
+          <Show when={showSessions()}>
+            <div class="mt-4 space-y-2 border-t border-border pt-4 dark:border-dark-border">
+              <p class="text-sm font-semibold text-text-primary dark:text-white">Sesiones activas</p>
+              <For each={sessions()}>
+                {(session) => (
+                  <div class="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm dark:border-dark-border">
+                    <div class="min-w-0">
+                      <p class="font-medium text-text-primary dark:text-white">
+                        {session.deviceLabel}
+                        <Show when={session.current}>
+                          <span class="ml-2 text-xs text-fero-green-dark">(actual)</span>
+                        </Show>
+                      </p>
+                      <p class="text-xs text-text-muted">
+                        {session.ipAddress ?? 'IP desconocida'} ·{' '}
+                        {new Date(session.lastSeenAt).toLocaleString('es-VE')}
+                      </p>
+                    </div>
+                    <Show when={!session.current}>
+                      <button
+                        type="button"
+                        class="flex h-8 w-8 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover hover:text-red-500"
+                        aria-label="Cerrar sesión"
+                        onClick={() => void handleRevokeSession(session.id)}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </Show>
+                  </div>
+                )}
+              </For>
+            </div>
+          </Show>
         </Card>
 
-        {/* Preferences */}
         <Card padding={false} class="flex h-full flex-col p-5 md:p-6">
           <div class="mb-5">
             <h3 class="font-heading text-base font-semibold text-text-primary dark:text-white">
@@ -467,7 +636,7 @@ export default function ProfilePage() {
               <SelectField
                 label="Tema"
                 value={prefs().theme}
-                onChange={(e) => patchPrefs({ theme: e.currentTarget.value })}
+                onChange={(e) => patchPrefs({ theme: e.currentTarget.value as ProfilePreferences['theme'] })}
               >
                 <For each={profileThemeOptions}>{(o) => <option value={o.value}>{o.label}</option>}</For>
               </SelectField>
@@ -477,6 +646,31 @@ export default function ProfilePage() {
                 onChange={(e) => patchPrefs({ defaultView: e.currentTarget.value })}
               >
                 <For each={profileDefaultViewOptions}>
+                  {(o) => <option value={o.value}>{o.label}</option>}
+                </For>
+              </SelectField>
+              <SelectField
+                label="Idioma"
+                value={prefs().language}
+                onChange={(e) => patchPrefs({ language: e.currentTarget.value })}
+              >
+                <For each={profileLanguageOptions}>
+                  {(o) => <option value={o.value}>{o.label}</option>}
+                </For>
+              </SelectField>
+              <SelectField
+                label="Unidades"
+                value={prefs().units}
+                onChange={(e) => patchPrefs({ units: e.currentTarget.value as ProfilePreferences['units'] })}
+              >
+                <For each={profileUnitsOptions}>{(o) => <option value={o.value}>{o.label}</option>}</For>
+              </SelectField>
+              <SelectField
+                label="Zona horaria"
+                value={prefs().timezone}
+                onChange={(e) => patchPrefs({ timezone: e.currentTarget.value })}
+              >
+                <For each={profileTimezoneOptions}>
                   {(o) => <option value={o.value}>{o.label}</option>}
                 </For>
               </SelectField>
@@ -509,8 +703,8 @@ export default function ProfilePage() {
               </SelectField>
               <SelectField
                 label="Elementos por página"
-                value={prefs().pageSize}
-                onChange={(e) => patchPrefs({ pageSize: e.currentTarget.value })}
+                value={String(prefs().pageSize)}
+                onChange={(e) => patchPrefs({ pageSize: Number(e.currentTarget.value) })}
               >
                 <For each={profilePageSizeOptions}>
                   {(o) => <option value={o.value}>{o.label}</option>}
@@ -532,7 +726,28 @@ export default function ProfilePage() {
                 variant="primary"
                 size="sm"
                 icon={<Check size={14} />}
-                onClick={() => showFlash('Preferencias guardadas.')}
+                loading={savingPrefs()}
+                onClick={() => {
+                  setSavingPrefs(true);
+                  void updateProfilePreferences({
+                    theme: prefs().theme,
+                    language: prefs().language,
+                    units: prefs().units,
+                    defaultView: prefs().defaultView,
+                    reportFrequency: prefs().reportFrequency,
+                    pageSize: prefs().pageSize,
+                    emailNotifications: prefs().emailNotifications,
+                    systemNotifications: prefs().systemNotifications,
+                    timezone: prefs().timezone,
+                  })
+                    .then((saved) => {
+                      setPrefs(saved);
+                      applyThemePreference(saved.theme);
+                      showFlash('Preferencias guardadas.');
+                    })
+                    .catch(() => showFlash('No se pudieron guardar las preferencias.'))
+                    .finally(() => setSavingPrefs(false));
+                }}
               >
                 Guardar preferencias
               </Button>

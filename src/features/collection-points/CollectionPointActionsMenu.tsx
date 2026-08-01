@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import { Ban, MoreVertical, Sparkles, Trash2 } from 'lucide-solid';
-import type { CollectionPoint } from '../../data/mock/collectionPoints';
+import type { CollectionPoint } from '../../core/types/collectionPoint';
 
 interface CollectionPointActionsMenuProps {
   point: CollectionPoint;

@@ -1,4 +1,4 @@
-import type { RouteCollection } from '../../data/types/geo';
+import type { RouteCollection } from '../types/geo';
 import { routesMock } from '../../data/mock/routes';
 import { apiGet, apiPost, withMockFallback } from './client';
 

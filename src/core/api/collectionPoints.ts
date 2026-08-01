@@ -1,9 +1,6 @@
-import type { ContainerCollection } from '../../data/types/geo';
-import {
-  collectionPointsList,
-  fillStatusFromLevel,
-  type CollectionPoint,
-} from '../../data/mock/collectionPoints';
+import type { ContainerCollection } from '../types/geo';
+import { collectionPointsList, fillStatusFromLevel } from '../../data/mock/collectionPoints';
+import type { CollectionPoint } from '../types/collectionPoint';
 import { containersData } from '../../data/mock/containers';
 import { apiDownload, apiGet, apiPatch, apiPost, apiDelete, withMockFallback } from './client';
 import {
@@ -19,8 +16,6 @@ import {
   readLastOptimizedCodes,
   readLocalPriorityBoostCodes,
 } from '../utils/collectionPointsOptimization';
-import type { CollectionPoint } from '../../data/mock/collectionPoints';
-
 export interface CollectionPointFilters {
   sector?: string;
   minFill?: number;
@@ -166,13 +161,14 @@ export interface CollectionPointExportFilters {
 
 export function downloadCollectionPointsExport(
   filters?: CollectionPointExportFilters,
+  filename = 'feromap-puntos-recoleccion.csv',
 ): Promise<void> {
   const params = new URLSearchParams({ format: 'csv' });
   if (filters?.sector) params.set('sector', filters.sector);
   if (filters?.status) params.set('status', filters.status);
   return apiDownload(
     `/api/v1/collection-points/export?${params.toString()}`,
-    'feromap-puntos-recoleccion.csv',
+    filename,
   );
 }
 

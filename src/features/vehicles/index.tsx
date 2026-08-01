@@ -43,6 +43,7 @@ import {
 import {
   computeVehiclesKpisFromSummary,
   countAssignableVehicles,
+  downloadVehiclesExport,
   enrichVehiclesWithOptimization,
   fetchVehicles,
   fetchVehiclesOptimizationContext,
@@ -52,12 +53,13 @@ import {
   isAssignableVehicle,
   updateVehicleStatus,
 } from '../../core/api/vehicles';
-import { ApiError } from '../../core/api/client';
+import { ApiError, useMocks } from '../../core/api/client';
 import { canManageVehicles, canOptimize } from '../../core/auth/permissions';
 import { buildVehicleMapHref } from '../../core/utils/vehiclesOptimization';
 import { buildVehiclesExportFilename, downloadVehiclesCsv } from '../../core/utils/vehiclesUtils';
 import { authUser } from '../../core/stores/authStore';
 import { VehicleActionsMenu } from './VehicleActionsMenu';
+import { VehicleEditModal } from './VehicleEditModal';
 import { VehicleMaintenancePanel } from './VehicleMaintenancePanel';
 import { VehicleOptimizationBadges } from './VehicleOptimizationBadges';
 
@@ -134,6 +136,7 @@ export default function VehiclesPage() {
   const [detailTab, setDetailTab] = createSignal<VehicleDetailTabId>('info');
   const [statusUpdating, setStatusUpdating] = createSignal(false);
   const [exporting, setExporting] = createSignal(false);
+  const [editingVehicle, setEditingVehicle] = createSignal<(Vehicle & { maxCapacityKg: number }) | null>(null);
   const { toasts, addToast, removeToast } = createToastStore();
   const [apiVehicles, { refetch: refetchVehicles }] = createResource(fetchVehicles);
   const [apiSummary, { refetch: refetchSummary }] = createResource(fetchVehiclesSummary);
@@ -253,26 +256,36 @@ export default function VehiclesPage() {
     }
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     const vehicles = filtered();
     if (vehicles.length === 0) {
       addToast('No hay vehículos para exportar con los filtros actuales', 'warning');
       return;
     }
 
+    const filename = buildVehiclesExportFilename({
+      status: statusFilter(),
+      assignableOnly: assignableOnly(),
+      search: search(),
+    });
+
     setExporting(true);
     try {
-      downloadVehiclesCsv(
-        vehicles,
-        buildVehiclesExportFilename({
-          status: statusFilter(),
-          assignableOnly: assignableOnly(),
-          search: search(),
-        }),
-      );
+      if (useMocks) {
+        downloadVehiclesCsv(vehicles, filename);
+      } else {
+        await downloadVehiclesExport(
+          {
+            status: statusFilter() || undefined,
+            assignableOnly: assignableOnly(),
+            q: search().trim() || undefined,
+          },
+          filename,
+        );
+      }
       addToast(`Exportados ${vehicles.length} vehículos a CSV`, 'success');
     } catch {
-      addToast('No se pudo generar el archivo CSV', 'error');
+      addToast('No se pudo descargar el archivo CSV del servidor', 'error');
     } finally {
       setExporting(false);
     }
@@ -281,6 +294,17 @@ export default function VehiclesPage() {
   return (
     <div class="space-y-5">
       <ToastContainer toasts={toasts()} onDismiss={removeToast} />
+      <VehicleEditModal
+        vehicle={editingVehicle()}
+        open={editingVehicle() !== null}
+        onClose={() => setEditingVehicle(null)}
+        onSaved={() => {
+          void refetchVehicles();
+          void refetchSummary();
+          addToast('Vehículo actualizado.', 'success');
+        }}
+        onError={(message) => addToast(message, 'error')}
+      />
       <Show when={vehiclesError()}>
         <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900/50 dark:bg-red-950/30">
           <p class="text-sm font-semibold text-red-700 dark:text-red-300">
@@ -326,6 +350,13 @@ export default function VehiclesPage() {
           </Show>
         </div>
         <div class="flex shrink-0 flex-wrap gap-2">
+          <Show when={canManage()}>
+            <A href="/drivers">
+              <Button variant="outline" class="w-full gap-2 px-5 py-2.5 xl:w-auto">
+                Conductores
+              </Button>
+            </A>
+          </Show>
           <Show when={canGoToSimulation()}>
             <A href={simulationHref()}>
               <Button
@@ -499,13 +530,16 @@ export default function VehiclesPage() {
                           >
                             <Eye size={16} />
                           </button>
-                          <button
-                            type="button"
-                            class="flex h-8 w-8 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover hover:text-text-secondary"
-                            aria-label="Editar"
-                          >
-                            <Pencil size={16} />
-                          </button>
+                          <Show when={canManage()}>
+                            <button
+                              type="button"
+                              class="flex h-8 w-8 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover hover:text-text-secondary"
+                              aria-label="Editar"
+                              onClick={() => setEditingVehicle(v)}
+                            >
+                              <Pencil size={16} />
+                            </button>
+                          </Show>
                           <Show when={canManage()}>
                             <VehicleActionsMenu
                               vehicle={v}

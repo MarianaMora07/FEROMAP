@@ -2,7 +2,8 @@ from fastapi import APIRouter, Query, Response, status
 
 from app.api.deps import DbSession, OptionalUser, PlannerOrAdmin
 from app.schemas.vehicle import VehicleUpdate
-from app.services.catalog_service import list_alerts, monitoring_status
+from app.services.catalog_service import monitoring_status
+from app.services.map_context_service import map_operational_context
 from app.services.vehicle_service import (
     export_vehicles_csv,
     list_vehicles,
@@ -65,7 +66,9 @@ def patch_vehicle(
     db: DbSession,
     _user: PlannerOrAdmin,
 ):
-    return update_vehicle(db, code, payload)
+    result = update_vehicle(db, code, payload)
+    db.commit()
+    return result
 
 
 @router.get("/vehicles")
@@ -73,11 +76,24 @@ def get_vehicles(db: DbSession):
     return list_vehicles(db)
 
 
-@router.get("/alerts")
-def get_alerts(db: DbSession):
-    return list_alerts(db)
-
 
 @router.get("/monitoring/status")
 def get_monitoring_status(db: DbSession, current_user: OptionalUser = None):
     return monitoring_status(db, current_user=current_user)
+
+
+@router.get("/map/context")
+def get_map_context(
+    db: DbSession,
+    current_user: OptionalUser = None,
+    sector: str | None = Query(default=None),
+    bbox: str | None = Query(default=None),
+):
+    from app.services.catalog_service import _driver_filter
+
+    return map_operational_context(
+        db,
+        sector=sector,
+        bbox=bbox,
+        driver_id=_driver_filter(current_user),
+    )

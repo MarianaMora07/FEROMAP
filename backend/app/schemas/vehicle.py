@@ -9,6 +9,7 @@ VehicleStatusValue = Literal["available", "maintenance", "in_route", "inactive"]
 
 class VehicleUpdate(CamelModel):
     status: VehicleStatusValue | None = Field(default=None)
+    default_driver_id: int | None = Field(default=None)
 
 
 class VehicleOptimizationContext(CamelModel):

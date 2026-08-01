@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import { CheckCircle2, MoreVertical, Wrench } from 'lucide-solid';
-import type { Vehicle } from '../../data/mock/vehicles';
+import type { Vehicle } from '../../core/types/vehicle';
 
 interface VehicleActionsMenuProps {
   vehicle: Vehicle;

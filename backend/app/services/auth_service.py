@@ -50,6 +50,7 @@ def get_user_by_id(db: Session, user_id: int) -> User | None:
         .options(
             joinedload(User.sector),
             joinedload(User.driver_profile),
+            joinedload(User.preferences),
         )
     )
 
@@ -61,11 +62,19 @@ def get_user_by_email(db: Session, email: str) -> User | None:
         .options(
             joinedload(User.sector),
             joinedload(User.driver_profile),
+            joinedload(User.preferences),
         )
     )
 
 
-def authenticate_user(db: Session, email: str, password: str) -> tuple[str, UserPublic]:
+def authenticate_user(
+    db: Session,
+    email: str,
+    password: str,
+    *,
+    user_agent: str | None = None,
+    ip_address: str | None = None,
+) -> tuple[str, UserPublic, str]:
     user = get_user_by_email(db, email)
     if user is None or not user.active:
         raise HTTPException(
@@ -81,8 +90,12 @@ def authenticate_user(db: Session, email: str, password: str) -> tuple[str, User
     user.last_login_at = datetime.now(timezone.utc)
     db.flush()
 
+    from app.services.profile_service import create_user_session
+
+    session = create_user_session(db, user, user_agent=user_agent, ip_address=ip_address)
+
     token = create_access_token(
         subject=str(user.id),
-        claims={"role": user.role.value, "email": user.email},
+        claims={"role": user.role.value, "email": user.email, "sid": session.id},
     )
-    return token, user_to_public(user)
+    return token, user_to_public(user), session.id
