@@ -1,0 +1,61 @@
+# Desarrollo: código montado desde el host (sin rebuild al cambiar Python/TS).
+# En .env usa DB_HOST=db para el servicio PostgreSQL del compose.
+services:
+  db:
+    image: docker.io/postgis/postgis:16-3.4
+    container_name: ${COMPOSE_PROJECT_NAME:-feromap}-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-feromap}
+      POSTGRES_USER: ${DB_USERNAME:-feromap}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+      - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:${DB_HOST_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-feromap} -d ${DB_DATABASE:-feromap}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  api:
+    build:
+      context: .
+      dockerfile: Containerfile.dev
+    image: ${COMPOSE_PROJECT_NAME:-feromap}-api:dev
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    volumes:
+      - ./backend:/app
+      - ./data:/app/data:ro
+      - ./data/cache:/app/data/cache
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      DATABASE_URL: postgresql+psycopg://${DB_USERNAME:-feromap}:${DB_PASSWORD}@db:5432/${DB_DATABASE:-feromap}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+    depends_on:
+      - db
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Containerfile.frontend.dev
+    image: ${COMPOSE_PROJECT_NAME:-feromap}-frontend:dev
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-5173}:5173"
+    volumes:
+      - .:/app
+      - frontend_node_modules:/app/node_modules
+      - /app/backend
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+      VITE_USE_MOCKS: ${VITE_USE_MOCKS:-false}
+      VITE_API_PROXY_TARGET: ${VITE_API_PROXY_TARGET:-http://api:8000}
+    depends_on:
+      - api
+
+volumes:
+  frontend_node_modules:

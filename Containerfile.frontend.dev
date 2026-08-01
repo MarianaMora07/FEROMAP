@@ -1,0 +1,19 @@
+# Desarrollo: Vite dev server con dependencias npm en la imagen.
+# El código frontend se monta desde la raíz del monorepo (compose.dev.yml).
+FROM docker.io/library/node:20-bookworm-slim
+
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+EXPOSE 5173
+
+COPY --chmod=755 <<'EOF' /usr/local/bin/start-frontend-dev.sh
+#!/bin/bash
+set -euo pipefail
+echo "🌐 Frontend Vite en http://0.0.0.0:5173"
+exec npm run dev -- --host 0.0.0.0 --port 5173
+EOF
+
+CMD ["/usr/local/bin/start-frontend-dev.sh"]

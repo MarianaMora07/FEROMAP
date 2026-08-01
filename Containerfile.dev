@@ -1,0 +1,28 @@
+# Desarrollo: Python + dependencias pip en la imagen (sin pip install al arrancar).
+# El código FastAPI se monta desde el host (compose.dev.yml).
+FROM docker.io/library/python:3.11-slim-bookworm
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+COPY backend/requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+EXPOSE 8000
+
+COPY --chmod=755 <<'EOF' /usr/local/bin/start-api-dev.sh
+#!/bin/bash
+set -euo pipefail
+echo "🚀 API FastAPI en http://0.0.0.0:8000 (reload activo)"
+exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+EOF
+
+CMD ["/usr/local/bin/start-api-dev.sh"]

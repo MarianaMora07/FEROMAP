@@ -1,0 +1,66 @@
+# Producción: imágenes empaquetadas (API + frontend estático con Nginx).
+# Uso: COMPOSE_ENV=prod en .env  →  just rebuild
+# Nginx sirve el SPA y hace proxy de /api al contenedor api.
+services:
+  db:
+    image: docker.io/postgis/postgis:16-3.4
+    container_name: ${COMPOSE_PROJECT_NAME:-feromap}-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-feromap}
+      POSTGRES_USER: ${DB_USERNAME:-feromap}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+      - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:${DB_HOST_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-feromap} -d ${DB_DATABASE:-feromap}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  api:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: ${COMPOSE_PROJECT_NAME:-feromap}-api:latest
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    volumes:
+      - ./data:/app/data
+      - ./data/cache:/app/data/cache
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      DATABASE_URL: postgresql+psycopg://${DB_USERNAME:-feromap}:${DB_PASSWORD}@db:5432/${DB_DATABASE:-feromap}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+      DATA_DIR: /app/data
+    depends_on:
+      - db
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Containerfile.frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-}
+        VITE_USE_MOCKS: ${VITE_USE_MOCKS:-false}
+    image: ${COMPOSE_PROJECT_NAME:-feromap}-frontend:latest
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 10s
