@@ -67,6 +67,7 @@ export interface LiveVehicle {
   image: string;
   lng: number;
   lat: number;
+  routeId?: number | null;
 }
 
 export const liveFleet: LiveVehicle[] = [

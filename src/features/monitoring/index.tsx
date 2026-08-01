@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import { A } from '@solidjs/router';
 import maplibregl, { type Map as MapLibreMap, type Marker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -8,6 +8,7 @@ import {
   Car,
   CloudRain,
   Crosshair,
+  FastForward,
   Maximize2,
   Minus,
   Plus,
@@ -20,23 +21,28 @@ import {
   User,
 } from 'lucide-solid';
 import {
+  Button,
   Card,
   CardHeader,
   KpiCard,
   ProgressBar,
   StatusBadge,
 } from '../../design-system/components';
+import {
+  advanceActiveRoutes,
+  fetchMonitoringStatus,
+  type MonitoringKpi,
+} from '../../core/api/monitoring';
+import { canAdvanceFleet } from '../../core/auth/permissions';
+import { authUser } from '../../core/stores/authStore';
+import { BreakdownReporter, ContingencyResultBanner } from '../contingency/BreakdownReporter';
 import { osmMapStyle } from '../../core/utils/mapStyle';
 import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
 import {
   currentConditions,
   liveActivities,
-  liveFleet,
-  monitoringAlerts,
   monitoringBins,
-  monitoringKpis,
   monitoringMapRoutes,
-  routeProgress,
   vehicleFilterOptions,
   type FleetLiveStatus,
   type LiveVehicle,
@@ -105,7 +111,7 @@ function buildVehiclePopup(v: LiveVehicle) {
   `;
 }
 
-function KpiIcon(props: { name: (typeof monitoringKpis)[number]['icon'] }) {
+function KpiIcon(props: { name: MonitoringKpi['icon'] }) {
   switch (props.name) {
     case 'truck':
       return <Truck size={22} />;
@@ -130,16 +136,23 @@ export default function MonitoringPage() {
   const markersById = new Map<string, Marker>();
   const binMarkers: Marker[] = [];
 
+  const [monitoringData, { refetch }] = createResource(fetchMonitoringStatus);
+  const [advancing, setAdvancing] = createSignal(false);
+  const monitoringKpis = () => monitoringData()?.kpis ?? [];
+  const liveFleet = () => monitoringData()?.liveFleet ?? [];
+  const routeProgress = () => monitoringData()?.routeProgress ?? [];
+  const monitoringAlerts = () => monitoringData()?.monitoringAlerts ?? [];
+
   const [search, setSearch] = createSignal('');
   const [statusFilter, setStatusFilter] = createSignal('');
-  const [selectedId, setSelectedId] = createSignal('TR-08');
+  const [selectedId, setSelectedId] = createSignal('');
   const [mapReady, setMapReady] = createSignal(false);
   const [legendOpen, setLegendOpen] = createSignal(false);
 
   const filteredFleet = createMemo(() => {
     const q = search().trim().toLowerCase();
     const status = statusFilter();
-    return liveFleet.filter((v) => {
+    return liveFleet().filter((v) => {
       if (status && v.status !== status) return false;
       if (!q) return true;
       return (
@@ -150,10 +163,33 @@ export default function MonitoringPage() {
     });
   });
 
+  const syncFleetMarkers = (fleet: LiveVehicle[]) => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+    markersById.forEach((m) => m.remove());
+    markersById.clear();
+    for (const v of fleet) {
+      const el = createPin(v.color, truckSvg('#fff'), 30);
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setSelectedId(v.id);
+      });
+      const marker = new maplibregl.Marker({ element: el })
+        .setLngLat([v.lng, v.lat])
+        .setPopup(
+          new maplibregl.Popup({ offset: 18, maxWidth: '280px' }).setHTML(buildVehiclePopup(v)),
+        )
+        .addTo(map);
+      markersById.set(v.id, marker);
+    }
+    const first = fleet[0];
+    if (first && !selectedId()) setSelectedId(first.id);
+  };
+
   const openVehiclePopup = (id: string) => {
     const marker = markersById.get(id);
     const map = mapRef.current;
-    const v = liveFleet.find((x) => x.id === id);
+    const v = liveFleet().find((x) => x.id === id);
     if (!marker || !map || !v) return;
     map.flyTo({ center: [v.lng, v.lat], zoom: Math.max(map.getZoom(), 14), essential: true });
     markersById.forEach((m, mid) => {
@@ -161,6 +197,17 @@ export default function MonitoringPage() {
     });
     const popup = marker.getPopup();
     if (popup && !popup.isOpen()) marker.togglePopup();
+  };
+
+  const handleAdvance = async () => {
+    setAdvancing(true);
+    try {
+      await advanceActiveRoutes();
+      await refetch();
+      syncFleetMarkers(liveFleet());
+    } finally {
+      setAdvancing(false);
+    }
   };
 
   onMount(() => {
@@ -197,7 +244,7 @@ export default function MonitoringPage() {
         binMarkers.push(m);
       }
 
-      for (const v of liveFleet) {
+      for (const v of liveFleet()) {
         const el = createPin(v.color, truckSvg('#fff'), 30);
         el.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -213,7 +260,8 @@ export default function MonitoringPage() {
       }
 
       setMapReady(true);
-      openVehiclePopup(selectedId());
+      const first = liveFleet()[0];
+      if (first) openVehiclePopup(first.id);
     });
 
     const onPopupClick = (e: MouseEvent) => {
@@ -242,10 +290,40 @@ export default function MonitoringPage() {
     if (mapReady()) openVehiclePopup(v.id);
   };
 
+  createEffect(() => {
+    const fleet = liveFleet();
+    if (mapReady() && fleet.length > 0) syncFleetMarkers(fleet);
+  });
+
   return (
     <div class="space-y-5">
+      <ContingencyResultBanner />
+
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <p class="text-sm text-text-secondary">
+          Datos en vivo desde la API · {monitoringData()?.fleetCounts.inRoute ?? 0} vehículos en ruta
+        </p>
+        <div class="flex flex-wrap items-center gap-2">
+          <BreakdownReporter
+            compact
+            vehicles={liveFleet().map((v) => ({ id: v.id, routeId: v.routeId, status: v.status }))}
+            onComplete={() => void refetch()}
+          />
+          <Button
+          variant="primary"
+          size="sm"
+          class="gap-2"
+          icon={<FastForward size={16} />}
+          disabled={advancing() || !monitoringData()?.fleetCounts.inRoute || !canAdvanceFleet(authUser()?.role)}
+          onClick={() => void handleAdvance()}
+        >
+          {advancing() ? 'Avanzando…' : 'Simular avance de flota'}
+        </Button>
+        </div>
+      </div>
+
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        <For each={monitoringKpis}>
+        <For each={monitoringKpis()}>
           {(kpi) => (
             <KpiCard
               title={kpi.title}
@@ -415,7 +493,7 @@ export default function MonitoringPage() {
         <Card>
           <CardHeader title="Progreso de recolección por ruta" />
           <ul class="space-y-3.5">
-            <For each={routeProgress}>
+            <For each={routeProgress()}>
               {(r) => (
                 <li>
                   <div class="mb-1 flex items-center justify-between gap-2 text-sm">
@@ -434,7 +512,7 @@ export default function MonitoringPage() {
         <Card>
           <CardHeader title="Alertas e incidencias" />
           <ul class="space-y-3">
-            <For each={monitoringAlerts}>
+            <For each={monitoringAlerts()}>
               {(al) => (
                 <li class="flex gap-2.5">
                   <span

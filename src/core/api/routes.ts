@@ -1,6 +1,6 @@
 import type { RouteCollection } from '../../data/types/geo';
 import { routesMock } from '../../data/mock/routes';
-import { apiGet, withMockFallback } from './client';
+import { apiGet, apiPost, withMockFallback } from './client';
 
 export function fetchCurrentRoute(): Promise<RouteCollection> {
   return withMockFallback(
@@ -43,4 +43,12 @@ export function mergeRouteCollections(
     type: 'FeatureCollection',
     features: [...current.features, ...optimized.features],
   };
+}
+
+export function dispatchRoutes(): Promise<{ dispatchedRouteIds: number[]; count: number }> {
+  return apiPost('/api/v1/routes/dispatch', {});
+}
+
+export function advanceRoutes(): Promise<{ advanced: number; routes: unknown[] }> {
+  return apiPost('/api/v1/routes/advance', {});
 }

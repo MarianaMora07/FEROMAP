@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { For, Show, createMemo, createResource, createSignal, onCleanup, onMount } from 'solid-js';
 import { A } from '@solidjs/router';
 import {
   Chart,
@@ -43,8 +43,6 @@ import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
 import {
   alertCategoryOptions,
   alertStatusOptions,
-  alertsByCategory,
-  alertsDistribution,
   alertsKpis,
   alertsList,
   mapAlertLegend,
@@ -52,6 +50,12 @@ import {
   recentAlertActivity,
   type AlertPriority,
 } from '../../data/mock/alerts';
+import {
+  computeAlertsByCategory,
+  computeAlertsDistribution,
+  computeAlertsKpis,
+  fetchAlerts,
+} from '../../core/api/alerts';
 
 function KpiIcon(props: { name: (typeof alertsKpis)[number]['icon'] }) {
   switch (props.name) {
@@ -121,6 +125,15 @@ export default function AlertsPage() {
   const mapRef: { current?: MapLibreMap } = {};
   const markers: Marker[] = [];
 
+  const [alertsData] = createResource(fetchAlerts);
+  const alertsListData = () => alertsData() ?? alertsList;
+  const alertsKpisData = () =>
+    alertsData() ? computeAlertsKpis(alertsData()!) : alertsKpis;
+  const alertsDistribution = () =>
+    alertsData() ? computeAlertsDistribution(alertsData()!) : { total: 0, items: [] };
+  const alertsByCategory = () =>
+    alertsData() ? computeAlertsByCategory(alertsData()!) : [];
+
   const [search, setSearch] = createSignal('');
   const [categoryFilter, setCategoryFilter] = createSignal('');
   const [statusFilter, setStatusFilter] = createSignal('');
@@ -144,7 +157,7 @@ export default function AlertsPage() {
 
     map.on('load', () => {
       map.resize();
-      for (const a of alertsList) {
+      for (const a of alertsListData()) {
         const marker = new maplibregl.Marker({ element: createAlertPin(priorityColor[a.priority]) })
           .setLngLat([a.lng, a.lat])
           .setPopup(
@@ -173,7 +186,7 @@ export default function AlertsPage() {
     const cat = categoryFilter();
     const st = statusFilter();
     const pr = priorityFilter();
-    return alertsList.filter((a) => {
+    return alertsListData().filter((a) => {
       if (pr && a.priority !== pr) return false;
       if (cat && a.category !== cat) return false;
       if (st && a.status !== st) return false;
@@ -211,24 +224,26 @@ export default function AlertsPage() {
     setPage(1);
   };
 
-  const donutData = {
-    labels: alertsDistribution.items.map((i) => i.label),
+  const donutData = () => ({
+    labels: alertsDistribution().items.map((i) => i.label),
     datasets: [
       {
-        data: alertsDistribution.items.map((i) => i.count),
-        backgroundColor: alertsDistribution.items.map((i) => i.color),
+        data: alertsDistribution().items.map((i) => i.count),
+        backgroundColor: alertsDistribution().items.map((i) => i.color),
         borderWidth: 0,
         cutout: '72%',
       },
     ],
-  };
+  });
 
-  const maxCategory = Math.max(...alertsByCategory.map((c) => c.count));
+  const maxCategory = () => Math.max(...alertsByCategory().map((c) => c.count), 1);
+  const criticalCount = () =>
+    alertsListData().filter((a) => a.priority === 'critica').length;
 
   return (
     <div class="space-y-5">
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        <For each={alertsKpis}>
+        <For each={alertsKpisData()}>
           {(kpi) => (
             <KpiCard
               title={kpi.title}
@@ -430,7 +445,7 @@ export default function AlertsPage() {
           <div class="flex flex-col items-center gap-4 sm:flex-row">
             <div class="relative h-36 w-36 shrink-0">
               <Doughnut
-                data={donutData}
+                data={donutData()}
                 options={{
                   responsive: true,
                   maintainAspectRatio: false,
@@ -439,13 +454,13 @@ export default function AlertsPage() {
               />
               <div class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                 <span class="font-heading text-2xl font-bold text-text-primary dark:text-white">
-                  {alertsDistribution.total}
+                  {alertsDistribution().total}
                 </span>
                 <span class="text-xs text-text-muted">Total</span>
               </div>
             </div>
             <ul class="w-full space-y-2">
-              <For each={alertsDistribution.items}>
+              <For each={alertsDistribution().items}>
                 {(item) => (
                   <li class="flex items-center justify-between gap-2 text-sm">
                     <span class="flex items-center gap-2 text-text-secondary">
@@ -465,7 +480,7 @@ export default function AlertsPage() {
         <Card>
           <CardHeader title="Alertas por categoría" />
           <ul class="space-y-3.5">
-            <For each={alertsByCategory}>
+            <For each={alertsByCategory()}>
               {(c) => (
                 <li>
                   <div class="mb-1 flex items-center justify-between gap-2 text-sm">
@@ -476,7 +491,7 @@ export default function AlertsPage() {
                     <div
                       class="h-full rounded-full"
                       style={{
-                        width: `${(c.count / maxCategory) * 100}%`,
+                        width: `${(c.count / maxCategory()) * 100}%`,
                         'background-color': c.color,
                       }}
                     />
@@ -512,7 +527,7 @@ export default function AlertsPage() {
             <AlertTriangle size={18} />
           </span>
           <p class="text-sm text-red-800 dark:text-red-200">
-            <span class="font-semibold">5 alertas críticas</span> requieren tu atención inmediata. Revisa las
+            <span class="font-semibold"> {criticalCount()} alertas críticas</span> requieren tu atención inmediata. Revisa las
             alertas para evitar interrupciones en el servicio.
           </p>
         </div>

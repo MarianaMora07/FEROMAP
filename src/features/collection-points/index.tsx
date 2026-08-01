@@ -54,6 +54,7 @@ import {
   type CollectionPoint,
 } from '../../data/mock/collectionPoints';
 import { fetchCollectionPointsList } from '../../core/api/collectionPoints';
+import { authUser } from '../../core/stores/authStore';
 
 function trashSvg(color: string) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>`;
@@ -125,7 +126,7 @@ export default function CollectionPointsPage() {
   const [selectedId, setSelectedId] = createSignal('CNT-001');
   const [mapReady, setMapReady] = createSignal(false);
   const [apiPoints] = createResource(fetchCollectionPointsList);
-  const allPoints = createMemo(() => apiPoints() ?? collectionPointsList);
+  const allPoints = createMemo(() => apiPoints() ?? []);
 
   const syncMapMarkers = () => {
     const map = mapRef.current;
@@ -297,6 +298,14 @@ export default function CollectionPointsPage() {
 
   return (
     <div class="space-y-5">
+      <Show when={authUser()?.role === 'residente' && authUser()?.sectorName}>
+        <div class="rounded-xl border border-fero-blue/30 bg-fero-blue/10 px-4 py-3">
+          <p class="text-sm font-semibold text-fero-blue">Horario de recolección — {authUser()!.sectorName}</p>
+          <p class="mt-1 text-sm text-text-secondary">
+            Lunes, miércoles y viernes · Ventana estimada 07:00–12:00 · Solo ves contenedores de tu sector.
+          </p>
+        </div>
+      </Show>
       <div class="flex flex-col gap-4 xl:flex-row xl:items-center">
         <div class="grid flex-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           <For each={collectionPointsKpis}>

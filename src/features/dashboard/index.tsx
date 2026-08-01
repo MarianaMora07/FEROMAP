@@ -1,4 +1,4 @@
-import { For, onMount, type JSX } from 'solid-js';
+import { For, Show, onMount, type JSX } from 'solid-js';
 import { A } from '@solidjs/router';
 import {
   Chart,
@@ -287,11 +287,38 @@ export default function DashboardPage() {
   });
 
   const kpis = () => dashboardView()?.kpis ?? mockDashboardKpis;
+  const lastOptimization = () => dashboardView()?.lastOptimization;
+  const residentSchedule = () => dashboardView()?.summary?.residentSchedule;
   const recentAlerts = () => dashboardView()?.recentAlerts ?? mockRecentAlerts;
   const activeRoutes = () => dashboardView()?.activeRoutes ?? mockActiveRoutes;
 
   return (
     <div class="space-y-4 md:space-y-5">
+      <Show when={residentSchedule()}>
+        {(schedule) => (
+          <div class="rounded-xl border border-fero-blue/30 bg-fero-blue/10 px-4 py-3">
+            <p class="text-sm font-semibold text-fero-blue">{schedule().message}</p>
+            <p class="mt-1 text-sm text-text-secondary">
+              Sector {schedule().sectorName} · {schedule().collectionDays} · Próxima recolección:{' '}
+              {schedule().nextCollection}
+            </p>
+          </div>
+        )}
+      </Show>
+      <Show when={lastOptimization()}>
+        {(opt) => (
+          <div class="rounded-xl border border-fero-green/30 bg-fero-green/10 px-4 py-3">
+            <p class="text-sm font-semibold text-fero-green-dark">
+              Última optimización — {opt().scenarioName}
+            </p>
+            <p class="mt-1 text-sm text-text-secondary">
+              Ahorro de {opt().savingPercentage.toFixed(1)}% en distancia ·{' '}
+              {opt().kpis.distanceKm.current} km → {opt().kpis.distanceKm.optimized} km ·{' '}
+              {opt().kpis.containersServed} contenedores atendidos
+            </p>
+          </div>
+        )}
+      </Show>
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           title="Residuos recolectados hoy"

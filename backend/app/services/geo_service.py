@@ -73,6 +73,7 @@ def collection_points_geojson(
     *,
     sector: str | None = None,
     min_fill: int | None = None,
+    sector_id: int | None = None,
 ) -> dict[str, Any]:
     stmt = (
         select(CollectionPoint)
@@ -84,6 +85,8 @@ def collection_points_geojson(
     features = []
     for point in points:
         sector_name = point.sector.name if point.sector else ""
+        if sector_id is not None and point.sector_id != sector_id:
+            continue
         if sector and sector_name != sector:
             continue
         pct = fill_level_pct(point)

@@ -7,6 +7,7 @@ import {
   sectorFillLevels,
   weeklyTons,
 } from '../../data/mock/dashboard';
+import type { KpiMetrics } from '../../data/types/simulation';
 import { apiGet, withMockFallback } from './client';
 
 export interface DashboardMapMetric {
@@ -15,6 +16,32 @@ export interface DashboardMapMetric {
   value: number;
   tone: string;
   icon: string;
+}
+
+export interface DashboardFleetStatus {
+  total: number;
+  items: Array<{ label: string; count: number; pct: number; color: string }>;
+}
+
+export interface DashboardActiveRoute {
+  id: string;
+  driver: string;
+  vehicle: string;
+  progress: number;
+  tone: string;
+  routeId?: number;
+}
+
+export interface DashboardRecentAlert {
+  title: string;
+  detail: string;
+  time: string;
+  tone: 'danger' | 'warning' | 'info';
+}
+
+export interface DashboardWeeklyTons {
+  labels: string[];
+  values: number[];
 }
 
 export interface DashboardSummary {
@@ -44,6 +71,23 @@ export interface DashboardSummary {
   }>;
   sectorFillLevels: Array<{ name: string; pct: number }>;
   mapMetrics: DashboardMapMetric[];
+  lastOptimization?: {
+    simulationId: number;
+    scenarioName: string;
+    savingPercentage: number;
+    executedAt: string | null;
+    kpis: KpiMetrics;
+  } | null;
+  residentSchedule?: {
+    sectorName: string;
+    collectionDays: string;
+    nextCollection: string;
+    message: string;
+  } | null;
+  fleetStatus?: DashboardFleetStatus;
+  activeRoutes?: DashboardActiveRoute[];
+  weeklyTons?: DashboardWeeklyTons;
+  recentAlerts?: DashboardRecentAlert[];
 }
 
 export interface DashboardViewModel {
@@ -54,17 +98,25 @@ export interface DashboardViewModel {
   recentAlerts: typeof recentAlerts;
   activeRoutes: typeof activeRoutes;
   weeklyTons: typeof weeklyTons;
+  lastOptimization: DashboardSummary['lastOptimization'];
 }
 
 function mapSummaryToViewModel(summary: DashboardSummary): DashboardViewModel {
-  const total = summary.metrics.totalContainers || 1;
-  const critical = summary.metrics.criticalContainers;
-  const full = summary.metrics.fullContainers;
+  const lastOpt = summary.lastOptimization ?? null;
+  const optKpis = lastOpt?.kpis;
+  const alertCount = summary.recentAlerts?.length ?? summary.notifications;
 
   return {
     summary,
+    lastOptimization: lastOpt,
     kpis: {
-      wasteTons: { value: '28.45', unit: 'toneladas', trend: 12 },
+      wasteTons: {
+        value: optKpis
+          ? String((optKpis.distanceKm.current * 0.12).toFixed(2))
+          : String((summary.weeklyTons?.values.at(-1) ?? 28.45).toFixed(2)),
+        unit: 'toneladas',
+        trend: lastOpt ? Math.max(0, Math.round(lastOpt.savingPercentage)) : 12,
+      },
       routes: {
         done: summary.metrics.routesInProgress,
         total: Math.max(summary.metrics.routesInProgress + 6, 24),
@@ -73,9 +125,9 @@ function mapSummaryToViewModel(summary: DashboardSummary): DashboardViewModel {
         active: summary.fleet.activeVehicles,
         total: summary.fleet.totalVehicles,
       },
-      alerts: { count: summary.notifications },
+      alerts: { count: alertCount },
     },
-    fleetStatus: {
+    fleetStatus: summary.fleetStatus ?? {
       total: summary.fleet.totalVehicles,
       items: [
         {
@@ -84,41 +136,22 @@ function mapSummaryToViewModel(summary: DashboardSummary): DashboardViewModel {
           pct: Math.round((summary.fleet.activeVehicles / summary.fleet.totalVehicles) * 100) || 0,
           color: '#34D634',
         },
-        {
-          label: 'En mantenimiento',
-          count: Math.max(1, Math.floor(summary.fleet.totalVehicles * 0.1)),
-          pct: 11,
-          color: '#1143F3',
-        },
-        {
-          label: 'Fuera de servicio',
-          count: Math.max(
-            0,
-            summary.fleet.totalVehicles - summary.fleet.activeVehicles - 1,
-          ),
-          pct: 6,
-          color: '#f59e0b',
-        },
-        {
-          label: 'Inactivos',
-          count: 1,
-          pct: 5,
-          color: '#94a3b8',
-        },
       ],
     },
     sectorFillLevels: summary.sectorFillLevels,
-    recentAlerts: summary.criticalContainerList.slice(0, 3).map((item, index) => ({
-      title: 'Contenedor crítico de llenado',
-      detail: `${item.id} · ${item.sector} · ${item.fillLevel}%`,
-      time: ['10:15 AM', '09:42 AM', '09:10 AM'][index] ?? '09:00 AM',
-      tone: (index === 0 ? 'danger' : index === 1 ? 'warning' : 'info') as
-        | 'danger'
-        | 'warning'
-        | 'info',
-    })),
-    activeRoutes,
-    weeklyTons,
+    recentAlerts: summary.recentAlerts?.length
+      ? summary.recentAlerts
+      : summary.criticalContainerList.slice(0, 3).map((item, index) => ({
+          title: 'Contenedor crítico de llenado',
+          detail: `${item.id} · ${item.sector} · ${item.fillLevel}%`,
+          time: ['10:15 AM', '09:42 AM', '09:10 AM'][index] ?? '09:00 AM',
+          tone: (index === 0 ? 'danger' : index === 1 ? 'warning' : 'info') as
+            | 'danger'
+            | 'warning'
+            | 'info',
+        })),
+    activeRoutes: summary.activeRoutes?.length ? summary.activeRoutes : activeRoutes,
+    weeklyTons: summary.weeklyTons ?? weeklyTons,
   };
 }
 
@@ -148,6 +181,10 @@ export function fetchDashboardSummary(): Promise<DashboardViewModel> {
         { id: 'vehicles', label: 'Vehículos activos', value: 3, tone: 'blue', icon: 'truck' },
         { id: 'routes', label: 'Rutas en ejecución', value: 3, tone: 'green', icon: 'route' },
       ],
+      fleetStatus,
+      activeRoutes,
+      weeklyTons,
+      recentAlerts,
     } as DashboardSummary),
   );
 }

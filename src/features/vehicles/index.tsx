@@ -40,7 +40,7 @@ import {
   type VehicleDetailTabId,
   type VehicleStatus,
 } from '../../data/mock/vehicles';
-import { fetchVehicles } from '../../core/api/vehicles';
+import { fetchVehicles, computeVehiclesKpis } from '../../core/api/vehicles';
 
 const kpiIcon: Record<(typeof vehiclesKpis)[number]['icon'], () => JSX.Element> = {
   truck: () => <Truck size={24} />,
@@ -93,7 +93,10 @@ export default function VehiclesPage() {
   const [selectedId, setSelectedId] = createSignal<string | null>('TR-08');
   const [detailTab, setDetailTab] = createSignal<VehicleDetailTabId>('info');
   const [apiVehicles] = createResource(fetchVehicles);
-  const allVehicles = createMemo(() => apiVehicles() ?? vehiclesList);
+  const allVehicles = createMemo(() => apiVehicles() ?? []);
+  const vehiclesKpisData = createMemo(() =>
+    allVehicles().length ? computeVehiclesKpis(allVehicles()) : vehiclesKpis,
+  );
 
   const filtered = createMemo(() => {
     const q = search().trim().toLowerCase();
@@ -146,7 +149,7 @@ export default function VehiclesPage() {
     <div class="space-y-5">
       <div class="flex flex-col gap-4 xl:flex-row xl:items-center">
         <div class="grid flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <For each={vehiclesKpis}>
+          <For each={vehiclesKpisData()}>
             {(kpi) => (
               <KpiCard
                 title={kpi.title}

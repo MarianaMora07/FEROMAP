@@ -5,7 +5,7 @@ import {
   type CollectionPoint,
 } from '../../data/mock/collectionPoints';
 import { containersData } from '../../data/mock/containers';
-import { apiGet, useMocks, withMockFallback } from './client';
+import { apiGet, withMockFallback } from './client';
 
 export interface CollectionPointFilters {
   sector?: string;
@@ -65,6 +65,9 @@ function geoToCollectionPoints(geo: ContainerCollection): CollectionPoint[] {
 }
 
 export function fetchCollectionPointsList(): Promise<CollectionPoint[]> {
-  if (useMocks) return Promise.resolve(collectionPointsList);
-  return fetchCollectionPoints().then(geoToCollectionPoints);
+  return withMockFallback(
+    'collection-points-list',
+    () => fetchCollectionPoints().then(geoToCollectionPoints),
+    collectionPointsList,
+  );
 }

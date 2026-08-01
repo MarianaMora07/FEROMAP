@@ -31,6 +31,7 @@ import {
   appState,
   toggleSidebar,
   toggleDarkMode,
+  initAppData,
 } from '../../core/stores/appStore';
 import { dashboardSummary } from '../../core/stores/dashboardStore';
 import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
@@ -292,6 +293,7 @@ export default function MapPage() {
   };
 
   onMount(() => {
+    void initAppData();
     const map = new maplibregl.Map({
       container: mapContainer,
       style: mapStylesById.claro,
@@ -323,6 +325,14 @@ export default function MapPage() {
   });
 
   createEffect(() => {
+    if (appState.showOptimizedOnly) {
+      setLayerState((state) => ({
+        ...state,
+        routes: true,
+        'route-01': true,
+        'route-02': true,
+      }));
+    }
     layerState();
     appState.containers;
     if (getMap()?.isStyleLoaded()) syncOverlayLayers();
