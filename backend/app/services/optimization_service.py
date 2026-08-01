@@ -25,6 +25,7 @@ from app.services.graph_service import (
     load_road_graph,
     nearest_node,
 )
+from app.services.operations_service import dispatch_optimized_routes
 from app.services.scenario_utils import normalize_scenario_id
 from app.services.seed_loader import load_seed
 
@@ -448,7 +449,7 @@ def _persist_routes(
                 route_kind=kind,
                 total_distance_meters=Decimal(str(round(d, 2))),
                 estimated_duration_seconds=int(t),
-                status="completed",
+                status="pending" if kind == "optimized" else "completed",
             )
             db.add(db_route)
             db.flush()
@@ -470,7 +471,16 @@ def _persist_routes(
                 )
 
 
-def run_optimization_engine(db: Session, scenario_id: str) -> dict[str, Any]:
+def run_optimization_engine(
+    db: Session,
+    scenario_id: str,
+    *,
+    collection_point_ids: list[int] | None = None,
+    exclude_vehicle_ids: list[int] | None = None,
+    contingency_meta: dict[str, Any] | None = None,
+    auto_dispatch: bool = True,
+    auto_commit: bool = True,
+) -> dict[str, Any]:
     """Ejecuta el motor real de optimización y persiste resultados."""
     normalized = normalize_scenario_id(scenario_id)
     scenarios = {row["id"]: row for row in load_seed("scenarios.json")}
@@ -494,6 +504,12 @@ def run_optimization_engine(db: Session, scenario_id: str) -> dict[str, Any]:
         .order_by(CollectionPoint.code)
     ).all()
 
+    if collection_point_ids is not None:
+        allowed = set(collection_point_ids)
+        points = [p for p in points if p.id in allowed]
+        if not points:
+            raise ValueError("No hay puntos de recolección pendientes para reoptimizar")
+
     customers: list[CustomerNode] = []
     for point in points:
         pct = fill_level_pct(point)
@@ -516,6 +532,11 @@ def run_optimization_engine(db: Session, scenario_id: str) -> dict[str, Any]:
     vehicles_db = db.scalars(
         select(Vehicle).where(Vehicle.status.in_(["available", "in_route"])).order_by(Vehicle.id)
     ).all()
+    if exclude_vehicle_ids:
+        excluded = set(exclude_vehicle_ids)
+        vehicles_db = [v for v in vehicles_db if v.id not in excluded]
+    if contingency_meta:
+        vehicles_db = [v for v in vehicles_db if v.status == "available"]
     drivers = db.scalars(select(Driver).where(Driver.active.is_(True)).order_by(Driver.id)).all()
     if not drivers:
         raise RuntimeError("No hay conductores activos en la base de datos")
@@ -584,8 +605,12 @@ def run_optimization_engine(db: Session, scenario_id: str) -> dict[str, Any]:
             1,
         )
 
+    scenario_label = scenario["label"]
+    if contingency_meta:
+        scenario_label = f"{scenario_label} — recálculo por avería"
+
     simulation = Simulation(
-        scenario_name=scenario["label"],
+        scenario_name=scenario_label,
         parameters_json=json.dumps(
             {
                 "scenarioId": normalized,
@@ -593,6 +618,8 @@ def run_optimization_engine(db: Session, scenario_id: str) -> dict[str, Any]:
                 "routesGeojson": routes_payload,
                 "kpis": kpis,
                 "engine": "aco_vrp_osmnx",
+                "contingency": contingency_meta is not None,
+                **(contingency_meta or {}),
             },
             ensure_ascii=False,
         ),
@@ -612,8 +639,26 @@ def run_optimization_engine(db: Session, scenario_id: str) -> dict[str, Any]:
         customers,
         routes_payload,
     )
-    db.commit()
-    db.refresh(simulation)
+    dispatch = {"dispatchedRouteIds": [], "count": 0}
+    if auto_dispatch:
+        dispatch = dispatch_optimized_routes(
+            db,
+            preserve_active=contingency_meta is not None,
+        )
+    if auto_commit:
+        db.commit()
+        db.refresh(simulation)
+    else:
+        db.flush()
+        db.refresh(simulation)
+
+    log_entries = _optimization_logs(scenario_label, len(customers), len(vehicles))
+    if contingency_meta:
+        log_entries = [
+            {"message": f"Contingencia: avería en {contingency_meta.get('brokenVehicleCode', 'vehículo')}", "type": "warning"},
+            {"message": f"Reasignando {contingency_meta.get('pendingPointsCount', 0)} puntos pendientes", "type": "info"},
+            *log_entries,
+        ]
 
     logs = [
         {
@@ -622,7 +667,7 @@ def run_optimization_engine(db: Session, scenario_id: str) -> dict[str, Any]:
             "message": entry["message"],
             "type": entry["type"],
         }
-        for index, entry in enumerate(_optimization_logs(scenario["label"], len(customers), len(vehicles)))
+        for index, entry in enumerate(log_entries)
     ]
 
     return {
@@ -632,4 +677,6 @@ def run_optimization_engine(db: Session, scenario_id: str) -> dict[str, Any]:
         "kpis": kpis,
         "routes": routes_payload,
         "logs": logs,
+        "dispatch": dispatch,
+        "contingency": contingency_meta,
     }

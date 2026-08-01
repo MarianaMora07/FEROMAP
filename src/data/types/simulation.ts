@@ -1,4 +1,4 @@
-export type ScenarioId = 'normal' | 'peak_traffic' | 'rain' | 'saturated';
+export type ScenarioId = 'normal' | 'peak_traffic' | 'rain' | 'saturated' | 'broken_vehicle';
 
 export interface Scenario {
   id: ScenarioId;

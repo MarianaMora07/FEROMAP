@@ -29,6 +29,13 @@ export const scenarios: Scenario[] = [
     trafficMultiplier: 1.05,
     fillLevelBoost: 15,
   },
+  {
+    id: 'broken_vehicle',
+    label: 'Vehículo averiado',
+    description: 'Recálculo de ruta tras avería en campo.',
+    trafficMultiplier: 1.1,
+    fillLevelBoost: 5,
+  },
 ];
 
 export const kpiByScenario: Record<string, KpiMetrics> = {
@@ -63,6 +70,14 @@ export const kpiByScenario: Record<string, KpiMetrics> = {
     co2KgAvoided: 35.6,
     criticalCoveragePct: { current: 48, optimized: 97 },
     containersServed: 20,
+  },
+  broken_vehicle: {
+    distanceKm: { current: 12.5, optimized: 8.2 },
+    durationHours: { current: 1.1, optimized: 0.72 },
+    fuelLiters: { current: 18.8, optimized: 12.3 },
+    co2KgAvoided: 14.2,
+    criticalCoveragePct: { current: 40, optimized: 88 },
+    containersServed: 8,
   },
 };
 

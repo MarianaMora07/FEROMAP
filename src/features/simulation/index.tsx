@@ -1,4 +1,4 @@
-import { For, Show, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { For, Show, createResource, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import { A } from '@solidjs/router';
 import maplibregl, { type Map as MapLibreMap, type Marker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -30,7 +30,12 @@ import {
 } from '../../design-system/components';
 import { osmMapStyle } from '../../core/utils/mapStyle';
 import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
-import { runOptimization, setScenario, simulationState, initSimulationData } from '../../core/stores/simulationStore';
+import { runOptimization, setScenario, simulationState, initSimulationData, currentKpis, kpiImpactRows, kpiSavingsSummary } from '../../core/stores/simulationStore';
+import { canOptimize } from '../../core/auth/permissions';
+import { authUser } from '../../core/stores/authStore';
+import { fetchMonitoringStatus } from '../../core/api/monitoring';
+import { BreakdownReporter, ContingencyResultBanner } from '../contingency/BreakdownReporter';
+import { appState } from '../../core/stores/appStore';
 import type { ScenarioId } from '../../data/types/simulation';
 import {
   currentScenarioSummary,
@@ -44,10 +49,8 @@ import {
   simulationConditions,
   simulationEfficiency,
   simulationHistory,
-  simulationImpactRows,
   simulationMapPoints,
   simulationMapRoutes,
-  simulationSavings,
   simulationSteps,
   wasteLevelOptions,
   type ConditionId,
@@ -234,6 +237,14 @@ export default function SimulationPage() {
   const mapRef: { current?: MapLibreMap } = {};
   const markers: Marker[] = [];
 
+  const [monitoringData] = createResource(fetchMonitoringStatus);
+  const fleetForBreakdown = () =>
+    (monitoringData()?.liveFleet ?? []).map((v) => ({
+      id: v.id,
+      routeId: v.routeId,
+      status: v.status,
+    }));
+
   const [step, setStep] = createSignal(1);
   const [preset, setPreset] = createSignal('custom');
   const [conditions, setConditions] = createSignal(
@@ -246,7 +257,10 @@ export default function SimulationPage() {
   const [wasteLevel, setWasteLevel] = createSignal('30');
   const [duration, setDuration] = createSignal('4');
   const [mapReady, setMapReady] = createSignal(false);
-  const [hasResults, setHasResults] = createSignal(true);
+  const [hasResults, setHasResults] = createSignal(false);
+
+  const impactRows = () => kpiImpactRows(currentKpis());
+  const savings = () => kpiSavingsSummary(currentKpis());
 
   const toggleCondition = (id: ConditionId) =>
     setConditions((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -265,6 +279,20 @@ export default function SimulationPage() {
     await runOptimization();
     setHasResults(true);
     setStep(3);
+    const map = mapRef.current;
+    if (map?.getSource('sim-routes')) {
+      const features = appState.routes.features.map((feature) => ({
+        ...feature,
+        properties: {
+          ...feature.properties,
+          kind: feature.properties.type,
+        },
+      }));
+      (map.getSource('sim-routes') as maplibregl.GeoJSONSource).setData({
+        type: 'FeatureCollection',
+        features,
+      });
+    }
   };
 
   onMount(() => {
@@ -335,6 +363,9 @@ export default function SimulationPage() {
 
   return (
     <div class="space-y-5">
+      <ContingencyResultBanner />
+      <BreakdownReporter vehicles={fleetForBreakdown()} />
+
       <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div class="flex flex-wrap items-center gap-2 sm:gap-3">
           <For each={[...simulationSteps]}>
@@ -385,10 +416,19 @@ export default function SimulationPage() {
             class="gap-2 px-5 py-2.5"
             icon={<Play size={16} />}
             loading={simulationState.isOptimizing}
+            disabled={!canOptimize(authUser()?.role)}
             onClick={() => void handleRun()}
           >
-            Ejecutar simulación
+            Optimizar rutas con IA
           </Button>
+          <Show when={hasResults()}>
+            <A href="/map">
+              <Button variant="outline" class="gap-2">
+                Ver rutas en mapa
+                <ArrowRight size={16} />
+              </Button>
+            </A>
+          </Show>
         </div>
       </div>
 
@@ -543,7 +583,7 @@ export default function SimulationPage() {
                       </tr>
                     </thead>
                     <tbody class="divide-y divide-border dark:divide-dark-border">
-                      <For each={simulationImpactRows}>
+                      <For each={impactRows()}>
                         {(row) => (
                           <tr>
                             <td class="py-2.5 text-text-secondary">{row.metric}</td>
@@ -566,8 +606,8 @@ export default function SimulationPage() {
                   <div>
                     <p class="text-xs font-semibold text-fero-green-dark">Ahorro estimado</p>
                     <p class="mt-0.5 text-sm font-medium text-text-primary dark:text-white">
-                      {simulationSavings.distanceKm} km · {simulationSavings.timeMin} min ·{' '}
-                      {simulationSavings.fuelL} L · ${simulationSavings.costUsd}
+                      {savings().distanceKm} km · {savings().timeMin} min · {savings().fuelL} L ·{' '}
+                      {savings().co2Kg} kg CO₂ evitados
                     </p>
                   </div>
                 </div>

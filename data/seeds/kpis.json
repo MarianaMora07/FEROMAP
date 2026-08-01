@@ -78,5 +78,25 @@
       "optimized": 97
     },
     "containersServed": 20
+  },
+  "broken_vehicle": {
+    "distanceKm": {
+      "current": 12.5,
+      "optimized": 8.2
+    },
+    "durationHours": {
+      "current": 1.1,
+      "optimized": 0.72
+    },
+    "fuelLiters": {
+      "current": 18.8,
+      "optimized": 12.3
+    },
+    "co2KgAvoided": 14.2,
+    "criticalCoveragePct": {
+      "current": 40,
+      "optimized": 88
+    },
+    "containersServed": 8
   }
 }

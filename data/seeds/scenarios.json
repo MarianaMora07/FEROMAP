@@ -26,5 +26,12 @@
     "description": "Más del 60% de contenedores superan el 80% de llenado.",
     "trafficMultiplier": 1.05,
     "fillLevelBoost": 15
+  },
+  {
+    "id": "broken_vehicle",
+    "label": "Vehículo averiado",
+    "description": "Recálculo de ruta tras avería en campo: flota restante y puntos pendientes.",
+    "trafficMultiplier": 1.1,
+    "fillLevelBoost": 5
   }
 ]
