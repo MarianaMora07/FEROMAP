@@ -2,7 +2,7 @@ import { Show } from 'solid-js';
 import { useLocation } from '@solidjs/router';
 import { Menu, Bell, RefreshCw, CalendarDays } from 'lucide-solid';
 import { toggleSidebar } from '../../core/stores/appStore';
-import { dashboardSummary } from '../../data/mock/dashboard';
+import { dashboardSummary, loadDashboardData } from '../../core/stores/dashboardStore';
 import { optimizationPageMeta } from '../../data/mock/optimization';
 import { vehiclesPageMeta } from '../../data/mock/vehicles';
 import { collectionPointsPageMeta } from '../../data/mock/collectionPoints';
@@ -22,10 +22,6 @@ interface HeaderProps {
 type PageMeta = { title: string; subtitle: string; dateLabel?: string };
 
 const pageMeta: Record<string, PageMeta> = {
-  '/': {
-    title: dashboardSummary.greeting,
-    subtitle: dashboardSummary.subtitle,
-  },
   '/optimization': optimizationPageMeta,
   '/vehicles': vehiclesPageMeta,
   '/collection-points': collectionPointsPageMeta,
@@ -42,9 +38,17 @@ export function Header(props: HeaderProps) {
   const location = useLocation();
   const meta = () => pageMeta[location.pathname];
 
-  const title = () => props.title ?? meta()?.title;
-  const subtitle = () => props.subtitle ?? meta()?.subtitle;
-  const dateLabel = () => meta()?.dateLabel ?? dashboardSummary.dateLabel;
+  const title = () => {
+    if (props.title) return props.title;
+    if (location.pathname === '/') return dashboardSummary().greeting;
+    return meta()?.title;
+  };
+  const subtitle = () => {
+    if (props.subtitle) return props.subtitle;
+    if (location.pathname === '/') return dashboardSummary().subtitle;
+    return meta()?.subtitle;
+  };
+  const dateLabel = () => meta()?.dateLabel ?? dashboardSummary().dateLabel;
 
   return (
     <header class="sticky top-0 z-30 flex h-(--header-height) items-center gap-4 border-b border-border bg-surface/90 px-4 backdrop-blur-md md:px-6 dark:bg-dark-surface/90 dark:border-dark-border">
@@ -80,9 +84,9 @@ export function Header(props: HeaderProps) {
           aria-label="Notificaciones"
         >
           <Bell size={18} />
-          <Show when={dashboardSummary.notifications > 0}>
+          <Show when={dashboardSummary().notifications > 0}>
             <span class="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-              {dashboardSummary.notifications}
+              {dashboardSummary().notifications}
             </span>
           </Show>
         </button>
@@ -91,6 +95,7 @@ export function Header(props: HeaderProps) {
           type="button"
           class="flex h-9 w-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
           aria-label="Actualizar"
+          onClick={() => void loadDashboardData()}
         >
           <RefreshCw size={18} />
         </button>

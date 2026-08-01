@@ -1,8 +1,20 @@
 import { createStore } from 'solid-js/store';
-import type { ContainerFeature, FleetSummary, LayerVisibility, RouteCollection, SectorName } from '../../data/types/geo';
+import type {
+  ContainerCollection,
+  ContainerFeature,
+  FleetSummary,
+  LayerVisibility,
+  RouteCollection,
+  SectorCollection,
+  SectorName,
+} from '../../data/types/geo';
 import { containersData } from '../../data/mock/containers';
 import { sectorsData } from '../../data/mock/sectors';
 import { routesMock } from '../../data/mock/routes';
+import { fetchCollectionPoints } from '../api/collectionPoints';
+import { fetchSectors } from '../api/sectors';
+import { fetchAllRoutes } from '../api/routes';
+import { loadDashboardData } from './dashboardStore';
 import { snapRoutesToRoads } from '../services/routeSnapping';
 
 interface AppState {
@@ -11,11 +23,15 @@ interface AppState {
   selectedSector: SectorName | null;
   sidebarOpen: boolean;
   darkMode: boolean;
+  containers: ContainerCollection;
+  sectors: SectorCollection;
   routes: RouteCollection;
   routesSnapping: boolean;
   routesOnRoads: boolean;
   showOptimizedOnly: boolean;
   fleet: FleetSummary;
+  dataReady: boolean;
+  dataLoading: boolean;
 }
 
 const [state, setState] = createStore<AppState>({
@@ -29,6 +45,8 @@ const [state, setState] = createStore<AppState>({
   selectedSector: null,
   sidebarOpen: true,
   darkMode: false,
+  containers: containersData,
+  sectors: sectorsData,
   routes: routesMock,
   routesSnapping: false,
   routesOnRoads: false,
@@ -38,10 +56,41 @@ const [state, setState] = createStore<AppState>({
     totalVehicles: 5,
     driversOnShift: 3,
   },
+  dataReady: false,
+  dataLoading: false,
 });
 
-export const containers = containersData;
-export const sectors = sectorsData;
+let initPromise: Promise<void> | null = null;
+
+export async function initAppData(): Promise<void> {
+  if (initPromise) return initPromise;
+
+  initPromise = (async () => {
+    setState('dataLoading', true);
+    try {
+      const [containers, sectors, routes] = await Promise.all([
+        fetchCollectionPoints(),
+        fetchSectors(),
+        fetchAllRoutes(),
+      ]);
+      setState({
+        containers,
+        sectors,
+        routes,
+        dataReady: true,
+      });
+      await loadDashboardData();
+      const view = (await import('./dashboardStore')).dashboardView();
+      if (view?.summary.fleet) {
+        setState('fleet', view.summary.fleet);
+      }
+    } finally {
+      setState('dataLoading', false);
+    }
+  })();
+
+  return initPromise;
+}
 
 export function toggleLayer(key: keyof LayerVisibility) {
   setState('layers', key, (v) => !v);
@@ -71,7 +120,6 @@ export function setRoutes(routes: RouteCollection) {
   setState('routes', routes);
 }
 
-/** Ajusta las polilíneas a la red vial usando OSRM (OpenStreetMap). */
 export async function loadRoutesWithRoadSnapping(routes: RouteCollection) {
   setState('routesSnapping', true);
   try {
@@ -83,8 +131,9 @@ export async function loadRoutesWithRoadSnapping(routes: RouteCollection) {
   }
 }
 
-export function initRoadSnappedRoutes() {
-  void loadRoutesWithRoadSnapping(routesMock);
+export async function initRoadSnappedRoutes() {
+  await initAppData();
+  await loadRoutesWithRoadSnapping(state.routes);
 }
 
 export function showOptimizedRoute(show: boolean) {
@@ -93,7 +142,7 @@ export function showOptimizedRoute(show: boolean) {
 }
 
 export function criticalContainers() {
-  return containers.features.filter((f) => f.properties.fillLevel >= 80);
+  return state.containers.features.filter((f) => f.properties.fillLevel >= 80);
 }
 
 export { state as appState, setState as setAppState };

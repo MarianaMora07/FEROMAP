@@ -18,7 +18,7 @@ import {
   ChevronDown,
 } from 'lucide-solid';
 import { appState, toggleDarkMode } from '../../core/stores/appStore';
-import { dashboardSummary } from '../../data/mock/dashboard';
+import { dashboardSummary } from '../../core/stores/dashboardStore';
 
 interface NavItem {
   href: string;
@@ -108,7 +108,7 @@ export function Sidebar(props: SidebarProps) {
           <div class="min-w-0">
             <p class="text-[11px] text-white/55">Operadores conectados</p>
             <p class="text-sm font-semibold text-white">
-              {dashboardSummary.operatorsOnline}{' '}
+              {dashboardSummary().operatorsOnline}{' '}
               <span class="text-fero-green">En línea</span>
             </p>
           </div>
@@ -137,11 +137,11 @@ export function Sidebar(props: SidebarProps) {
           class="flex items-center gap-3 rounded-md px-2 py-2 transition-colors hover:bg-white/10"
         >
           <div class="flex h-9 w-9 items-center justify-center rounded-full bg-fero-green-mid text-xs font-bold text-white">
-            {dashboardSummary.user.initials}
+            {dashboardSummary().user.initials}
           </div>
           <div class="min-w-0 flex-1">
-            <p class="truncate text-sm font-semibold text-white">{dashboardSummary.user.name}</p>
-            <p class="truncate text-xs text-white/50">{dashboardSummary.user.role}</p>
+            <p class="truncate text-sm font-semibold text-white">{dashboardSummary().user.name}</p>
+            <p class="truncate text-xs text-white/50">{dashboardSummary().user.role}</p>
           </div>
           <ChevronDown size={16} class="shrink-0 text-white/40" />
         </A>

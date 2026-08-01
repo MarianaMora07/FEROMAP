@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from 'solid-js';
 import { A } from '@solidjs/router';
 import {
   Chart,
@@ -53,6 +53,7 @@ import {
   mapFillLegend,
   type CollectionPoint,
 } from '../../data/mock/collectionPoints';
+import { fetchCollectionPointsList } from '../../core/api/collectionPoints';
 
 function trashSvg(color: string) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>`;
@@ -121,8 +122,35 @@ export default function CollectionPointsPage() {
   const [sectorFilter, setSectorFilter] = createSignal('');
   const [page, setPage] = createSignal(1);
   const [pageSize] = createSignal(8);
-  const [selectedId, setSelectedId] = createSignal('045');
+  const [selectedId, setSelectedId] = createSignal('CNT-001');
   const [mapReady, setMapReady] = createSignal(false);
+  const [apiPoints] = createResource(fetchCollectionPointsList);
+  const allPoints = createMemo(() => apiPoints() ?? collectionPointsList);
+
+  const syncMapMarkers = () => {
+    const map = mapRef.current;
+    const points = allPoints();
+    if (!map || !map.isStyleLoaded() || points.length === 0) return;
+    markersById.forEach((m) => m.remove());
+    markersById.clear();
+    for (const point of points) {
+      const el = createPinEl(fillStatusColor(point.status));
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setSelectedId(point.id);
+      });
+      const marker = new maplibregl.Marker({ element: el })
+        .setLngLat([point.lng, point.lat])
+        .setPopup(
+          new maplibregl.Popup({ offset: 18, maxWidth: '280px', closeButton: true }).setHTML(
+            buildPopupHtml(point),
+          ),
+        )
+        .addTo(map);
+      markersById.set(point.id, marker);
+    }
+    openSelectedPopup();
+  };
 
   onMount(() => {
     Chart.register(ArcElement, CategoryScale, LinearScale, LineElement, PointElement, Filler, Tooltip, Legend);
@@ -139,24 +167,8 @@ export default function CollectionPointsPage() {
 
     map.on('load', () => {
       map.resize();
-      for (const point of collectionPointsList) {
-        const el = createPinEl(fillStatusColor(point.status));
-        el.addEventListener('click', (e) => {
-          e.stopPropagation();
-          setSelectedId(point.id);
-        });
-        const marker = new maplibregl.Marker({ element: el })
-          .setLngLat([point.lng, point.lat])
-          .setPopup(
-            new maplibregl.Popup({ offset: 18, maxWidth: '280px', closeButton: true }).setHTML(
-              buildPopupHtml(point),
-            ),
-          )
-          .addTo(map);
-        markersById.set(point.id, marker);
-      }
       setMapReady(true);
-      openSelectedPopup();
+      syncMapMarkers();
     });
 
     const onPopupClick = (e: MouseEvent) => {
@@ -181,12 +193,17 @@ export default function CollectionPointsPage() {
     });
   });
 
+  createEffect(() => {
+    allPoints();
+    if (mapReady()) syncMapMarkers();
+  });
+
   const openSelectedPopup = () => {
     const id = selectedId();
     const marker = markersById.get(id);
     const map = mapRef.current;
     if (!marker || !map) return;
-    const point = collectionPointsList.find((p) => p.id === id);
+    const point = allPoints().find((p) => p.id === id);
     if (!point) return;
     map.flyTo({ center: [point.lng, point.lat], zoom: Math.max(map.getZoom(), 14), essential: true });
     markersById.forEach((m, mid) => {
@@ -205,7 +222,7 @@ export default function CollectionPointsPage() {
     const q = search().trim().toLowerCase();
     const status = statusFilter();
     const sector = sectorFilter();
-    return collectionPointsList.filter((p) => {
+    return allPoints().filter((p) => {
       if (status && p.status !== status) return false;
       if (sector && p.sector !== sector) return false;
       if (!q) return true;
@@ -234,7 +251,7 @@ export default function CollectionPointsPage() {
     return `Mostrando ${from} a ${to} de ${total()} puntos`;
   };
 
-  const selected = createMemo(() => collectionPointsList.find((p) => p.id === selectedId()));
+  const selected = createMemo(() => allPoints().find((p) => p.id === selectedId()));
 
   const selectPoint = (p: CollectionPoint) => setSelectedId(p.id);
 

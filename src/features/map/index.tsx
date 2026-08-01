@@ -29,11 +29,10 @@ import {
 import { Button } from '../../design-system/components';
 import {
   appState,
-  containers,
-  sectors,
   toggleSidebar,
   toggleDarkMode,
 } from '../../core/stores/appStore';
+import { dashboardSummary } from '../../core/stores/dashboardStore';
 import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
 import { fillLevelColor } from '../../core/utils/geoUtils';
 import { buildContainerPopupHtml } from '../../core/utils/popupHtml';
@@ -48,7 +47,6 @@ import {
   initialLayerState,
   type MapBaseStyleId,
 } from '../../data/mock/mapGis';
-import { dashboardSummary } from '../../data/mock/dashboard';
 
 const toneIconBg = {
   green: 'bg-fero-green/15 text-fero-green-dark',
@@ -197,7 +195,7 @@ export default function MapPage() {
     clearMarkers();
 
     if (state.containers) {
-      for (const feature of containers.features) {
+      for (const feature of appState.containers.features) {
         const bucket = containerBucket(feature.properties.fillLevel);
         if (!state[`bin-${bucket}`]) continue;
         const color = fillLevelColor(feature.properties.fillLevel);
@@ -239,7 +237,7 @@ export default function MapPage() {
     if (!map) return;
 
     if (!map.getSource('sectors')) {
-      map.addSource('sectors', { type: 'geojson', data: sectors });
+      map.addSource('sectors', { type: 'geojson', data: appState.sectors });
       map.addLayer({
         id: 'sectors-fill',
         type: 'fill',
@@ -326,7 +324,16 @@ export default function MapPage() {
 
   createEffect(() => {
     layerState();
+    appState.containers;
     if (getMap()?.isStyleLoaded()) syncOverlayLayers();
+  });
+
+  createEffect(() => {
+    const sectors = appState.sectors;
+    const map = getMap();
+    if (map?.getSource('sectors') && sectors.features.length > 0) {
+      (map.getSource('sectors') as maplibregl.GeoJSONSource).setData(sectors);
+    }
   });
 
   createEffect(() => {
@@ -415,7 +422,7 @@ export default function MapPage() {
           >
             <Bell size={18} />
             <span class="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-              {dashboardSummary.notifications}
+              {dashboardSummary().notifications}
             </span>
           </button>
           <button
@@ -592,10 +599,10 @@ export default function MapPage() {
 
           <div class="min-w-0 flex-1 rounded-xl border border-border bg-surface/95 px-3 py-2.5 shadow-lg backdrop-blur-md dark:bg-dark-surface/95 dark:border-dark-border">
             <div class="grid grid-cols-2 content-center gap-3 sm:grid-cols-3 lg:grid-cols-5">
-              <For each={mapGisMetrics}>
+              <For each={dashboardSummary().mapMetrics?.length ? dashboardSummary().mapMetrics : mapGisMetrics}>
                 {(metric) => (
                   <div class="flex items-center gap-3">
-                    <span class={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${toneIconBg[metric.tone]}`}>
+                    <span class={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${toneIconBg[metric.tone as keyof typeof toneIconBg] ?? toneIconBg.blue}`}>
                       <Show when={metric.icon === 'trash'}><Trash2 size={18} /></Show>
                       <Show when={metric.icon === 'truck'}><Truck size={18} /></Show>
                       <Show when={metric.icon === 'route'}><Route size={18} /></Show>

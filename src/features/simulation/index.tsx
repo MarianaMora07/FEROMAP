@@ -30,7 +30,8 @@ import {
 } from '../../design-system/components';
 import { osmMapStyle } from '../../core/utils/mapStyle';
 import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
-import { runOptimization, simulationState } from '../../core/stores/simulationStore';
+import { runOptimization, setScenario, simulationState, initSimulationData } from '../../core/stores/simulationStore';
+import type { ScenarioId } from '../../data/types/simulation';
 import {
   currentScenarioSummary,
   durationOptions,
@@ -255,6 +256,7 @@ export default function SimulationPage() {
     if (!q) return;
     setPreset(id);
     setConditions({ ...q.conditions });
+    setScenario(id as ScenarioId);
     setStep(1);
   };
 
@@ -266,6 +268,7 @@ export default function SimulationPage() {
   };
 
   onMount(() => {
+    void initSimulationData();
     const map = new maplibregl.Map({
       container: mapContainer,
       style: osmMapStyle,

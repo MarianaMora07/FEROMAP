@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, type JSX } from 'solid-js';
+import { For, Show, createMemo, createResource, createSignal, type JSX } from 'solid-js';
 import { A } from '@solidjs/router';
 import {
   ChevronDown,
@@ -40,6 +40,7 @@ import {
   type VehicleDetailTabId,
   type VehicleStatus,
 } from '../../data/mock/vehicles';
+import { fetchVehicles } from '../../core/api/vehicles';
 
 const kpiIcon: Record<(typeof vehiclesKpis)[number]['icon'], () => JSX.Element> = {
   truck: () => <Truck size={24} />,
@@ -91,12 +92,14 @@ export default function VehiclesPage() {
   const [pageSize, setPageSize] = createSignal(8);
   const [selectedId, setSelectedId] = createSignal<string | null>('TR-08');
   const [detailTab, setDetailTab] = createSignal<VehicleDetailTabId>('info');
+  const [apiVehicles] = createResource(fetchVehicles);
+  const allVehicles = createMemo(() => apiVehicles() ?? vehiclesList);
 
   const filtered = createMemo(() => {
     const q = search().trim().toLowerCase();
     const status = statusFilter();
     const type = typeFilter();
-    return vehiclesList.filter((v) => {
+    return allVehicles().filter((v) => {
       if (status && v.status !== status) return false;
       if (type && v.type !== type) return false;
       if (!q) return true;
@@ -129,7 +132,7 @@ export default function VehiclesPage() {
   const selected = createMemo(() => {
     const id = selectedId();
     if (!id) return undefined;
-    return vehiclesList.find((v) => v.id === id);
+    return allVehicles().find((v) => v.id === id);
   });
 
   const selectVehicle = (v: Vehicle) => {
