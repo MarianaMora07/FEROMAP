@@ -2,7 +2,7 @@
 
 Prototipo y sistema para el **Sistema Basado en Inteligencia Artificial para la Optimización Dinámica de Rutas de Recolección de Desechos** en la parroquia Unare, Ciudad Guayana (trabajo de grado UNEG 2025–2026).
 
-> El desarrollo activo vive en este repositorio (`FEROMAP/`). La carpeta hermana `proyecto_unare/` quedó como **archivo histórico** del prototipo inicial (ver su `README.md`).
+**Repositorio:** [github.com/MarianaMora07/FEROMAP](https://github.com/MarianaMora07/FEROMAP)
 
 ## Stack
 
@@ -15,15 +15,139 @@ Prototipo y sistema para el **Sistema Basado en Inteligencia Artificial para la 
 | Producción | Nginx (SPA + proxy `/api`), imágenes Podman/Docker |
 | Orquestación | Compose (`dev` / `prod`), [just](https://github.com/casey/just) |
 
-## Requisitos
+## Requisitos previos
 
-- Podman o Docker (+ Compose)
-- [just](https://github.com/casey/just)
-- Node.js 20+ (solo si desarrollas el frontend fuera de contenedores)
+Instala en tu máquina (Linux recomendado):
+
+| Herramienta | Uso |
+|-------------|-----|
+| [Podman](https://podman.io/) o Docker + Compose | Contenedores (DB, API, frontend) |
+| [just](https://github.com/casey/just) | Comandos del proyecto (`just setup`, etc.) |
+| Node.js 20+ | Solo si desarrollas el frontend **fuera** de contenedores |
+| `curl` | Verificación de salud (`just health`) |
+
+Comprueba que Compose funciona:
+
+```bash
+podman compose version   # o: docker compose version
+just --version
+```
+
+---
+
+## Levantar el entorno (desarrollo)
+
+### 1. Clonar el repositorio
+
+```bash
+git clone https://github.com/MarianaMora07/FEROMAP.git
+cd FEROMAP
+```
+
+### 2. Primera vez — setup completo
+
+Un solo comando crea `.env`, levanta contenedores, espera PostgreSQL y verifica API + frontend:
+
+```bash
+just setup
+```
+
+Esto ejecuta: `init-env` → `up` → `wait-db` → `health`.
+
+Luego aplica migraciones y datos demo:
+
+```bash
+just migrate
+just seed
+```
+
+Verificación rápida del flujo (login + optimización):
+
+```bash
+just defense-verify
+```
+
+### 3. Abrir la aplicación
+
+| URL | Servicio |
+|-----|----------|
+| http://localhost:5173 | **Frontend** (Vite + HMR) |
+| http://localhost:5173/login | Inicio de sesión |
+| http://localhost:8000 | API FastAPI (directa) |
+| http://localhost:8000/health | Health check |
+
+Inicia sesión con `plan@fero.com` / `123456789` (ver tabla de credenciales más abajo).
+
+### 4. Sesiones siguientes
+
+```bash
+cd FEROMAP
+just up          # levanta contenedores en segundo plano
+just health      # opcional: comprobar que todo responde
+```
+
+Para detener:
+
+```bash
+just down        # conserva datos de PostgreSQL
+just down-volumes   # borra también la BD (postgres_data/)
+```
+
+### 5. Si algo falla
+
+```bash
+just status      # estado de contenedores
+just logs-api    # logs del backend
+just env-info    # puertos y COMPOSE_ENV activos
+```
+
+Reinicio limpio de base de datos y seeds:
+
+```bash
+just db-reset    # down-volumes + up + migrate + seed
+```
+
+Reconstruir imágenes tras cambiar dependencias (`requirements.txt`, Dockerfiles):
+
+```bash
+just rebuild
+```
+
+---
+
+## Producción local (defensa / demo empaquetada)
+
+UI estática con Nginx y proxy `/api` al backend:
+
+```bash
+git clone https://github.com/MarianaMora07/FEROMAP.git
+cd FEROMAP
+cp .env.prod.example .env
+just setup-prod
+```
+
+`setup-prod` hace: build de imágenes → migrate → seed → health → `defense-verify`.
+
+| URL | Servicio |
+|-----|----------|
+| http://localhost:8080 | **UI** (Nginx: SPA + proxy `/api`) |
+| http://localhost:8080/health | Health vía Nginx |
+| http://localhost:8000 | API directa (opcional, depuración) |
+
+En producción el frontend usa rutas relativas (`/api/v1/...`); Nginx reenvía al contenedor `api`.
+
+Sin editar `.env` (solo para esta sesión):
+
+```bash
+COMPOSE_ENV=prod just rebuild-prod
+COMPOSE_ENV=prod just up-prod
+```
+
+---
 
 ## Credenciales demo (autenticación)
 
-Tras `just seed`, puedes iniciar sesión en `/login` con cualquiera de estas cuentas (contraseña común para todas):
+Tras `just seed`, inicia sesión en `/login`:
 
 | Email | Rol | Uso en la demo |
 |-------|-----|----------------|
@@ -32,86 +156,29 @@ Tras `just seed`, puedes iniciar sesión en `/login` con cualquiera de estas cue
 | `conductor@fero.com` | Conductor | Monitoreo, avance de ruta, averías |
 | `residente@fero.com` | Residente | Mi recolección, puntos de su sector |
 
-**Contraseña:** `123456789`
+**Contraseña (todas):** `123456789`
 
-Variables opcionales para scripts de verificación: `DEMO_EMAIL`, `DEMO_PASSWORD`.
+Variables opcionales para scripts: `DEMO_EMAIL`, `DEMO_PASSWORD`.
 
-## Inicio rápido (desarrollo)
-
-```bash
-cd FEROMAP
-just setup
-```
-
-Equivale a: `init-env` → `up` → `wait-db` → `health`.
-
-| URL | Servicio |
-|-----|----------|
-| http://localhost:5173 | Frontend (Vite + HMR) |
-| http://localhost:8000 | API FastAPI |
-| http://localhost:8000/health | Health check |
-
-Siguientes sesiones:
-
-```bash
-just up
-```
-
-## Producción local (defensa / demo empaquetada)
-
-Copia la plantilla de producción:
-
-```bash
-cp .env.prod.example .env
-just setup-prod
-```
-
-O configura manualmente `.env`:
-
-| URL | Servicio |
-|-----|----------|
-| http://localhost:8080 | **UI** (Nginx: SPA + proxy `/api`) |
-| http://localhost:8080/health | Health vía Nginx |
-| http://localhost:8000 | API directa (opcional, depuración) |
-
-En producción el frontend llama a rutas relativas (`/api/v1/...`); Nginx reenvía al contenedor `api`.
-
-También puedes usar la variable de entorno sin editar `.env`:
-
-```bash
-COMPOSE_ENV=prod just rebuild
-```
+---
 
 ## Flujo de demostración (defensa de grado)
 
-Con `VITE_USE_MOCKS=false` y el stack levantado:
+Con `VITE_USE_MOCKS=false` en `.env` y el stack levantado:
 
-1. **Mapa** (`/map`) — Sectores, contenedores por nivel de llenado, ruta actual (verde).
-2. Panel **Resumen operativo** — contenedores críticos (>80%).
-3. **Simulación** (`/simulation`) — Elegir escenario → **Optimizar rutas con IA**.
-4. **Mapa** — Activar capa *Ruta 02* (azul): geometría del motor Python (OSMnx + ACO).
-5. **Dashboard** (`/dashboard`) — KPIs y gráficos comparativos.
+1. **Mapa** (`/map`) — Sectores, contenedores por nivel de llenado, ruta actual.
+2. **Simulación** (`/simulation`) — Escenario → **Optimizar rutas con IA**.
+3. **Mapa** — Capa de ruta optimizada (geometría OSMnx + ACO).
+4. **Dashboard** (`/dashboard`) — KPIs operativos.
+5. **Reportes** (`/reports`) — Exportar CSV/PDF de simulaciones.
 
-Atajo de verificación:
+Verificación automática:
 
 ```bash
 just defense-verify
 ```
 
-Equivalente manual:
-
-```bash
-just health
-curl http://localhost:8000/health
-curl -X POST http://localhost:8000/api/v1/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"plan@fero.com","password":"123456789"}'
-# Usar accessToken en Authorization: Bearer …
-curl -X POST http://localhost:8000/api/v1/simulations/optimize \
-  -H 'Authorization: Bearer <token>' \
-  -H 'Content-Type: application/json' \
-  -d '{"scenarioId":"normal"}'
-```
+---
 
 ## Comandos (`just`)
 
@@ -119,29 +186,32 @@ curl -X POST http://localhost:8000/api/v1/simulations/optimize \
 |---------|-------------|
 | `just setup` | Primera vez (dev): `.env`, contenedores, DB, health |
 | `just setup-prod` | Primera vez (prod): rebuild, migrate, seed, health, `defense-verify` |
-| `just defense-verify` | Pre-defensa: health + login + optimize (+ Nginx si `COMPOSE_ENV=prod`) |
-| `just demo-verify` | Flujo demo rápido (GIS + optimización) |
-| `just test` | Tests unitarios (motor ACO + contingencias) en contenedor API |
-| `just test-local` | Tests en el host (`pip install -r backend/requirements.txt`) |
 | `just up` | Levanta stack según `COMPOSE_ENV` en `.env` |
-| `just up-prod` | `COMPOSE_ENV=prod just up` |
 | `just down` | Detiene contenedores (conserva PostgreSQL) |
 | `just down-volumes` | Detiene y borra volúmenes (`postgres_data/`) |
-| `just rebuild` | Reconstruye imágenes y levanta (usa `COMPOSE_ENV`) |
+| `just rebuild` | Reconstruye imágenes y levanta |
 | `just rebuild-prod` | Producción: build estático + API empaquetados |
-| `just logs` / `just logs-api` | Logs |
 | `just health` | Comprueba API y frontend |
-| `just wait-db` | Espera PostgreSQL |
+| `just defense-verify` | Pre-defensa: health + login + optimize (+ Nginx en prod) |
+| `just demo-verify` | Flujo demo rápido (GIS + optimización) |
+| `just test` | Tests unitarios (motor ACO + contingencias) |
 | `just migrate` | Alembic `upgrade head` |
 | `just seed` | Pobla BD desde `data/seeds/*.json` |
 | `just db-reset` | Borra BD, levanta, migra y seed |
-| `just export-seeds` | Mocks TS → `data/seeds/*.json` |
+| `just logs` / `just logs-api` | Logs |
 | `just env-info` | Muestra entorno y URLs |
 | `just status` | Estado de contenedores |
 
+Lista completa: `just` o `just --list`.
+
+---
+
 ## Variables de entorno
 
-Copia la plantilla: `just init-env` (dev) o `cp .env.prod.example .env` (prod).
+| Acción | Comando |
+|--------|---------|
+| Desarrollo | `just init-env` (copia `.env.example` → `.env`) |
+| Producción | `cp .env.prod.example .env` |
 
 | Variable | Dev (`COMPOSE_ENV=dev`) | Prod (`COMPOSE_ENV=prod`) |
 |----------|-------------------------|---------------------------|
@@ -149,94 +219,91 @@ Copia la plantilla: `just init-env` (dev) o `cp .env.prod.example .env` (prod).
 | `APP_ENV` | `local` | `production` |
 | `API_PORT` | `8000` | `8000` |
 | `FRONTEND_PORT` | `5173` (Vite) | `8080` (Nginx) |
-| `DB_HOST` | `db` (contenedor) | `db` o host externo |
-| `DATABASE_URL` | `postgresql+psycopg://…@db:5432/feromap` | Igual o RDS/externo |
-| `VITE_USE_MOCKS` | `false` para API real | `false` |
-| `VITE_API_URL` | `http://localhost:8000` (build) | **vacío** (mismo origen vía Nginx) |
-| `VITE_API_PROXY_TARGET` | `http://api:8000` (proxy Vite) | no aplica |
+| `VITE_USE_MOCKS` | `false` (API real) | `false` |
+| `VITE_API_URL` | `http://localhost:8000` | **vacío** (mismo origen vía Nginx) |
 | `CORS_ORIGINS` | `http://localhost:5173` | `http://localhost:8080` |
-| `JWT_SECRET` | `feromap-dev-secret-…` | **Cambiar en prod** |
-| `JWT_EXPIRE_MINUTES` | `1440` | `1440` |
-| `COMPOSE_PROJECT_NAME` | `feromap` | `feromap` |
+| `JWT_SECRET` | valor de `.env.example` | **cambiar en despliegue real** |
 
-## Tests (Fase 5)
+No subas `.env` al repositorio (está en `.gitignore`).
+
+---
+
+## Tests
 
 ```bash
 just test          # dentro del contenedor api (recomendado)
-just test-local    # en el host, desde backend/
+just test-local    # en el host: pip install -r backend/requirements.txt && cd backend && pytest
 ```
 
-Cubre el motor ACO/VRP (`test_optimization_engine.py`) y el servicio de contingencias por avería (`test_contingency_service.py`).
+Cubre el motor ACO/VRP y el servicio de contingencias por avería.
+
+---
 
 ## Solo frontend (sin contenedores)
+
+Requiere API levantada (`just up` en otra terminal):
 
 ```bash
 npm install
 npm run dev
 ```
 
-Proxy de Vite: `/api` → `http://localhost:8000` (requiere `just up` o API local).
+Proxy de Vite: `/api` → `http://localhost:8000`.
+
+---
 
 ## Datos y base de datos
 
-Los mocks en `src/data/mock/` son la fuente inicial; se exportan a seeds:
+Seeds iniciales en `data/seeds/*.json` (exportables desde mocks TS):
 
 ```bash
 just export-seeds
-just db-reset    # 20 contenedores, 8 sectores, 10 vehículos, …
+just db-reset
 ```
 
 Coordenadas base: `[-62.715, 8.295]` (Parroquia Unare, Puerto Ordaz).
+
+---
 
 ## API REST (`/api/v1`)
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
 | GET | `/health` | Estado del API |
+| POST | `/api/v1/auth/login` | Inicio de sesión (JWT) |
+| GET | `/api/v1/auth/me` | Usuario autenticado |
 | GET | `/api/v1/sectors` | Sectores (GeoJSON) |
 | GET | `/api/v1/collection-points` | Contenedores (GeoJSON) |
 | GET | `/api/v1/routes/current` | Ruta baseline |
 | GET | `/api/v1/routes/optimized` | Última ruta optimizada |
 | GET | `/api/v1/dashboard/summary` | Resumen operativo |
-| GET | `/api/v1/scenarios` | Escenarios de simulación |
-| POST | `/api/v1/auth/login` | Inicio de sesión (JWT) |
-| GET | `/api/v1/auth/me` | Usuario autenticado |
-| POST | `/api/v1/simulations/optimize` | Motor ACO/VRP (requiere planificador/admin) |
-| GET | `/api/v1/simulations/{id}` | Detalle de simulación |
-| GET | `/api/v1/kpis?scenario=` | KPIs por escenario |
-| GET | `/api/v1/vehicles` | Flota |
+| POST | `/api/v1/simulations/optimize` | Motor ACO/VRP (planificador/admin) |
+| POST | `/api/v1/contingencies/vehicle-breakdown` | Avería y recálculo |
+| GET | `/api/v1/reports/summary` | KPIs para reportes |
+| GET | `/api/v1/reports/export?format=csv\|pdf` | Exportación |
+| GET | `/api/v1/resident/overview` | Vista residente |
 
 Respuestas en **camelCase**.
+
+---
 
 ## Estructura del monorepo
 
 ```
 FEROMAP/
 ├── backend/              # FastAPI, Alembic, motor de optimización
-│   └── app/services/     # graph_service, optimization_service, …
-├── data/                 # GeoJSON, grafos OSM, seeds, cache
-├── deploy/
-│   ├── nginx/            # SPA + proxy /api (prod)
-│   └── postgres/init/
+├── data/                 # GeoJSON, grafos OSM, seeds
+├── deploy/nginx/         # SPA + proxy /api (prod)
 ├── src/                  # Frontend SolidJS
-│   ├── core/api/         # Cliente HTTP (mock / API)
-│   └── features/
+├── scripts/              # compose.sh, defense-verify.sh
 ├── compose.yml           # Servicios base
 ├── compose.dev.yml       # Dev: volúmenes + Vite
 ├── compose.prod.yml      # Prod: imágenes + Nginx
-├── Containerfile         # API producción
-├── Containerfile.frontend
 ├── justfile
 └── package.json
 ```
 
-## Scripts npm (frontend)
-
-```bash
-npm run dev       # Vite (desarrollo)
-npm run build     # Build estático
-npm run preview   # Vista previa del build
-```
+---
 
 ## Autores
 
