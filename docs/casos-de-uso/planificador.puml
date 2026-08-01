@@ -1,0 +1,27 @@
+@startuml
+skinparam packageStyle rectangle
+left to right direction
+
+actor "Planificador" as planificador
+
+rectangle "Sistema de Optimización de Rutas" {
+  usecase "Cargar datos geoespaciales" as UC1
+  usecase "Gestionar puntos de recolección" as UC2
+  usecase "Simular condiciones dinámicas" as UC3
+  usecase "Configurar parámetros de la flota" as UC4
+  usecase "Ejecutar optimización de rutas" as UC5
+  usecase "Visualizar rutas en el mapa" as UC6
+  usecase "Recalcular rutas por contingencia" as UC7
+  usecase "Exportar reportes de rutas" as UC8
+}
+
+planificador --> UC1
+planificador --> UC2
+planificador --> UC3
+planificador --> UC4
+planificador --> UC5
+planificador --> UC6
+planificador --> UC7
+planificador --> UC8
+
+@enduml

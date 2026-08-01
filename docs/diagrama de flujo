@@ -1,0 +1,42 @@
+@startuml
+skinparam actorStyle awesome
+skinparam DefaultFontName Arial
+
+start
+
+:Cargar datos geoespaciales;
+
+:Inicializar simulación de variables dinámicas;
+
+:Configurar parámetros de la flota de vehículos;
+
+partition "Motor de Optimización IA" {
+    :Ejecutar algoritmo de optimización;
+}
+
+if (¿Se generó una ruta válida y factible?) then (Sí)
+    :Visualizar rutas optimizadas en el mapa interactivo;
+
+    repeat
+        :Monitorear el avance del recorrido simulado;
+
+        if (¿Ocurre alguna contingencia?() then (Sí)
+            :Registrar contingencia en el sistema;
+            :Recalcular rutas dinámicamente;
+        else (No)
+            :Continuar con el recorrido de recolección establecido;
+        endif
+
+    backward:Avanzar al siguiente sector;
+    repeat while (¿Quedan contenedores pendientes?) is (Sí) not (No)
+
+    :Finalizar la jornada de recolección;
+    :Exportar reportes de simulación e indicadores clave (KPIs);
+
+else (No)
+    :Mostrar mensaje de alerta (Parámetros inconsistentes);
+    :Solicitar ajuste de parámetros de flota o demanda;
+endif
+
+stop
+@enduml

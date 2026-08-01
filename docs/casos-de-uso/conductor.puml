@@ -1,0 +1,20 @@
+@startuml
+skinparam packageStyle rectangle
+left to right direction
+
+actor "Conductor" as conductor
+
+rectangle "Sistema de Optimización de Rutas" {
+  usecase "Consultar ruta asignada de la semana" as UC_C1
+  usecase "Visualizar recorrido en el mapa" as UC_C2
+  usecase "Consultar secuencia de paradas y horarios" as UC_C3
+}
+
+conductor --> UC_C1
+conductor --> UC_C2
+conductor --> UC_C3
+
+UC_C1 <-- UC_C2 : <<include>>
+UC_C1 <-- UC_C3 : <<include>>
+
+@enduml

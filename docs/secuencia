@@ -1,0 +1,47 @@
+@startuml
+' Configuración de colores lila/lavanda para mantener consistencia visual
+skinparam ParticipantBackgroundColor #F3F0FF
+skinparam ParticipantBorderColor #B2A2E8
+skinparam ActorBackgroundColor #F3F0FF
+skinparam ActorBorderColor #B2A2E8
+skinparam ArrowColor #8C78D6
+skinparam LifeLineBorderColor #8C78D6
+skinparam LifeLineBackgroundColor #F3F0FF
+skinparam NoteBackgroundColor #F3F0FF
+skinparam NoteBorderColor #B2A2E8
+
+actor "Planificador" as Planificador
+participant "Interfaz Web" as Interfaz
+participant "Controlador\nde Rutas" as Controlador
+participant "Motor de IA" as Motor
+database "Base de Datos\n(GIS)" as DB
+
+Planificador -> Interfaz: Solicitar optimización de rutas
+activate Interfaz
+
+Interfaz -> Controlador: Iniciar cálculo de rutas dinámicas
+activate Controlador
+
+Controlador -> DB: Obtener estado de contenedores, tráfico y flota
+activate DB
+DB --> Controlador: Retornar datos dinámicos y grafo vial
+deactivate DB
+
+Controlador -> Motor: Ejecutar optimización (grafo, contenedores, flota)
+activate Motor
+note over Motor: Procesamiento del Algoritmo\n(ACO / Recocido Simulado)
+Motor --> Controlador: Retornar rutas óptimas calculadas
+deactivate Motor
+
+Controlador -> DB: Guardar rutas generadas
+activate DB
+DB --> Controlador: Confirmación de guardado
+deactivate DB
+
+Controlador --> Interfaz: Retornar rutas optimizadas
+deactivate Controlador
+
+Interfaz --> Planificador: Renderizar rutas en mapa interactivo
+deactivate Interfaz
+
+@enduml

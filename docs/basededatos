@@ -1,0 +1,267 @@
+// =============================================================================
+// SISTEMA DE OPTIMIZACIÓN DINÁMICA DE RUTAS — Esquema de Dominio Limpio
+// =============================================================================
+//
+// Alcance:
+//   - Autenticación y control de acceso por roles (administrador, planificador,
+//     conductor y residente)
+//   - Estructura geográfica multizona (Parroquias y Sectores de Ciudad Guayana)
+//   - Grafo vial (nodos de intersección y aristas/calles con soporte de bloqueo)
+//   - Catálogos de recolección (contenedores de basura, camiones y operadores)
+//   - Simulación y datos dinámicos (llenado, tráfico, vías bloqueadas)
+//   - Resultados del algoritmo de Inteligencia Artificial (rutas y waypoints)
+//   - Historial de simulaciones y KPIs comparativos
+//
+// =============================================================================
+
+// --- ROLES Y USUARIOS DEL SISTEMA ---
+
+Enum user_role {
+  administrador  // Gestión global del sistema, usuarios y configuración
+  planificador   // Datos geoespaciales, flota, simulación y optimización de rutas
+  conductor      // Consulta de rutas asignadas y recorridos en mapa
+  residente      // Consulta de horarios y proximidad del camión en su zona
+}
+
+// Cuentas de acceso al sistema (un usuario tiene exactamente un rol)
+Table users {
+  id integer [primary key, increment]
+  email varchar(255) [not null, unique]
+  password_hash varchar(255) [not null]
+  first_name varchar(255) [not null]
+  last_name varchar(255) [not null]
+  phone varchar(50) [null]
+  role user_role [not null]
+  sector_id integer [null] // Obligatorio para residentes: sector donde reside
+  active boolean [default: true]
+  last_login_at timestamp [null]
+  created_at timestamp [null]
+  updated_at timestamp [null]
+  deleted_at timestamp [null]
+
+  indexes {
+    role
+    (role, active)
+  }
+}
+
+// --- CATÁLOGOS GEOGRÁFICOS Y VIALES ---
+
+// Permite escalar el sistema a otras zonas de Ciudad Guayana o del municipio
+Table parishes {
+  id integer [primary key, increment]
+  name varchar(255) [not null, unique] // Ej: Unare, Cachamay, Universidad, Simón Bolívar...
+  city varchar(255) [default: "Ciudad Guayana"]
+  created_at timestamp [null]
+  updated_at timestamp [null]
+}
+
+Table sectors {
+  id integer [primary key, increment]
+  parish_id integer [not null] // Relación para agrupar sectores por zona
+  name varchar(255) [not null] // Ej: Unare I, Unare II, Río Caura, Alta Vista Sur...
+  created_at timestamp [null]
+  updated_at timestamp [null]
+  deleted_at timestamp [null]
+
+  indexes {
+    (parish_id, name) [unique] // Evita nombres de sectores repetidos en una misma parroquia
+  }
+}
+
+// Intersecciones o esquinas (vértices del grafo vial)
+Table road_nodes {
+  id integer [primary key, increment]
+  latitude decimal(10,8) [not null]
+  longitude decimal(11,8) [not null]
+  name varchar(255) [null] // Referencia de cruce (ej: Av. Guayana con Av. Atlántico)
+  created_at timestamp [null]
+  updated_at timestamp [null]
+}
+
+// Calles y avenidas (aristas del grafo vial)
+Table road_segments {
+  id integer [primary key, increment]
+  source_node_id integer [not null] // Nodo de inicio
+  target_node_id integer [not null] // Nodo de fin
+  street_name varchar(255) [not null] // Ej: Avenida Atlántico
+  distance_meters decimal(10,2) [not null] // Distancia física (GIS)
+  base_travel_time_seconds integer [not null] // Tiempo base a velocidad normal
+  traffic_multiplier decimal(4,2) [default: 1.0] // Multiplicador de congestión por hora
+  is_blocked boolean [default: false] // BLOQUEO TOTAL: descarta la calle por protestas u obras
+  is_one_way boolean [default: false] // Sentido único o doble vía
+  created_at timestamp [null]
+  updated_at timestamp [null]
+}
+
+// --- CATÁLOGOS DE RECOLECCIÓN Y FLOTA ---
+
+// Puntos de recolección (contenedores)
+Table collection_points {
+  id integer [primary key, increment]
+  sector_id integer [not null]
+  road_node_id integer [null] // Nodo del grafo más cercano para el cálculo de distancias
+  code varchar(50) [not null, unique] // Código físico (ej: CNT-UN1-042)
+  latitude decimal(10,8) [not null]
+  longitude decimal(11,8) [not null]
+  max_capacity_kg decimal(8,2) [not null] // Capacidad máxima del contenedor
+  current_fill_level_kg decimal(8,2) [default: 0.0] // Nivel de llenado dinámico simulado
+  status varchar(50) [default: "active"] // active, inactive, damaged
+  last_emptied_at timestamp [null]
+  created_at timestamp [null]
+  updated_at timestamp [null]
+  deleted_at timestamp [null]
+}
+
+// Flota de vehículos de recolección
+Table vehicles {
+  id integer [primary key, increment]
+  license_plate varchar(50) [not null, unique] // Placa del camión
+  code varchar(20) [not null, unique] // Código operativo (ej: CAM-01)
+  max_capacity_kg decimal(8,2) [not null] // Capacidad de carga máxima
+  fuel_consumption_rate decimal(5,2) [null] // Consumo estimado (litros/km)
+  ideal_operators_count integer [not null, default: 1] // Dotación ideal de operadores por turno
+  status varchar(50) [default: "available"] // available, in_route, maintenance, inactive
+  created_at timestamp [null]
+  updated_at timestamp [null]
+  deleted_at timestamp [null]
+}
+
+// Perfil operativo de conductores (extiende users con role = conductor)
+Table drivers {
+  id integer [primary key, increment]
+  user_id integer [not null, unique] // Cuenta de acceso asociada (rol conductor)
+  document varchar(50) [not null, unique] // Cédula de identidad
+  first_name varchar(255) [not null]
+  last_name varchar(255) [not null]
+  phone varchar(50) [null]
+  active boolean [default: true]
+  created_at timestamp [null]
+  updated_at timestamp [null]
+  deleted_at timestamp [null]
+}
+
+// --- RESULTADOS DE OPTIMIZACIÓN Y SIMULACIÓN (IA) ---
+
+// Cabecera general de una ruta calculada por el algoritmo
+Table optimized_routes {
+  id integer [primary key, increment]
+  vehicle_id integer [not null]
+  driver_id integer [not null]
+  calculated_at timestamp [default: `now()`]
+  total_distance_meters decimal(10,2) [null]
+  estimated_duration_seconds integer [null]
+  status varchar(50) [default: "pending"] // pending, in_progress, completed, interrupted, cancelled
+  created_at timestamp [null]
+  updated_at timestamp [null]
+}
+
+// Secuencia ordenada de paradas (waypoints) generada por la metaheurística
+Table route_waypoints {
+  id integer [primary key, increment]
+  route_id integer [not null]
+  collection_point_id integer [not null]
+  sequence_order integer [not null] // 1 para la primera parada, 2 para la segunda, etc.
+  status varchar(20) [not null, default: "pending"] // pending, completed, skipped
+  estimated_arrival_at timestamp [null]
+  actual_arrival_at timestamp [null] // Marca de tiempo real al completar la parada
+  collected_weight_kg decimal(8,2) [null] // Registro de peso recogido para análisis
+  created_at timestamp [null]
+  updated_at timestamp [null]
+
+  indexes {
+    (route_id, collection_point_id) [unique]
+    (route_id, status)
+  }
+}
+
+// Historial de averías y contingencias de flota
+Enum incident_type {
+  breakdown      // Avería mecánica durante operación
+  maintenance    // Mantenimiento programado o correctivo
+  unavailable    // Indisponibilidad operativa (sin conductor, etc.)
+}
+
+Table vehicle_incidents {
+  id integer [primary key, increment]
+  vehicle_id integer [not null]
+  route_id integer [null] // Ruta activa al momento del incidente (si aplica)
+  incident_type incident_type [not null]
+  description text [null]
+  reported_at timestamp [not null, default: `now()`]
+  resolved_at timestamp [null] // Cierre del incidente; vehículo vuelve a disponible
+  affects_active_route boolean [default: true] // Si interrumpe la ruta en curso
+  created_at timestamp [null]
+  updated_at timestamp [null]
+
+  indexes {
+    vehicle_id
+    route_id
+    reported_at
+  }
+}
+
+// Registro histórico de simulaciones para análisis y defensa de tesis (KPIs)
+Table simulations {
+  id integer [primary key, increment]
+  executed_at timestamp [default: `now()`]
+  scenario_name varchar(255) [not null] // Ej: "Contingencia Lunes: Av. Atlántico Trancada"
+  parameters_json text [null] // Parámetros dinámicos configurados en la simulación
+  kpi_total_distance_historical decimal(10,2) [null] // Distancia en ruta estática tradicional
+  kpi_total_distance_optimized decimal(10,2) [null] // Distancia lograda por el algoritmo de IA
+  kpi_saving_percentage decimal(5,2) [null] // Porcentaje de optimización obtenido
+  created_at timestamp [null]
+}
+
+// --- RELACIONES DE DOMINIO ---
+
+// Usuarios y roles
+Ref: users.sector_id > sectors.id
+Ref: drivers.user_id > users.id
+
+// Jerarquía geográfica urbana
+Ref: sectors.parish_id > parishes.id
+
+// Grafo Vial
+Ref: road_segments.source_node_id > road_nodes.id
+Ref: road_segments.target_node_id > road_nodes.id
+
+// Contenedores de Desechos
+Ref: collection_points.sector_id > sectors.id
+Ref: collection_points.road_node_id > road_nodes.id
+
+// Rutas Optimizadas
+Ref: optimized_routes.vehicle_id > vehicles.id
+Ref: optimized_routes.driver_id > drivers.id
+
+// Detalle de Rutas (Waypoints)
+Ref: route_waypoints.route_id > optimized_routes.id
+Ref: route_waypoints.collection_point_id > collection_points.id
+
+// Contingencias de flota
+Ref: vehicle_incidents.vehicle_id > vehicles.id
+Ref: vehicle_incidents.route_id > optimized_routes.id
+
+// --- NOTAS OPERATIVAS ---
+// 1. users.role: Define el alcance funcional del actor (casos de uso del capítulo 4).
+//    - administrador: configuración global, usuarios y seguridad.
+//    - planificador: datos GIS, flota, simulación y optimización.
+//    - conductor: rutas asignadas y visualización en mapa.
+//    - residente: horarios y proximidad del camión en su sector (users.sector_id).
+// 2. drivers.user_id: Relación 1:1 entre cuenta de acceso y perfil operativo de flota.
+// 3. vehicles.ideal_operators_count: Dotación recomendada de operadores por vehículo/turno
+//    (conductor + ayudantes). El motor de asignación puede validar que la tripulación
+//    asignada cumpla este mínimo antes de despachar la ruta.
+// 4. road_segments.is_blocked: Al estar en 'true', el motor de IA le asignará un costo
+//    infinito a esa arista en el grafo, forzando una ruta alternativa.
+// 5. parishes + sectors: Permiten al planificador acotar la búsqueda del algoritmo
+//    exclusivamente a los nodos y contenedores de la zona seleccionada.
+// 6. route_waypoints.status + actual_arrival_at: Rastrean el avance de la ruta.
+//    - pending: parada aún no visitada.
+//    - completed: parada recogida (actual_arrival_at registrado).
+//    - skipped: parada no atendida por contingencia (avería, recálculo).
+// 7. vehicle_incidents: Historial de averías. Al reportar un incidente con
+//    affects_active_route=true, la aplicación marca la ruta como interrupted,
+//    las paradas pending pasan a skipped y se dispara un nuevo VRP con la flota restante.
+
+// https://dbdiagram.io/d/6a49988936d348d1206ae0f1
