@@ -2,11 +2,18 @@ import {
   monitoringAlerts,
   monitoringKpis,
   liveFleet,
+  liveActivities,
+  monitoringBins,
+  monitoringMapRoutes,
   routeProgress,
   type FleetLiveStatus,
   type LiveVehicle,
 } from '../../data/mock/monitoring';
+import { mapGisMetrics } from '../../data/mock/mapGis';
 import { apiGet, apiPost, withMockFallback } from './client';
+
+import type { ContainerCollection, RouteCollection } from '../types/geo';
+import type { MapMetric, LiveActivity } from '../types/mapContext';
 
 export interface MonitoringKpi {
   id: string;
@@ -45,6 +52,11 @@ export interface MonitoringStatus {
     maintenance: number;
     inactive: number;
   };
+  routes?: RouteCollection;
+  containers?: ContainerCollection;
+  mapMetrics?: MapMetric[];
+  liveActivities?: LiveActivity[];
+  updatedAt?: string;
 }
 
 export function fetchMonitoringStatus(): Promise<MonitoringStatus> {
@@ -56,6 +68,28 @@ export function fetchMonitoringStatus(): Promise<MonitoringStatus> {
       liveFleet,
       routeProgress,
       monitoringAlerts,
+      routes: monitoringMapRoutes,
+      containers: {
+        type: 'FeatureCollection',
+        features: monitoringBins.map((bin) => ({
+          type: 'Feature',
+          properties: {
+            id: bin.id,
+            sector: 'Unare I',
+            fillLevel: bin.status === 'critical' ? 92 : bin.status === 'full' ? 75 : 45,
+            priority: 'media',
+            lastCollection: '25/06/2026',
+            capacityKg: 1200,
+            bucket: bin.status,
+          },
+          geometry: {
+            type: 'Point',
+            coordinates: [bin.lng, bin.lat],
+          },
+        })),
+      },
+      mapMetrics: mapGisMetrics,
+      liveActivities,
       fleetCounts: {
         total: 18,
         inRoute: 12,
@@ -63,6 +97,7 @@ export function fetchMonitoringStatus(): Promise<MonitoringStatus> {
         maintenance: 1,
         inactive: 1,
       },
+      updatedAt: new Date().toISOString(),
     },
   );
 }

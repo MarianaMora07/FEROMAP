@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import math
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -13,6 +13,7 @@ from sqlalchemy import delete, select
 from app.config import settings
 from app.core.security import hash_password
 from app.db.models import (
+    AlertActivity,
     CollectionPoint,
     Driver,
     OptimizedRoute,
@@ -20,12 +21,17 @@ from app.db.models import (
     RouteWaypoint,
     Sector,
     Simulation,
+    SystemAlert,
     User,
+    UserPreferences,
     UserRole,
     Vehicle,
     VehicleIncident,
 )
 from app.db.session import SessionLocal
+from app.services.alert_service import seed_alerts_from_json
+from app.services.admin_service import ensure_default_settings
+from app.services.profile_service import ensure_user_preferences
 
 SEEDS_DIR = Path(settings.data_dir) / "seeds"
 DEMO_PASSWORD = "123456789"
@@ -59,6 +65,8 @@ def nearest_collection_point_id(
 
 
 def clear_tables(session) -> None:
+    session.execute(delete(AlertActivity))
+    session.execute(delete(SystemAlert))
     session.execute(delete(RouteWaypoint))
     session.execute(delete(VehicleIncident))
     session.execute(delete(OptimizedRoute))
@@ -145,30 +153,47 @@ def seed() -> None:
         session.flush()
 
         driver_by_name: dict[str, Driver] = {}
-        row = drivers_data[0]
-        driver = Driver(
-            user_id=conductor_user.id,
-            document=row["document"],
-            first_name=row["firstName"],
-            last_name=row["lastName"],
-            phone=row.get("phone"),
-            active=True,
-        )
-        session.add(driver)
-        full_name = f"{row['firstName']} {row['lastName']}".strip()
-        driver_by_name[full_name] = driver
+        for index, row in enumerate(drivers_data):
+            if index == 0:
+                user = conductor_user
+            else:
+                user = User(
+                    email=f"{row['slug'].lower()}@fero.com",
+                    password_hash=DEMO_PASSWORD_HASH,
+                    first_name=row["firstName"],
+                    last_name=row["lastName"],
+                    phone=row.get("phone"),
+                    role=UserRole.conductor,
+                    active=True,
+                )
+                session.add(user)
+                session.flush()
+            driver = Driver(
+                user_id=user.id,
+                document=row["document"],
+                first_name=row["firstName"],
+                last_name=row["lastName"],
+                phone=row.get("phone"),
+                active=True,
+            )
+            session.add(driver)
+            full_name = f"{row['firstName']} {row['lastName']}".strip()
+            driver_by_name[full_name] = driver
         session.flush()
 
-        default_driver = session.scalar(select(Driver).limit(1))
+        default_driver = driver_by_name.get(f"{conductor_row['firstName']} {conductor_row['lastName']}".strip())
 
         vehicle_by_code: dict[str, Vehicle] = {}
         for row in vehicles_data:
+            driver_name = row.get("driverName")
+            default_driver_row = driver_by_name.get(driver_name) if driver_name else None
             vehicle = Vehicle(
                 license_plate=row["licensePlate"],
                 code=row["code"],
                 max_capacity_kg=Decimal(str(row["maxCapacityKg"])),
                 fuel_consumption_rate=Decimal(str(row.get("fuelConsumptionRate", 0.35))),
                 ideal_operators_count=int(row.get("idealOperatorsCount", 2)),
+                default_driver_id=default_driver_row.id if default_driver_row else None,
                 status=row.get("status", "available"),
             )
             session.add(vehicle)
@@ -196,13 +221,38 @@ def seed() -> None:
             collection_points.append(point)
         session.flush()
 
-        default_vehicle = session.scalar(select(Vehicle).limit(1))
-        if default_vehicle is None or default_driver is None:
-            raise RuntimeError("Se requiere al menos un vehículo y un conductor para rutas")
+        active_route_points = collection_points[:12]
+        for vehicle in vehicle_by_code.values():
+            if vehicle.status != "in_route" or vehicle.default_driver_id is None:
+                continue
+            route = OptimizedRoute(
+                vehicle_id=vehicle.id,
+                driver_id=vehicle.default_driver_id,
+                route_kind="optimized",
+                total_distance_meters=Decimal("12500"),
+                estimated_duration_seconds=90 * 60,
+                status="in_progress",
+            )
+            session.add(route)
+            session.flush()
+
+            for sequence, point in enumerate(active_route_points[:3], start=1):
+                session.add(
+                    RouteWaypoint(
+                        route_id=route.id,
+                        collection_point_id=point.id,
+                        sequence_order=sequence,
+                        status="completed" if sequence == 1 else "pending",
+                    )
+                )
 
         for route_row in routes_data:
+            fallback_vehicle = session.scalar(select(Vehicle).limit(1))
+            if fallback_vehicle is None or default_driver is None:
+                raise RuntimeError("Se requiere al menos un vehículo y un conductor para rutas históricas")
+
             route = OptimizedRoute(
-                vehicle_id=default_vehicle.id,
+                vehicle_id=fallback_vehicle.id,
                 driver_id=default_driver.id,
                 route_kind=route_row.get("kind", "optimized"),
                 total_distance_meters=Decimal(str(route_row["distanceKm"])) * Decimal("1000"),
@@ -232,10 +282,43 @@ def seed() -> None:
                 )
                 sequence += 1
 
-        for row in simulations_data:
+        maintenance_vehicle = vehicle_by_code.get("TR-07")
+        if maintenance_vehicle is not None:
+            session.add(
+                VehicleIncident(
+                    vehicle_id=maintenance_vehicle.id,
+                    incident_type="scheduled_maintenance",
+                    description="Revisión programada de frenos y sistema hidráulico.",
+                    affects_active_route=False,
+                )
+            )
+            session.add(
+                VehicleIncident(
+                    vehicle_id=maintenance_vehicle.id,
+                    incident_type="preventive_service",
+                    description="Cambio de aceite y filtros completado.",
+                    affects_active_route=False,
+                    resolved_at=datetime.now(timezone.utc),
+                )
+            )
+
+        broken_vehicle = vehicle_by_code.get("TR-19")
+        if broken_vehicle is not None:
+            session.add(
+                VehicleIncident(
+                    vehicle_id=broken_vehicle.id,
+                    incident_type="breakdown",
+                    description="Falla en transmisión reportada durante ruta.",
+                    affects_active_route=True,
+                )
+            )
+
+        for index, row in enumerate(simulations_data):
+            executed_at = datetime.now(timezone.utc) - timedelta(days=len(simulations_data) - index)
             session.add(
                 Simulation(
                     scenario_name=row["scenarioName"],
+                    executed_at=executed_at,
                     parameters_json=json.dumps(row.get("parameters", {}), ensure_ascii=False),
                     kpi_total_distance_historical=Decimal(str(row["kpiTotalDistanceHistorical"])),
                     kpi_total_distance_optimized=Decimal(str(row["kpiTotalDistanceOptimized"])),
@@ -243,13 +326,20 @@ def seed() -> None:
                 )
             )
 
+        alerts_count = seed_alerts_from_json(session)
+
+        for user in session.scalars(select(User)).all():
+            ensure_user_preferences(session, user)
+
+        ensure_default_settings(session)
+
         session.commit()
 
         sectors_count = len(sectors_data)
         points_count = len(collection_points)
         vehicles_count = len(vehicles_data)
-        drivers_count = len(driver_by_name)
-        users_count = 4
+        drivers_count = len(drivers_data)
+        users_count = 3 + drivers_count
 
         print("✅ Seed completado")
         print(f"   parishes: 1")
@@ -262,6 +352,7 @@ def seed() -> None:
         print(f"   clave demo: {DEMO_PASSWORD}")
         print(f"   optimized_routes: {len(routes_data)}")
         print(f"   simulations: {len(simulations_data)}")
+        print(f"   system_alerts: {alerts_count}")
 
 
 if __name__ == "__main__":

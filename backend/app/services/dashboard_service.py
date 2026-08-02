@@ -4,16 +4,17 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import CollectionPoint, Driver, OptimizedRoute, RouteWaypoint, Simulation, User, UserRole, Vehicle, Vehicle
 from app.services.auth_service import role_label
 from app.services.geo_service import fill_level_pct, fleet_summary, route_geojson, seed_meta_by_code
-from app.services.operations_service import active_routes_view, alerts_from_db
+from app.services.alert_service import list_alerts as list_persisted_alerts
 from app.services.optimization_service import run_optimization_engine
 from app.services.scenario_utils import normalize_scenario_id
 from app.services.seed_loader import load_seed
+from app.services.reports_service import _parse_simulation
 
 
 def _latest_optimization(db: Session) -> dict[str, Any] | None:
@@ -72,7 +73,7 @@ def _weekly_tons_from_simulations(db: Session) -> dict[str, Any]:
 
 
 def _recent_alerts_view(db: Session) -> list[dict[str, Any]]:
-    alerts = alerts_from_db(db)[:3]
+    alerts = list_persisted_alerts(db, active_only=True)[:3]
     tones = ["danger", "warning", "info"]
     return [
         {
@@ -213,6 +214,30 @@ def get_kpis(scenario_id: str) -> dict[str, Any]:
 
 def run_optimization(db: Session, scenario_id: str) -> dict[str, Any]:
     return run_optimization_engine(db, scenario_id)
+
+
+def list_simulations(db: Session, *, limit: int = 25, offset: int = 0) -> dict[str, Any]:
+    simulations = db.scalars(
+        select(Simulation)
+        .order_by(Simulation.executed_at.desc())
+        .offset(offset)
+        .limit(limit)
+    ).all()
+    total = db.scalar(select(func.count()).select_from(Simulation)) or 0
+    items = []
+    for simulation in simulations:
+        parsed = _parse_simulation(simulation)
+        items.append(
+            {
+                "id": parsed["id"],
+                "name": parsed["scenarioName"],
+                "executedAt": parsed["executedAt"],
+                "scenarioId": parsed["scenarioId"],
+                "savingPercentage": parsed["savingPercentage"],
+                "contingency": parsed["contingency"],
+            }
+        )
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
 def simulation_detail(db: Session, simulation_id: int) -> dict[str, Any]:

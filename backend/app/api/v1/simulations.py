@@ -5,6 +5,7 @@ from app.schemas.simulation import OptimizeRequest
 from app.services.dashboard_service import (
     get_kpis,
     list_scenarios,
+    list_simulations,
     normalize_scenario_id,
     run_optimization,
     simulation_detail,
@@ -32,6 +33,11 @@ def optimize_simulation(body: OptimizeRequest, db: DbSession, _: PlannerOrAdmin)
         return run_optimization(db, body.scenario_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/simulations")
+def get_simulations(db: DbSession, limit: int = Query(default=25, ge=1, le=100), offset: int = Query(default=0, ge=0)):
+    return list_simulations(db, limit=limit, offset=offset)
 
 
 @router.get("/simulations/{simulation_id}")

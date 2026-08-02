@@ -1,4 +1,5 @@
-import { For, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { useSearchParams } from '@solidjs/router';
 import {
   Chart,
   ArcElement,
@@ -12,7 +13,7 @@ import {
   Legend,
 } from 'chart.js';
 import { Bar, Doughnut, Line } from 'solid-chartjs';
-import maplibregl, { type Map as MapLibreMap } from 'maplibre-gl';
+import maplibregl, { type GeoJSONSource, type Map as MapLibreMap } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import {
   Clock,
@@ -32,9 +33,12 @@ import {
   KpiCard,
   ProgressBar,
 } from '../../design-system/components';
-import { osmMapStyle } from '../../core/utils/mapStyle';
+import { bindMapTheme, mapStyleForTheme } from '../../core/utils/mapStyle';
+import { appState } from '../../core/stores/appStore';
 import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
-import { fetchAnalyticsSummary } from '../../core/api/analytics';
+import { fetchAnalyticsHeatmap, fetchAnalyticsSummary } from '../../core/api/analytics';
+import type { AnalyticsGranularity, AnalyticsHeatmapGeoJson } from '../../core/types/analytics';
+import { defaultDateRange } from '../../core/utils/analyticsFilters';
 import {
   analyticsEfficiencyIndicators as mockEfficiency,
   analyticsInsights as mockInsights,
@@ -42,7 +46,6 @@ import {
   analyticsRoutePerformance as mockRoutePerformance,
   analyticsWasteTypes as mockWasteTypes,
   evolutionSeries as mockEvolution,
-  heatmapPoints,
   hourlyDistribution as mockHourly,
   hourlyMetricOptions,
   type HourlyMetricId,
@@ -118,7 +121,16 @@ const insightToneBg = {
 export default function AnalyticsPage() {
   let mapContainer!: HTMLDivElement;
   const mapRef: { current?: MapLibreMap } = {};
-  const [granularity, setGranularity] = createSignal('daily');
+  const [params] = useSearchParams();
+  const focusCollectionPoints = () => params.focus === 'collection-points';
+  const focusSector = () => {
+    const sector = params.sector;
+    return typeof sector === 'string' && sector.length > 0 ? sector : '';
+  };
+  const defaultRange = defaultDateRange();
+  const [granularity, setGranularity] = createSignal<AnalyticsGranularity>('daily');
+  const [dateFrom, setDateFrom] = createSignal(defaultRange.from);
+  const [dateTo, setDateTo] = createSignal(defaultRange.to);
   const [hourlyMetric, setHourlyMetric] = createSignal<HourlyMetricId>('toneladas');
   const [mapReady, setMapReady] = createSignal(false);
   const [kpis, setKpis] = createSignal(mockKpis);
@@ -129,41 +141,24 @@ export default function AnalyticsPage() {
   const [analyticsEfficiencyIndicators, setAnalyticsEfficiencyIndicators] = createSignal(mockEfficiency);
   const [analyticsInsights, setAnalyticsInsights] = createSignal(mockInsights);
 
-  onMount(() => {
-    void fetchAnalyticsSummary().then((summary) => {
-      setKpis(summary.kpis);
-      setEvolutionSeries(summary.evolutionSeries);
-      setAnalyticsWasteTypes(summary.wasteTypes);
-      setAnalyticsRoutePerformance(summary.routePerformance);
-      setHourlyDistribution(summary.hourlyDistribution);
-      setAnalyticsEfficiencyIndicators(summary.efficiencyIndicators);
-      setAnalyticsInsights(summary.insights);
-    });
-    Chart.register(
-      ArcElement,
-      BarElement,
-      CategoryScale,
-      LinearScale,
-      LineElement,
-      PointElement,
-      Filler,
-      Tooltip,
-      Legend,
-    );
+  const filters = createMemo(() => ({
+    from: dateFrom(),
+    to: dateTo(),
+    granularity: granularity(),
+    sector: focusSector() || undefined,
+  }));
 
-    const map = new maplibregl.Map({
-      container: mapContainer,
-      style: osmMapStyle,
-      center: UNARE_CENTER,
-      zoom: UNARE_ZOOM - 0.4,
-      attributionControl: false,
-    });
-    mapRef.current = map;
-    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
+  const applyHeatmapData = (data: AnalyticsHeatmapGeoJson) => {
+    const source = mapRef.current?.getSource('heat') as GeoJSONSource | undefined;
+    source?.setData(data);
+  };
 
-    map.on('load', () => {
-      map.resize();
-      map.addSource('heat', { type: 'geojson', data: heatmapPoints });
+  const setupAnalyticsHeatmap = (map: MapLibreMap) => {
+    if (!map.getSource('heat')) {
+      map.addSource('heat', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
       map.addLayer({
         id: 'heat-layer',
         type: 'heatmap',
@@ -190,7 +185,61 @@ export default function AnalyticsPage() {
           ],
         },
       });
+    }
+  };
+
+  bindMapTheme(
+    () => mapRef.current,
+    mapReady,
+    () => setupAnalyticsHeatmap(mapRef.current!),
+  );
+
+  createEffect(() => {
+    const activeFilters = filters();
+    void fetchAnalyticsSummary(activeFilters).then((summary) => {
+      setKpis(summary.kpis);
+      setEvolutionSeries(summary.evolutionSeries);
+      setAnalyticsWasteTypes(summary.wasteTypes);
+      setAnalyticsRoutePerformance(summary.routePerformance);
+      setHourlyDistribution(summary.hourlyDistribution);
+      setAnalyticsEfficiencyIndicators(summary.efficiencyIndicators);
+      setAnalyticsInsights(summary.insights);
+    });
+    void fetchAnalyticsHeatmap(activeFilters).then((geojson) => {
+      if (mapReady()) {
+        applyHeatmapData(geojson);
+      }
+    });
+  });
+
+  onMount(() => {
+    Chart.register(
+      ArcElement,
+      BarElement,
+      CategoryScale,
+      LinearScale,
+      LineElement,
+      PointElement,
+      Filler,
+      Tooltip,
+      Legend,
+    );
+
+    const map = new maplibregl.Map({
+      container: mapContainer,
+      style: mapStyleForTheme(appState.darkMode),
+      center: UNARE_CENTER,
+      zoom: UNARE_ZOOM - 0.4,
+      attributionControl: false,
+    });
+    mapRef.current = map;
+    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
+
+    map.on('load', () => {
+      map.resize();
+      setupAnalyticsHeatmap(map);
       setMapReady(true);
+      void fetchAnalyticsHeatmap(filters()).then(applyHeatmapData);
     });
 
     const ro = new ResizeObserver(() => mapRef.current?.resize());
@@ -255,6 +304,57 @@ export default function AnalyticsPage() {
 
   return (
     <div class="space-y-5">
+      <Show when={focusCollectionPoints()}>
+        <div class="rounded-xl border border-fero-blue/30 bg-fero-blue/10 px-4 py-3">
+          <p class="text-sm font-semibold text-fero-blue">Análisis de puntos de recolección</p>
+          <p class="mt-1 text-sm text-text-secondary">
+            Vista enfocada en contenedores y niveles de llenado
+            <Show when={focusSector()}>
+              {' '}
+              · Sector <span class="font-semibold text-text-primary dark:text-white">{focusSector()}</span>
+            </Show>
+            .
+          </p>
+        </div>
+      </Show>
+      <div class="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-surface px-4 py-3 dark:border-dark-border dark:bg-dark-surface">
+        <div>
+          <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+            Desde
+          </label>
+          <input
+            type="date"
+            value={dateFrom()}
+            onInput={(e) => setDateFrom(e.currentTarget.value)}
+            class="rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs dark:border-dark-border dark:bg-dark-surface-hover dark:text-white"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+            Hasta
+          </label>
+          <input
+            type="date"
+            value={dateTo()}
+            onInput={(e) => setDateTo(e.currentTarget.value)}
+            class="rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs dark:border-dark-border dark:bg-dark-surface-hover dark:text-white"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+            Granularidad
+          </label>
+          <select
+            value={granularity()}
+            onChange={(e) => setGranularity(e.currentTarget.value as AnalyticsGranularity)}
+            class="rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-text-secondary dark:bg-dark-surface-hover dark:border-dark-border"
+          >
+            <option value="daily">Diario</option>
+            <option value="weekly">Semanal</option>
+            <option value="monthly">Mensual</option>
+          </select>
+        </div>
+      </div>
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <For each={kpis()}>
           {(kpi) => (
@@ -276,15 +376,7 @@ export default function AnalyticsPage() {
           <CardHeader
             title="Evolución de recolecciones y toneladas"
             action={
-              <select
-                value={granularity()}
-                onChange={(e) => setGranularity(e.currentTarget.value)}
-                class="rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-text-secondary dark:bg-dark-surface-hover dark:border-dark-border"
-              >
-                <option value="daily">Diario</option>
-                <option value="weekly">Semanal</option>
-                <option value="monthly">Mensual</option>
-              </select>
+              <span class="text-xs text-text-muted">Granularidad: {granularity()}</span>
             }
           />
           <div class="mb-2 flex flex-wrap gap-3 text-xs text-text-secondary">
@@ -325,7 +417,13 @@ export default function AnalyticsPage() {
         </Card>
 
         <Card class="xl:col-span-2">
-          <CardHeader title="Recolección por tipo de residuo" />
+          <CardHeader
+            title={
+              focusCollectionPoints()
+                ? `Recolección por tipo de residuo${focusSector() ? ` — ${focusSector()}` : ''}`
+                : 'Recolección por tipo de residuo'
+            }
+          />
           <div class="flex flex-col items-center gap-4 sm:flex-row">
             <div class="relative h-36 w-36 shrink-0">
               <Doughnut
@@ -465,6 +563,11 @@ export default function AnalyticsPage() {
           <div class="border-b border-border px-4 py-3 dark:border-dark-border">
             <h3 class="font-heading font-semibold text-text-primary dark:text-white">
               Mapa de calor de recolecciones
+              <Show when={focusCollectionPoints()}>
+                <span class="ml-2 text-sm font-normal text-fero-blue">
+                  (enfoque: puntos de recolección)
+                </span>
+              </Show>
             </h3>
           </div>
           <div class="relative min-h-72 flex-1 bg-slate-100 dark:bg-slate-900">

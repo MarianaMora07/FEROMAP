@@ -15,7 +15,7 @@ import networkx as nx
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import CollectionPoint, Driver, OptimizedRoute, RouteWaypoint, Simulation, Vehicle
+from app.db.models import CollectionPoint, OptimizedRoute, RouteWaypoint, Simulation, Vehicle
 from app.services.geo_service import fill_level_pct
 from app.services.graph_service import (
     DEPOT_LAT,
@@ -28,6 +28,7 @@ from app.services.graph_service import (
 from app.services.operations_service import dispatch_optimized_routes
 from app.services.scenario_utils import normalize_scenario_id
 from app.services.seed_loader import load_seed
+from app.services.vehicle_service import ASSIGNABLE_STATUSES, get_active_routes_by_vehicle_id, resolve_vehicle_driver_id
 
 logger = logging.getLogger(__name__)
 
@@ -416,6 +417,51 @@ def _optimization_logs(scenario_label: str, n_points: int, n_vehicles: int) -> l
     ]
 
 
+def build_optimization_vehicle_units(
+    db: Session,
+    *,
+    exclude_vehicle_ids: set[int] | None = None,
+    contingency: bool = False,
+    limit: int = 4,
+) -> list[VehicleUnit]:
+    """Arma la flota del VRP usando el conductor asignado a cada vehículo."""
+    stmt = (
+        select(Vehicle)
+        .where(Vehicle.status.in_(["available", "in_route"]))
+        .options(joinedload(Vehicle.default_driver))
+        .order_by(Vehicle.id)
+    )
+    vehicles_db = db.scalars(stmt).unique().all()
+    vehicles_db = [vehicle for vehicle in vehicles_db if vehicle.status in ASSIGNABLE_STATUSES]
+    if exclude_vehicle_ids:
+        vehicles_db = [vehicle for vehicle in vehicles_db if vehicle.id not in exclude_vehicle_ids]
+    if contingency:
+        vehicles_db = [vehicle for vehicle in vehicles_db if vehicle.status == "available"]
+
+    active_routes = get_active_routes_by_vehicle_id(db)
+    units: list[VehicleUnit] = []
+    for vehicle in vehicles_db:
+        if len(units) >= limit:
+            break
+        active_route = active_routes.get(vehicle.id)
+        driver_id = resolve_vehicle_driver_id(vehicle, active_route=active_route)
+        if driver_id is None:
+            logger.warning(
+                "Vehículo %s sin conductor asignado; omitido de la optimización",
+                vehicle.code,
+            )
+            continue
+        units.append(
+            VehicleUnit(
+                vehicle_id=vehicle.id,
+                driver_id=driver_id,
+                capacity_kg=float(vehicle.max_capacity_kg),
+                fuel_rate=float(vehicle.fuel_consumption_rate or 1.5),
+            )
+        )
+    return units
+
+
 def _persist_routes(
     db: Session,
     simulation_id: int,
@@ -500,6 +546,7 @@ def run_optimization_engine(
 
     points = db.scalars(
         select(CollectionPoint)
+        .where(CollectionPoint.deleted_at.is_(None), CollectionPoint.status == "active")
         .options(joinedload(CollectionPoint.sector))
         .order_by(CollectionPoint.code)
     ).all()
@@ -515,6 +562,9 @@ def run_optimization_engine(
         pct = fill_level_pct(point)
         boosted_pct = min(100, pct + int(fill_boost))
         demand = float(point.current_fill_level_kg) * (1 + fill_boost / 100)
+        if bool(getattr(point, "priority_boost", False)):
+            boosted_pct = min(100, boosted_pct + 25)
+            demand = max(demand, float(point.max_capacity_kg) * 0.85)
         if demand <= 0:
             demand = float(point.max_capacity_kg) * boosted_pct / 100
         customers.append(
@@ -529,30 +579,15 @@ def run_optimization_engine(
             )
         )
 
-    vehicles_db = db.scalars(
-        select(Vehicle).where(Vehicle.status.in_(["available", "in_route"])).order_by(Vehicle.id)
-    ).all()
-    if exclude_vehicle_ids:
-        excluded = set(exclude_vehicle_ids)
-        vehicles_db = [v for v in vehicles_db if v.id not in excluded]
-    if contingency_meta:
-        vehicles_db = [v for v in vehicles_db if v.status == "available"]
-    drivers = db.scalars(select(Driver).where(Driver.active.is_(True)).order_by(Driver.id)).all()
-    if not drivers:
-        raise RuntimeError("No hay conductores activos en la base de datos")
-
-    vehicles: list[VehicleUnit] = []
-    for i, v in enumerate(vehicles_db[:4]):
-        vehicles.append(
-            VehicleUnit(
-                vehicle_id=v.id,
-                driver_id=drivers[i % len(drivers)].id,
-                capacity_kg=float(v.max_capacity_kg),
-                fuel_rate=float(v.fuel_consumption_rate or 1.5),
-            )
-        )
+    excluded_ids = set(exclude_vehicle_ids or [])
+    vehicles = build_optimization_vehicle_units(
+        db,
+        exclude_vehicle_ids=excluded_ids,
+        contingency=contingency_meta is not None,
+        limit=4,
+    )
     if not vehicles:
-        raise RuntimeError("No hay vehículos disponibles para la optimización")
+        raise RuntimeError("No hay vehículos con conductor asignado para la optimización")
 
     depot_node = nearest_node(graph, DEPOT_LON, DEPOT_LAT)
     dist_matrix, time_matrix = _build_distance_matrix(graph, depot_node, customers)
@@ -679,4 +714,5 @@ def run_optimization_engine(
         "logs": logs,
         "dispatch": dispatch,
         "contingency": contingency_meta,
+        "servedPointCodes": sorted(served_codes),
     }

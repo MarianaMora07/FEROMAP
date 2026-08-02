@@ -1,66 +1,20 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import CollectionPoint, User, UserRole, Vehicle
-from app.services.operations_service import active_routes_view, alerts_from_db, live_fleet_view
+from app.services.geo_service import fill_level_pct
+from app.services.map_context_service import map_operational_context
+from app.services.alert_service import list_alerts as list_persisted_alerts
+from app.services.operations_service import active_routes_view, live_fleet_view
 from app.services.seed_loader import load_seed
-
-STATUS_TO_UI = {
-    "in_route": "en-ruta",
-    "available": "disponible",
-    "maintenance": "mantenimiento",
-    "inactive": "fuera-de-servicio",
-}
-
-
-DEFAULT_VEHICLE_IMAGE = (
-    "https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&w=480&h=320&q=80"
-)
-VEHICLE_TYPES = ("Compactador", "Volteo", "Recolector")
-
-
-def list_vehicles(db: Session) -> list[dict[str, Any]]:
-    seed_rows = {row["code"]: row for row in load_seed("vehicles.json")}
-    vehicles = db.scalars(select(Vehicle).order_by(Vehicle.code)).all()
-    result = []
-    for index, vehicle in enumerate(vehicles):
-        seed = seed_rows.get(vehicle.code, {})
-        capacity_m3 = float(vehicle.max_capacity_kg) / 1000
-        result.append(
-            {
-                "id": vehicle.code,
-                "plate": vehicle.license_plate,
-                "status": STATUS_TO_UI.get(vehicle.status, vehicle.status),
-                "maxCapacityKg": float(vehicle.max_capacity_kg),
-                "fuelConsumptionRate": float(vehicle.fuel_consumption_rate or 0),
-                "driver": seed.get("driverName"),
-                "driverPhone": seed.get("driverPhone"),
-                "type": VEHICLE_TYPES[index % len(VEHICLE_TYPES)],
-                "fuelPct": max(25, 100 - index * 7),
-                "capacityPct": min(95, 15 + index * 8),
-                "capacityM3": capacity_m3,
-                "model": "Camión de recolección",
-                "year": 2020 + (index % 5),
-                "mileageKm": 12000 + index * 1500,
-                "base": "Base Unare",
-                "updatedAt": datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M"),
-                "image": DEFAULT_VEHICLE_IMAGE,
-                "idealOperatorsCount": vehicle.ideal_operators_count,
-            }
-        )
-    return result
 
 
 def list_alerts(db: Session) -> list[dict[str, Any]]:
-    dynamic = alerts_from_db(db)
-    if dynamic:
-        return dynamic
-    return load_seed("alerts.json")
+    return list_persisted_alerts(db, active_only=True)
 
 
 def monitoring_status(db: Session, *, current_user: User | None = None) -> dict[str, Any]:
@@ -119,12 +73,14 @@ def monitoring_status(db: Session, *, current_user: User | None = None) -> dict[
         },
     ]
 
-    live_fleet = live_fleet_view(db, driver_id=_driver_filter(current_user))
+    driver_id = _driver_filter(current_user)
+    map_context = map_operational_context(db, driver_id=driver_id)
+    live_fleet = map_context["vehicles"]
     if not live_fleet:
         live_fleet = data.get("liveFleet", [])
 
     route_progress = []
-    for route in active_routes_view(db, driver_id=_driver_filter(current_user)):
+    for route in active_routes_view(db, driver_id=driver_id):
         route_progress.append(
             {
                 "label": route["id"],
@@ -136,7 +92,7 @@ def monitoring_status(db: Session, *, current_user: User | None = None) -> dict[
         )
 
     monitoring_alerts = []
-    for alert in alerts_from_db(db)[:4]:
+    for alert in list_persisted_alerts(db, active_only=True)[:4]:
         monitoring_alerts.append(
             {
                 "title": alert["title"],
@@ -158,6 +114,11 @@ def monitoring_status(db: Session, *, current_user: User | None = None) -> dict[
             "maintenance": sum(1 for v in vehicles if v.status == "maintenance"),
             "inactive": sum(1 for v in vehicles if v.status == "inactive"),
         },
+        "routes": map_context["routes"],
+        "containers": map_context["containers"],
+        "mapMetrics": map_context["mapMetrics"],
+        "liveActivities": map_context["liveActivities"],
+        "updatedAt": map_context["updatedAt"],
     }
 
 

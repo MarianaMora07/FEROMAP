@@ -1,6 +1,8 @@
 import { createStore } from 'solid-js/store';
 import { fetchCurrentUser, loginRequest, logoutRequest } from '../api/auth';
+import { fetchProfile } from '../api/profile';
 import { homePathForRole } from '../auth/permissions';
+import { applyThemePreference } from './appStore';
 import { setAuthToken } from '../api/client';
 import type { AuthUser, UserRole } from '../types/auth';
 import { ROLE_LABELS } from '../types/auth';
@@ -32,6 +34,15 @@ function persistToken(token: string | null) {
   setAuthToken(token);
 }
 
+export async function loadUserPreferences(): Promise<void> {
+  try {
+    const profile = await fetchProfile();
+    applyThemePreference(profile.preferences.theme);
+  } catch {
+    // ignore — theme stays at default
+  }
+}
+
 export async function initAuth(): Promise<void> {
   const stored = localStorage.getItem(TOKEN_KEY);
   if (!stored) {
@@ -44,6 +55,7 @@ export async function initAuth(): Promise<void> {
   try {
     const user = await fetchCurrentUser();
     setState({ token: stored, user, initialized: true, error: null });
+    await loadUserPreferences();
   } catch {
     persistToken(null);
     setState({ token: null, user: null, initialized: true, error: null });
@@ -58,6 +70,7 @@ export async function login(email: string, password: string): Promise<string> {
     const response = await loginRequest(email, password);
     persistToken(response.accessToken);
     setState({ token: response.accessToken, user: response.user, error: null });
+    await loadUserPreferences();
     return homePathForRole(response.user.role);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'No se pudo iniciar sesión';

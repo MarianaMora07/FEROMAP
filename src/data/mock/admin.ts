@@ -12,7 +12,10 @@ export type AdminTabId =
   | 'integrations'
   | 'users'
   | 'security'
-  | 'api';
+  | 'api'
+  | 'audit';
+
+export const adminMvpTabIds: ReadonlySet<AdminTabId> = new Set(['general', 'users', 'audit']);
 
 export type AdminCategoryId =
   | 'info'
@@ -56,6 +59,7 @@ export const adminTabs: AdminTab[] = [
   { id: 'notifications', label: 'Notificaciones' },
   { id: 'integrations', label: 'Integraciones' },
   { id: 'users', label: 'Usuarios y Roles' },
+  { id: 'audit', label: 'Auditoría' },
   { id: 'security', label: 'Seguridad' },
   { id: 'api', label: 'API' },
 ];
@@ -184,44 +188,3 @@ export const rateLimitOptions = [
   { value: '500', label: '500 req/min' },
   { value: '1000', label: '1000 req/min' },
 ];
-
-export const defaultAdminSettings = {
-  systemName: 'FEROMAP - Sistema Inteligente de Recolección de Residuos',
-  language: 'es',
-  timezone: 'America/Caracas',
-  dateFormat: 'dd/mm/yyyy',
-  refreshSeconds: '30',
-  maxLoadTons: '25',
-  idleMinutes: '15',
-  defaultSpeed: '30',
-  maxAssignDistance: '5',
-  autoRecalcRoutes: true,
-  distanceUnit: 'km',
-  volumeUnit: 'm3',
-  weightUnit: 't',
-  timeUnit: 'min',
-  theme: 'system',
-  accentColor: '#1143F3',
-  backupFrequency: 'daily',
-  lastBackup: '24 de junio, 2026 — 02:00',
-  exportFormat: 'csv',
-  algorithm: 'hybrid',
-  timeWeight: '40',
-  distanceWeight: '35',
-  fillWeight: '25',
-  maxStops: '45',
-  avoidTolls: true,
-  workStart: '06:00',
-  workEnd: '18:00',
-  fillThreshold: '80',
-  emailNotifications: true,
-  pushNotifications: true,
-  smsCritical: true,
-  autoEscalate: true,
-  mapProvider: 'OpenStreetMap',
-  telemetryInterval: '30',
-  require2fa: false,
-  sessionTimeout: '60',
-  apiKeyMasked: 'fero_live_••••••••••••9a2c',
-  rateLimit: '500',
-};

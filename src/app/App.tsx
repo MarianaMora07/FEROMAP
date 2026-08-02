@@ -7,6 +7,7 @@ const DashboardPage = lazy(() => import('../features/dashboard'));
 const OptimizationPage = lazy(() => import('../features/optimization'));
 const MapPage = lazy(() => import('../features/map'));
 const VehiclesPage = lazy(() => import('../features/vehicles'));
+const DriversPage = lazy(() => import('../features/drivers'));
 const CollectionPointsPage = lazy(() => import('../features/collection-points'));
 const SimulationPage = lazy(() => import('../features/simulation'));
 const MonitoringPage = lazy(() => import('../features/monitoring'));
@@ -55,6 +56,7 @@ export default function App() {
           <Route path="/optimization" component={OptimizationPage} />
           <Route path="/map" component={MapPage} />
           <Route path="/vehicles" component={VehiclesPage} />
+          <Route path="/drivers" component={DriversPage} />
           <Route path="/collection-points" component={CollectionPointsPage} />
           <Route path="/simulation" component={SimulationPage} />
           <Route path="/monitoring" component={MonitoringPage} />

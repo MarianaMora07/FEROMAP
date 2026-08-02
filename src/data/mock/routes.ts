@@ -1,4 +1,4 @@
-import type { RouteCollection } from '../types/geo';
+import type { RouteCollection } from '../../core/types/geo';
 
 /** Orden de paradas; la geometría en pantalla se ajusta a vías con OSRM. */
 const currentWaypoints: [number, number][] = [

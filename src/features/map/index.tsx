@@ -1,5 +1,5 @@
-import { For, Show, createSignal, createEffect, onCleanup, onMount, type JSX } from 'solid-js';
-import { A } from '@solidjs/router';
+import { For, Show, createEffect, createResource, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { A, useSearchParams } from '@solidjs/router';
 import maplibregl, { type Map as MapLibreMap, type Marker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import {
@@ -34,17 +34,20 @@ import {
   initAppData,
 } from '../../core/stores/appStore';
 import { dashboardSummary } from '../../core/stores/dashboardStore';
+import { fetchMapContext, MAP_CONTEXT_POLL_MS } from '../../core/api/map';
+import {
+  ensureOperationalRouteLayer,
+  syncContainerMarkers,
+  syncFleetMarkers,
+  vehicleStatusKey,
+} from '../../core/map/operationalMapLayers';
 import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
-import { fillLevelColor } from '../../core/utils/geoUtils';
 import { buildContainerPopupHtml } from '../../core/utils/popupHtml';
-import { mapStylesById } from '../../core/utils/mapStyle';
+import { mapStylesById, mapStyleForTheme, themeBaseStyleId } from '../../core/utils/mapStyle';
 import {
   mapBaseStyles,
-  mapExtraRoutes,
-  mapGisMetrics,
   mapLayers,
   mapLegend,
-  mapVehicles,
   initialLayerState,
   type MapBaseStyleId,
 } from '../../data/mock/mapGis';
@@ -75,14 +78,37 @@ function createPinEl(bg: string, svg: string) {
 export default function MapPage() {
   let mapContainer!: HTMLDivElement;
   const mapRef: { current?: MapLibreMap } = {};
-  const markers: Marker[] = [];
+  const vehicleMarkersById = new Map<string, Marker>();
+  const containerMarkers: Marker[] = [];
+  const [searchParams] = useSearchParams();
+  const [mapContext, { refetch }] = createResource(fetchMapContext);
+
+  const focusVehicleId = () => {
+    const value = searchParams.vehicle;
+    if (typeof value === 'string' && value.trim()) return value.trim().toUpperCase();
+    if (Array.isArray(value) && value[0]) return value[0].trim().toUpperCase();
+    return undefined;
+  };
 
   const [layersOpen, setLayersOpen] = createSignal(true);
   const [legendOpen, setLegendOpen] = createSignal(true);
-  const [baseStyle, setBaseStyle] = createSignal<MapBaseStyleId>('claro');
+  const [baseStyle, setBaseStyle] = createSignal<MapBaseStyleId>(
+    themeBaseStyleId(appState.darkMode),
+  );
   const [coords, setCoords] = createSignal({ lng: UNARE_CENTER[0], lat: UNARE_CENTER[1], zoom: UNARE_ZOOM });
   const [layerState, setLayerState] = createSignal<Record<string, boolean>>(initialLayerState());
   const [mapReady, setMapReady] = createSignal(false);
+
+  const mapMetrics = () =>
+    mapContext()?.mapMetrics?.length
+      ? mapContext()!.mapMetrics
+      : dashboardSummary().mapMetrics?.length
+        ? dashboardSummary().mapMetrics!
+        : [];
+
+  const operationalRoutes = () => mapContext()?.routes ?? { type: 'FeatureCollection', features: [] };
+  const operationalContainers = () => mapContext()?.containers ?? { type: 'FeatureCollection', features: [] };
+  const operationalFleet = () => mapContext()?.vehicles ?? [];
 
   const getMap = () => mapRef.current;
 
@@ -129,18 +155,16 @@ export default function MapPage() {
     });
 
     if (enablingSatellite) changeBaseStyle('satelital');
-    if (disablingSatellite && baseStyle() === 'satelital') changeBaseStyle('claro');
+    if (disablingSatellite && baseStyle() === 'satelital') {
+      changeBaseStyle(themeBaseStyleId(appState.darkMode));
+    }
   };
 
-  const containerBucket = (fill: number) => {
-    if (fill >= 80) return 'critical';
-    if (fill >= 60) return 'full';
-    if (fill >= 40) return 'partial';
-    return 'normal';
-  };
-
-  const clearMarkers = () => {
-    while (markers.length) markers.pop()?.remove();
+  const clearOperationalMarkers = () => {
+    vehicleMarkersById.forEach((marker) => marker.remove());
+    vehicleMarkersById.clear();
+    containerMarkers.forEach((marker) => marker.remove());
+    containerMarkers.length = 0;
   };
 
   const syncOverlayLayers = () => {
@@ -166,70 +190,70 @@ export default function MapPage() {
       );
     }
 
-    setVis('routes-line', state.routes && (state['route-01'] || state['route-02']));
-    setVis('routes-extra-line', state.routes && (state['route-03'] || state['route-04']));
-
-    if (map.getSource('routes') && state.routes) {
-      const filtered = {
-        ...appState.routes,
-        features: appState.routes.features.filter((f) => {
-          if (f.properties.type === 'current') return state['route-01'];
-          if (f.properties.type === 'optimized') return state['route-02'];
-          return true;
-        }),
-      };
-      (map.getSource('routes') as maplibregl.GeoJSONSource).setData(filtered);
+    const routesVisible = state.routes;
+    setVis('operational-routes-line', routesVisible);
+    if (map.getSource('operational-routes')) {
+      const routes = routesVisible
+        ? operationalRoutes()
+        : { type: 'FeatureCollection' as const, features: [] };
+      ensureOperationalRouteLayer(map, routes);
     }
-
-    if (map.getSource('routes-extra') && state.routes) {
-      const filtered = {
-        ...mapExtraRoutes,
-        features: mapExtraRoutes.features.filter((f) => {
-          if (f.properties.id === 'ruta-03') return state['route-03'];
-          if (f.properties.id === 'ruta-04') return state['route-04'];
-          return true;
-        }),
-      };
-      (map.getSource('routes-extra') as maplibregl.GeoJSONSource).setData(filtered);
-    }
-
-    clearMarkers();
 
     if (state.containers) {
-      for (const feature of appState.containers.features) {
-        const bucket = containerBucket(feature.properties.fillLevel);
-        if (!state[`bin-${bucket}`]) continue;
-        const color = fillLevelColor(feature.properties.fillLevel);
-        const el = createPinEl(color, trashSvg('#fff'));
-        const marker = new maplibregl.Marker({ element: el })
-          .setLngLat(feature.geometry.coordinates as [number, number])
-          .setPopup(
-            new maplibregl.Popup({ offset: 18, maxWidth: '280px' }).setHTML(
-              buildContainerPopupHtml(feature),
-            ),
-          )
-          .addTo(map);
-        markers.push(marker);
-      }
+      const visibleBuckets = new Set<string>();
+      if (state['bin-critical']) visibleBuckets.add('critical');
+      if (state['bin-full']) visibleBuckets.add('full');
+      if (state['bin-normal']) visibleBuckets.add('normal');
+      if (state['bin-partial']) visibleBuckets.add('partial');
+
+      syncContainerMarkers(map, operationalContainers(), containerMarkers, {
+        visibleBuckets,
+        createMarkerElement: (color) => createPinEl(color, trashSvg('#fff')),
+        buildPopupHtml: buildContainerPopupHtml,
+      });
+    } else {
+      containerMarkers.forEach((marker) => marker.remove());
+      containerMarkers.length = 0;
     }
 
     if (state.vehicles) {
-      for (const feature of mapVehicles.features) {
-        const statusKey = `veh-${feature.properties.status}`;
-        if (!state[statusKey]) continue;
-        const color = feature.properties.color;
-        const el = createPinEl(color, truckSvg('#fff'));
-        el.title = feature.properties.id;
-        const marker = new maplibregl.Marker({ element: el })
-          .setLngLat(feature.geometry.coordinates)
-          .setPopup(
-            new maplibregl.Popup({ offset: 18 }).setHTML(
-              `<strong>${feature.properties.id}</strong><br/><span style="font-size:12px;color:#64748b">${feature.properties.status.replace('_', ' ')}</span>`,
-            ),
-          )
-          .addTo(map);
-        markers.push(marker);
+      const focusedId = focusVehicleId();
+      const filteredFleet = operationalFleet().filter((vehicle) => {
+        const statusKey = `veh-${vehicleStatusKey(vehicle.status)}`;
+        return state[statusKey];
+      });
+
+      syncFleetMarkers(map, filteredFleet, vehicleMarkersById, {
+        createMarkerElement: (vehicle) => {
+          const isFocused = focusedId === vehicle.id;
+          const el = createPinEl(vehicle.color, truckSvg('#fff'));
+          el.title = vehicle.id;
+          if (isFocused) {
+            el.style.transform = 'scale(1.2)';
+            el.style.zIndex = '10';
+          }
+          return el;
+        },
+        buildPopupHtml: (vehicle) =>
+          `<strong>${vehicle.id}</strong><br/><span style="font-size:12px;color:#64748b">${vehicle.status.replace('_', ' ')}</span>`,
+      });
+
+      if (focusedId) {
+        const focused = filteredFleet.find((vehicle) => vehicle.id === focusedId);
+        const marker = vehicleMarkersById.get(focusedId);
+        if (focused && marker) {
+          map.flyTo({
+            center: [focused.lng, focused.lat],
+            zoom: Math.max(map.getZoom(), 14),
+            essential: true,
+          });
+          const popup = marker.getPopup();
+          if (popup && !popup.isOpen()) marker.togglePopup();
+        }
       }
+    } else {
+      vehicleMarkersById.forEach((marker) => marker.remove());
+      vehicleMarkersById.clear();
     }
   };
 
@@ -253,42 +277,7 @@ export default function MapPage() {
       });
     }
 
-    if (!map.getSource('routes')) {
-      map.addSource('routes', { type: 'geojson', data: appState.routes });
-      map.addLayer({
-        id: 'routes-line',
-        type: 'line',
-        source: 'routes',
-        paint: {
-          'line-color': [
-            'match',
-            ['get', 'type'],
-            'optimized',
-            '#1143F3',
-            '#34D634',
-          ],
-          'line-width': 4,
-          'line-opacity': 0.9,
-        },
-      });
-    } else {
-      (map.getSource('routes') as maplibregl.GeoJSONSource).setData(appState.routes);
-    }
-
-    if (!map.getSource('routes-extra')) {
-      map.addSource('routes-extra', { type: 'geojson', data: mapExtraRoutes });
-      map.addLayer({
-        id: 'routes-extra-line',
-        type: 'line',
-        source: 'routes-extra',
-        paint: {
-          'line-color': ['get', 'color'],
-          'line-width': 4,
-          'line-opacity': 0.85,
-        },
-      });
-    }
-
+    ensureOperationalRouteLayer(map, operationalRoutes());
     syncOverlayLayers();
   };
 
@@ -296,7 +285,7 @@ export default function MapPage() {
     void initAppData();
     const map = new maplibregl.Map({
       container: mapContainer,
-      style: mapStylesById.claro,
+      style: mapStyleForTheme(appState.darkMode),
       center: UNARE_CENTER,
       zoom: UNARE_ZOOM,
       attributionControl: false,
@@ -321,7 +310,20 @@ export default function MapPage() {
 
     const ro = new ResizeObserver(() => resizeMap());
     ro.observe(mapContainer);
-    onCleanup(() => ro.disconnect());
+
+    const pollTimer = window.setInterval(() => {
+      void refetch();
+    }, MAP_CONTEXT_POLL_MS);
+
+    onCleanup(() => {
+      window.clearInterval(pollTimer);
+      ro.disconnect();
+    });
+  });
+
+  createEffect(() => {
+    focusVehicleId();
+    if (getMap()?.isStyleLoaded()) syncOverlayLayers();
   });
 
   createEffect(() => {
@@ -329,12 +331,10 @@ export default function MapPage() {
       setLayerState((state) => ({
         ...state,
         routes: true,
-        'route-01': true,
-        'route-02': true,
       }));
     }
     layerState();
-    appState.containers;
+    mapContext();
     if (getMap()?.isStyleLoaded()) syncOverlayLayers();
   });
 
@@ -347,15 +347,16 @@ export default function MapPage() {
   });
 
   createEffect(() => {
-    const routes = appState.routes;
-    const map = getMap();
-    if (map?.getSource('routes')) {
-      (map.getSource('routes') as maplibregl.GeoJSONSource).setData(routes);
-    }
+    const dark = appState.darkMode;
+    if (!mapReady()) return;
+    const style = baseStyle();
+    if (style === 'satelital' || style === 'terreno') return;
+    const next = themeBaseStyleId(dark);
+    if (style !== next) changeBaseStyle(next);
   });
 
   onCleanup(() => {
-    clearMarkers();
+    clearOperationalMarkers();
     mapRef.current?.remove();
     mapRef.current = undefined;
     setMapReady(false);
@@ -365,7 +366,7 @@ export default function MapPage() {
     setBaseStyle(id);
     const map = getMap();
     if (!map) return;
-    clearMarkers();
+    clearOperationalMarkers();
     map.setStyle(mapStylesById[id]);
     map.once('style.load', () => {
       map.resize();
@@ -609,7 +610,7 @@ export default function MapPage() {
 
           <div class="min-w-0 flex-1 rounded-xl border border-border bg-surface/95 px-3 py-2.5 shadow-lg backdrop-blur-md dark:bg-dark-surface/95 dark:border-dark-border">
             <div class="grid grid-cols-2 content-center gap-3 sm:grid-cols-3 lg:grid-cols-5">
-              <For each={dashboardSummary().mapMetrics?.length ? dashboardSummary().mapMetrics : mapGisMetrics}>
+              <For each={mapMetrics()}>
                 {(metric) => (
                   <div class="flex items-center gap-3">
                     <span class={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${toneIconBg[metric.tone as keyof typeof toneIconBg] ?? toneIconBg.blue}`}>

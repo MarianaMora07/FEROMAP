@@ -1,0 +1,31 @@
+import type { ContainerCollection, RouteCollection } from './geo';
+import type { LiveVehicle } from '../api/monitoring';
+
+export interface MapMetric {
+  id: string;
+  label: string;
+  value: number;
+  tone: 'green' | 'red' | 'amber' | 'blue';
+  icon: 'trash' | 'truck' | 'route';
+}
+
+export interface LiveActivity {
+  id: string;
+  time: string;
+  text: string;
+  tone: 'success' | 'info' | 'warning' | 'danger' | 'default';
+}
+
+export interface MapOperationalContext {
+  vehicles: LiveVehicle[];
+  routes: RouteCollection;
+  containers: ContainerCollection;
+  mapMetrics: MapMetric[];
+  liveActivities: LiveActivity[];
+  updatedAt: string;
+}
+
+export interface MapContextFilters {
+  sector?: string;
+  bbox?: string;
+}

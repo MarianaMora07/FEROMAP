@@ -6,10 +6,15 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import Simulation
+from app.services.analytics_filters import (
+    AnalyticsFilters,
+    bucket_evolution_series,
+    filtered_simulations_stmt,
+    load_simulation_rows,
+)
 
 
 def _parse_simulation(sim: Simulation) -> dict[str, Any]:
@@ -31,14 +36,14 @@ def _parse_simulation(sim: Simulation) -> dict[str, Any]:
     }
 
 
-def reports_summary(db: Session) -> dict[str, Any]:
-    simulations = db.scalars(
-        select(Simulation).order_by(Simulation.executed_at.desc()).limit(50)
-    ).all()
-    rows = [_parse_simulation(s) for s in simulations]
+def reports_summary(db: Session, filters: AnalyticsFilters | None = None) -> dict[str, Any]:
+    filters = filters or AnalyticsFilters()
+    rows = load_simulation_rows(db, filters)
 
     if not rows:
         return _empty_summary()
+
+    recent_rows = list(reversed(rows))
 
     total_opt = sum(r["distanceOptimizedKm"] for r in rows)
     total_hist = sum(r["distanceHistoricalKm"] for r in rows)
@@ -46,24 +51,16 @@ def reports_summary(db: Session) -> dict[str, Any]:
     total_containers = sum(r["containersServed"] for r in rows)
     total_fuel = sum(float(r["fuelLitersOptimized"] or 0) for r in rows)
 
-    recent = rows[:7]
-    labels = []
-    collections = []
-    tons = []
-    distance = []
-    efficiency = []
-    for row in reversed(recent):
-        dt = row["executedAt"]
-        labels.append(datetime.fromisoformat(dt).strftime("%d %b") if dt else "—")
-        served = int(row["containersServed"] or 0)
-        collections.append(served)
-        tons.append(round(served * 0.12, 1))
-        distance.append(round(row["distanceOptimizedKm"], 1))
-        efficiency.append(min(100, int(row["savingPercentage"] or 0)))
+    series = bucket_evolution_series(rows, filters.granularity)
+    labels = series["labels"]
+    collections = series["collections"]
+    tons = series["tons"]
+    distance = series["distanceKm"]
+    efficiency = series["savingPct"]
 
     route_perf = []
     colors = ["#34D634", "#1143F3", "#7c3aed", "#f59e0b", "#ef4444"]
-    for index, row in enumerate(rows[:5]):
+    for index, row in enumerate(recent_rows[:5]):
         route_perf.append(
             {
                 "label": row["scenarioName"][:24],
@@ -72,8 +69,8 @@ def reports_summary(db: Session) -> dict[str, Any]:
             }
         )
 
-    prev = rows[1] if len(rows) > 1 else rows[0]
-    curr = rows[0]
+    prev = recent_rows[1] if len(recent_rows) > 1 else recent_rows[0]
+    curr = recent_rows[0]
     period_comparison = [
         {
             "metric": "Distancia optimizada (km)",
@@ -104,7 +101,7 @@ def reports_summary(db: Session) -> dict[str, Any]:
             "format": "csv",
             "generatedAt": row["executedAt"],
         }
-        for row in rows[:8]
+        for row in recent_rows[:8]
     ]
 
     return {
@@ -175,6 +172,12 @@ def reports_summary(db: Session) -> dict[str, Any]:
             "distanceOptimizedKm": round(total_opt, 2),
             "avgSavingPct": round(avg_saving, 1),
         },
+        "filters": {
+            "from": filters.date_from.isoformat() if filters.date_from else None,
+            "to": filters.date_to.isoformat() if filters.date_to else None,
+            "granularity": filters.granularity,
+            "sector": filters.sector,
+        },
     }
 
 
@@ -197,8 +200,9 @@ def _empty_summary() -> dict[str, Any]:
     }
 
 
-def export_simulations_csv(db: Session) -> str:
-    simulations = db.scalars(select(Simulation).order_by(Simulation.executed_at.desc())).all()
+def export_simulations_csv(db: Session, filters: AnalyticsFilters | None = None) -> str:
+    filters = filters or AnalyticsFilters()
+    simulations = db.scalars(filtered_simulations_stmt(filters)).all()
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow(
@@ -234,10 +238,10 @@ def _pdf_safe(text: str) -> str:
     return text.encode("latin-1", errors="replace").decode("latin-1")
 
 
-def export_simulations_pdf(db: Session) -> bytes:
+def export_simulations_pdf(db: Session, filters: AnalyticsFilters | None = None) -> bytes:
     from fpdf import FPDF
 
-    summary = reports_summary(db)
+    summary = reports_summary(db, filters)
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()

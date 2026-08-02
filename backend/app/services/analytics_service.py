@@ -3,18 +3,20 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import Simulation
-from app.services.reports_service import _parse_simulation
+from app.services.analytics_filters import (
+    AnalyticsFilters,
+    bucket_evolution_series,
+    hourly_distribution_from_rows,
+    load_simulation_rows,
+)
+from app.services.geo_service import collection_points_geojson
 
 
-def analytics_summary(db: Session) -> dict[str, Any]:
-    simulations = db.scalars(
-        select(Simulation).order_by(Simulation.executed_at.desc()).limit(100)
-    ).all()
-    rows = [_parse_simulation(s) for s in simulations]
+def analytics_summary(db: Session, filters: AnalyticsFilters | None = None) -> dict[str, Any]:
+    filters = filters or AnalyticsFilters()
+    rows = load_simulation_rows(db, filters)
 
     if not rows:
         return _empty_analytics()
@@ -30,17 +32,9 @@ def analytics_summary(db: Session) -> dict[str, Any]:
         for key, count in scenario_counts.most_common()
     ]
 
-    recent = list(reversed(rows[:10]))
-    evolution = {
-        "labels": [
-            (r["executedAt"] or "")[:10] or f"#{r['id']}" for r in recent
-        ],
-        "distanceKm": [round(r["distanceOptimizedKm"], 1) for r in recent],
-        "savingPct": [round(r["savingPercentage"], 1) for r in recent],
-    }
-
-    hourly = [12, 18, 25, 32, 28, 22, 15, 10, 8, 14, 20, 26]
-    hourly_labels = ["06:00", "07:00", "08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"]
+    evolution = bucket_evolution_series(rows, filters.granularity)
+    spark_distance = evolution["distanceKm"][-6:] or [1, 2, 3]
+    spark_saving = evolution["savingPct"][-6:] or [10, 15, 20]
 
     return {
         "kpis": [
@@ -50,7 +44,7 @@ def analytics_summary(db: Session) -> dict[str, Any]:
                 "value": str(len(rows)),
                 "icon": "route",
                 "iconTone": "blue",
-                "sparkline": evolution["distanceKm"][-6:] or [1, 2, 3],
+                "sparkline": spark_distance,
             },
             {
                 "id": "saving",
@@ -58,7 +52,7 @@ def analytics_summary(db: Session) -> dict[str, Any]:
                 "value": f"{avg_saving:.1f}%",
                 "icon": "leaf",
                 "iconTone": "green",
-                "sparkline": evolution["savingPct"][-6:] or [10, 15, 20],
+                "sparkline": spark_saving,
             },
             {
                 "id": "distance",
@@ -66,7 +60,7 @@ def analytics_summary(db: Session) -> dict[str, Any]:
                 "value": f"{total_distance:.0f} km",
                 "icon": "truck",
                 "iconTone": "amber",
-                "sparkline": evolution["distanceKm"][-6:] or [5, 8, 6],
+                "sparkline": spark_distance,
             },
             {
                 "id": "containers",
@@ -74,7 +68,7 @@ def analytics_summary(db: Session) -> dict[str, Any]:
                 "value": str(total_containers),
                 "icon": "trash",
                 "iconTone": "green",
-                "sparkline": [total_containers // max(len(rows), 1)] * 4,
+                "sparkline": evolution["collections"][-6:] or [0],
             },
             {
                 "id": "contingencies",
@@ -86,11 +80,7 @@ def analytics_summary(db: Session) -> dict[str, Any]:
             },
         ],
         "scenarioBreakdown": scenario_breakdown,
-        "hourlyDistribution": {
-            "labels": hourly_labels,
-            "toneladas": hourly,
-            "recolecciones": [v * 2 for v in hourly],
-        },
+        "hourlyDistribution": hourly_distribution_from_rows(rows),
         "routePerformance": [
             {
                 "id": f"r{r['id']}",
@@ -99,7 +89,7 @@ def analytics_summary(db: Session) -> dict[str, Any]:
                 "efficiency": min(100, int(r["savingPercentage"])),
                 "distanceKm": round(r["distanceOptimizedKm"], 1),
             }
-            for r in rows[:6]
+            for r in sorted(rows, key=lambda row: row["distanceOptimizedKm"], reverse=True)[:6]
         ],
         "efficiencyIndicators": [
             {"label": "Cobertura crítica", "value": min(100, int(avg_saving + 10)), "target": 90},
@@ -139,14 +129,38 @@ def analytics_summary(db: Session) -> dict[str, Any]:
                 {"label": "Otros", "pct": 8, "color": "#7c3aed"},
             ],
         },
-        "evolutionSeries": {
-            "labels": evolution["labels"],
-            "collections": [int(r["containersServed"] or 0) for r in recent],
-            "tons": [round(int(r["containersServed"] or 0) * 0.12, 1) for r in recent],
-            "distanceKm": evolution["distanceKm"],
-            "savingPct": evolution["savingPct"],
+        "evolutionSeries": evolution,
+        "filters": {
+            "from": filters.date_from.isoformat() if filters.date_from else None,
+            "to": filters.date_to.isoformat() if filters.date_to else None,
+            "granularity": filters.granularity,
+            "sector": filters.sector,
         },
     }
+
+
+def analytics_heatmap(db: Session, filters: AnalyticsFilters | None = None) -> dict[str, Any]:
+    filters = filters or AnalyticsFilters()
+    rows = load_simulation_rows(db, filters)
+    activity_scale = min(1.5, 0.5 + len(rows) / 20) if rows else 0.75
+
+    geo = collection_points_geojson(db, sector=filters.sector)
+    features = []
+    for feature in geo.get("features", []):
+        fill_level = int(feature.get("properties", {}).get("fillLevel", 0))
+        weight = round((fill_level / 100) * activity_scale, 2)
+        features.append(
+            {
+                "type": "Feature",
+                "properties": {
+                    "weight": weight,
+                    "fillLevel": fill_level,
+                    "sector": feature.get("properties", {}).get("sector"),
+                },
+                "geometry": feature["geometry"],
+            }
+        )
+    return {"type": "FeatureCollection", "features": features}
 
 
 def _empty_analytics() -> dict[str, Any]:
@@ -165,4 +179,5 @@ def _empty_analytics() -> dict[str, Any]:
         "efficiencyIndicators": [],
         "insights": [],
         "wasteTypes": {"totalLabel": "0", "items": []},
+        "filters": {},
     }

@@ -33,26 +33,25 @@ import {
   fetchMonitoringStatus,
   type MonitoringKpi,
 } from '../../core/api/monitoring';
+import { MAP_CONTEXT_POLL_MS } from '../../core/api/map';
+import {
+  ensureOperationalRouteLayer,
+  syncContainerMarkers,
+  syncFleetMarkers,
+} from '../../core/map/operationalMapLayers';
+import { appState } from '../../core/stores/appStore';
 import { canAdvanceFleet } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
 import { BreakdownReporter, ContingencyResultBanner } from '../contingency/BreakdownReporter';
-import { osmMapStyle } from '../../core/utils/mapStyle';
+import { RecentIncidentsPanel } from '../contingency/RecentIncidentsPanel';
+import { bindMapTheme, mapStyleForTheme } from '../../core/utils/mapStyle';
 import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
 import {
   currentConditions,
-  liveActivities,
-  monitoringBins,
-  monitoringMapRoutes,
   vehicleFilterOptions,
   type FleetLiveStatus,
   type LiveVehicle,
 } from '../../data/mock/monitoring';
-
-const binColor = {
-  normal: '#34D634',
-  full: '#f59e0b',
-  critical: '#ef4444',
-};
 
 const activityTone = {
   success: 'bg-fero-green/15 text-fero-green-dark',
@@ -142,12 +141,16 @@ export default function MonitoringPage() {
   const liveFleet = () => monitoringData()?.liveFleet ?? [];
   const routeProgress = () => monitoringData()?.routeProgress ?? [];
   const monitoringAlerts = () => monitoringData()?.monitoringAlerts ?? [];
+  const operationalRoutes = () => monitoringData()?.routes ?? { type: 'FeatureCollection', features: [] };
+  const operationalContainers = () => monitoringData()?.containers ?? { type: 'FeatureCollection', features: [] };
+  const liveActivities = () => monitoringData()?.liveActivities ?? [];
 
   const [search, setSearch] = createSignal('');
   const [statusFilter, setStatusFilter] = createSignal('');
   const [selectedId, setSelectedId] = createSignal('');
   const [mapReady, setMapReady] = createSignal(false);
   const [legendOpen, setLegendOpen] = createSignal(false);
+  const [incidentsRefreshKey, setIncidentsRefreshKey] = createSignal(0);
 
   const filteredFleet = createMemo(() => {
     const q = search().trim().toLowerCase();
@@ -163,26 +166,29 @@ export default function MonitoringPage() {
     });
   });
 
-  const syncFleetMarkers = (fleet: LiveVehicle[]) => {
+  const syncOperationalMap = () => {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
-    markersById.forEach((m) => m.remove());
-    markersById.clear();
-    for (const v of fleet) {
-      const el = createPin(v.color, truckSvg('#fff'), 30);
-      el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        setSelectedId(v.id);
-      });
-      const marker = new maplibregl.Marker({ element: el })
-        .setLngLat([v.lng, v.lat])
-        .setPopup(
-          new maplibregl.Popup({ offset: 18, maxWidth: '280px' }).setHTML(buildVehiclePopup(v)),
-        )
-        .addTo(map);
-      markersById.set(v.id, marker);
-    }
-    const first = fleet[0];
+
+    ensureOperationalRouteLayer(map, operationalRoutes(), 'live-routes', 'live-routes-line');
+
+    syncContainerMarkers(map, operationalContainers(), binMarkers, {
+      createMarkerElement: (color) => createPin(color, trashSvg('#fff'), 24),
+    });
+
+    syncFleetMarkers(map, liveFleet(), markersById, {
+      createMarkerElement: (vehicle) => {
+        const el = createPin(vehicle.color, truckSvg('#fff'), 30);
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          setSelectedId(vehicle.id);
+        });
+        return el;
+      },
+      buildPopupHtml: buildVehiclePopup,
+    });
+
+    const first = liveFleet()[0];
     if (first && !selectedId()) setSelectedId(first.id);
   };
 
@@ -204,16 +210,26 @@ export default function MonitoringPage() {
     try {
       await advanceActiveRoutes();
       await refetch();
-      syncFleetMarkers(liveFleet());
+      syncOperationalMap();
     } finally {
       setAdvancing(false);
     }
   };
 
+  const setupMonitoringMap = (map: MapLibreMap) => {
+    syncOperationalMap();
+  };
+
+  bindMapTheme(
+    () => mapRef.current,
+    mapReady,
+    () => setupMonitoringMap(mapRef.current!),
+  );
+
   onMount(() => {
     const map = new maplibregl.Map({
       container: mapContainer,
-      style: osmMapStyle,
+      style: mapStyleForTheme(appState.darkMode),
       center: UNARE_CENTER,
       zoom: UNARE_ZOOM - 0.2,
       attributionControl: false,
@@ -223,42 +239,7 @@ export default function MonitoringPage() {
 
     map.on('load', () => {
       map.resize();
-      map.addSource('live-routes', { type: 'geojson', data: monitoringMapRoutes });
-      map.addLayer({
-        id: 'live-routes-line',
-        type: 'line',
-        source: 'live-routes',
-        paint: {
-          'line-color': ['get', 'color'],
-          'line-width': 4,
-          'line-opacity': 0.9,
-        },
-      });
-
-      for (const b of monitoringBins) {
-        const m = new maplibregl.Marker({
-          element: createPin(binColor[b.status], trashSvg('#fff'), 24),
-        })
-          .setLngLat([b.lng, b.lat])
-          .addTo(map);
-        binMarkers.push(m);
-      }
-
-      for (const v of liveFleet()) {
-        const el = createPin(v.color, truckSvg('#fff'), 30);
-        el.addEventListener('click', (e) => {
-          e.stopPropagation();
-          setSelectedId(v.id);
-        });
-        const marker = new maplibregl.Marker({ element: el })
-          .setLngLat([v.lng, v.lat])
-          .setPopup(
-            new maplibregl.Popup({ offset: 18, maxWidth: '280px' }).setHTML(buildVehiclePopup(v)),
-          )
-          .addTo(map);
-        markersById.set(v.id, marker);
-      }
-
+      setupMonitoringMap(map);
       setMapReady(true);
       const first = liveFleet()[0];
       if (first) openVehiclePopup(first.id);
@@ -274,7 +255,12 @@ export default function MonitoringPage() {
     const ro = new ResizeObserver(() => mapRef.current?.resize());
     ro.observe(mapContainer);
 
+    const pollTimer = window.setInterval(() => {
+      void refetch();
+    }, MAP_CONTEXT_POLL_MS);
+
     onCleanup(() => {
+      window.clearInterval(pollTimer);
       document.removeEventListener('click', onPopupClick);
       ro.disconnect();
       markersById.forEach((m) => m.remove());
@@ -291,8 +277,8 @@ export default function MonitoringPage() {
   };
 
   createEffect(() => {
-    const fleet = liveFleet();
-    if (mapReady() && fleet.length > 0) syncFleetMarkers(fleet);
+    monitoringData();
+    if (mapReady()) syncOperationalMap();
   });
 
   return (
@@ -307,7 +293,10 @@ export default function MonitoringPage() {
           <BreakdownReporter
             compact
             vehicles={liveFleet().map((v) => ({ id: v.id, routeId: v.routeId, status: v.status }))}
-            onComplete={() => void refetch()}
+            onComplete={() => {
+              void refetch();
+              setIncidentsRefreshKey((value) => value + 1);
+            }}
           />
           <Button
           variant="primary"
@@ -450,6 +439,7 @@ export default function MonitoringPage() {
                         <StatusBadge status={statusForBadge(v.status)} />
                       </div>
                       <p class="truncate text-xs text-text-muted">{v.route}</p>
+                      <p class="truncate text-xs text-text-secondary">{v.driver}</p>
                       <div class="mt-1.5 flex items-center gap-2">
                         <ProgressBar value={v.progress} color="green" size="sm" class="min-w-0 flex-1" />
                         <span class="shrink-0 text-[11px] font-medium text-text-secondary">
@@ -474,7 +464,7 @@ export default function MonitoringPage() {
         <Card>
           <CardHeader title="Actividades en tiempo real" />
           <ul class="space-y-3">
-            <For each={liveActivities}>
+            <For each={liveActivities()}>
               {(a) => (
                 <li class="flex gap-2.5">
                   <span class={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${activityTone[a.tone]}`}>
@@ -573,6 +563,8 @@ export default function MonitoringPage() {
           </A>
         </Card>
       </div>
+
+      <RecentIncidentsPanel refreshKey={incidentsRefreshKey()} />
     </div>
   );
 }

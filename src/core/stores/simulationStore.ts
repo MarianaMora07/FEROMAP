@@ -1,25 +1,34 @@
 import { createStore } from 'solid-js/store';
-import type { KpiMetrics, Scenario, ScenarioId, SimulationLogEntry } from '../../data/types/simulation';
 import { useMocks } from '../api/client';
 import { reportVehicleBreakdown, type ContingencyComparison, type VehicleBreakdownResponse } from '../api/contingencies';
 import { fetchKpis, fetchScenarios, runSimulationOptimize } from '../api/simulation';
+import {
+  dispatchOptimizedRoutes,
+  fetchSimulationDetail,
+  fetchSimulationHistory,
+  type SimulationHistoryRow,
+} from '../api/simulationOperations';
 import { mergeRouteCollections } from '../api/routes';
 import { loadDashboardData } from './dashboardStore';
 import { kpiByScenario, optimizationLogMessages, scenarios as mockScenarios } from '../../data/mock/kpis';
 import { getScenarioRoutes } from '../../data/mock/routes';
-import { loadRoutesWithRoadSnapping, showOptimizedRoute } from './appStore';
+import { loadRoutesWithRoadSnapping, refreshAppRoutes, showOptimizedRoute } from './appStore';
+import { writeLastOptimizedCodes } from '../utils/collectionPointsOptimization';
 
 interface SimulationState {
   scenarioId: ScenarioId;
   scenarios: Scenario[];
   kpis: KpiMetrics;
   isOptimizing: boolean;
+  isDispatching: boolean;
   optimizationProgress: number;
   logs: SimulationLogEntry[];
   lastOptimizedAt: string | null;
   lastSimulationId: number | null;
   lastContingency: VehicleBreakdownResponse | null;
   contingencyComparison: ContingencyComparison | null;
+  history: SimulationHistoryRow[];
+  lastDispatch: { count: number; routeIds: number[] } | null;
 }
 
 const [state, setState] = createStore<SimulationState>({
@@ -27,29 +36,42 @@ const [state, setState] = createStore<SimulationState>({
   scenarios: mockScenarios,
   kpis: kpiByScenario.normal,
   isOptimizing: false,
+  isDispatching: false,
   optimizationProgress: 0,
   logs: [],
   lastOptimizedAt: null,
   lastSimulationId: null,
   lastContingency: null,
   contingencyComparison: null,
+  history: [],
+  lastDispatch: null,
 });
 
 let scenariosLoaded = false;
 
 export async function initSimulationData(): Promise<void> {
   if (scenariosLoaded) return;
-  const [scenarios, kpis] = await Promise.all([
+  const [scenarios, kpis, history] = await Promise.all([
     fetchScenarios(),
     fetchKpis(state.scenarioId),
+    fetchSimulationHistory(),
   ]);
-  setState({ scenarios, kpis });
+  setState({ scenarios, kpis, history });
   scenariosLoaded = true;
 }
 
+export async function refreshSimulationHistory(): Promise<void> {
+  const history = await fetchSimulationHistory();
+  setState('history', history);
+}
+
+export function applySimulationScenario(scenarioId: ScenarioId) {
+  setState('scenarioId', scenarioId);
+  void fetchKpis(scenarioId).then((kpis) => setState('kpis', kpis));
+}
+
 export function setScenario(id: ScenarioId) {
-  setState('scenarioId', id);
-  void fetchKpis(id).then((kpis) => setState('kpis', kpis));
+  applySimulationScenario(id);
 }
 
 export function currentKpis() {
@@ -110,7 +132,10 @@ export async function runOptimization(): Promise<void> {
     }
     const routes = getScenarioRoutes(state.scenarioId);
     await loadRoutesWithRoadSnapping(routes);
-    setState('kpis', kpiByScenario[state.scenarioId]);
+    setState({
+      kpis: kpiByScenario[state.scenarioId],
+      lastSimulationId: 1,
+    });
     await loadDashboardData();
   } else {
     const result = await runSimulationOptimize(state.scenarioId);
@@ -121,10 +146,14 @@ export async function runOptimization(): Promise<void> {
     }
     const merged = mergeRouteCollections(result.routes.current, result.routes.optimized);
     await loadRoutesWithRoadSnapping(merged);
+    await refreshAppRoutes();
     setState({
       kpis: result.kpis,
       lastSimulationId: result.simulationId,
     });
+    if (result.servedPointCodes?.length) {
+      writeLastOptimizedCodes(result.servedPointCodes);
+    }
     await loadDashboardData();
   }
 
@@ -134,6 +163,75 @@ export async function runOptimization(): Promise<void> {
     optimizationProgress: 100,
     lastOptimizedAt: new Date().toISOString(),
   });
+  await refreshSimulationHistory();
+}
+
+export async function loadSimulationFromHistory(simulationId: number): Promise<void> {
+  if (state.isOptimizing) return;
+
+  setState({ isOptimizing: true, optimizationProgress: 0, logs: [] });
+
+  try {
+    const detail = await fetchSimulationDetail(simulationId);
+    const merged = mergeRouteCollections(detail.routes.current, detail.routes.optimized);
+    await loadRoutesWithRoadSnapping(merged);
+    await refreshAppRoutes();
+    setState({
+      kpis: detail.kpis,
+      scenarioId: detail.scenarioId,
+      lastSimulationId: detail.id,
+      isOptimizing: false,
+      optimizationProgress: 100,
+      lastOptimizedAt: detail.executedAt ?? new Date().toISOString(),
+      logs: [
+        {
+          id: `log-history-${detail.id}`,
+          timestamp: new Date().toLocaleTimeString('es-VE'),
+          message: `Simulación #${detail.id} cargada — ${detail.scenarioName}`,
+          type: 'info',
+        },
+      ],
+    });
+    showOptimizedRoute(true);
+  } catch (error) {
+    setState({ isOptimizing: false, optimizationProgress: 0 });
+    throw error;
+  }
+}
+
+export async function dispatchRoutesAfterOptimization(): Promise<void> {
+  if (state.isDispatching) return;
+  if (state.lastSimulationId == null) {
+    throw new Error('No hay rutas optimizadas para despachar');
+  }
+
+  setState({ isDispatching: true });
+  try {
+    const result = useMocks
+      ? { dispatchedRouteIds: [1, 2], count: 2 }
+      : await dispatchOptimizedRoutes();
+
+    setState({
+      lastDispatch: {
+        count: result.count,
+        routeIds: result.dispatchedRouteIds,
+      },
+      logs: [
+        ...state.logs,
+        {
+          id: `log-dispatch-${Date.now()}`,
+          timestamp: new Date().toLocaleTimeString('es-VE'),
+          message: `Despachadas ${result.count} ruta(s) optimizada(s) a operación`,
+          type: 'success',
+        },
+      ],
+    });
+    if (!useMocks) {
+      await loadDashboardData();
+    }
+  } finally {
+    setState({ isDispatching: false });
+  }
 }
 
 export async function reportBreakdown(vehicleId: string, routeId?: number): Promise<VehicleBreakdownResponse> {
@@ -201,6 +299,7 @@ export async function reportBreakdown(vehicleId: string, routeId?: number): Prom
     }
     const merged = mergeRouteCollections(recalc.routes.current, recalc.routes.optimized);
     await loadRoutesWithRoadSnapping(merged);
+    await refreshAppRoutes();
     setState({
       kpis: recalc.kpis,
       lastSimulationId: recalc.simulationId,
@@ -226,6 +325,8 @@ export async function reportBreakdown(vehicleId: string, routeId?: number): Prom
     contingencyComparison: result.comparison ?? null,
     lastOptimizedAt: new Date().toISOString(),
   });
+
+  await refreshSimulationHistory();
 
   return result;
 }

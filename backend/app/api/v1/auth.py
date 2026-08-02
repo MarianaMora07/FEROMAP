@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Request, Response
 
 from app.api.deps import CurrentUser, DbSession
 from app.config import settings
@@ -9,8 +9,14 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(body: LoginRequest, response: Response, db: DbSession):
-    token, user = authenticate_user(db, body.email, body.password)
+def login(body: LoginRequest, request: Request, response: Response, db: DbSession):
+    token, user, _session_id = authenticate_user(
+        db,
+        body.email,
+        body.password,
+        user_agent=request.headers.get("user-agent"),
+        ip_address=request.client.host if request.client else None,
+    )
     db.commit()
     response.set_cookie(
         key=settings.jwt_cookie_name,

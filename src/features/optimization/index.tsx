@@ -1,4 +1,4 @@
-import { For, Show, createSignal } from 'solid-js';
+import { For, Show, createMemo, createSignal, onMount } from 'solid-js';
 import {
   Sparkles,
   MapPin,
@@ -8,13 +8,9 @@ import {
   Truck,
   Fuel,
   Leaf,
-  Layers,
-  Maximize2,
-  Plus,
-  Minus,
-  Crosshair,
   CheckCircle2,
-  Trash2,
+  Send,
+  Loader2,
 } from 'lucide-solid';
 import {
   Badge,
@@ -25,22 +21,35 @@ import {
   SelectField,
   TextField,
 } from '../../design-system/components';
-import { UNARE_CENTER } from '../../data/types/geo';
+import { canOptimize } from '../../core/auth/permissions';
+import { authUser } from '../../core/stores/authStore';
+import { appState } from '../../core/stores/appStore';
+import {
+  dispatchOptimizationResult,
+  executeOptimization,
+  initOptimizationPage,
+  loadOptimizationFromHistory,
+  optimizationState,
+  setOptimizationScenario,
+  updateOptimizationPreset,
+} from '../../core/stores/optimizationStore';
+import {
+  buildComparisonRows,
+  buildResultsTotals,
+  buildRouteResults,
+  buildSavingsBanner,
+  buildScenarioInfoRows,
+} from '../../core/utils/optimizationResults';
 import {
   algorithms,
-  availableVehicles,
-  comparisonRows,
   constraints as constraintDefs,
-  mapLegendContainers,
-  mapLegendVehicles,
   objectives,
   optimizationTabs,
-  resultsTotals,
-  routeResults,
-  savingsBanner,
-  scenarioInfo,
   type OptimizationTabId,
 } from '../../data/mock/optimization';
+import type { OptimizationConstraints } from '../../core/api/optimization';
+import type { ScenarioId } from '../../data/types/simulation';
+import { OptimizationRouteMap } from './OptimizationRouteMap';
 
 const vehicleToneClass = {
   blue: 'bg-fero-blue/10 text-fero-blue border-fero-blue/20',
@@ -67,12 +76,16 @@ function FieldLabel(props: { children: string }) {
   );
 }
 
-function ParametersForm(props: { onGenerate: () => void }) {
-  const [checks, setChecks] = createSignal(
-    Object.fromEntries(constraintDefs.map((c) => [c.id, c.checked])) as Record<string, boolean>,
-  );
+function ParametersForm(props: { onGenerate: () => void; disabled?: boolean }) {
+  const preset = () => optimizationState.preset;
+  const context = () => optimizationState.context;
+  const assignableVehicles = () => context()?.assignableVehicles ?? [];
 
-  const toggle = (id: string) => setChecks((prev) => ({ ...prev, [id]: !prev[id] }));
+  const toggleConstraint = (id: keyof OptimizationConstraints) => {
+    updateOptimizationPreset({
+      constraints: { ...preset().constraints, [id]: !preset().constraints[id] },
+    });
+  };
 
   return (
     <Card>
@@ -88,32 +101,69 @@ function ParametersForm(props: { onGenerate: () => void }) {
           label="Fecha de operación"
           type="date"
           name="operationDate"
-          value="2026-06-25"
+          value={preset().operationDate}
+          onInput={(e) => updateOptimizationPreset({ operationDate: e.currentTarget.value })}
         />
 
         <div>
-          <FieldLabel>Vehículos disponibles</FieldLabel>
+          <FieldLabel>Vehículos disponibles ({assignableVehicles().length})</FieldLabel>
           <div class="flex flex-wrap gap-2 rounded-md border border-border bg-surface px-3 py-2.5 dark:bg-dark-surface-hover dark:border-dark-border">
-            <For each={availableVehicles}>
-              {(v) => (
-                <span class={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${vehicleToneClass[v.tone]}`}>
-                  {v.id}
-                </span>
-              )}
-            </For>
+            <Show
+              when={assignableVehicles().length > 0}
+              fallback={<span class="text-xs text-text-muted">Sin vehículos asignables</span>}
+            >
+              <For each={assignableVehicles()}>
+                {(v, index) => {
+                  const tones = ['blue', 'green', 'purple'] as const;
+                  const tone = tones[index() % tones.length]!;
+                  return (
+                    <span
+                      class={`inline-flex flex-col rounded-full border px-2.5 py-0.5 text-xs font-semibold ${vehicleToneClass[tone]}`}
+                      title={v.driver !== '—' ? v.driver : 'Sin conductor asignado'}
+                    >
+                      <span>{v.id}</span>
+                      <Show when={v.driver && v.driver !== '—'}>
+                        <span class="text-[10px] font-medium opacity-80">{v.driver}</span>
+                      </Show>
+                    </span>
+                  );
+                }}
+              </For>
+            </Show>
           </div>
         </div>
 
-        <SelectField label="Algoritmo de optimización" name="algorithm" value="aco">
+        <SelectField
+          label="Escenario operativo"
+          name="scenario"
+          value={preset().scenarioId}
+          onChange={(e) => setOptimizationScenario(e.currentTarget.value as ScenarioId)}
+        >
+          <For each={context()?.scenarios ?? []}>
+            {(scenario) => <option value={scenario.id}>{scenario.label}</option>}
+          </For>
+        </SelectField>
+
+        <SelectField
+          label="Algoritmo de optimización"
+          name="algorithm"
+          value={preset().algorithm}
+          onChange={(e) => updateOptimizationPreset({ algorithm: e.currentTarget.value })}
+        >
           <For each={algorithms}>{(a) => <option value={a.id}>{a.label}</option>}</For>
         </SelectField>
 
-        <SelectField label="Objetivo principal" name="objective" value="distance_time">
+        <SelectField
+          label="Objetivo principal"
+          name="objective"
+          value={preset().objective}
+          onChange={(e) => updateOptimizationPreset({ objective: e.currentTarget.value })}
+        >
           <For each={objectives}>{(o) => <option value={o.id}>{o.label}</option>}</For>
         </SelectField>
 
         <div>
-          <FieldLabel>Restricciones (opcionales)</FieldLabel>
+          <FieldLabel>Restricciones (guardadas localmente)</FieldLabel>
           <ul class="space-y-2.5">
             <For each={constraintDefs}>
               {(item) => (
@@ -122,8 +172,8 @@ function ParametersForm(props: { onGenerate: () => void }) {
                     <input
                       type="checkbox"
                       class="size-4 rounded border-border accent-fero-green-mid"
-                      checked={checks()[item.id]}
-                      onChange={() => toggle(item.id)}
+                      checked={preset().constraints[item.id as keyof OptimizationConstraints]}
+                      onChange={() => toggleConstraint(item.id as keyof OptimizationConstraints)}
                     />
                     {item.label}
                   </label>
@@ -133,8 +183,17 @@ function ParametersForm(props: { onGenerate: () => void }) {
           </ul>
         </div>
 
-        <Button type="submit" variant="gradient" size="lg" class="w-full font-semibold" icon={<Sparkles size={18} />}>
-          Generar ruta óptima
+        <Button
+          type="submit"
+          variant="gradient"
+          size="lg"
+          class="w-full font-semibold"
+          icon={optimizationState.isOptimizing ? <Loader2 size={18} class="animate-spin" /> : <Sparkles size={18} />}
+          disabled={props.disabled || optimizationState.isOptimizing || !canOptimize(authUser()?.role)}
+        >
+          {optimizationState.isOptimizing
+            ? `Optimizando… ${optimizationState.optimizationProgress}%`
+            : 'Generar ruta óptima'}
         </Button>
       </form>
     </Card>
@@ -142,11 +201,21 @@ function ParametersForm(props: { onGenerate: () => void }) {
 }
 
 function ScenarioInfoCard() {
+  const context = () => optimizationState.context;
+  const kpis = () => optimizationState.kpis;
+  const rows = createMemo(() =>
+    buildScenarioInfoRows(
+      context()?.pointsToVisit ?? 0,
+      kpis(),
+      context()?.pointsContext.criticalCount ?? 0,
+    ),
+  );
+
   return (
     <Card>
       <CardHeader title="Información del escenario" />
       <ul class="space-y-3">
-        <For each={scenarioInfo}>
+        <For each={rows()}>
           {(row) => {
             const Icon = scenarioIconMap[row.icon];
             return (
@@ -167,80 +236,11 @@ function ScenarioInfoCard() {
   );
 }
 
-function RouteMap() {
-  const [lng, lat] = UNARE_CENTER;
-  const delta = 0.035;
-  const bbox = `${lng - delta}%2C${lat - delta}%2C${lng + delta}%2C${lat + delta}`;
-
-  return (
-    <Card padding={false} class="overflow-hidden">
-      <div class="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-        <h3 class="font-heading font-semibold text-text-primary dark:text-white">
-          Vista de la ruta óptima
-        </h3>
-        <div class="flex items-center gap-2">
-          <button
-            type="button"
-            class="hidden items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-text-secondary sm:inline-flex"
-          >
-            <Layers size={14} />
-            Capas
-          </button>
-          <button
-            type="button"
-            class="flex h-8 w-8 items-center justify-center rounded-md border border-border text-text-secondary"
-            aria-label="Pantalla completa"
-          >
-            <Maximize2 size={14} />
-          </button>
-        </div>
-      </div>
-
-      <div class="relative h-85 bg-slate-100 dark:bg-slate-900 lg:h-95">
-        <iframe
-          title="Mapa de ruta óptima Unare"
-          class="h-full w-full border-0"
-          loading="lazy"
-          referrerpolicy="no-referrer-when-downgrade"
-          src={`https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat}%2C${lng}`}
-        />
-        <div class="absolute right-3 top-3 flex flex-col overflow-hidden rounded-md border border-border bg-surface shadow-sm dark:bg-dark-surface">
-          <button type="button" class="flex h-8 w-8 items-center justify-center text-text-secondary hover:bg-surface-hover" aria-label="Acercar">
-            <Plus size={14} />
-          </button>
-          <button type="button" class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover" aria-label="Alejar">
-            <Minus size={14} />
-          </button>
-          <button type="button" class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover" aria-label="Centrar">
-            <Crosshair size={14} />
-          </button>
-        </div>
-      </div>
-
-      <div class="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border px-4 py-3 text-xs text-text-secondary">
-        <For each={mapLegendVehicles}>
-          {(v) => (
-            <span class={`inline-flex items-center gap-1.5 font-medium ${v.class}`}>
-              <Truck size={14} />
-              {v.id}
-            </span>
-          )}
-        </For>
-        <span class="hidden h-4 w-px bg-border sm:block" />
-        <For each={mapLegendContainers}>
-          {(c) => (
-            <span class={`inline-flex items-center gap-1.5 ${c.class}`}>
-              <Trash2 size={14} />
-              {c.label}
-            </span>
-          )}
-        </For>
-      </div>
-    </Card>
-  );
-}
-
-function ResultsCard() {
+function ResultsCard(props: {
+  routeResults: ReturnType<typeof buildRouteResults>;
+  totals: ReturnType<typeof buildResultsTotals>;
+  driverByVehicleId?: Record<string, string>;
+}) {
   return (
     <Card>
       <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -254,14 +254,19 @@ function ResultsCard() {
       </div>
 
       <div class="grid gap-3 sm:grid-cols-3">
-        <For each={routeResults}>
+        <For each={props.routeResults}>
           {(route) => (
             <div class="rounded-lg border border-border p-3 dark:border-dark-border">
-              <div class="mb-3 flex items-center justify-between gap-2">
-                <span class={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold ${vehicleToneClass[route.tone]}`}>
-                  {route.id}
-                </span>
-                <span class={`flex h-9 w-9 items-center justify-center rounded-lg ${vehicleIconClass[route.tone]}`}>
+              <div class="mb-3 flex items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <span class={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold ${vehicleToneClass[route.tone]}`}>
+                    {route.id}
+                  </span>
+                  <Show when={props.driverByVehicleId?.[route.id]}>
+                    <p class="mt-1 text-[11px] text-text-muted">{props.driverByVehicleId![route.id]}</p>
+                  </Show>
+                </div>
+                <span class={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${vehicleIconClass[route.tone]}`}>
                   <Truck size={18} />
                 </span>
               </div>
@@ -300,28 +305,28 @@ function ResultsCard() {
           <Route size={16} class="text-fero-blue" />
           <div>
             <p class="text-xs text-text-muted">Distancia</p>
-            <p class="font-semibold text-text-primary dark:text-white">{resultsTotals.distanceKm} km</p>
+            <p class="font-semibold text-text-primary dark:text-white">{props.totals.distanceKm} km</p>
           </div>
         </div>
         <div class="flex items-center gap-2">
           <Clock size={16} class="text-fero-blue" />
           <div>
             <p class="text-xs text-text-muted">Tiempo</p>
-            <p class="font-semibold text-text-primary dark:text-white">{resultsTotals.duration}</p>
+            <p class="font-semibold text-text-primary dark:text-white">{props.totals.duration}</p>
           </div>
         </div>
         <div class="flex items-center gap-2">
           <Weight size={16} class="text-fero-blue" />
           <div>
             <p class="text-xs text-text-muted">Toneladas</p>
-            <p class="font-semibold text-text-primary dark:text-white">{resultsTotals.tons} ton</p>
+            <p class="font-semibold text-text-primary dark:text-white">{props.totals.tons} ton</p>
           </div>
         </div>
         <div class="flex items-center gap-2">
           <Fuel size={16} class="text-fero-blue" />
           <div>
             <p class="text-xs text-text-muted">Combustible</p>
-            <p class="font-semibold text-text-primary dark:text-white">{resultsTotals.fuelL} L</p>
+            <p class="font-semibold text-text-primary dark:text-white">{props.totals.fuelL} L</p>
           </div>
         </div>
       </div>
@@ -329,7 +334,10 @@ function ResultsCard() {
   );
 }
 
-function ComparisonCard() {
+function ComparisonCard(props: {
+  rows: ReturnType<typeof buildComparisonRows>;
+  savingsText: string;
+}) {
   return (
     <Card class="h-full">
       <CardHeader title="Comparación de rutas" />
@@ -343,14 +351,16 @@ function ComparisonCard() {
             </tr>
           </thead>
           <tbody class="divide-y divide-border">
-            <For each={comparisonRows}>
+            <For each={props.rows}>
               {(row) => (
                 <tr>
                   <td class="py-3 text-text-secondary">{row.metric}</td>
                   <td class="py-3 text-text-muted">{row.current}</td>
                   <td class="py-3">
                     <span class="font-semibold text-fero-green-dark">{row.optimized}</span>
-                    <span class="ml-2 text-xs font-medium text-fero-green-dark">↓ {Math.abs(row.delta)}%</span>
+                    <span class="ml-2 text-xs font-medium text-fero-green-dark">
+                      {row.delta >= 0 ? '↑' : '↓'} {Math.abs(row.delta)}%
+                    </span>
                   </td>
                 </tr>
               )}
@@ -361,24 +371,135 @@ function ComparisonCard() {
 
       <div class="mt-4 flex items-start gap-2 rounded-lg bg-fero-green/15 px-3 py-3 text-sm text-fero-green-dark">
         <Leaf size={18} class="mt-0.5 shrink-0" />
-        <p class="font-medium leading-snug">{savingsBanner.text}</p>
+        <p class="font-medium leading-snug">{props.savingsText}</p>
       </div>
     </Card>
   );
 }
 
-function PlaceholderTab(props: { title: string; description: string }) {
+function HistoryTab() {
+  const [error, setError] = createSignal<string | null>(null);
+
+  const handleLoad = async (id: number) => {
+    setError(null);
+    try {
+      await loadOptimizationFromHistory(id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo cargar la optimización');
+    }
+  };
+
   return (
-    <Card class="py-16 text-center">
-      <p class="font-heading font-semibold text-text-primary dark:text-white">{props.title}</p>
-      <p class="mt-1 text-sm text-text-muted">{props.description}</p>
+    <Card>
+      <CardHeader title="Historial de optimizaciones" />
+      <Show when={error()}>
+        <p class="mb-3 text-sm text-red-500">{error()}</p>
+      </Show>
+      <ul class="divide-y divide-border">
+        <For each={optimizationState.history}>
+          {(row) => (
+            <li class="flex items-center justify-between gap-3 py-3">
+              <div>
+                <p class="text-sm font-semibold text-text-primary dark:text-white">{row.name}</p>
+                <p class="text-xs text-text-muted">{row.datetime} · {row.efficiency}% ahorro</p>
+              </div>
+              <Button size="sm" variant="secondary" onClick={() => void handleLoad(row.id)}>
+                Ver
+              </Button>
+            </li>
+          )}
+        </For>
+      </ul>
+      <Show when={optimizationState.history.length === 0}>
+        <p class="py-8 text-center text-sm text-text-muted">Aún no hay optimizaciones guardadas.</p>
+      </Show>
+    </Card>
+  );
+}
+
+function ScenariosTab() {
+  const scenarios = () => optimizationState.context?.scenarios ?? [];
+
+  return (
+    <Card>
+      <CardHeader title="Escenarios operativos" />
+      <ul class="space-y-3">
+        <For each={scenarios()}>
+          {(scenario) => (
+            <li class="rounded-lg border border-border p-3 dark:border-dark-border">
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <p class="font-semibold text-text-primary dark:text-white">{scenario.label}</p>
+                  <p class="mt-1 text-sm text-text-secondary">{scenario.description}</p>
+                  <p class="mt-2 text-xs text-text-muted">
+                    Tráfico ×{scenario.trafficMultiplier} · Llenado +{scenario.fillLevelBoost}%
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant={optimizationState.preset.scenarioId === scenario.id ? 'primary' : 'secondary'}
+                  onClick={() => setOptimizationScenario(scenario.id)}
+                >
+                  {optimizationState.preset.scenarioId === scenario.id ? 'Activo' : 'Usar'}
+                </Button>
+              </div>
+            </li>
+          )}
+        </For>
+      </ul>
     </Card>
   );
 }
 
 export default function OptimizationPage() {
   const [tab, setTab] = createSignal<OptimizationTabId>('nueva');
-  const [generated, setGenerated] = createSignal(true);
+  const [dispatchError, setDispatchError] = createSignal<string | null>(null);
+
+  const hasResults = () => optimizationState.kpis != null;
+  const kpis = () => optimizationState.kpis!;
+  const routeResults = createMemo(() => {
+    if (!hasResults()) return [];
+    const optimized =
+      optimizationState.lastResult?.routes.optimized ?? {
+        type: 'FeatureCollection' as const,
+        features: appState.routes.features.filter((feature) => feature.properties.type === 'optimized'),
+      };
+    return buildRouteResults(optimized, kpis());
+  });
+  const comparisonRows = createMemo(() => (hasResults() ? buildComparisonRows(kpis()) : []));
+  const totals = createMemo(() => (hasResults() ? buildResultsTotals(kpis()) : null));
+  const savingsText = createMemo(() => (hasResults() ? buildSavingsBanner(kpis()) : ''));
+  const driverByVehicleId = createMemo(() => {
+    const map: Record<string, string> = {};
+    for (const vehicle of optimizationState.context?.vehicles ?? []) {
+      if (vehicle.driver && vehicle.driver !== '—') {
+        map[vehicle.id] = vehicle.driver;
+      }
+    }
+    return map;
+  });
+
+  onMount(() => {
+    void initOptimizationPage();
+  });
+
+  const handleGenerate = async () => {
+    setDispatchError(null);
+    try {
+      await executeOptimization();
+    } catch {
+      // error stored in optimizationState.error
+    }
+  };
+
+  const handleDispatch = async () => {
+    setDispatchError(null);
+    try {
+      await dispatchOptimizationResult();
+    } catch (error) {
+      setDispatchError(error instanceof Error ? error.message : 'No se pudieron despachar las rutas');
+    }
+  };
 
   return (
     <div class="space-y-4 md:space-y-5">
@@ -400,22 +521,75 @@ export default function OptimizationPage() {
         </For>
       </div>
 
+      <Show when={optimizationState.error}>
+        <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {optimizationState.error}
+        </div>
+      </Show>
+
       <Show when={tab() === 'nueva'}>
         <div class="grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
           <div class="space-y-4 xl:col-span-3">
-            <ParametersForm onGenerate={() => setGenerated(true)} />
+            <ParametersForm
+              onGenerate={() => void handleGenerate()}
+              disabled={optimizationState.isLoadingContext}
+            />
             <ScenarioInfoCard />
+            <Show when={optimizationState.isOptimizing}>
+              <Card>
+                <CardHeader title="Progreso del motor" />
+                <ProgressBar value={optimizationState.optimizationProgress} color="green" />
+                <ul class="mt-3 max-h-40 space-y-1 overflow-y-auto text-xs text-text-muted">
+                  <For each={optimizationState.logs}>
+                    {(log) => (
+                      <li>
+                        <span class="text-text-secondary">{log.timestamp}</span> — {log.message}
+                      </li>
+                    )}
+                  </For>
+                </ul>
+              </Card>
+            </Show>
           </div>
 
           <div class="space-y-4 xl:col-span-9">
-            <RouteMap />
-            <Show when={generated()}>
+            <OptimizationRouteMap hasResults={hasResults()} routeResults={routeResults()} />
+            <Show when={hasResults()}>
+              <div class="flex flex-wrap items-center justify-end gap-2">
+                <Show when={optimizationState.lastDispatch}>
+                  {(dispatch) => (
+                    <Badge variant="success">
+                      Despachadas {dispatch().count} ruta(s)
+                    </Badge>
+                  )}
+                </Show>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={<Send size={16} />}
+                  disabled={
+                    optimizationState.isDispatching ||
+                    optimizationState.lastSimulationId == null ||
+                    !canOptimize(authUser()?.role)
+                  }
+                  onClick={() => void handleDispatch()}
+                >
+                  {optimizationState.isDispatching ? 'Despachando…' : 'Despachar rutas'}
+                </Button>
+              </div>
+              <Show when={dispatchError()}>
+                <p class="text-sm text-red-500">{dispatchError()}</p>
+              </Show>
               <div class="grid grid-cols-1 items-start gap-4 lg:grid-cols-5">
                 <div class="lg:col-span-3">
-                  <ResultsCard />
+                  <ResultsCard
+                    routeResults={routeResults()}
+                    totals={totals()!}
+                    driverByVehicleId={driverByVehicleId()}
+                  />
                 </div>
                 <div class="lg:col-span-2">
-                  <ComparisonCard />
+                  <ComparisonCard rows={comparisonRows()} savingsText={savingsText()} />
                 </div>
               </div>
             </Show>
@@ -424,17 +598,11 @@ export default function OptimizationPage() {
       </Show>
 
       <Show when={tab() === 'historial'}>
-        <PlaceholderTab
-          title="Historial de optimizaciones"
-          description="Aquí se listarán las optimizaciones ejecutadas anteriormente."
-        />
+        <HistoryTab />
       </Show>
 
       <Show when={tab() === 'escenarios'}>
-        <PlaceholderTab
-          title="Escenarios guardados"
-          description="Aquí podrá reutilizar configuraciones de optimización guardadas."
-        />
+        <ScenariosTab />
       </Show>
     </div>
   );

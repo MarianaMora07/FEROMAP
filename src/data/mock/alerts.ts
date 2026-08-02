@@ -1,25 +1,17 @@
+import type { AlertStatus, SystemAlert } from '../../core/types/alert';
+
+export {
+  priorityColor,
+  type AlertCategory,
+  type AlertPriority,
+  type AlertStatus,
+  type SystemAlert,
+} from '../../core/types/alert';
+
 export const alertsPageMeta = {
   title: 'Alertas',
   subtitle: 'Gestiona y da seguimiento a las alertas generadas en el sistema.',
 };
-
-export type AlertPriority = 'critica' | 'advertencia' | 'informativa';
-export type AlertStatus = 'nueva' | 'en-progreso' | 'informativa' | 'resuelta';
-export type AlertCategory = 'contenedores' | 'trafico' | 'vehiculos' | 'mantenimiento' | 'sistema';
-
-export interface SystemAlert {
-  id: string;
-  priority: AlertPriority;
-  title: string;
-  detail: string;
-  source: string;
-  location: string;
-  datetime: string;
-  status: AlertStatus;
-  category: AlertCategory;
-  lng: number;
-  lat: number;
-}
 
 export const alertsKpis = [
   {
@@ -244,9 +236,3 @@ export const mapAlertLegend = [
   { id: 'contenedor', label: 'Contenedor', color: '#34D634', icon: 'trash' as const },
   { id: 'vehiculo', label: 'Vehículo', color: '#7c3aed', icon: 'truck' as const },
 ];
-
-export const priorityColor: Record<AlertPriority, string> = {
-  critica: '#ef4444',
-  advertencia: '#f59e0b',
-  informativa: '#1143F3',
-};

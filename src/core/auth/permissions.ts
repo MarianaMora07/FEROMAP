@@ -5,6 +5,7 @@ export const ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
   '/optimization': ['administrador', 'planificador'],
   '/map': ['administrador', 'planificador', 'conductor', 'residente'],
   '/vehicles': ['administrador', 'planificador'],
+  '/drivers': ['administrador', 'planificador'],
   '/collection-points': ['administrador', 'planificador', 'residente'],
   '/simulation': ['administrador', 'planificador'],
   '/monitoring': ['administrador', 'planificador', 'conductor'],
@@ -45,6 +46,7 @@ export const MAIN_NAV_ITEMS: NavItemDef[] = [
   { href: '/optimization', label: 'Optimización de Rutas', roles: ['administrador', 'planificador'] },
   { href: '/map', label: 'Mapa GIS', roles: ['administrador', 'planificador', 'conductor', 'residente'] },
   { href: '/vehicles', label: 'Vehículos', roles: ['administrador', 'planificador'] },
+  { href: '/drivers', label: 'Conductores', roles: ['administrador', 'planificador'] },
   { href: '/collection-points', label: 'Puntos de Recolección', roles: ['administrador', 'planificador', 'residente'] },
   { href: '/resident', label: 'Mi Recolección', roles: ['residente'] },
   { href: '/simulation', label: 'Simulación', roles: ['administrador', 'planificador'] },
@@ -68,6 +70,14 @@ export function navItemsForRole(role: UserRole | undefined) {
 }
 
 export function canOptimize(role: UserRole | undefined): boolean {
+  return role === 'administrador' || role === 'planificador';
+}
+
+export function canManageCollectionPoints(role: UserRole | undefined): boolean {
+  return role === 'administrador' || role === 'planificador';
+}
+
+export function canManageVehicles(role: UserRole | undefined): boolean {
   return role === 'administrador' || role === 'planificador';
 }
 

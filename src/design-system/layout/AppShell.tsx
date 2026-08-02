@@ -1,8 +1,10 @@
 import { type JSX, Show } from 'solid-js';
 import { useLocation } from '@solidjs/router';
+import { ToastContainer } from '../components/Toast';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { appState } from '../../core/stores/appStore';
+import { globalToast } from '../../core/stores/toastStore';
 
 interface AppShellProps {
   children: JSX.Element;
@@ -38,6 +40,8 @@ export function AppShell(props: AppShellProps) {
           {props.children}
         </main>
       </div>
+
+      <ToastContainer toasts={globalToast.toasts()} onDismiss={globalToast.removeToast} />
     </div>
   );
 }

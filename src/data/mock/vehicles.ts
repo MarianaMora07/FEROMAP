@@ -1,30 +1,15 @@
+export {
+  vehicleDetailTabs,
+  type Vehicle,
+  type VehicleDetailTabId,
+  type VehicleStatus,
+  type VehicleType,
+} from '../../core/types/vehicle';
+
 export const vehiclesPageMeta = {
   title: 'Gestión de Vehículos',
   subtitle: 'Administra la flota de recolección de residuos.',
 };
-
-export type VehicleStatus = 'en-ruta' | 'disponible' | 'mantenimiento' | 'fuera-de-servicio';
-export type VehicleType = 'Compactador' | 'Volteo' | 'Recolector';
-
-export interface Vehicle {
-  id: string;
-  type: VehicleType;
-  plate: string;
-  status: VehicleStatus;
-  driver: string;
-  driverPhone?: string;
-  fuelPct: number;
-  fuelLiters?: number;
-  capacityPct: number;
-  capacityM3: number;
-  model: string;
-  year: number;
-  mileageKm: number;
-  base: string;
-  currentRoute?: string;
-  updatedAt: string;
-  image: string;
-}
 
 const truckImages = {
   compactadorA:
@@ -252,11 +237,3 @@ export const vehiclesList: Vehicle[] = [
   },
 ];
 
-export const vehicleDetailTabs = [
-  { id: 'info', label: 'Información' },
-  { id: 'maintenance', label: 'Mantenimiento' },
-  { id: 'history', label: 'Historial' },
-  { id: 'docs', label: 'Documentos' },
-] as const;
-
-export type VehicleDetailTabId = (typeof vehicleDetailTabs)[number]['id'];
