@@ -21,17 +21,11 @@ COPY backend/ ./
 # Datos geoespaciales empaquetados (grafos, seeds); en runtime se puede montar ./data
 COPY data/ /app/data/
 
-COPY --chmod=755 <<'EOF' /usr/local/bin/start-api.sh
-#!/bin/bash
-set -euo pipefail
-echo "🚀 Iniciando API FastAPI (producción)..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
-EOF
-
 RUN useradd --create-home --shell /bin/bash appuser \
     && chown -R appuser:appuser /app
 USER appuser
 
 EXPOSE 8000
 
-CMD ["/usr/local/bin/start-api.sh"]
+# CMD exec-form (evita scripts con CRLF al build en Windows)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

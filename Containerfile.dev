@@ -18,11 +18,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 EXPOSE 8000
 
-COPY --chmod=755 <<'EOF' /usr/local/bin/start-api-dev.sh
-#!/bin/bash
-set -euo pipefail
-echo "🚀 API FastAPI en http://0.0.0.0:8000 (reload activo)"
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-EOF
-
-CMD ["/usr/local/bin/start-api-dev.sh"]
+# CMD exec-form (evita scripts con CRLF al build en Windows)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

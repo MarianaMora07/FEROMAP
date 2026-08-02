@@ -1,0 +1,8 @@
+# Evita CRLF en scripts/shebangs (rompe bash y CMD en Linux/WSL).
+* text=auto eol=lf
+*.sh text eol=lf
+Containerfile text eol=lf
+Containerfile.* text eol=lf
+justfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
