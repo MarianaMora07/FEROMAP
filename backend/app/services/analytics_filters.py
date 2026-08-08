@@ -9,7 +9,7 @@ from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
 from app.db.models import Simulation
-from app.services.reports_service import _parse_simulation
+from app.services.simulation_parsing import parse_simulation
 
 Granularity = Literal["daily", "weekly", "monthly"]
 
@@ -74,7 +74,7 @@ def filtered_simulations_stmt(filters: AnalyticsFilters) -> Select[tuple[Simulat
 
 def load_simulation_rows(db: Session, filters: AnalyticsFilters) -> list[dict[str, Any]]:
     simulations = db.scalars(filtered_simulations_stmt(filters)).all()
-    return [_parse_simulation(sim) for sim in simulations]
+    return [parse_simulation(sim) for sim in simulations]
 
 
 def _bucket_key(dt: datetime | None, granularity: Granularity) -> str:
