@@ -26,8 +26,8 @@ REQUIRED_SEED_FILES = [
 ]
 
 MIN_COUNTS = {
-    "sectors.json": ("features", 1),
-    "collection_points.json": ("features", 1),
+    "sectors.json": None,
+    "collection_points.json": None,
     "vehicles.json": None,
     "drivers.json": None,
     "scenarios.json": None,
@@ -46,22 +46,27 @@ def test_seed_file_exists(filename: str) -> None:
     assert path.is_file(), f"Seed requerido no encontrado: {path}"
 
 
-def test_sectors_geojson_contract() -> None:
+def test_sectors_seed_contract() -> None:
     data = _load_seed("sectors.json")
-    assert data["type"] == "FeatureCollection"
-    assert len(data.get("features", [])) >= 1
-    feature = data["features"][0]
-    assert feature["geometry"]["type"] == "Polygon"
-    assert "name" in feature["properties"]
+    assert isinstance(data, list)
+    assert len(data) >= 1
+    row = data[0]
+    assert "name" in row
+    assert row["geometry"]["type"] == "Polygon"
+    assert len(row["geometry"]["coordinates"][0]) >= 4
 
 
-def test_collection_points_geojson_contract() -> None:
+def test_collection_points_seed_contract() -> None:
     data = _load_seed("collection_points.json")
-    assert data["type"] == "FeatureCollection"
-    assert len(data.get("features", [])) >= 1
-    props = data["features"][0]["properties"]
-    assert "id" in props
-    assert "fillLevel" in props
+    assert isinstance(data, list)
+    assert len(data) >= 1
+    row = data[0]
+    assert "code" in row
+    assert "sectorName" in row
+    assert "fillLevelPct" in row
+    sector_names = {s["name"] for s in _load_seed("sectors.json")}
+    for point in data:
+        assert point["sectorName"] in sector_names, point["sectorName"]
 
 
 def test_vehicles_seed_has_entries() -> None:

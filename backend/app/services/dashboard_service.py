@@ -14,7 +14,7 @@ from app.services.alert_service import list_alerts as list_persisted_alerts
 from app.services.optimization_service import run_optimization_engine
 from app.services.scenario_utils import normalize_scenario_id
 from app.services.seed_loader import load_seed
-from app.services.reports_service import _parse_simulation
+from app.services.simulation_parsing import parse_simulation
 
 
 def _latest_optimization(db: Session) -> dict[str, Any] | None:
@@ -226,7 +226,7 @@ def list_simulations(db: Session, *, limit: int = 25, offset: int = 0) -> dict[s
     total = db.scalar(select(func.count()).select_from(Simulation)) or 0
     items = []
     for simulation in simulations:
-        parsed = _parse_simulation(simulation)
+        parsed = parse_simulation(simulation)
         items.append(
             {
                 "id": parsed["id"],

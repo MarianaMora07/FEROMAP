@@ -187,9 +187,13 @@ def seed() -> None:
         for row in vehicles_data:
             driver_name = row.get("driverName")
             default_driver_row = driver_by_name.get(driver_name) if driver_name else None
+            vehicle_type = row.get("vehicleType", "Compactadora")
+            if vehicle_type not in ("Volteo", "Compactadora"):
+                vehicle_type = "Compactadora"
             vehicle = Vehicle(
                 license_plate=row["licensePlate"],
                 code=row["code"],
+                vehicle_type=vehicle_type,
                 max_capacity_kg=Decimal(str(row["maxCapacityKg"])),
                 fuel_consumption_rate=Decimal(str(row.get("fuelConsumptionRate", 0.35))),
                 ideal_operators_count=int(row.get("idealOperatorsCount", 2)),

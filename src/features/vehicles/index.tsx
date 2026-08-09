@@ -64,9 +64,9 @@ import { VehicleMaintenancePanel } from './VehicleMaintenancePanel';
 import { VehicleOptimizationBadges } from './VehicleOptimizationBadges';
 
 const kpiIcon = {
-  truck: () => <Truck size={24} />,
-  wrench: () => <Wrench size={24} />,
-  flag: () => <Flag size={24} />,
+  truck: () => <Truck size={18} />,
+  wrench: () => <Wrench size={18} />,
+  flag: () => <Flag size={18} />,
 } as const;
 
 function fuelBarColor(pct: number): 'green' | 'amber' | 'red' {
@@ -323,8 +323,9 @@ export default function VehiclesPage() {
         </div>
       </Show>
 
-      <div class="flex flex-col gap-4 xl:flex-row xl:items-center">
-        <div class="grid flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {/* KPI row: max 2 cols until 2xl so cards stay readable with sidebar */}
+      <div class="flex flex-col gap-3">
+        <div class="grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 2xl:grid-cols-4">
           <Show
             when={!vehiclesLoading()}
             fallback={
@@ -349,10 +350,10 @@ export default function VehiclesPage() {
             </For>
           </Show>
         </div>
-        <div class="flex shrink-0 flex-wrap gap-2">
+        <div class="flex flex-wrap gap-2">
           <Show when={canManage()}>
             <A href="/drivers">
-              <Button variant="outline" class="w-full gap-2 px-5 py-2.5 xl:w-auto">
+              <Button variant="outline" class="gap-2 px-5 py-2.5">
                 Conductores
               </Button>
             </A>
@@ -361,7 +362,7 @@ export default function VehiclesPage() {
             <A href={simulationHref()}>
               <Button
                 variant="outline"
-                class="w-full gap-2 px-5 py-2.5 xl:w-auto"
+                class="gap-2 px-5 py-2.5"
                 icon={<ArrowRight size={17} />}
               >
                 {assignableCount() > 0
@@ -370,7 +371,7 @@ export default function VehiclesPage() {
               </Button>
             </A>
           </Show>
-          <Button variant="primary" class="w-full gap-2 px-5 py-2.5 xl:w-auto" icon={<Plus size={17} />}>
+          <Button variant="primary" class="gap-2 px-5 py-2.5" icon={<Plus size={17} />}>
             Nuevo vehículo
             <ChevronDown size={15} class="opacity-80" />
           </Button>

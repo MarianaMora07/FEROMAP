@@ -71,8 +71,8 @@ export function Sidebar(props: SidebarProps) {
 
   return (
     <aside
-      class={`fixed top-0 left-0 z-40 flex h-full flex-col bg-sidebar transition-all duration-300 ${
-        props.open ? 'w-[var(--sidebar-width)] translate-x-0' : '-translate-x-full'
+      class={`fixed top-0 left-0 z-40 flex h-full w-[var(--sidebar-width)] flex-col bg-sidebar transition-transform duration-300 ${
+        props.open ? 'translate-x-0' : '-translate-x-full'
       }`}
     >
       <div class="flex items-start gap-3 border-b border-white/10 px-4 py-4">

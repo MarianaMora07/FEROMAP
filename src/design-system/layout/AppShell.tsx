@@ -1,9 +1,13 @@
-import { type JSX, Show } from 'solid-js';
+import { type JSX, Show, createEffect } from 'solid-js';
 import { useLocation } from '@solidjs/router';
 import { ToastContainer } from '../components/Toast';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
-import { appState } from '../../core/stores/appStore';
+import {
+  appState,
+  closeSidebarIfMobile,
+  setSidebarOpen,
+} from '../../core/stores/appStore';
 import { globalToast } from '../../core/stores/toastStore';
 
 interface AppShellProps {
@@ -17,13 +21,27 @@ export function AppShell(props: AppShellProps) {
   const location = useLocation();
   const isMapView = () => props.fullWidth || location.pathname === '/map';
 
+  createEffect(() => {
+    location.pathname;
+    closeSidebarIfMobile();
+  });
+
   return (
     <div class="flex h-full overflow-hidden bg-surface dark:bg-dark-surface">
       <Sidebar open={appState.sidebarOpen} />
 
+      <Show when={appState.sidebarOpen}>
+        <button
+          type="button"
+          class="fixed inset-0 z-30 bg-slate-950/40 lg:hidden"
+          aria-label="Cerrar menú"
+          onClick={() => setSidebarOpen(false)}
+        />
+      </Show>
+
       <div
-        class={`flex min-w-0 flex-1 flex-col transition-all duration-300 ${
-          appState.sidebarOpen ? 'ml-[var(--sidebar-width)]' : 'ml-0'
+        class={`flex min-w-0 flex-1 flex-col transition-[margin] duration-300 ${
+          appState.sidebarOpen ? 'ml-0 lg:ml-[var(--sidebar-width)]' : 'ml-0'
         }`}
       >
         <Show when={!isMapView()}>

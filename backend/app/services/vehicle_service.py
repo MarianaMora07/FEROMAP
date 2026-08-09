@@ -27,7 +27,7 @@ ALLOWED_VEHICLE_STATUSES = frozenset({"available", "maintenance", "in_route", "i
 DEFAULT_VEHICLE_IMAGE = (
     "https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&w=480&h=320&q=80"
 )
-VEHICLE_TYPES = ("Compactador", "Volteo", "Recolector")
+ALLOWED_VEHICLE_TYPES = frozenset({"Volteo", "Compactadora"})
 
 
 def _driver_display(driver: Driver | None) -> tuple[str | None, str | None]:
@@ -112,7 +112,7 @@ def _serialize_vehicle(
         "driverPhone": driver_phone,
         "defaultDriverId": vehicle.default_driver_id,
         "driverId": effective_driver_id,
-        "type": VEHICLE_TYPES[index % len(VEHICLE_TYPES)],
+        "type": vehicle.vehicle_type if vehicle.vehicle_type in ALLOWED_VEHICLE_TYPES else "Compactadora",
         "fuelPct": None,
         "capacityPct": None,
         "capacityM3": capacity_m3,

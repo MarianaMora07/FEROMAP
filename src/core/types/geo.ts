@@ -1,14 +1,7 @@
 import type { Feature, FeatureCollection, LineString, Point, Polygon } from 'geojson';
 
-export type SectorName =
-  | 'Unare I'
-  | 'Unare II'
-  | 'Unare III'
-  | 'Río Caura'
-  | 'Ventuari'
-  | 'Curagua'
-  | 'El Caimito'
-  | 'Villa Ikabarú';
+/** Nombre de sector operativo (parroquia Unare). */
+export type SectorName = string;
 
 export type ContainerPriority = 'baja' | 'media' | 'alta' | 'critica';
 
