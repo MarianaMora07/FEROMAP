@@ -7,7 +7,7 @@ import logging
 import math
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any, Callable, Protocol
 
@@ -729,8 +729,10 @@ def build_optimization_vehicle_units(
     exclude_vehicle_ids: set[int] | None = None,
     contingency: bool = False,
     limit: int = 4,
+    fleet_limit: int | None = None,
 ) -> list[VehicleUnit]:
     """Arma la flota del VRP usando el conductor asignado a cada vehículo."""
+    effective_limit = fleet_limit if fleet_limit is not None and fleet_limit > 0 else limit
     stmt = (
         select(Vehicle)
         .where(Vehicle.status.in_(["available", "in_route"]))
@@ -747,7 +749,7 @@ def build_optimization_vehicle_units(
     active_routes = get_active_routes_by_vehicle_id(db)
     units: list[VehicleUnit] = []
     for vehicle in vehicles_db:
-        if len(units) >= limit:
+        if len(units) >= effective_limit:
             break
         active_route = active_routes.get(vehicle.id)
         driver_id = resolve_vehicle_driver_id(vehicle, active_route=active_route)
@@ -810,6 +812,9 @@ def _persist_routes(
     dist_matrix: list[list[float]],
     time_matrix: list[list[float]],
     operators_shortage: int | None = None,
+    *,
+    daily_plan_id: int | None = None,
+    planning_level: str | None = None,
 ) -> None:
     """Guarda rutas y waypoints en BD."""
     for kind, solution in [("current", current_solution), ("optimized", optimized_solution)]:
@@ -832,6 +837,9 @@ def _persist_routes(
                 total_distance_meters=Decimal(str(round(d, 2))),
                 estimated_duration_seconds=total_s,
                 status="pending" if kind == "optimized" else "completed",
+                simulation_id=simulation_id if kind == "optimized" else None,
+                daily_plan_id=daily_plan_id if kind == "optimized" else None,
+                planning_level=planning_level if kind == "optimized" else None,
             )
             db.add(db_route)
             db.flush()
@@ -866,9 +874,14 @@ def run_optimization_engine(
     collection_point_ids: list[int] | None = None,
     exclude_vehicle_ids: list[int] | None = None,
     contingency_meta: dict[str, Any] | None = None,
-    auto_dispatch: bool = True,
+    auto_dispatch: bool = False,
     auto_commit: bool = True,
     reporter: OptimizationProgressReporter | None = None,
+    operation_date: date | None = None,
+    daily_plan_id: int | None = None,
+    weekly_plan_id: int | None = None,
+    planning_level: str | None = None,
+    fleet_limit: int | None = None,
 ) -> dict[str, Any]:
     """Ejecuta el motor real de optimización y persiste resultados."""
     computation_started = time.perf_counter()
@@ -988,6 +1001,7 @@ def run_optimization_engine(
         exclude_vehicle_ids=excluded_ids,
         contingency=contingency_meta is not None,
         limit=4,
+        fleet_limit=fleet_limit,
     )
     if not vehicles:
         raise RuntimeError("No hay vehículos con conductor asignado para la optimización")
@@ -1183,6 +1197,14 @@ def run_optimization_engine(
 
     report("persistencia", "Persistiendo rutas optimizadas y waypoints en PostgreSQL", "success")
 
+    planning_context = {
+        "level": planning_level or ("operational" if contingency_meta else "simulation"),
+        "weeklyPlanId": weekly_plan_id,
+        "dailyPlanId": daily_plan_id,
+        "operationDate": operation_date.isoformat() if operation_date else None,
+        "autoDispatch": auto_dispatch,
+    }
+
     simulation = Simulation(
         scenario_name=scenario_label,
         parameters_json=json.dumps(
@@ -1195,6 +1217,7 @@ def run_optimization_engine(
                 "algorithm": "aco",
                 "simulationParameters": simulation_parameters,
                 "contingency": contingency_meta is not None,
+                "planningContext": planning_context,
                 **(contingency_meta or {}),
             },
             ensure_ascii=False,
@@ -1217,12 +1240,19 @@ def run_optimization_engine(
         dist_matrix,
         time_matrix,
         operators_shortage=shortage_for_engine,
+        daily_plan_id=daily_plan_id,
+        planning_level=planning_context["level"],
     )
+    if daily_plan_id is not None:
+        from app.services.planning_service import mark_daily_plan_optimized
+
+        mark_daily_plan_optimized(db, daily_plan_id, simulation.id)
     dispatch = {"dispatchedRouteIds": [], "count": 0}
     if auto_dispatch:
         dispatch = dispatch_optimized_routes(
             db,
             preserve_active=contingency_meta is not None,
+            daily_plan_id=daily_plan_id,
         )
     if auto_commit:
         db.commit()

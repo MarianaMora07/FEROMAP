@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     aco_parallel_workers: int = 0
     optimization_max_workers: int = 2
     matrix_incremental_max_additions: int = 3
+    driver_webhook_url: str | None = None
 
 
 settings = Settings(
@@ -51,4 +52,5 @@ settings = Settings(
     aco_parallel_workers=int(os.getenv("ACO_PARALLEL_WORKERS", "0")),
     optimization_max_workers=int(os.getenv("OPTIMIZATION_MAX_WORKERS", "2")),
     matrix_incremental_max_additions=int(os.getenv("MATRIX_INCREMENTAL_MAX_ADDITIONS", "3")),
+    driver_webhook_url=os.getenv("DRIVER_WEBHOOK_URL") or None,
 )

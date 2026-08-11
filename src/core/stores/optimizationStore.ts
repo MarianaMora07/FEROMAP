@@ -5,12 +5,17 @@ import { createStore } from 'solid-js/store';
  */
 import { useMocks } from '../api/client';
 import {
+  dispatchDailyPlanRoutes,
+  closeDailyPlanForId,
   fetchOptimizationHistory,
   fetchOptimizationPageContext,
+  loadDailyPlanForDate,
   loadOptimizationPreset,
+  openDailyPlanForDate,
   runOptimization,
   saveOptimizationPreset,
   dispatchOptimizationRoutes,
+  type DailyPlan,
   type OptimizationPageContext,
   type OptimizationPreset,
   type OptimizeResponse,
@@ -29,6 +34,8 @@ import { recordOperationalRun } from '../utils/operationalHistory';
 interface OptimizationState {
   context: OptimizationPageContext | null;
   preset: OptimizationPreset;
+  dailyPlan: DailyPlan | null;
+  isLoadingDailyPlan: boolean;
   kpis: KpiMetrics | null;
   lastResult: OptimizeResponse | null;
   lastSimulationId: number | null;
@@ -45,6 +52,8 @@ interface OptimizationState {
 const [state, setState] = createStore<OptimizationState>({
   context: null,
   preset: loadOptimizationPreset(),
+  dailyPlan: null,
+  isLoadingDailyPlan: false,
   kpis: null,
   lastResult: null,
   lastSimulationId: null,
@@ -60,29 +69,49 @@ const [state, setState] = createStore<OptimizationState>({
 
 let contextLoaded = false;
 
-export async function initOptimizationPage(): Promise<void> {
-  if (contextLoaded && state.context) return;
-  setState({ isLoadingContext: true, error: null });
+export async function initOptimizationPage(operationDate?: string): Promise<void> {
+  const dateValue = operationDate ?? state.preset.operationDate;
+  if (contextLoaded && state.context && state.dailyPlan?.operationDate === dateValue) return;
+  setState({ isLoadingContext: true, isLoadingDailyPlan: true, error: null });
   try {
-    const [context, history] = await Promise.all([
+    const [context, history, dailyPlan] = await Promise.all([
       fetchOptimizationPageContext(),
       fetchOptimizationHistory(),
+      openDailyPlanForDate(dateValue).catch(() => loadDailyPlanForDate(dateValue)),
     ]);
     setState({
       context,
       history,
+      dailyPlan,
       preset: {
         ...state.preset,
-        scenarioId: state.preset.scenarioId ?? context.scenarios[0]?.id ?? 'normal',
+        operationDate: dateValue,
+        scenarioId: dailyPlan.scenarioId ?? state.preset.scenarioId,
       },
     });
+    saveOptimizationPreset(state.preset);
     contextLoaded = true;
   } catch (error) {
     setState({
       error: error instanceof Error ? error.message : 'No se pudo cargar el contexto de optimización',
     });
   } finally {
-    setState({ isLoadingContext: false });
+    setState({ isLoadingContext: false, isLoadingDailyPlan: false });
+  }
+}
+
+export async function refreshDailyPlan(): Promise<void> {
+  const dateValue = state.preset.operationDate;
+  setState({ isLoadingDailyPlan: true, error: null });
+  try {
+    const dailyPlan = await openDailyPlanForDate(dateValue);
+    setState({ dailyPlan });
+  } catch (error) {
+    setState({
+      error: error instanceof Error ? error.message : 'No se pudo actualizar el plan del día',
+    });
+  } finally {
+    setState({ isLoadingDailyPlan: false });
   }
 }
 
@@ -93,6 +122,10 @@ export function updateOptimizationPreset(patch: Partial<OptimizationPreset>): vo
   }
   setState('preset', next);
   saveOptimizationPreset(next);
+  if (patch.operationDate) {
+    contextLoaded = false;
+    void initOptimizationPage(next.operationDate);
+  }
 }
 
 export function setOptimizationScenario(scenarioId: ScenarioId): void {
@@ -158,9 +191,15 @@ export async function executeOptimization(): Promise<void> {
       });
       await loadDashboardData();
     } else {
+      const dailyPlanId = state.dailyPlan?.id;
+      if (!dailyPlanId) {
+        throw new Error('No hay plan del día cargado');
+      }
+      await refreshDailyPlan();
       const result = await runOptimization({
         scenarioId: state.preset.scenarioId,
         preset: state.preset,
+        dailyPlanId,
       });
 
       for (let i = 0; i < result.logs.length; i++) {
@@ -175,6 +214,9 @@ export async function executeOptimization(): Promise<void> {
         kpis: result.kpis,
         lastResult: result,
         lastSimulationId: result.simulationId,
+        dailyPlan: state.dailyPlan
+          ? { ...state.dailyPlan, status: 'optimized', simulationId: result.simulationId }
+          : null,
       });
 
       if (result.servedPointCodes?.length) {
@@ -234,7 +276,7 @@ export async function loadOptimizationFromHistory(simulationId: number): Promise
 
 export async function dispatchOptimizationResult(): Promise<void> {
   if (state.isDispatching) return;
-  if (state.lastSimulationId == null) {
+  if (state.lastSimulationId == null && !state.dailyPlan?.id) {
     throw new Error('No hay rutas optimizadas para despachar');
   }
 
@@ -242,13 +284,16 @@ export async function dispatchOptimizationResult(): Promise<void> {
   try {
     const result = useMocks
       ? { dispatchedRouteIds: [1, 2], count: 2 }
-      : await dispatchOptimizationRoutes();
+      : state.dailyPlan?.id
+        ? await dispatchDailyPlanRoutes(state.dailyPlan.id)
+        : await dispatchOptimizationRoutes();
 
     setState({
       lastDispatch: {
         count: result.count,
         routeIds: result.dispatchedRouteIds,
       },
+      dailyPlan: state.dailyPlan ? { ...state.dailyPlan, status: 'dispatched' } : null,
       logs: [
         ...state.logs,
         {
@@ -275,6 +320,27 @@ export async function refreshOptimizationHistory(): Promise<void> {
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function closeOptimizationDay(): Promise<void> {
+  if (!state.dailyPlan?.id) {
+    throw new Error('No hay plan del día para cerrar');
+  }
+  const result = await closeDailyPlanForId(state.dailyPlan.id);
+  setState({
+    dailyPlan: state.dailyPlan
+      ? { ...state.dailyPlan, status: result.status, closedAt: result.closedAt }
+      : null,
+    logs: [
+      ...state.logs,
+      {
+        id: `log-close-${Date.now()}`,
+        timestamp: new Date().toLocaleTimeString('es-VE'),
+        message: `Día cerrado — ${result.newPendingVisits} pendiente(s) para mañana`,
+        type: 'info',
+      },
+    ],
+  });
 }
 
 export { state as optimizationState };

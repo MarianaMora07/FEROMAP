@@ -129,6 +129,6 @@ export interface DispatchRoutesResult {
   count: number;
 }
 
-export function dispatchOptimizedRoutes(): Promise<DispatchRoutesResult> {
-  return apiPost<DispatchRoutesResult>('/api/v1/routes/dispatch', {});
+export function dispatchOptimizedRoutes(dailyPlanId?: number): Promise<DispatchRoutesResult> {
+  return apiPost<DispatchRoutesResult>('/api/v1/routes/dispatch', dailyPlanId ? { dailyPlanId } : {});
 }

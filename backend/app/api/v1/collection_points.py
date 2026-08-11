@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Query, Response, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from app.api.deps import CurrentUser, DbSession, PlannerOrAdmin
 from app.schemas.collection_point import CollectionPointCreate, CollectionPointUpdate
+from app.schemas.visit_schedule import VisitScheduleUpsert
 from app.services.collection_point_service import (
     collection_point_detail,
     collection_point_fill_history,
@@ -13,6 +14,8 @@ from app.services.collection_point_service import (
     list_sector_options,
     update_collection_point,
 )
+
+from app.services.visit_schedule_service import get_visit_schedule, upsert_visit_schedule
 
 router = APIRouter(tags=["collection-points"])
 
@@ -80,6 +83,29 @@ def patch_collection_point(
     _user: PlannerOrAdmin,
 ):
     return update_collection_point(db, code, payload)
+
+
+@router.get("/collection-points/{code}/visit-schedule")
+def get_point_visit_schedule(code: str, db: DbSession, _user: PlannerOrAdmin):
+    schedule = get_visit_schedule(db, code)
+    if schedule is None:
+        raise HTTPException(status_code=404, detail="Frecuencia no configurada para este punto")
+    return schedule
+
+
+@router.patch("/collection-points/{code}/visit-schedule")
+def put_point_visit_schedule(code: str, body: VisitScheduleUpsert, db: DbSession, _user: PlannerOrAdmin):
+    result = upsert_visit_schedule(
+        db,
+        code,
+        visits_per_week=body.visits_per_week,
+        weekdays=body.weekdays,
+        is_extra_visit=body.is_extra_visit,
+        effective_from=body.effective_from,
+        effective_until=body.effective_until,
+    )
+    db.commit()
+    return result
 
 
 @router.delete("/collection-points/{code}", status_code=status.HTTP_200_OK)

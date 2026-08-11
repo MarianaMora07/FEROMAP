@@ -1,3 +1,6 @@
+from datetime import date
+from typing import Literal
+
 from pydantic import Field
 
 from app.schemas.common import CamelModel
@@ -42,6 +45,12 @@ class OptimizeRequest(CamelModel):
         le=60,
         description="Iteraciones del ACO. Si se omite, usa ACO_ITERATIONS del servidor.",
     )
+    planning_level: Literal["strategic", "administrative", "operational", "simulation"] | None = None
+    operation_date: date | None = None
+    collection_point_ids: list[int] | None = None
+    daily_plan_id: int | None = None
+    weekly_plan_id: int | None = None
+    auto_dispatch: bool | None = None
 
 
 class OptimizeJobCreated(CamelModel):

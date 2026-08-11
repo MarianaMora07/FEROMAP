@@ -8,7 +8,10 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SEEDS_DIR = REPO_ROOT / "data" / "seeds"
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+SEEDS_DIR = BACKEND_ROOT / "data" / "seeds"
+if not SEEDS_DIR.exists():
+    SEEDS_DIR = REPO_ROOT / "data" / "seeds"
 
 REQUIRED_SEED_FILES = [
     "parish.json",
@@ -73,7 +76,7 @@ def test_vehicles_seed_has_entries() -> None:
     data = _load_seed("vehicles.json")
     assert isinstance(data, list)
     assert len(data) >= 1
-    assert "id" in data[0]
+    assert "code" in data[0]
 
 
 def test_drivers_seed_has_entries() -> None:
@@ -96,6 +99,6 @@ def test_kpis_seed_has_normal_scenario() -> None:
 
 
 def test_alembic_versions_present() -> None:
-    versions_dir = REPO_ROOT / "backend" / "alembic" / "versions"
+    versions_dir = BACKEND_ROOT / "alembic" / "versions"
     migrations = sorted(versions_dir.glob("*.py"))
     assert len(migrations) >= 8, "Se esperan al menos 8 migraciones Alembic"

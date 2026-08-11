@@ -43,6 +43,7 @@ import {
 import { dashboardView, loadDashboardData } from '../../core/stores/dashboardStore';
 import { analyticsHref, reportsHref, simulationResultsHref } from '../../core/utils/simulationLinks';
 import { DashboardMiniMap } from './DashboardMiniMap';
+import { PlanningWidgets } from './PlanningWidgets';
 
 const alertIcon: Record<'danger' | 'warning' | 'info', () => JSX.Element> = {
   danger: () => <AlertTriangle size={16} />,
@@ -274,6 +275,9 @@ export default function DashboardPage() {
           </div>
         )}
       </Show>
+
+      <PlanningWidgets />
+
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           title="Residuos recolectados hoy"

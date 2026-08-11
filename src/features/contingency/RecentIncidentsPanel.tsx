@@ -1,7 +1,8 @@
-import { For, Show, createResource } from 'solid-js';
+import { For, Show, createResource, createSignal } from 'solid-js';
 import { AlertTriangle, Wrench } from 'lucide-solid';
 import { Card, CardHeader } from '../../design-system/components';
 import { fetchRecentIncidents, type IncidentPayload } from '../../core/api/contingencies';
+import { fetchIncidentTrace } from '../../core/api/planningAnalytics';
 import { canReportBreakdown } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
 
@@ -32,6 +33,19 @@ function incidentTypeLabel(type: string): string {
 
 function IncidentRow(props: { incident: IncidentPayload }) {
   const incident = () => props.incident;
+  const [trace, setTrace] = createSignal<string | null>(null);
+
+  const loadTrace = async () => {
+    try {
+      const result = await fetchIncidentTrace(incident().id);
+      const pendingCount = result.pendingVisits.length;
+      const nextDate = result.pendingVisits[0]?.targetOperationDate ?? '—';
+      setTrace(`${pendingCount} pendiente(s) → plan del ${nextDate}`);
+    } catch {
+      setTrace('Sin trazabilidad registrada');
+    }
+  };
+
   return (
     <li class="flex items-start gap-3 border-b border-border py-3 last:border-0 dark:border-dark-border">
       <span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-950/40">
@@ -49,6 +63,16 @@ function IncidentRow(props: { incident: IncidentPayload }) {
           {incident().routeId != null ? ` · Ruta #${incident().routeId}` : ''}
           {incident().affectsActiveRoute ? ' · Ruta activa afectada' : ''}
         </p>
+        <Show when={trace()}>
+          <p class="mt-1 text-[11px] font-medium text-fero-blue">{trace()}</p>
+        </Show>
+        <button
+          type="button"
+          class="mt-1 text-[11px] font-semibold text-fero-blue hover:underline"
+          onClick={() => void loadTrace()}
+        >
+          Ver trazabilidad
+        </button>
       </div>
     </li>
   );

@@ -289,7 +289,7 @@ def collection_point_fill_history(
 ) -> dict[str, Any]:
     if days < 1 or days > 30:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="El parámetro days debe estar entre 1 y 30",
         )
 
@@ -336,7 +336,7 @@ def _validate_coordinates(longitude: float, latitude: float) -> None:
     lon_min, lat_min, lon_max, lat_max = UNARE_BBOX
     if not (lon_min <= longitude <= lon_max and lat_min <= latitude <= lat_max):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Las coordenadas están fuera del área de estudio de la parroquia Unare",
         )
 
@@ -344,7 +344,7 @@ def _validate_coordinates(longitude: float, latitude: float) -> None:
 def _validate_fill_level(current_fill: Decimal, capacity: Decimal) -> None:
     if current_fill < 0 or current_fill > capacity:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="El nivel de llenado debe estar entre 0 y la capacidad máxima",
         )
 

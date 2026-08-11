@@ -2,7 +2,16 @@ import type { Scenario, ScenarioId } from '../../data/types/simulation';
 import type { Vehicle } from '../types/vehicle';
 import type { CollectionPointOptimizationContext } from './collectionPoints';
 import { fetchCollectionPointsOptimizationContext, fetchCollectionPointsSummary } from './collectionPoints';
+import {
+  closeDailyPlan,
+  fetchDailyPlan,
+  openDailyPlan,
+  optimizeDailyPlan,
+  dispatchDailyPlan,
+  type DailyPlan,
+} from './planning';
 import { fetchScenarios, runSimulationOptimize, type OptimizeResponse } from './simulation';
+import { fetchSimulationOptimizeJob } from './simulationJobs';
 import { dispatchOptimizedRoutes, type SimulationHistoryRow } from './simulationOperations';
 import { fetchOperationalHistory } from '../utils/operationalHistory';
 import { fetchVehicles, fetchVehiclesOptimizationContext, isAssignableVehicle } from './vehicles';
@@ -102,13 +111,51 @@ export async function fetchOptimizationPageContext(): Promise<OptimizationPageCo
   };
 }
 
-export function runOptimization(payload: OptimizationRunPayload): Promise<OptimizeResponse> {
+export function runOptimization(payload: OptimizationRunPayload & { dailyPlanId?: number }): Promise<OptimizeResponse> {
   const scenarioId = payload.scenarioId ?? inferScenarioId(loadOptimizationPreset());
   if (payload.preset) {
     saveOptimizationPreset({ ...loadOptimizationPreset(), ...payload.preset, scenarioId });
   }
-  return runSimulationOptimize(scenarioId);
+  if (payload.dailyPlanId) {
+    return optimizeDailyPlanAndWait(payload.dailyPlanId);
+  }
+  return runSimulationOptimize(scenarioId, { planningLevel: 'simulation', autoDispatch: false });
 }
+
+async function optimizeDailyPlanAndWait(dailyPlanId: number): Promise<OptimizeResponse> {
+  const { jobId } = await optimizeDailyPlan(dailyPlanId);
+  while (true) {
+    const snapshot = await fetchSimulationOptimizeJob(jobId);
+    if (snapshot.status === 'completed' && snapshot.result) {
+      return snapshot.result;
+    }
+    if (snapshot.status === 'failed') {
+      throw new Error(snapshot.error ?? 'La optimización del día falló');
+    }
+    if (snapshot.status === 'cancelled') {
+      throw new Error('Optimización cancelada');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 450));
+  }
+}
+
+export function loadDailyPlanForDate(operationDate: string): Promise<DailyPlan> {
+  return fetchDailyPlan(operationDate);
+}
+
+export function openDailyPlanForDate(operationDate: string): Promise<DailyPlan> {
+  return openDailyPlan(operationDate);
+}
+
+export function closeDailyPlanForId(dailyPlanId: number) {
+  return closeDailyPlan(dailyPlanId);
+}
+
+export function dispatchDailyPlanRoutes(dailyPlanId: number) {
+  return dispatchDailyPlan(dailyPlanId);
+}
+
+export type { DailyPlan };
 
 export function dispatchOptimizationRoutes() {
   return dispatchOptimizedRoutes();

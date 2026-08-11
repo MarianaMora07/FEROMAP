@@ -65,6 +65,7 @@ import { EngineComputationPanel } from './EngineComputationPanel';
 import { ExecutionPanel } from './ExecutionPanel';
 import { PostSimulationActions } from './PostSimulationActions';
 import { SimulationHistoryPanel } from './SimulationHistoryPanel';
+import { WeeklyPlanTab } from './WeeklyPlanTab';
 import { WizardStepNav } from './WizardStepNav';
 import { CancelExecutionConfirmDialog } from './CancelExecutionConfirmDialog';
 import {
@@ -91,10 +92,11 @@ import {
   type ConditionId,
 } from './simulationConfig';
 
-type SimulationPageTab = 'flow' | 'history';
+type SimulationPageTab = 'flow' | 'history' | 'weekly';
 
 const simulationPageTabs: { id: SimulationPageTab; label: string }[] = [
   { id: 'flow', label: 'Flujo de simulación' },
+  { id: 'weekly', label: 'Plan semanal' },
   { id: 'history', label: 'Historial' },
 ];
 
@@ -250,7 +252,7 @@ export default function SimulationPage() {
 
   const [step, setStep] = createSignal(1);
   const [pageTab, setPageTab] = createSignal<SimulationPageTab>(
-    params.view === 'history' ? 'history' : 'flow',
+    params.view === 'history' ? 'history' : params.view === 'weekly' ? 'weekly' : 'flow',
   );
   const [conditions, setConditions] = createSignal(defaultConditions());
   const [rainIntensity, setRainIntensity] = createSignal('alta');
@@ -469,6 +471,9 @@ export default function SimulationPage() {
       }
       if (params.view === 'history') {
         setPageTab('history');
+      }
+      if (params.view === 'weekly') {
+        setPageTab('weekly');
       }
     });
 
@@ -947,6 +952,10 @@ export default function SimulationPage() {
         </div>
       </Show>
       </div>
+      </Show>
+
+      <Show when={pageTab() === 'weekly'}>
+        <WeeklyPlanTab />
       </Show>
 
       <Show when={pageTab() === 'history'}>

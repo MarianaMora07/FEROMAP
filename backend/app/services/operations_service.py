@@ -47,6 +47,7 @@ def dispatch_optimized_routes(
     db: Session,
     *,
     preserve_active: bool = False,
+    daily_plan_id: int | None = None,
 ) -> dict[str, Any]:
     """Marca rutas optimizadas pendientes como en ejecución y asigna vehículos."""
     if not preserve_active:
@@ -62,14 +63,13 @@ def dispatch_optimized_routes(
             if vehicle and vehicle.status == "in_route":
                 vehicle.status = "available"
 
-    pending = db.scalars(
-        select(OptimizedRoute)
-        .where(
-            OptimizedRoute.route_kind == "optimized",
-            OptimizedRoute.status == "pending",
-        )
-        .order_by(OptimizedRoute.id.desc())
-    ).all()
+    pending_stmt = select(OptimizedRoute).where(
+        OptimizedRoute.route_kind == "optimized",
+        OptimizedRoute.status == "pending",
+    )
+    if daily_plan_id is not None:
+        pending_stmt = pending_stmt.where(OptimizedRoute.daily_plan_id == daily_plan_id)
+    pending = db.scalars(pending_stmt.order_by(OptimizedRoute.id.desc())).all()
 
     if not pending:
         latest_calculated = db.scalar(
@@ -79,15 +79,14 @@ def dispatch_optimized_routes(
             .limit(1)
         )
         if latest_calculated:
-            pending = list(
-                db.scalars(
-                    select(OptimizedRoute).where(
-                        OptimizedRoute.route_kind == "optimized",
-                        OptimizedRoute.status == "pending",
-                        OptimizedRoute.calculated_at == latest_calculated,
-                    )
-                ).all()
+            fallback_stmt = select(OptimizedRoute).where(
+                OptimizedRoute.route_kind == "optimized",
+                OptimizedRoute.status == "pending",
+                OptimizedRoute.calculated_at == latest_calculated,
             )
+            if daily_plan_id is not None:
+                fallback_stmt = fallback_stmt.where(OptimizedRoute.daily_plan_id == daily_plan_id)
+            pending = list(db.scalars(fallback_stmt).all())
 
     dispatched_ids: list[int] = []
     for route in pending:
@@ -135,6 +134,13 @@ def advance_route(db: Session, route_id: int) -> dict[str, Any]:
     if point is not None:
         point.current_fill_level_kg = Decimal("0")
         point.last_emptied_at = now
+        from app.services.planning_service import resolve_pending_visits_for_points
+
+        resolve_pending_visits_for_points(
+            db,
+            [point.id],
+            operation_date=now.date(),
+        )
 
     db.flush()
     progress = route_progress_percent(list(route.waypoints))
