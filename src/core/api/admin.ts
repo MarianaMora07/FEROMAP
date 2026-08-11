@@ -104,3 +104,20 @@ export function updateAdminSettings(payload: OperationalSettingsUpdate): Promise
 export function fetchAdminAuditLog(limit = 50): Promise<AuditLogEntry[]> {
   return apiGet<AuditLogEntry[]>(`/api/v1/admin/audit-log?limit=${limit}`);
 }
+
+export interface SeedResult {
+  parishes: number;
+  sectors: number;
+  collectionPoints: number;
+  vehicles: number;
+  drivers: number;
+  users: number;
+  optimizedRoutes: number;
+  simulations: number;
+  systemAlerts: number;
+  demoPassword: string;
+}
+
+export function runAdminSeed(): Promise<SeedResult> {
+  return apiPost<SeedResult>('/api/v1/admin/seed', {});
+}

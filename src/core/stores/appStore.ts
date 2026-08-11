@@ -34,6 +34,13 @@ interface AppState {
   dataLoading: boolean;
 }
 
+const LG_MIN_WIDTH_MQ = '(min-width: 1024px)';
+
+function initialSidebarOpen(): boolean {
+  if (typeof window === 'undefined') return true;
+  return window.matchMedia(LG_MIN_WIDTH_MQ).matches;
+}
+
 const [state, setState] = createStore<AppState>({
   layers: {
     sectors: true,
@@ -43,7 +50,7 @@ const [state, setState] = createStore<AppState>({
   },
   selectedContainer: null,
   selectedSector: null,
-  sidebarOpen: true,
+  sidebarOpen: initialSidebarOpen(),
   darkMode: false,
   containers: containersData,
   sectors: sectorsData,
@@ -104,8 +111,20 @@ export function setSelectedSector(sector: SectorName | null) {
   setState('selectedSector', sector);
 }
 
+export function setSidebarOpen(open: boolean) {
+  setState('sidebarOpen', open);
+}
+
 export function toggleSidebar() {
   setState('sidebarOpen', (v) => !v);
+}
+
+/** Close overlay sidebar on viewports below the `lg` breakpoint. */
+export function closeSidebarIfMobile() {
+  if (typeof window === 'undefined') return;
+  if (!window.matchMedia(LG_MIN_WIDTH_MQ).matches) {
+    setState('sidebarOpen', false);
+  }
 }
 
 export function toggleDarkMode() {

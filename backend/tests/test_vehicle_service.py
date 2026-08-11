@@ -309,7 +309,7 @@ def _serialized_row(
         "status": status,
         "driver": driver,
         "driverPhone": "+58 414-555-0192",
-        "type": "Compactador",
+        "type": "Compactadora",
         "maxCapacityKg": 15000.0,
         "currentRoute": None,
         "updatedAt": "01/08/2026 12:00",

@@ -41,50 +41,50 @@ export function KpiCard(props: KpiCardProps) {
 
   return (
     <div
-      class={`rounded-lg border border-border bg-surface p-4 shadow-xs transition-all duration-200 hover:shadow-sm dark:bg-dark-surface dark:border-dark-border ${local.class ?? ''}`}
+      class={`rounded-lg border border-border bg-surface p-3 shadow-xs transition-all duration-200 hover:shadow-sm sm:p-4 dark:bg-dark-surface dark:border-dark-border ${local.class ?? ''}`}
       {...others}
     >
-      <div class="flex items-center justify-between gap-4">
-        <div class="min-w-0 flex-1">
-          <p class="text-sm font-medium text-text-muted">{local.title}</p>
-          <div class="mt-2 flex items-baseline gap-1.5">
-            <span class="font-heading text-3xl font-bold leading-none text-text-primary dark:text-white">
-              {local.value}
-            </span>
-            <Show when={local.unit}>
-              <span class="text-sm font-medium text-text-muted">{local.unit}</span>
-            </Show>
-          </div>
-
-          <Show when={local.trend}>
-            {(trend) => (
-              <div class="mt-3 flex items-center gap-1">
-                <span
-                  class={`text-sm font-medium ${
-                    trend().direction === 'up' ? 'text-fero-green-dark' : 'text-red-500'
-                  }`}
-                >
-                  {trend().direction === 'up' ? '+' : '-'}
-                  {Math.abs(trend().value)}%
-                </span>
-                <span class="text-xs text-text-muted">{local.trendLabel ?? 'vs anterior'}</span>
-              </div>
-            )}
-          </Show>
-
-          <Show when={local.footer}>
-            <div class="mt-3">{local.footer}</div>
-          </Show>
-        </div>
-
+      <div class="flex items-start justify-between gap-2">
+        <p class="min-w-0 flex-1 text-sm font-medium leading-snug text-text-muted break-words">
+          {local.title}
+        </p>
         <Show when={local.icon}>
           <div
-            class={`flex h-14 w-14 shrink-0 items-center justify-center self-center rounded-xl ${iconToneClasses[local.iconTone ?? 'green']}`}
+            class={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${iconToneClasses[local.iconTone ?? 'green']}`}
           >
             {local.icon}
           </div>
         </Show>
       </div>
+
+      <div class="mt-2 flex min-w-0 flex-wrap items-baseline gap-1.5">
+        <span class="font-heading text-2xl font-bold leading-none text-text-primary sm:text-3xl dark:text-white">
+          {local.value}
+        </span>
+        <Show when={local.unit}>
+          <span class="text-sm font-medium text-text-muted">{local.unit}</span>
+        </Show>
+      </div>
+
+      <Show when={local.trend}>
+        {(trend) => (
+          <div class="mt-3 flex items-center gap-1">
+            <span
+              class={`text-sm font-medium ${
+                trend().direction === 'up' ? 'text-fero-green-dark' : 'text-red-500'
+              }`}
+            >
+              {trend().direction === 'up' ? '+' : '-'}
+              {Math.abs(trend().value)}%
+            </span>
+            <span class="text-xs text-text-muted">{local.trendLabel ?? 'vs anterior'}</span>
+          </div>
+        )}
+      </Show>
+
+      <Show when={local.footer}>
+        <div class="mt-3">{local.footer}</div>
+      </Show>
     </div>
   );
 }

@@ -115,11 +115,12 @@ def log_audit(
     resource_id: str | None = None,
     details: dict[str, Any] | None = None,
     ip_address: str | None = None,
+    actor_email: str | None = None,
 ) -> None:
     db.add(
         AuditLog(
             user_id=actor.id if actor else None,
-            actor_email=actor.email if actor else None,
+            actor_email=actor_email if actor_email is not None else (actor.email if actor else None),
             action=action,
             resource=resource,
             resource_id=resource_id,

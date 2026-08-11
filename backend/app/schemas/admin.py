@@ -111,3 +111,16 @@ class AuditLogEntry(CamelModel):
     details: dict | None = None
     ip_address: str | None = None
     created_at: str
+
+
+class SeedResult(CamelModel):
+    parishes: int
+    sectors: int
+    collection_points: int
+    vehicles: int
+    drivers: int
+    users: int
+    optimized_routes: int
+    simulations: int
+    system_alerts: int
+    demo_password: str

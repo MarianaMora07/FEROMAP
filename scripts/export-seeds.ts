@@ -57,6 +57,7 @@ const vehicles = vehiclesList.map((vehicle) => ({
   maxCapacityKg: Math.round(vehicle.capacityM3 * 1000),
   fuelConsumptionRate: 0.35,
   status: vehicleStatusMap[vehicle.status] ?? 'available',
+  vehicleType: vehicle.type,
   driverName: vehicle.driver === '—' ? null : vehicle.driver,
   driverPhone: vehicle.driverPhone ?? null,
 }));

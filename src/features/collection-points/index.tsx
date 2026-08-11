@@ -698,8 +698,8 @@ export default function CollectionPointsPage() {
           </button>
         </div>
       </Show>
-      <div class="flex flex-col gap-4 xl:flex-row xl:items-center">
-        <div class="grid flex-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <div class="flex flex-col gap-4">
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           <Show
             when={!pointsLoading() && !summaryLoading()}
             fallback={
@@ -720,11 +720,11 @@ export default function CollectionPointsPage() {
           </Show>
         </div>
         <Show when={canManage()}>
-          <div class="flex shrink-0 flex-wrap gap-2">
+          <div class="flex flex-wrap gap-2">
             <A href={simulationHref()}>
               <Button
                 variant="outline"
-                class="w-full gap-2 px-5 py-2.5 xl:w-auto"
+                class="gap-2 px-5 py-2.5"
                 icon={<ArrowRight size={17} />}
               >
                 {criticalCount() > 0
@@ -734,7 +734,7 @@ export default function CollectionPointsPage() {
             </A>
             <Button
               variant="primary"
-              class="w-full gap-2 px-5 py-2.5 xl:w-auto"
+              class="gap-2 px-5 py-2.5"
               icon={<Plus size={17} />}
               onClick={() => openCreateForm()}
             >
@@ -742,7 +742,7 @@ export default function CollectionPointsPage() {
             </Button>
             <Button
               variant="outline"
-              class={`w-full gap-2 px-5 py-2.5 xl:w-auto ${placeMode() ? 'border-fero-blue text-fero-blue' : ''}`}
+              class={`gap-2 px-5 py-2.5 ${placeMode() ? 'border-fero-blue text-fero-blue' : ''}`}
               icon={<Crosshair size={17} />}
               onClick={() => setPlaceMode((active) => !active)}
             >
