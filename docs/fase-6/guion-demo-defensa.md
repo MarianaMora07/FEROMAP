@@ -1,4 +1,4 @@
-# Guión de demo de defensa (5–7 min)
+# Guión de demo de defensa (6–8 min)
 
 **Audiencia:** tribunal / evaluadores de tesis  
 **Rol demo:** Planificador (`plan@fero.com` / `123456789`)  
@@ -9,27 +9,43 @@
 
 ## Mensaje clave (decir al inicio, ~30 s)
 
-> «FEROMAP guía al planificador en un flujo de **simulación de escenarios**: configura condiciones, ejecuta el motor ACO y muestra el impacto medible. La **planificación operativa** es un módulo aparte para el despacho diario de rutas.»
+> «FEROMAP guía al planificador en un flujo de **simulación de escenarios**: configura condiciones, ejecuta el cálculo de rutas paso a paso y muestra el impacto medible. La **planificación operativa** es un módulo aparte para el despacho diario.»
 
 No hace falta explicar “dos pantallas parecidas”: los banners y el menú ya orientan.
 
 ---
 
-## Minuto a minuto
+## Minuto a minuto (con guion visual)
 
-| Tiempo | Pantalla | Qué hacer | Qué decir |
-|--------|----------|-----------|-----------|
+| Tiempo | Pantalla | Qué hacer | Qué decir (apoyado en la UI) |
+|--------|----------|-----------|------------------------------|
 | **0:00–0:45** | `/login` → `/` | Iniciar sesión como planificador | Dashboard con CTA **Nueva simulación** como entrada principal |
-| **0:45–1:30** | `/simulation` paso 1 | Escenario **Tráfico pico** o toggles tráfico + saturación | Condiciones derivan el escenario; parámetros conectados (lluvia/desechos) cuando aplica |
-| **1:30–2:00** | Paso 1 → **Continuar** | Revisar resumen lateral (vehículos, puntos) | Sistema valida recursos antes de ejecutar |
-| **2:00–3:30** | Paso 2 | **Ejecutar simulación** — mostrar progreso y logs | Motor ACO (12 hormigas × 20 iteraciones) sobre grafo OSM de Unare |
-| **3:30–4:30** | Paso 3 | KPIs comparativos, ahorro estimado, mapa | Resultado: distancia, tiempo, combustible, CO₂ evitado |
-| **4:30–5:15** | Paso 3 acciones | **Ver en analítica** (deep link con `simulationId`) | Continuidad sin perder contexto |
-| **5:15–5:45** | `/simulation?view=history` | Pestaña Historial — una corrida anterior | Historial de escenarios de tesis (no confundir con operativo) |
-| **5:45–6:30** | `/optimization` (opcional) | Mostrar banner + **Generar ruta operativa** | «Aquí es operación del día; evaluación de escenarios está en Simulación» |
-| **6:30–7:00** | `/reports` | Descargar CSV o PDF | Evidencia exportable para el capítulo de resultados |
+| **0:45–1:30** | `/simulation` paso 1 | Escenario **Tráfico pico** o toggles tráfico + saturación | «Aquí defino las condiciones del día: lluvia, avería, saturación… El sistema deriva el escenario automáticamente.» |
+| **1:30–2:00** | Paso 1 → **Continuar** | Revisar resumen lateral (vehículos, puntos) | «Antes de calcular, valida que hay camiones y contenedores suficientes.» |
+| **2:00–4:00** | Paso 2 | **Ejecutar simulación** | **Señalar el wizard:** aparece «Ejecutando — fase X de 8». **Stepper izquierdo:** 8 etapas en español claro. **Panel central:** «Qué está haciendo ahora» + barra de progreso real. **Mapa:** animación según la fase (red de calles → exploración → ruta final). |
+| **4:00–4:30** | Paso 2 (opcional) | Pulsar **Cancelar ejecución** o **Esc** | «El usuario puede interrumpir; el sistema confirma y no guarda un resultado a medias.» (solo si quieres demostrar cancelación; luego re-ejecutar). |
+| **4:30–5:30** | Paso 3 | KPIs comparativos, ahorro estimado, mapa | «Aquí está el ahorro: distancia, tiempo, combustible y CO₂ evitado frente a la ruta actual.» |
+| **5:30–6:15** | Paso 3 acciones | **Ver en analítica** (deep link con `simulationId`) | «Desde el resultado sigo el análisis sin perder el contexto de esta corrida.» |
+| **6:15–6:45** | `/simulation?view=history` | Pestaña Historial — una corrida anterior | «Historial de escenarios de tesis; no es el despacho operativo del día.» |
+| **6:45–7:15** | `/optimization` (opcional) | Banner + **Generar ruta operativa** | «Aquí es operación diaria; la evaluación de escenarios está en Simulación.» |
+| **7:15–8:00** | `/reports` | Descargar CSV o PDF | Evidencia exportable para el capítulo de resultados |
 
-**Duración total:** ~6–7 min (se puede acortar omitiendo Optimización).
+**Duración total:** ~7–8 min (se puede acortar omitiendo cancelación u Optimización).
+
+---
+
+## Guión visual — paso 2 (lo más importante para el tribunal)
+
+Usa esta secuencia al narrar mientras corre la ejecución:
+
+1. **Wizard superior:** «Fase 3 de 8: Distancias y tiempos» — el evaluador sabe dónde estamos sin leer logs técnicos.
+2. **Stepper (columna izquierda):** etapas completadas con ✓; la activa con spinner.
+3. **Caja verde «Qué está haciendo ahora»:** explica en lenguaje llano (sin asumir que conocen VRP o ACO; las siglas aparecen entre paréntesis la primera vez).
+4. **Mapa:** «Primero carga la red de calles reales; luego el algoritmo explora rutas; al final muestra la ruta optimizada.»
+5. **Registro del cálculo:** mensajes del motor con etiqueta de etapa (opcional, si preguntan por trazabilidad).
+
+**Frase de cierre del paso 2:**  
+> «No es una barra genérica: cada fase corresponde a un hito real del motor en el servidor, con opción de cancelar.»
 
 ---
 
@@ -44,13 +60,14 @@ No hace falta explicar “dos pantallas parecidas”: los banners y el menú ya 
 ## Plan B (si el motor tarda)
 
 - Tener una simulación previa en historial → abrir con `?simulationId=…`
-- Mencionar que `just defense-verify` validó API + optimize antes de la sesión
+- Mencionar que `just defense-verify` validó API + jobs de optimización antes de la sesión
+- Mostrar al menos el **stepper y el sub-estado del wizard** aunque la corrida tarde; el progreso es consultable en tiempo real
 
 ---
 
 ## Cierre (~30 s)
 
-> «El flujo es reproducible: configurar → ejecutar → interpretar → analítica/reporte. La separación Simulación / Planificación operativa está documentada en la matriz de responsabilidades (Opción A).»
+> «El flujo es reproducible: configurar → ejecutar con transparencia → interpretar → analítica/reporte. La separación Simulación / Planificación operativa está documentada en la matriz de responsabilidades (Opción A).»
 
 ---
 
@@ -60,4 +77,16 @@ No hace falta explicar “dos pantallas parecidas”: los banners y el menú ya 
 - [ ] Login planificador OK
 - [ ] Pestaña del navegador en `/simulation`
 - [ ] Sin ventanas de error en consola
+- [ ] Probar una corrida completa y ver «Ejecutando — fase X de 8» en el wizard
+- [ ] (Opcional) Probar Esc → confirmar cancelación
 - [ ] (Opcional) Una corrida previa en historial por si falla la red
+- [ ] `npm test` (unit) en verde
+
+---
+
+## Pruebas automatizadas (Fase 7.5)
+
+```bash
+npm test              # unit: fases y cancelación en store/runner
+npm run test:e2e      # requiere API en :8000 + VITE_USE_MOCKS=true en dev
+```

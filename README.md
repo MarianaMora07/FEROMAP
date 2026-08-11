@@ -182,7 +182,7 @@ Verificación automática:
 just defense-verify
 ```
 
-Documentación de implementación (fases 0–6): [docs/fase-0/README.md](docs/fase-0/README.md) · [docs/fase-6/README.md](docs/fase-6/README.md)
+Documentación de implementación (fases 0–7): [docs/fase-0/README.md](docs/fase-0/README.md) · [docs/fase-6/README.md](docs/fase-6/README.md) · [docs/fase-7/README.md](docs/fase-7/README.md)
 
 ---
 

@@ -141,3 +141,25 @@ html.dark body {
 .dark ::-webkit-scrollbar-thumb:hover {
   background: #475569;
 }
+
+/* Simulación — marcadores animados en ejecución */
+.sim-marker--pulse > span {
+  animation: sim-marker-pulse 1.15s ease-in-out infinite;
+}
+
+@keyframes sim-marker-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  }
+  50% {
+    transform: scale(1.12);
+    box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.28);
+  }
+}
+
+.sim-truck-marker {
+  pointer-events: none;
+  transition: transform 0.2s linear;
+}

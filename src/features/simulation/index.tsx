@@ -8,6 +8,7 @@ import {
   Leaf,
   Play,
   Plus,
+  Square,
   Trash2,
   TrendingUp,
   Truck,
@@ -25,13 +26,18 @@ import { authUser } from '../../core/stores/authStore';
 import { fetchMonitoringStatus } from '../../core/api/monitoring';
 import {
   applySimulationScenario,
+  cancelOptimization,
   currentKpis,
+  executionNarrative,
+  executionPhaseIndex,
+  executionTotalPhases,
   initSimulationData,
   kpiImpactRows,
   kpiSavingsSummary,
   loadSimulationFromHistory,
   runOptimization,
   simulationState,
+  wasExecutionCancelled,
 } from '../../core/stores/simulationStore';
 import {
   deriveScenarioId,
@@ -54,6 +60,12 @@ import { ExecutionPanel } from './ExecutionPanel';
 import { PostSimulationActions } from './PostSimulationActions';
 import { SimulationHistoryPanel } from './SimulationHistoryPanel';
 import { WizardStepNav } from './WizardStepNav';
+import { CancelExecutionConfirmDialog } from './CancelExecutionConfirmDialog';
+import {
+  EXECUTION_CANCEL_MESSAGES,
+  formatWizardExecutionSubstatus,
+  getExecutionPhase,
+} from './executionPhases';
 
 import {
   conditionsForScenario,
@@ -261,7 +273,9 @@ export default function SimulationPage() {
   const [hasResults, setHasResults] = createSignal(false);
   const [historyError, setHistoryError] = createSignal<string | null>(null);
   const [runError, setRunError] = createSignal<string | null>(null);
+  const [runNotice, setRunNotice] = createSignal<string | null>(null);
   const [incidentsRefreshKey, setIncidentsRefreshKey] = createSignal(0);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = createSignal(false);
 
   const [monitoringData] = createResource(
     () => (step() >= 2 ? step() : undefined),
@@ -303,6 +317,26 @@ export default function SimulationPage() {
   const savings = () => kpiSavingsSummary(currentKpis());
   const canRun = () => canOptimize(authUser()?.role) && (readiness()?.ready ?? false);
 
+  const wizardExecutionSubstatus = createMemo(() => {
+    if (step() !== 2 || !simulationState.isOptimizing || !simulationState.executionPhase) {
+      return null;
+    }
+    const phase = getExecutionPhase(simulationState.executionPhase);
+    return formatWizardExecutionSubstatus(phase.order, executionTotalPhases(), phase.label);
+  });
+
+  const requestCancelExecution = () => {
+    if (!simulationState.isOptimizing) return;
+    setCancelConfirmOpen(true);
+  };
+
+  const confirmCancelExecution = () => {
+    cancelOptimization();
+    setCancelConfirmOpen(false);
+    setRunError(null);
+    setRunNotice(EXECUTION_CANCEL_MESSAGES.done);
+  };
+
   const applyDerivedScenario = () => {
     applySimulationScenario(deriveScenarioId(conditions()));
   };
@@ -334,6 +368,7 @@ export default function SimulationPage() {
 
   const handleRun = async () => {
     setRunError(null);
+    setRunNotice(null);
     applyDerivedScenario();
     const ready = readiness();
     if (!ready?.ready) {
@@ -342,11 +377,19 @@ export default function SimulationPage() {
     }
     try {
       await runOptimization(simulationParams());
+      if (wasExecutionCancelled()) {
+        setRunNotice(EXECUTION_CANCEL_MESSAGES.done);
+        return;
+      }
       setHasResults(true);
       setStep(3);
     } catch (error) {
       setRunError(error instanceof Error ? error.message : 'No se pudo ejecutar la simulación');
     }
+  };
+
+  const handleCancelExecution = () => {
+    requestCancelExecution();
   };
 
   const handleNewSimulation = () => {
@@ -383,6 +426,15 @@ export default function SimulationPage() {
         setPageTab('history');
       }
     });
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (step() !== 2 || !simulationState.isOptimizing || cancelConfirmOpen()) return;
+      event.preventDefault();
+      requestCancelExecution();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
   });
 
   return (
@@ -439,9 +491,19 @@ export default function SimulationPage() {
       </div>
 
       <Show when={pageTab() === 'flow'}>
+      <CancelExecutionConfirmDialog
+        open={cancelConfirmOpen()}
+        onConfirm={confirmCancelExecution}
+        onDismiss={() => setCancelConfirmOpen(false)}
+      />
       <div class="space-y-4">
       <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <WizardStepNav step={step()} hasResults={hasResults()} onStepChange={setStep} />
+        <WizardStepNav
+          step={step()}
+          hasResults={hasResults()}
+          onStepChange={setStep}
+          executionSubstatus={wizardExecutionSubstatus()}
+        />
       </div>
 
       <Show when={runError() && step() !== 2}>
@@ -604,9 +666,21 @@ export default function SimulationPage() {
               progress={simulationState.optimizationProgress}
               logs={simulationState.logs}
               error={runError()}
+              notice={runNotice()}
+              executionPhase={simulationState.executionPhase}
+              executionPhaseIndex={executionPhaseIndex()}
+              executionTotalPhases={executionTotalPhases()}
+              executionNarrative={executionNarrative()}
+              scenarioLabel={derivedScenario().label}
             />
             <Suspense fallback={<MapPanelFallback />}>
-              <SimulationMapPanel hasResults={false} />
+              <SimulationMapPanel
+                hasResults={false}
+                executionMode={simulationState.isOptimizing || simulationState.executionPhase === 'listo'}
+                executionPhase={simulationState.executionPhase}
+                isRunning={simulationState.isOptimizing}
+                executionProgress={simulationState.optimizationProgress}
+              />
             </Suspense>
             <Card>
               <CardHeader title="Reportar contingencia" />
@@ -618,20 +692,40 @@ export default function SimulationPage() {
             <RecentIncidentsPanel refreshKey={incidentsRefreshKey()} compact />
           </div>
         </div>
-        <div class="flex flex-wrap justify-between gap-2 border-t border-border pt-4 dark:border-dark-border">
-          <Button variant="outline" class="gap-2" icon={<ArrowLeft size={16} />} onClick={() => setStep(1)}>
+        <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4 dark:border-dark-border">
+          <Button
+            variant="outline"
+            class="gap-2"
+            icon={<ArrowLeft size={16} />}
+            disabled={simulationState.isOptimizing}
+            onClick={() => setStep(1)}
+          >
             Anterior
           </Button>
-          <Button
-            variant="primary"
-            class="gap-2 px-6"
-            icon={<Play size={16} />}
-            loading={simulationState.isOptimizing}
-            disabled={!canRun() || simulationState.isOptimizing}
-            onClick={() => void handleRun()}
-          >
-            Ejecutar simulación
-          </Button>
+          <div class="flex flex-wrap gap-2">
+            <Show when={simulationState.isOptimizing}>
+              <Button
+                variant="outline"
+                class="gap-2 border-amber-300 text-amber-800 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-300 dark:hover:bg-amber-950/30"
+                icon={<Square size={14} />}
+                onClick={handleCancelExecution}
+                data-testid="cancel-execution-btn"
+              >
+                Cancelar ejecución
+              </Button>
+            </Show>
+            <Button
+              variant="primary"
+              class="gap-2 px-6"
+              icon={<Play size={16} />}
+              loading={simulationState.isOptimizing}
+              disabled={!canRun() || simulationState.isOptimizing}
+              onClick={() => void handleRun()}
+              data-testid="execute-simulation-btn"
+            >
+              Ejecutar simulación
+            </Button>
+          </div>
         </div>
       </Show>
 

@@ -2,20 +2,39 @@ import type { RouteCollection } from '../../data/types/geo';
 import type { KpiMetrics, Scenario, ScenarioId, SimulationLogEntry } from '../../data/types/simulation';
 import { kpiByScenario, optimizationLogMessages, scenarios } from '../../data/mock/kpis';
 import { getScenarioRoutes } from '../../data/mock/routes';
-import { apiGet, apiPost, useMocks } from './client';
+import { apiGet, useMocks } from './client';
 import { mergeRouteCollections } from './routes';
+import {
+  fetchSimulationOptimizeJob,
+  startSimulationOptimizeJob,
+  type OptimizeJobResult,
+} from './simulationJobs';
 
-export interface OptimizeResponse {
-  simulationId: number;
-  scenarioId: ScenarioId;
-  scenario: Scenario;
-  kpis: KpiMetrics;
-  routes: {
-    current: RouteCollection;
-    optimized: RouteCollection;
-  };
-  logs: SimulationLogEntry[];
-  servedPointCodes?: string[];
+export type OptimizeResponse = OptimizeJobResult & {
+  scenario?: Scenario;
+};
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForOptimizeJob(jobId: string, signal?: AbortSignal): Promise<OptimizeJobResult> {
+  while (true) {
+    if (signal?.aborted) {
+      throw signal.reason ?? new DOMException('Aborted', 'AbortError');
+    }
+    const snapshot = await fetchSimulationOptimizeJob(jobId);
+    if (snapshot.status === 'completed' && snapshot.result) {
+      return snapshot.result;
+    }
+    if (snapshot.status === 'failed') {
+      throw new Error(snapshot.error ?? 'La optimización falló en el servidor');
+    }
+    if (snapshot.status === 'cancelled') {
+      throw new DOMException('Aborted', 'AbortError');
+    }
+    await delay(450);
+  }
 }
 
 function mockOptimizeResponse(scenarioId: ScenarioId): OptimizeResponse {
@@ -63,12 +82,34 @@ export interface SimulationRunParameters {
 export async function runSimulationOptimize(
   scenarioId: ScenarioId,
   parameters?: SimulationRunParameters,
+  signal?: AbortSignal,
 ): Promise<OptimizeResponse> {
-  if (useMocks) return mockOptimizeResponse(scenarioId);
-  return apiPost<OptimizeResponse>('/api/v1/simulations/optimize', {
-    scenarioId,
-    ...parameters,
-  });
+  if (useMocks) {
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(resolve, 1200);
+      signal?.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(timeout);
+          reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+        },
+        { once: true },
+      );
+    });
+    if (signal?.aborted) {
+      throw signal.reason ?? new DOMException('Aborted', 'AbortError');
+    }
+    return {
+      ...mockOptimizeResponse(scenarioId),
+      scenario: scenarios.find((s) => s.id === scenarioId)!,
+    };
+  }
+  const { jobId } = await startSimulationOptimizeJob(scenarioId, parameters);
+  const result = await waitForOptimizeJob(jobId, signal);
+  return {
+    ...result,
+    scenario: scenarios.find((s) => s.id === result.scenarioId),
+  };
 }
 
 export async function fetchSimulationRoutes(scenarioId: ScenarioId): Promise<RouteCollection> {

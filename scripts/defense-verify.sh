@@ -50,18 +50,43 @@ fi
 echo "   ✅ ${sectors_count} sectores, ${points_count} contenedores"
 
 echo ""
-echo "▶ 4/7 Optimización ACO (POST /simulations/optimize)…"
-optimize_json="$(curl -sf -X POST "${API_BASE}/api/v1/simulations/optimize" \
+echo "▶ 4/7 Optimización ACO (POST /simulations/optimize → job)…"
+job_json="$(curl -sf -X POST "${API_BASE}/api/v1/simulations/optimize" \
   -H "Authorization: Bearer ${TOKEN}" \
   -H 'Content-Type: application/json' \
   -d '{"scenarioId":"normal"}')"
-sim_id="$(echo "${optimize_json}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('simulationId',''))")"
+job_id="$(echo "${job_json}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('jobId',''))")"
+if [[ -z "${job_id}" ]]; then
+  echo "❌ Optimización no devolvió jobId" >&2
+  exit 1
+fi
+optimize_json=""
+deadline=$((SECONDS + 120))
+while [[ "${SECONDS}" -lt "${deadline}" ]]; do
+  optimize_json="$(curl -sf -H "Authorization: Bearer ${TOKEN}" "${API_BASE}/api/v1/simulations/jobs/${job_id}")"
+  status="$(echo "${optimize_json}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))")"
+  if [[ "${status}" == "completed" ]]; then
+    break
+  fi
+  if [[ "${status}" == "failed" || "${status}" == "cancelled" ]]; then
+    echo "❌ Job terminó con status=${status}" >&2
+    exit 1
+  fi
+  sleep 1
+done
+sim_id="$(echo "${optimize_json}" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+result = d.get('result') or {}
+print(result.get('simulationId',''))
+")"
 saving="$(echo "${optimize_json}" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
-kpis = d.get('kpis') or {}
+result = d.get('result') or {}
+kpis = result.get('kpis') or {}
 dist = kpis.get('distanceKm') or {}
-print(dist.get('savingPct', d.get('savingPercentage', '?')))
+print(dist.get('savingPct', result.get('savingPercentage', '?')))
 ")"
 if [[ -z "${sim_id}" ]]; then
   echo "❌ Optimización no devolvió simulationId" >&2

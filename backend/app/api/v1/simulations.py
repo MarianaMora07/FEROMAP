@@ -1,14 +1,18 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from app.api.deps import DbSession, OperationsStaff, OptionalUser, PlannerOrAdmin
-from app.schemas.simulation import OptimizeRequest
+from app.schemas.simulation import OptimizeJobCancelResponse, OptimizeJobCreated, OptimizeJobStatus, OptimizeRequest
 from app.services.dashboard_service import (
     get_kpis,
     list_scenarios,
     list_simulations,
     normalize_scenario_id,
-    run_optimization,
     simulation_detail,
+)
+from app.services.optimization_job_service import (
+    cancel_optimization_job,
+    create_optimization_job,
+    get_optimization_job_view,
 )
 
 router = APIRouter(tags=["simulations"])
@@ -27,18 +31,34 @@ def get_scenario_kpis(scenario: str = Query(default="normal")):
         raise HTTPException(status_code=404, detail=f"Escenario no encontrado: {scenario}") from None
 
 
-@router.post("/simulations/optimize")
-def optimize_simulation(body: OptimizeRequest, db: DbSession, _: PlannerOrAdmin):
+@router.post("/simulations/optimize", response_model=OptimizeJobCreated)
+def optimize_simulation(body: OptimizeRequest, _: PlannerOrAdmin):
     try:
-        return run_optimization(
-            db,
-            body.scenario_id,
+        job = create_optimization_job(
+            scenario_id=body.scenario_id,
             rain_intensity=body.rain_intensity,
             waste_level_pct=body.waste_level_pct,
             estimated_duration_hours=body.estimated_duration_hours,
         )
+        return {"jobId": job.id}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/simulations/jobs/{job_id}", response_model=OptimizeJobStatus)
+def get_simulation_job(job_id: str, _: PlannerOrAdmin):
+    try:
+        return get_optimization_job_view(job_id)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Job no encontrado") from None
+
+
+@router.post("/simulations/jobs/{job_id}/cancel", response_model=OptimizeJobCancelResponse)
+def cancel_simulation_job(job_id: str, _: PlannerOrAdmin):
+    try:
+        return cancel_optimization_job(job_id)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Job no encontrado") from None
 
 
 @router.get("/simulations")

@@ -9,7 +9,7 @@ import random
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any
+from typing import Any, Callable, Protocol
 
 import networkx as nx
 from sqlalchemy import select
@@ -46,6 +46,17 @@ ACO_RHO = 0.12
 AVG_SPEED_KMH = 25.0
 FUEL_L_PER_KM = 0.35
 CO2_KG_PER_LITER = 2.68
+
+
+class OptimizationCancelledError(Exception):
+    """Optimización cancelada por solicitud del cliente."""
+
+
+class OptimizationProgressReporter(Protocol):
+    def cancelled(self) -> bool: ...
+    def check_cancelled(self) -> None: ...
+    def advance(self, phase: str, message: str, log_type: str = "info") -> None: ...
+    def set_aco_progress(self, iteration: int, total: int) -> None: ...
 
 
 @dataclass
@@ -161,6 +172,8 @@ def _aco_cvrp(
     time_matrix: list[list[float]],
     *,
     seed: int = 42,
+    cancel_check: Callable[[], bool] | None = None,
+    on_iteration: Callable[[int, int], None] | None = None,
 ) -> RouteSolution:
     """Ant Colony Optimization para CVRP con múltiples vehículos."""
     rng = random.Random(seed)
@@ -173,7 +186,12 @@ def _aco_cvrp(
     best_cost = float("inf")
     best_time = float("inf")
 
-    for _ in range(ACO_ITERATIONS):
+    for iteration in range(ACO_ITERATIONS):
+        if cancel_check and cancel_check():
+            raise OptimizationCancelledError()
+        if on_iteration:
+            on_iteration(iteration + 1, ACO_ITERATIONS)
+
         iteration_best: list[list[int]] = []
         iteration_cost = float("inf")
 
@@ -535,14 +553,29 @@ def run_optimization_engine(
     contingency_meta: dict[str, Any] | None = None,
     auto_dispatch: bool = True,
     auto_commit: bool = True,
+    reporter: OptimizationProgressReporter | None = None,
 ) -> dict[str, Any]:
     """Ejecuta el motor real de optimización y persiste resultados."""
+
+    def report(phase: str, message: str, log_type: str = "info") -> None:
+        if reporter is not None:
+            reporter.advance(phase, message, log_type)
+
+    def cancelled() -> bool:
+        return reporter.cancelled() if reporter is not None else False
+
+    report("preparando", "Preparando escenario y parámetros de simulación")
     normalized = normalize_scenario_id(scenario_id)
     scenarios = {row["id"]: row for row in load_seed("scenarios.json")}
     if normalized not in scenarios:
         raise ValueError(f"Escenario desconocido: {scenario_id}")
 
     scenario = scenarios[normalized]
+    scenario_label = scenario["label"]
+    if contingency_meta:
+        scenario_label = f"{scenario_label} — recálculo por avería"
+
+    report("preparando", f"Iniciando optimización — escenario «{scenario_label}»")
     traffic_mult = float(scenario.get("trafficMultiplier", 1))
     fill_boost = float(scenario.get("fillLevelBoost", 0))
 
@@ -563,6 +596,7 @@ def run_optimization_engine(
         "appliedModifiers": applied_modifiers,
     }
 
+    report("grafo_vial", f"Cargando grafo OSMnx — red vial de Unare")
     graph = load_road_graph()
     graph = apply_scenario_weights(
         graph,
@@ -582,6 +616,11 @@ def run_optimization_engine(
         points = [p for p in points if p.id in allowed]
         if not points:
             raise ValueError("No hay puntos de recolección pendientes para reoptimizar")
+
+    report(
+        "grafo_vial",
+        f"Cargando {len(points)} puntos de recolección activos",
+    )
 
     customers: list[CustomerNode] = []
     for point in points:
@@ -615,6 +654,7 @@ def run_optimization_engine(
     if not vehicles:
         raise RuntimeError("No hay vehículos con conductor asignado para la optimización")
 
+    report("matriz_costos", "Construyendo matriz de costos sobre red vial (NetworkX shortest path)")
     depot_node = nearest_node(graph, DEPOT_LON, DEPOT_LAT)
     dist_matrix, time_matrix = _build_distance_matrix(graph, depot_node, customers)
     if traffic_mult != 1.0:
@@ -623,14 +663,26 @@ def run_optimization_engine(
                 if i != j:
                     time_matrix[i][j] *= traffic_mult
 
+    report(
+        "instancia_vrp",
+        f"Instancia VRP: {len(vehicles)} vehículos, demanda = nivel de llenado",
+    )
     current_solution = _baseline_route(len(customers), dist_matrix, time_matrix)
+    report(
+        "aco",
+        f"Ejecutando metaheurística ACO ({ACO_ANTS} hormigas × {ACO_ITERATIONS} iteraciones)",
+        "progress",
+    )
     optimized_solution = _aco_cvrp(
         len(customers),
         [c.demand_kg for c in customers],
         [v.capacity_kg for v in vehicles],
         dist_matrix,
         time_matrix,
+        cancel_check=cancelled,
+        on_iteration=(reporter.set_aco_progress if reporter is not None else None),
     )
+    report("refinamiento_2opt", "Aplicando 2-opt local sobre rutas candidatas", "progress")
 
     served_codes: set[str] = set()
     for route in optimized_solution.vehicle_routes:
@@ -666,9 +718,7 @@ def run_optimization_engine(
             1,
         )
 
-    scenario_label = scenario["label"]
-    if contingency_meta:
-        scenario_label = f"{scenario_label} — recálculo por avería"
+    report("persistencia", "Persistiendo rutas optimizadas y waypoints en PostgreSQL", "success")
 
     simulation = Simulation(
         scenario_name=scenario_label,
@@ -714,6 +764,8 @@ def run_optimization_engine(
     else:
         db.flush()
         db.refresh(simulation)
+
+    report("listo", "Optimización completada — GeoJSON generado desde grafo vial", "success")
 
     log_entries = _optimization_logs(scenario_label, len(customers), len(vehicles))
     if contingency_meta:

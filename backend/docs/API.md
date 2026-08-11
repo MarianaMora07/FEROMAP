@@ -388,7 +388,9 @@ Estados API internos: `available`, `in_route`, `maintenance`, `inactive` (mapead
 |--------|------|------|-------------|
 | GET | `/scenarios` | No | Escenarios disponibles |
 | GET | `/kpis?scenario=normal` | No | KPIs por escenario |
-| POST | `/simulations/optimize` | Planificador/Admin | Ejecutar optimización |
+| POST | `/simulations/optimize` | Planificador/Admin | Crear job de optimización (asíncrono) |
+| GET | `/simulations/jobs/{id}` | Planificador/Admin | Estado, fase, progreso y logs del job |
+| POST | `/simulations/jobs/{id}/cancel` | Planificador/Admin | Solicitar cancelación del job |
 | GET | `/simulations` | No | Listado paginado de simulaciones |
 | GET | `/simulations/{id}` | No | Detalle de simulación |
 
@@ -416,7 +418,7 @@ Estados API internos: `available`, `in_route`, `maintenance`, `inactive` (mapead
 
 ### `POST /simulations/optimize`
 
-Ejecuta el motor ACO sobre el grafo vial con el escenario indicado.
+Encola una optimización ACO y devuelve de inmediato un `jobId`. El cliente debe consultar `GET /simulations/jobs/{id}` (polling) hasta `status=completed`.
 
 **Request**
 
@@ -438,19 +440,54 @@ Ejecuta el motor ACO sobre el grafo vial con el escenario indicado.
 
 **Algoritmo:** siempre ACO (`aco_vrp_osmnx`, 12 hormigas × 20 iteraciones). No hay selector de algoritmo en API.
 
+**Response (201)**
+
+```json
+{
+  "jobId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+}
+```
+
+### `GET /simulations/jobs/{id}`
+
+Devuelve el estado en tiempo real del job: fase del motor, progreso (0–100), logs acumulados y resultado final cuando termina.
+
+**Response (en curso)**
+
+```json
+{
+  "jobId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "status": "running",
+  "phase": "aco",
+  "progress": 58,
+  "logs": [
+    {
+      "id": "log-a1b2-0",
+      "timestamp": "14:32:01",
+      "message": "Iniciando optimización ACO…",
+      "type": "info",
+      "phaseId": "aco"
+    }
+  ],
+  "result": null,
+  "error": null
+}
+```
+
+**Response (`status=completed`)**
+
+El campo `result` contiene el mismo payload que antes devolvía el POST síncrono: `simulationId`, `scenarioId`, `kpis`, `routes`, `logs`, `servedPointCodes`.
+
+### `POST /simulations/jobs/{id}/cancel`
+
+Marca el job para cancelación cooperativa. Si el motor aún está en ejecución, hace rollback de la transacción y el job pasa a `status=cancelled`.
+
 **Response**
 
 ```json
 {
-  "simulationId": 42,
-  "scenarioId": "normal",
-  "scenarioName": "Condiciones normales",
-  "kpis": {
-    "distanceSavingPct": 28.5,
-    "timeSavingPct": 31.2,
-    "fuelSavingPct": 26.0
-  },
-  "routesUpdated": true
+  "jobId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "status": "cancelled"
 }
 ```
 
@@ -684,7 +721,8 @@ Requiere rol `residente`.
 | `drivers.ts` | `/drivers/*` |
 | `routes.ts` | `/routes/*` |
 | `simulation.ts` | `/scenarios`, `/kpis`, `/simulations/*` |
-| `optimization.ts` | `/simulations/optimize`, `/vehicles/optimization-context`, `/collection-points/optimization-context`, `/routes/dispatch` |
+| `optimization.ts` | `/simulations/optimize` (job), `/simulations/jobs/*`, `/vehicles/optimization-context`, `/collection-points/optimization-context`, `/routes/dispatch` |
+| `simulationJobs.ts` | Polling de jobs de optimización (`start`, `fetch`, `cancel`) |
 | `dashboard.ts` | `/dashboard/summary` |
 | `monitoring.ts` | `/monitoring/status`, `/routes/advance` |
 | `map.ts` | `/map/context` |

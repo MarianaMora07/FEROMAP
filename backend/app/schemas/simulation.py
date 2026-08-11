@@ -21,3 +21,30 @@ class OptimizeRequest(CamelModel):
         le=12,
         description="Duración estimada de operación (horas). Se persiste; no modifica el motor VRP.",
     )
+
+
+class OptimizeJobCreated(CamelModel):
+    job_id: str
+
+
+class SimulationLogEntry(CamelModel):
+    id: str
+    timestamp: str
+    message: str
+    type: str
+    phase_id: str | None = None
+
+
+class OptimizeJobStatus(CamelModel):
+    job_id: str
+    status: str
+    phase: str | None = None
+    progress: int = 0
+    logs: list[SimulationLogEntry] = Field(default_factory=list)
+    result: dict | None = None
+    error: str | None = None
+
+
+class OptimizeJobCancelResponse(CamelModel):
+    job_id: str
+    status: str

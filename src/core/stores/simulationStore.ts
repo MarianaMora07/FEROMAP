@@ -5,7 +5,7 @@ import { createStore } from 'solid-js/store';
  */
 import { useMocks } from '../api/client';
 import { reportVehicleBreakdown, type ContingencyComparison, type VehicleBreakdownResponse } from '../api/contingencies';
-import { fetchKpis, fetchScenarios, runSimulationOptimize, type SimulationRunParameters } from '../api/simulation';
+import { fetchKpis, fetchScenarios, type SimulationRunParameters } from '../api/simulation';
 import {
   dispatchOptimizedRoutes,
   fetchSimulationDetail,
@@ -18,6 +18,20 @@ import { kpiByScenario, optimizationLogMessages, scenarios as mockScenarios } fr
 import { getScenarioRoutes } from '../../data/mock/routes';
 import { loadRoutesWithRoadSnapping, refreshAppRoutes, showOptimizedRoute } from './appStore';
 import { writeLastOptimizedCodes } from '../utils/collectionPointsOptimization';
+import {
+  EXECUTION_PHASE_COUNT,
+  getExecutionPhase,
+  type ExecutionPhaseId,
+  type ExecutionStatus,
+} from '../../features/simulation/executionPhases';
+import {
+  ExecutionCancelledError,
+  runPhasedMockExecution,
+} from '../../features/simulation/simulationExecutionRunner';
+import { runJobBasedExecution } from '../../features/simulation/simulationJobRunner';
+
+let activeAbortController: AbortController | null = null;
+let executionCancelled = false;
 
 interface SimulationState {
   scenarioId: ScenarioId;
@@ -27,6 +41,8 @@ interface SimulationState {
   isDispatching: boolean;
   optimizationProgress: number;
   logs: SimulationLogEntry[];
+  executionStatus: ExecutionStatus;
+  executionPhase: ExecutionPhaseId | null;
   lastOptimizedAt: string | null;
   lastSimulationId: number | null;
   lastContingency: VehicleBreakdownResponse | null;
@@ -43,6 +59,8 @@ const [state, setState] = createStore<SimulationState>({
   isDispatching: false,
   optimizationProgress: 0,
   logs: [],
+  executionStatus: 'idle',
+  executionPhase: null,
   lastOptimizedAt: null,
   lastSimulationId: null,
   lastContingency: null,
@@ -114,27 +132,114 @@ function savingsPct(current: number, optimized: number): number {
   return Math.round((1 - optimized / current) * 100);
 }
 
+function resetExecutionState() {
+  setState({
+    optimizationProgress: 0,
+    logs: [],
+    executionStatus: 'idle',
+    executionPhase: null,
+  });
+}
+
+function executionHandlers(isCancelled: () => boolean) {
+  return {
+    setPhase: (phaseId: ExecutionPhaseId) => {
+      if (isCancelled()) return;
+      setState({
+        executionPhase: phaseId,
+        executionStatus: phaseId === 'listo' ? 'listo' : 'running',
+      });
+    },
+    setProgress: (percent: number) => {
+      if (isCancelled()) return;
+      setState('optimizationProgress', percent);
+    },
+    appendLog: (log: SimulationLogEntry) => {
+      if (isCancelled()) return;
+      setState('logs', (logs) => [...logs, log]);
+    },
+    isCancelled,
+  };
+}
+
+function isExecutionCancelled(error: unknown): boolean {
+  return (
+    executionCancelled ||
+    error instanceof ExecutionCancelledError ||
+    (error instanceof DOMException && error.name === 'AbortError')
+  );
+}
+
+export function cancelOptimization(): void {
+  if (!state.isOptimizing) return;
+  executionCancelled = true;
+  activeAbortController?.abort();
+}
+
+/** Restablece el estado de ejecución (solo pruebas). */
+export function resetSimulationStoreForTests(): void {
+  executionCancelled = false;
+  activeAbortController = null;
+  setState({
+    isOptimizing: false,
+    optimizationProgress: 0,
+    logs: [],
+    executionStatus: 'idle',
+    executionPhase: null,
+    lastOptimizedAt: null,
+    lastSimulationId: null,
+  });
+}
+
+export function wasExecutionCancelled(): boolean {
+  return executionCancelled || state.executionStatus === 'cancelado';
+}
+
+export function executionPhaseIndex(): number {
+  if (!state.executionPhase) return 0;
+  return getExecutionPhase(state.executionPhase).order;
+}
+
+export function executionTotalPhases(): number {
+  return EXECUTION_PHASE_COUNT;
+}
+
+export function executionNarrative(): { whatItDoes: string; whyItMatters: string } | null {
+  if (!state.executionPhase) return null;
+  const phase = getExecutionPhase(state.executionPhase);
+  return { whatItDoes: phase.whatItDoes, whyItMatters: phase.whyItMatters };
+}
+
 export async function runOptimization(parameters?: SimulationRunParameters): Promise<void> {
   if (state.isOptimizing) return;
 
-  setState({ isOptimizing: true, optimizationProgress: 0, logs: [] });
+  executionCancelled = false;
+  activeAbortController = new AbortController();
+  const signal = activeAbortController.signal;
+  const isCancelled = () => executionCancelled || signal.aborted;
+
+  resetExecutionState();
+  setState({ isOptimizing: true, executionStatus: 'running' });
+
+  const handlers = executionHandlers(isCancelled);
 
   try {
     if (useMocks) {
-      for (let i = 0; i < optimizationLogMessages.length; i++) {
-        const entry = optimizationLogMessages[i];
-        await delay(400 + Math.random() * 300);
-        setState('optimizationProgress', Math.round(((i + 1) / optimizationLogMessages.length) * 100));
-        setState('logs', (logs) => [
-          ...logs,
-          {
-            id: `log-${Date.now()}-${i}`,
-            timestamp: new Date().toLocaleTimeString('es-VE'),
-            message: entry.message,
-            type: entry.type,
-          },
-        ]);
+      const mockLogs = optimizationLogMessages.map((entry, index) => ({
+        id: `log-${Date.now()}-${index}`,
+        timestamp: new Date().toLocaleTimeString('es-VE'),
+        message: entry.message,
+        type: entry.type,
+      }));
+
+      await runPhasedMockExecution(mockLogs, handlers);
+
+      if (isCancelled()) {
+        resetExecutionState();
+        setState({ isOptimizing: false, executionStatus: 'cancelado' });
+        return;
       }
+
       const routes = getScenarioRoutes(state.scenarioId);
       await loadRoutesWithRoadSnapping(routes);
       setState({
@@ -143,12 +248,14 @@ export async function runOptimization(parameters?: SimulationRunParameters): Pro
       });
       await loadDashboardData();
     } else {
-      const result = await runSimulationOptimize(state.scenarioId, parameters);
-      for (let i = 0; i < result.logs.length; i++) {
-        await delay(350);
-        setState('optimizationProgress', Math.round(((i + 1) / result.logs.length) * 100));
-        setState('logs', (logs) => [...logs, result.logs[i]]);
+      const result = await runJobBasedExecution(state.scenarioId, parameters, handlers);
+
+      if (isCancelled()) {
+        resetExecutionState();
+        setState({ isOptimizing: false, executionStatus: 'cancelado' });
+        return;
       }
+
       const merged = mergeRouteCollections(result.routes.current, result.routes.optimized);
       await loadRoutesWithRoadSnapping(merged);
       await refreshAppRoutes();
@@ -162,16 +269,36 @@ export async function runOptimization(parameters?: SimulationRunParameters): Pro
       await loadDashboardData();
     }
 
+    if (isCancelled()) {
+      resetExecutionState();
+      setState({ isOptimizing: false, executionStatus: 'cancelado' });
+      return;
+    }
+
     showOptimizedRoute(true);
     setState({
       isOptimizing: false,
       optimizationProgress: 100,
+      executionStatus: 'listo',
+      executionPhase: 'listo',
       lastOptimizedAt: new Date().toISOString(),
     });
     await refreshSimulationHistory();
   } catch (error) {
-    setState({ isOptimizing: false, optimizationProgress: 0 });
+    if (isExecutionCancelled(error)) {
+      resetExecutionState();
+      setState({ isOptimizing: false, executionStatus: 'cancelado' });
+      return;
+    }
+    setState({
+      isOptimizing: false,
+      optimizationProgress: 0,
+      executionStatus: 'error',
+      executionPhase: null,
+    });
     throw error;
+  } finally {
+    activeAbortController = null;
   }
 }
 

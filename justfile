@@ -69,6 +69,11 @@ test: _check
 test-local:
     cd backend && python -m pytest tests/ -v --tb=short
 
+# Tests frontend: vitest + playwright (API en :8000, VITE_USE_MOCKS=true).
+test-frontend:
+    npm test
+    npm run test:e2e
+
 # Muestra COMPOSE_ENV, credenciales y URLs de los servicios.
 env-info: _check
     @echo "COMPOSE_ENV={{env_var_or_default('COMPOSE_ENV', 'dev')}}  →  compose.yml + compose.{{env_var_or_default('COMPOSE_ENV', 'dev')}}.yml"

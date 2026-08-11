@@ -22,6 +22,8 @@ export interface SimulationLogEntry {
   timestamp: string;
   message: string;
   type: 'info' | 'success' | 'warning';
+  /** Fase del motor asociada (Fase 7) */
+  phaseId?: import('../../features/simulation/executionPhases').ExecutionPhaseId;
 }
 
 export interface TimelinePoint {
