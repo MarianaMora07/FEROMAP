@@ -1,12 +1,11 @@
 export const optimizationPageMeta = {
-  title: 'Optimización de Rutas',
-  subtitle: 'Genere rutas óptimas utilizando algoritmos de inteligencia artificial.',
+  title: 'Planificación operativa',
+  subtitle: 'Uso diario de rutas — genere y despache rutas para la operación del día.',
 };
 
 export const optimizationTabs = [
   { id: 'nueva', label: 'Nueva optimización' },
-  { id: 'historial', label: 'Historial de optimizaciones' },
-  { id: 'escenarios', label: 'Escenarios guardados' },
+  { id: 'historial', label: 'Historial operativo' },
 ] as const;
 
 export type OptimizationTabId = (typeof optimizationTabs)[number]['id'];

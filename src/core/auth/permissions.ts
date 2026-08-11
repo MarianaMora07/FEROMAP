@@ -39,19 +39,46 @@ export interface NavItemDef {
   href: string;
   label: string;
   roles: UserRole[];
+  /** Texto secundario bajo la etiqueta en el menú lateral */
+  description?: string;
+  /** Muestra un encabezado de sección antes de este ítem */
+  sectionBefore?: string;
 }
 
 export const MAIN_NAV_ITEMS: NavItemDef[] = [
   { href: '/', label: 'Dashboard', roles: ['administrador', 'planificador', 'conductor', 'residente'] },
-  { href: '/optimization', label: 'Optimización de Rutas', roles: ['administrador', 'planificador'] },
+  {
+    href: '/simulation',
+    label: 'Simulación de escenarios',
+    roles: ['administrador', 'planificador'],
+  },
   { href: '/map', label: 'Mapa GIS', roles: ['administrador', 'planificador', 'conductor', 'residente'] },
   { href: '/vehicles', label: 'Vehículos', roles: ['administrador', 'planificador'] },
   { href: '/drivers', label: 'Conductores', roles: ['administrador', 'planificador'] },
-  { href: '/collection-points', label: 'Puntos de Recolección', roles: ['administrador', 'planificador', 'residente'] },
+  {
+    href: '/collection-points',
+    label: 'Puntos de Recolección',
+    roles: ['administrador', 'planificador', 'residente'],
+  },
   { href: '/resident', label: 'Mi Recolección', roles: ['residente'] },
-  { href: '/simulation', label: 'Simulación', roles: ['administrador', 'planificador'] },
-  { href: '/monitoring', label: 'Monitoreo en Tiempo Real', roles: ['administrador', 'planificador', 'conductor'] },
-  { href: '/reports', label: 'Reportes', roles: ['administrador', 'planificador'] },
+  {
+    href: '/monitoring',
+    label: 'Monitoreo en Tiempo Real',
+    roles: ['administrador', 'planificador', 'conductor'],
+  },
+  {
+    href: '/optimization',
+    label: 'Planificación operativa',
+    description: 'Uso diario de rutas',
+    sectionBefore: 'Operación',
+    roles: ['administrador', 'planificador'],
+  },
+  {
+    href: '/reports',
+    label: 'Reportes',
+    sectionBefore: 'Resultados',
+    roles: ['administrador', 'planificador'],
+  },
   { href: '/analytics', label: 'Analítica', roles: ['administrador', 'planificador'] },
   { href: '/alerts', label: 'Alertas', roles: ['administrador', 'planificador', 'conductor', 'residente'] },
 ];

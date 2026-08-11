@@ -2,14 +2,14 @@ import '../design-system/tokens.css';
 import { render } from 'solid-js/web';
 import App from './App';
 import { logMockModeEnabled } from '../core/api/mockFallback';
-import { initRoadSnappedRoutes } from '../core/stores/appStore';
+import { initAppData } from '../core/stores/appStore';
 import { initSimulationData } from '../core/stores/simulationStore';
 import { initAuth } from '../core/stores/authStore';
 
 logMockModeEnabled();
 
 void initAuth();
-void initRoadSnappedRoutes();
+void initAppData();
 void initSimulationData();
 
 const root = document.getElementById('root');

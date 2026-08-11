@@ -23,9 +23,11 @@ async function fetchOsrmRoute(waypoints: LngLat[]): Promise<LngLat[] | null> {
   if (waypoints.length < 2) return waypoints;
 
   const url = `${OSRM_BASE}/${coordsToOsrmString(waypoints)}?overview=full&geometries=geojson&steps=false`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
 
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: controller.signal });
     if (!res.ok) return null;
     const data = (await res.json()) as OsrmRouteResponse;
     if (data.code !== 'Ok' || !data.routes?.[0]?.geometry?.coordinates?.length) {
@@ -34,6 +36,8 @@ async function fetchOsrmRoute(waypoints: LngLat[]): Promise<LngLat[] | null> {
     return data.routes[0].geometry.coordinates;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

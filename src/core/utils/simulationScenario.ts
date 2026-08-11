@@ -1,18 +1,16 @@
 import type { KpiMetrics, ScenarioId } from '../../data/types/simulation';
 import type { ConditionId } from '../../features/simulation/simulationConfig';
-import { isScenarioId } from '../../features/simulation/simulationConfig';
+import { conditionsForScenario, defaultConditions } from '../../features/simulation/simulationConfig';
 
-export function deriveScenarioId(
-  conditions: Record<ConditionId, boolean>,
-  preset: string,
-): ScenarioId {
-  if (preset !== 'custom' && isScenarioId(preset)) return preset;
+export function deriveScenarioId(conditions: Record<ConditionId, boolean>): ScenarioId {
   if (conditions.broken_vehicle) return 'broken_vehicle';
   if (conditions.critical_bin || conditions.waste_surge) return 'saturated';
   if (conditions.rain) return 'rain';
-  if (conditions.traffic || conditions.roadblock || conditions.accident) return 'peak_traffic';
+  if (conditions.accident) return 'peak_traffic';
   return 'normal';
 }
+
+export { conditionsForScenario, defaultConditions };
 
 export function scenarioEfficiencyPct(kpis: KpiMetrics): number {
   if (kpis.distanceKm.current <= 0) return 0;
@@ -44,12 +42,14 @@ export function buildPerformanceIndicators(kpis: KpiMetrics) {
   ];
 }
 
-export function scenarioSummaryIcon(scenarioId: ScenarioId): 'cloud-rain' | 'car' | 'trash' | 'truck' | 'chart' {
+export function scenarioSummaryIcon(
+  scenarioId: ScenarioId,
+): 'cloud-rain' | 'trash' | 'truck' | 'chart' | 'alert' {
   switch (scenarioId) {
     case 'rain':
       return 'cloud-rain';
     case 'peak_traffic':
-      return 'car';
+      return 'alert';
     case 'saturated':
       return 'trash';
     case 'broken_vehicle':

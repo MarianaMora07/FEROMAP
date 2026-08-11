@@ -11,6 +11,7 @@ from app.db.models import CollectionPoint, Driver, OptimizedRoute, RouteWaypoint
 from app.services.auth_service import role_label
 from app.services.geo_service import fill_level_pct, fleet_summary, route_geojson, seed_meta_by_code
 from app.services.alert_service import list_alerts as list_persisted_alerts
+from app.services.operations_service import active_routes_view
 from app.services.optimization_service import run_optimization_engine
 from app.services.scenario_utils import normalize_scenario_id
 from app.services.seed_loader import load_seed
@@ -212,8 +213,21 @@ def get_kpis(scenario_id: str) -> dict[str, Any]:
     return kpis[normalized]
 
 
-def run_optimization(db: Session, scenario_id: str) -> dict[str, Any]:
-    return run_optimization_engine(db, scenario_id)
+def run_optimization(
+    db: Session,
+    scenario_id: str,
+    *,
+    rain_intensity: str | None = None,
+    waste_level_pct: int | None = None,
+    estimated_duration_hours: int | None = None,
+) -> dict[str, Any]:
+    return run_optimization_engine(
+        db,
+        scenario_id,
+        rain_intensity=rain_intensity,
+        waste_level_pct=waste_level_pct,
+        estimated_duration_hours=estimated_duration_hours,
+    )
 
 
 def list_simulations(db: Session, *, limit: int = 25, offset: int = 0) -> dict[str, Any]:

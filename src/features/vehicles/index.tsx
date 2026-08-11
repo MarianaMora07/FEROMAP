@@ -365,8 +365,8 @@ export default function VehiclesPage() {
                 icon={<ArrowRight size={17} />}
               >
                 {assignableCount() > 0
-                  ? `Ir a Simulación (${assignableCount()} asignables)`
-                  : 'Ir a Simulación'}
+                  ? `Nueva simulación (${assignableCount()} asignables)`
+                  : 'Nueva simulación'}
               </Button>
             </A>
           </Show>

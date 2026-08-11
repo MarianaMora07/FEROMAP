@@ -17,14 +17,21 @@ import {
   TrafficCone,
   CirclePause,
   ArrowRight,
+  Brain,
+  Map,
+  BarChart3,
+  FileText,
 } from 'lucide-solid';
 import {
   Badge,
+  Button,
   Card,
   CardHeader,
   KpiCard,
   ProgressBar,
 } from '../../design-system/components';
+import { canOptimize } from '../../core/auth/permissions';
+import { authUser } from '../../core/stores/authStore';
 import {
   activeRoutes as mockActiveRoutes,
   dashboardKpis as mockDashboardKpis,
@@ -34,6 +41,7 @@ import {
   weeklyTons as mockWeeklyTons,
 } from '../../data/mock/dashboard';
 import { dashboardView, loadDashboardData } from '../../core/stores/dashboardStore';
+import { analyticsHref, reportsHref, simulationResultsHref } from '../../core/utils/simulationLinks';
 import { DashboardMiniMap } from './DashboardMiniMap';
 
 const alertIcon: Record<'danger' | 'warning' | 'info', () => JSX.Element> = {
@@ -185,8 +193,35 @@ export default function DashboardPage() {
   const recentAlerts = () => dashboardView()?.recentAlerts ?? mockRecentAlerts;
   const activeRoutes = () => dashboardView()?.activeRoutes ?? mockActiveRoutes;
 
+  const showPlannerActions = () => canOptimize(authUser()?.role);
+
   return (
     <div class="space-y-4 md:space-y-5">
+      <Show when={showPlannerActions()}>
+        <div class="flex flex-col gap-4 rounded-xl border border-fero-green/40 bg-linear-to-br from-fero-green/15 to-fero-blue/5 px-4 py-4 sm:flex-row sm:items-center sm:justify-between md:px-5">
+          <div class="min-w-0">
+            <p class="text-xs font-semibold uppercase tracking-wide text-fero-green-dark">Flujo principal</p>
+            <h2 class="mt-1 font-heading text-lg font-bold text-text-primary dark:text-white">
+              Evalúa escenarios de recolección
+            </h2>
+            <p class="mt-1 text-sm text-text-secondary">
+              Configura condiciones, ejecuta una simulación y compara el impacto del algoritmo.
+            </p>
+          </div>
+          <div class="flex shrink-0 flex-wrap gap-2">
+            <A href="/simulation">
+              <Button variant="primary" class="gap-2" icon={<Brain size={16} />}>
+                Nueva simulación
+              </Button>
+            </A>
+            <A href="/optimization">
+              <Button variant="outline" class="gap-2" icon={<Map size={16} />}>
+                Planificación operativa
+              </Button>
+            </A>
+          </div>
+        </div>
+      </Show>
       <Show when={residentSchedule()}>
         {(schedule) => (
           <div class="rounded-xl border border-fero-blue/30 bg-fero-blue/10 px-4 py-3">
@@ -201,14 +236,41 @@ export default function DashboardPage() {
       <Show when={lastOptimization()}>
         {(opt) => (
           <div class="rounded-xl border border-fero-green/30 bg-fero-green/10 px-4 py-3">
-            <p class="text-sm font-semibold text-fero-green-dark">
-              Última optimización — {opt().scenarioName}
-            </p>
-            <p class="mt-1 text-sm text-text-secondary">
-              Ahorro de {opt().savingPercentage.toFixed(1)}% en distancia ·{' '}
-              {opt().kpis.distanceKm.current} km → {opt().kpis.distanceKm.optimized} km ·{' '}
-              {opt().kpis.containersServed} contenedores atendidos
-            </p>
+            <div class="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p class="text-sm font-semibold text-fero-green-dark">
+                  Última simulación — {opt().scenarioName}
+                </p>
+                <p class="mt-1 text-sm text-text-secondary">
+                  Ahorro de {opt().savingPercentage.toFixed(1)}% en distancia ·{' '}
+                  {opt().kpis.distanceKm.current} km → {opt().kpis.distanceKm.optimized} km ·{' '}
+                  {opt().kpis.containersServed} contenedores atendidos
+                </p>
+              </div>
+              <div class="flex shrink-0 flex-wrap gap-2">
+                <A
+                  href={simulationResultsHref(opt().simulationId)}
+                  class="inline-flex items-center gap-1 rounded-md border border-fero-green/40 bg-white/60 px-3 py-1.5 text-sm font-medium text-fero-green-dark hover:bg-white dark:bg-dark-surface/60 dark:hover:bg-dark-surface"
+                >
+                  Ver resultados
+                  <ArrowRight size={14} />
+                </A>
+                <A
+                  href={analyticsHref(opt().simulationId)}
+                  class="inline-flex items-center gap-1 rounded-md border border-fero-green/30 px-3 py-1.5 text-sm font-medium text-fero-green-dark hover:bg-white/40 dark:hover:bg-dark-surface/40"
+                >
+                  <BarChart3 size={14} />
+                  Analítica
+                </A>
+                <A
+                  href={reportsHref(opt().simulationId)}
+                  class="inline-flex items-center gap-1 rounded-md border border-fero-green/30 px-3 py-1.5 text-sm font-medium text-fero-green-dark hover:bg-white/40 dark:hover:bg-dark-surface/40"
+                >
+                  <FileText size={14} />
+                  Reportes
+                </A>
+              </div>
+            </div>
           </div>
         )}
       </Show>

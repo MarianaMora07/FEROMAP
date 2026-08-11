@@ -39,6 +39,8 @@ import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
 import { fetchAnalyticsHeatmap, fetchAnalyticsSummary } from '../../core/api/analytics';
 import type { AnalyticsGranularity, AnalyticsHeatmapGeoJson } from '../../core/types/analytics';
 import { defaultDateRange } from '../../core/utils/analyticsFilters';
+import { parseSimulationIdParam } from '../../core/utils/simulationLinks';
+import { SimulationContextBanner } from '../simulation/SimulationContextBanner';
 import {
   analyticsEfficiencyIndicators as mockEfficiency,
   analyticsInsights as mockInsights,
@@ -127,6 +129,7 @@ export default function AnalyticsPage() {
     const sector = params.sector;
     return typeof sector === 'string' && sector.length > 0 ? sector : '';
   };
+  const focusedSimulationId = () => parseSimulationIdParam(params.simulationId);
   const defaultRange = defaultDateRange();
   const [granularity, setGranularity] = createSignal<AnalyticsGranularity>('daily');
   const [dateFrom, setDateFrom] = createSignal(defaultRange.from);
@@ -304,6 +307,7 @@ export default function AnalyticsPage() {
 
   return (
     <div class="space-y-5">
+      <SimulationContextBanner simulationId={focusedSimulationId()} page="analytics" />
       <Show when={focusCollectionPoints()}>
         <div class="rounded-xl border border-fero-blue/30 bg-fero-blue/10 px-4 py-3">
           <p class="text-sm font-semibold text-fero-blue">Análisis de puntos de recolección</p>

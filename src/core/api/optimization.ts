@@ -3,7 +3,8 @@ import type { Vehicle } from '../types/vehicle';
 import type { CollectionPointOptimizationContext } from './collectionPoints';
 import { fetchCollectionPointsOptimizationContext, fetchCollectionPointsSummary } from './collectionPoints';
 import { fetchScenarios, runSimulationOptimize, type OptimizeResponse } from './simulation';
-import { dispatchOptimizedRoutes, fetchSimulationHistory, type SimulationHistoryRow } from './simulationOperations';
+import { dispatchOptimizedRoutes, type SimulationHistoryRow } from './simulationOperations';
+import { fetchOperationalHistory } from '../utils/operationalHistory';
 import { fetchVehicles, fetchVehiclesOptimizationContext, isAssignableVehicle } from './vehicles';
 
 export const OPTIMIZATION_PRESET_KEY = 'feromap:optimization-preset';
@@ -114,7 +115,7 @@ export function dispatchOptimizationRoutes() {
 }
 
 export function fetchOptimizationHistory(): Promise<SimulationHistoryRow[]> {
-  return fetchSimulationHistory();
+  return fetchOperationalHistory();
 }
 
 export type { OptimizeResponse, SimulationHistoryRow };

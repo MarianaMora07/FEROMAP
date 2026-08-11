@@ -164,19 +164,25 @@ Variables opcionales para scripts: `DEMO_EMAIL`, `DEMO_PASSWORD`.
 
 ## Flujo de demostración (defensa de grado)
 
+**Guion detallado (5–7 min):** [docs/fase-6/guion-demo-defensa.md](docs/fase-6/guion-demo-defensa.md)  
+**Manual de usuario:** [docs/fase-6/manual-usuario.md](docs/fase-6/manual-usuario.md)
+
 Con `VITE_USE_MOCKS=false` en `.env` y el stack levantado:
 
-1. **Mapa** (`/map`) — Sectores, contenedores por nivel de llenado, ruta actual.
-2. **Simulación** (`/simulation`) — Escenario → **Optimizar rutas con IA**.
-3. **Mapa** — Capa de ruta optimizada (geometría OSMnx + ACO).
-4. **Dashboard** (`/dashboard`) — KPIs operativos.
-5. **Reportes** (`/reports`) — Exportar CSV/PDF de simulaciones.
+1. **Login** — `plan@fero.com` / `123456789`
+2. **Dashboard** (`/`) — CTA **Nueva simulación**
+3. **Simulación** (`/simulation`) — Configurar escenario → **Ejecutar simulación** → KPIs en paso 3
+4. **Acciones post-resultado** — Analítica, reportes o mapa (deep links con `simulationId`)
+5. **Historial** — Pestaña Historial en `/simulation`
+6. *(Opcional)* **Planificación operativa** (`/optimization`) — Despacho diario (módulo secundario)
 
 Verificación automática:
 
 ```bash
 just defense-verify
 ```
+
+Documentación de implementación (fases 0–6): [docs/fase-0/README.md](docs/fase-0/README.md) · [docs/fase-6/README.md](docs/fase-6/README.md)
 
 ---
 
@@ -294,6 +300,7 @@ FEROMAP/
 ├── backend/              # FastAPI, Alembic, motor de optimización
 ├── data/                 # GeoJSON, grafos OSM, seeds
 ├── deploy/nginx/         # SPA + proxy /api (prod)
+├── docs/                 # Fases 0–6, manual, guion demo, diagramas
 ├── src/                  # Frontend SolidJS
 ├── scripts/              # compose.sh, defense-verify.sh
 ├── compose.yml           # Servicios base

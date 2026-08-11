@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, onMount, type JSX } from 'solid-js';
-import { A } from '@solidjs/router';
+import { A, useSearchParams } from '@solidjs/router';
 import {
   Chart,
   ArcElement,
@@ -48,6 +48,8 @@ import {
   resolvePeriodRange,
   type ReportPeriodPreset,
 } from '../../core/utils/analyticsFilters';
+import { parseSimulationIdParam } from '../../core/utils/simulationLinks';
+import { SimulationContextBanner } from '../simulation/SimulationContextBanner';
 
 function KpiIcon(props: { name: (typeof mockReportsKpis)[number]['icon'] }) {
   const map: Record<(typeof mockReportsKpis)[number]['icon'], () => JSX.Element> = {
@@ -61,6 +63,8 @@ function KpiIcon(props: { name: (typeof mockReportsKpis)[number]['icon'] }) {
 }
 
 export default function ReportsPage() {
+  const [params] = useSearchParams();
+  const focusedSimulationId = () => parseSimulationIdParam(params.simulationId);
   const initialRange = defaultDateRange();
   const [granularity, setGranularity] = createSignal<AnalyticsGranularity>('daily');
   const [reportType, setReportType] = createSignal('performance');
@@ -183,6 +187,7 @@ export default function ReportsPage() {
 
   return (
     <div class="space-y-5">
+      <SimulationContextBanner simulationId={focusedSimulationId()} page="reports" />
       <Show when={loading()}>
         <div class="text-sm text-text-muted">Cargando reportes...</div>
       </Show>

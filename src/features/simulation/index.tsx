@@ -1,39 +1,31 @@
-import { For, Show, createMemo, createResource, createSignal, onMount, type JSX } from 'solid-js';
-import { A, useSearchParams } from '@solidjs/router';
+import { For, Show, Suspense, createMemo, createResource, createSignal, lazy, onMount, type JSX } from 'solid-js';
+import { useSearchParams } from '@solidjs/router';
 import {
   AlertTriangle,
+  ArrowLeft,
   ArrowRight,
-  Car,
   CloudRain,
-  Download,
-  Eye,
   Leaf,
-  Pencil,
   Play,
-  Route,
-  Save,
-  TrafficCone,
+  Plus,
   Trash2,
   TrendingUp,
   Truck,
   Wrench,
 } from 'lucide-solid';
 import {
-  Badge,
   Button,
   Card,
   CardHeader,
 } from '../../design-system/components';
+import { fetchCollectionPointsSummary } from '../../core/api/collectionPoints';
+import { fetchVehiclesSummary } from '../../core/api/vehicles';
 import { canOptimize } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
 import { fetchMonitoringStatus } from '../../core/api/monitoring';
-import { downloadReport } from '../../core/api/reports';
-import { initAppData } from '../../core/stores/appStore';
 import {
   applySimulationScenario,
   currentKpis,
-  currentScenario,
-  dispatchRoutesAfterOptimization,
   initSimulationData,
   kpiImpactRows,
   kpiSavingsSummary,
@@ -42,48 +34,94 @@ import {
   simulationState,
 } from '../../core/stores/simulationStore';
 import {
-  buildPerformanceIndicators,
   deriveScenarioId,
+  buildPerformanceIndicators,
   scenarioEfficiencyPct,
-  scenarioSummaryIcon,
 } from '../../core/utils/simulationScenario';
+import {
+  buildSimulationReadiness,
+  buildSimulationRunParameters,
+  describeDerivedScenario,
+} from '../../core/utils/simulationWizard';
+import { parseSimulationIdParam } from '../../core/utils/simulationLinks';
 import { BreakdownReporter, ContingencyResultBanner } from '../contingency/BreakdownReporter';
+import { ModuleGuidanceBanner } from '../shared/ModuleGuidanceBanner';
 import { RecentIncidentsPanel } from '../contingency/RecentIncidentsPanel';
 import type { ScenarioId } from '../../data/types/simulation';
+import { ConfigurationSummaryPanel } from './ConfigurationSummaryPanel';
+import { ExecutiveSummary } from './ExecutiveSummary';
+import { ExecutionPanel } from './ExecutionPanel';
+import { PostSimulationActions } from './PostSimulationActions';
+import { SimulationHistoryPanel } from './SimulationHistoryPanel';
+import { WizardStepNav } from './WizardStepNav';
+
 import {
+  conditionsForScenario,
   defaultConditions,
   durationOptions,
   quickScenariosFromApi,
   rainIntensityOptions,
-  scenarioPresetsFromApi,
   simulationConditions,
-  simulationSteps,
   wasteLevelOptions,
   type ConditionId,
 } from './simulationConfig';
-import { SimulationMapPanel } from './SimulationMapPanel';
+
+const SimulationMapPanel = lazy(() =>
+  import('./SimulationMapPanel').then((module) => ({ default: module.SimulationMapPanel })),
+);
+
+function MapPanelFallback() {
+  return (
+    <div class="flex h-72 items-center justify-center rounded-xl border border-border bg-slate-50 text-sm text-text-muted dark:border-dark-border dark:bg-dark-surface-hover">
+      Cargando mapa…
+    </div>
+  );
+}
+
+type SimulationPageTab = 'flow' | 'history';
+
+const simulationPageTabs: { id: SimulationPageTab; label: string }[] = [
+  { id: 'flow', label: 'Flujo de simulación' },
+  { id: 'history', label: 'Historial' },
+];
 
 function Toggle(props: {
   checked: boolean;
   onChange: () => void;
   label: string;
+  description?: string;
   icon: JSX.Element;
 }) {
   return (
-    <label class="flex cursor-pointer items-center justify-between gap-3 py-1.5">
-      <span class="flex min-w-0 items-center gap-2.5 text-sm text-text-secondary">
-        <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-100 text-text-secondary dark:bg-dark-surface-hover">
+    <div
+      class="flex cursor-pointer items-start justify-between gap-3 py-2"
+      role="button"
+      tabIndex={0}
+      aria-pressed={props.checked}
+      onClick={props.onChange}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          props.onChange();
+        }
+      }}
+    >
+      <span class="flex min-w-0 items-start gap-2.5 text-sm text-text-secondary">
+        <span class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-100 text-text-secondary dark:bg-dark-surface-hover">
           {props.icon}
         </span>
-        {props.label}
+        <span class="min-w-0">
+          <span class="block font-medium text-text-primary dark:text-white">{props.label}</span>
+          <Show when={props.description}>
+            <span class="mt-0.5 block text-xs text-text-muted">{props.description}</span>
+          </Show>
+        </span>
       </span>
-      <button
-        type="button"
+      <span
         role="switch"
         aria-checked={props.checked}
         aria-label={props.label}
-        onClick={props.onChange}
-        class={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+        class={`pointer-events-none relative h-6 w-11 shrink-0 rounded-full transition-colors ${
           props.checked ? 'bg-fero-green-dark' : 'bg-slate-300 dark:bg-slate-600'
         }`}
       >
@@ -92,23 +130,19 @@ function Toggle(props: {
             props.checked ? 'translate-x-5' : 'translate-x-0'
           }`}
         />
-      </button>
-    </label>
+      </span>
+    </div>
   );
 }
 
 function ConditionRowIcon(props: { icon: (typeof simulationConditions)[number]['icon'] }) {
   switch (props.icon) {
-    case 'car':
-      return <Car size={14} />;
     case 'cloud-rain':
       return <CloudRain size={14} />;
     case 'truck':
       return <Truck size={14} />;
     case 'trash':
       return <Trash2 size={14} />;
-    case 'cone':
-      return <TrafficCone size={14} />;
     case 'chart':
       return <TrendingUp size={14} />;
     case 'alert':
@@ -174,31 +208,11 @@ function MetricBar(props: { label: string; value: number }) {
   );
 }
 
-function ConditionIcon(props: { name: string; class?: string }) {
-  const cls = props.class ?? 'text-text-secondary';
-  switch (props.name) {
-    case 'cloud-rain':
-      return <CloudRain size={14} class={cls} />;
-    case 'car':
-      return <Car size={14} class={cls} />;
-    case 'trash':
-      return <Trash2 size={14} class={cls} />;
-    case 'cone':
-      return <TrafficCone size={14} class={cls} />;
-    case 'chart':
-      return <TrendingUp size={14} class={cls} />;
-    default:
-      return <Wrench size={14} class={cls} />;
-  }
-}
-
-function QuickIcon(props: { icon: 'car' | 'cloud-rain' | 'trash' | 'chart' | 'truck' }) {
+function QuickIcon(props: { icon: 'cloud-rain' | 'trash' | 'chart' | 'truck' | 'alert' }) {
   const wrap = (node: JSX.Element, tone: string) => (
     <span class={`flex h-9 w-9 items-center justify-center rounded-lg ${tone}`}>{node}</span>
   );
   switch (props.icon) {
-    case 'car':
-      return wrap(<Car size={18} />, 'bg-fero-blue/10 text-fero-blue');
     case 'cloud-rain':
       return wrap(<CloudRain size={18} />, 'bg-violet-100 text-violet-600');
     case 'trash':
@@ -207,7 +221,18 @@ function QuickIcon(props: { icon: 'car' | 'cloud-rain' | 'trash' | 'chart' | 'tr
       return wrap(<TrendingUp size={18} />, 'bg-fero-green/15 text-fero-green-dark');
     case 'truck':
       return wrap(<Truck size={18} />, 'bg-violet-100 text-violet-600');
+    case 'alert':
+      return wrap(<AlertTriangle size={18} />, 'bg-red-100 text-red-600');
   }
+}
+
+async function fetchReadiness() {
+  const [vehiclesSummary, pointsSummary] = await Promise.all([
+    fetchVehiclesSummary(),
+    fetchCollectionPointsSummary(),
+  ]);
+  const activePoints = pointsSummary.kpis.total - pointsSummary.kpis.fueraDeServicio;
+  return buildSimulationReadiness(vehiclesSummary.assignableCount, activePoints);
 }
 
 export default function SimulationPage() {
@@ -225,7 +250,24 @@ export default function SimulationPage() {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
   };
 
-  const [monitoringData] = createResource(fetchMonitoringStatus);
+  const [step, setStep] = createSignal(1);
+  const [pageTab, setPageTab] = createSignal<SimulationPageTab>(
+    params.view === 'history' ? 'history' : 'flow',
+  );
+  const [conditions, setConditions] = createSignal(defaultConditions());
+  const [rainIntensity, setRainIntensity] = createSignal('alta');
+  const [wasteLevel, setWasteLevel] = createSignal('30');
+  const [duration, setDuration] = createSignal('4');
+  const [hasResults, setHasResults] = createSignal(false);
+  const [historyError, setHistoryError] = createSignal<string | null>(null);
+  const [runError, setRunError] = createSignal<string | null>(null);
+  const [incidentsRefreshKey, setIncidentsRefreshKey] = createSignal(0);
+
+  const [monitoringData] = createResource(
+    () => (step() >= 2 ? step() : undefined),
+    () => fetchMonitoringStatus(),
+  );
+  const [readiness, { refetch: refetchReadiness }] = createResource(fetchReadiness);
   const fleetForBreakdown = () =>
     (monitoringData()?.liveFleet ?? []).map((v) => ({
       id: v.id,
@@ -233,88 +275,114 @@ export default function SimulationPage() {
       status: v.status,
     }));
 
-  const [step, setStep] = createSignal(1);
-  const [preset, setPreset] = createSignal(simulationState.scenarioId);
-  const [conditions, setConditions] = createSignal(defaultConditions());
-  const [rainIntensity, setRainIntensity] = createSignal('alta');
-  const [wasteLevel, setWasteLevel] = createSignal('30');
-  const [duration, setDuration] = createSignal('4');
-  const [hasResults, setHasResults] = createSignal(false);
-  const [historyError, setHistoryError] = createSignal<string | null>(null);
-  const [dispatchError, setDispatchError] = createSignal<string | null>(null);
-  const [incidentsRefreshKey, setIncidentsRefreshKey] = createSignal(0);
-
-  const scenarioPresets = createMemo(() => scenarioPresetsFromApi(simulationState.scenarios));
   const quickScenarios = createMemo(() => quickScenariosFromApi(simulationState.scenarios));
-  const activeScenario = () => currentScenario();
-  const scenarioIcon = () => scenarioSummaryIcon(simulationState.scenarioId);
+  const derivedScenario = createMemo(() =>
+    describeDerivedScenario(conditions(), simulationState.scenarios),
+  );
+  const simulationParams = () =>
+    buildSimulationRunParameters({
+      rainIntensity: rainIntensity(),
+      wasteLevel: wasteLevel(),
+      durationHours: duration(),
+      conditions: conditions(),
+      scenarioId: derivedScenario().scenarioId,
+    });
+
+  const panelParams = () => ({
+    rainIntensity: rainIntensity(),
+    wasteLevel: wasteLevel(),
+    durationHours: duration(),
+  });
   const efficiencyValue = createMemo(() =>
     hasResults() ? scenarioEfficiencyPct(currentKpis()) : 0,
   );
   const performanceIndicators = createMemo(() =>
     hasResults() ? buildPerformanceIndicators(currentKpis()) : [],
   );
-
   const impactRows = () => kpiImpactRows(currentKpis());
   const savings = () => kpiSavingsSummary(currentKpis());
+  const canRun = () => canOptimize(authUser()?.role) && (readiness()?.ready ?? false);
 
-  const toggleCondition = (id: ConditionId) =>
-    setConditions((prev) => ({ ...prev, [id]: !prev[id] }));
+  const applyDerivedScenario = () => {
+    applySimulationScenario(deriveScenarioId(conditions()));
+  };
 
-  const applyQuick = (id: string) => {
-    const scenarioId = id as ScenarioId;
-    setPreset(scenarioId);
-    applySimulationScenario(scenarioId);
+  const toggleCondition = (id: ConditionId) => {
+    const next = { ...conditions(), [id]: !conditions()[id] };
+    setConditions(next);
+    applySimulationScenario(deriveScenarioId(next));
+  };
+
+  const applyQuick = (nextConditions: Record<ConditionId, boolean>) => {
+    setConditions(nextConditions);
+    applySimulationScenario(deriveScenarioId(nextConditions));
     setStep(1);
+    setRunError(null);
   };
 
-  const syncScenarioFromUi = () => {
-    const scenarioId = deriveScenarioId(conditions(), preset());
-    applySimulationScenario(scenarioId);
-    if (preset() === 'custom') return;
-    setPreset(scenarioId);
-  };
-
-  const handlePresetChange = (value: string) => {
-    setPreset(value);
-    if (value !== 'custom') {
-      applySimulationScenario(value as ScenarioId);
+  const handleContinue = () => {
+    setRunError(null);
+    applyDerivedScenario();
+    const ready = readiness();
+    if (!ready?.ready) {
+      setRunError(ready?.issues.join(' ') ?? 'No se pudo verificar los recursos del sistema.');
+      void refetchReadiness();
+      return;
     }
+    setStep(2);
   };
 
   const handleRun = async () => {
-    syncScenarioFromUi();
-    setStep(2);
-    setDispatchError(null);
-    await runOptimization();
-    setHasResults(true);
-    setStep(3);
+    setRunError(null);
+    applyDerivedScenario();
+    const ready = readiness();
+    if (!ready?.ready) {
+      setRunError(ready?.issues.join(' ') ?? 'No se puede ejecutar la simulación.');
+      return;
+    }
+    try {
+      await runOptimization(simulationParams());
+      setHasResults(true);
+      setStep(3);
+    } catch (error) {
+      setRunError(error instanceof Error ? error.message : 'No se pudo ejecutar la simulación');
+    }
+  };
+
+  const handleNewSimulation = () => {
+    setPageTab('flow');
+    setStep(1);
+    setHasResults(false);
+    setRunError(null);
+    setConditions(defaultConditions());
+    applySimulationScenario('normal');
   };
 
   const handleViewHistory = async (simulationId: number) => {
     setHistoryError(null);
     try {
       await loadSimulationFromHistory(simulationId);
-      setPreset(simulationState.scenarioId);
+      setConditions(conditionsForScenario(simulationState.scenarioId));
       setHasResults(true);
+      setPageTab('flow');
       setStep(3);
     } catch (error) {
       setHistoryError(error instanceof Error ? error.message : 'No se pudo cargar la simulación');
     }
   };
 
-  const handleDispatch = async () => {
-    setDispatchError(null);
-    try {
-      await dispatchRoutesAfterOptimization();
-      setIncidentsRefreshKey((value) => value + 1);
-    } catch (error) {
-      setDispatchError(error instanceof Error ? error.message : 'No se pudieron despachar las rutas');
-    }
-  };
-
   onMount(() => {
-    void Promise.all([initAppData(), initSimulationData()]);
+    void refetchReadiness();
+    void initSimulationData().then(() => {
+      const simulationId = parseSimulationIdParam(params.simulationId);
+      if (simulationId) {
+        void handleViewHistory(simulationId);
+        return;
+      }
+      if (params.view === 'history') {
+        setPageTab('history');
+      }
+    });
   });
 
   return (
@@ -326,7 +394,7 @@ export default function SimulationPage() {
             {vehiclesFromFleet() === 1 ? '' : 's'} desde la flota
           </p>
           <p class="mt-1 text-sm text-text-secondary">
-            La optimización usará camiones disponibles o en ruta, excluyendo mantenimiento.
+            La simulación usará camiones disponibles o en ruta, excluyendo mantenimiento.
           </p>
         </div>
       </Show>
@@ -337,178 +405,209 @@ export default function SimulationPage() {
             {criticalFromPoints() === 1 ? '' : 's'} desde Puntos de Recolección
           </p>
           <p class="mt-1 text-sm text-text-secondary">
-            Ejecuta la optimización para incorporar los contenedores más urgentes en la ruta.
+            Ejecuta la simulación para incorporar los contenedores más urgentes en la ruta.
           </p>
         </div>
       </Show>
       <ContingencyResultBanner />
 
-      <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
-          <For each={[...simulationSteps]}>
-            {(s, i) => (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setStep(s.id)}
-                  class={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors sm:text-sm ${
-                    step() === s.id
-                      ? 'bg-fero-green-dark text-white'
-                      : step() > s.id
-                        ? 'bg-fero-green/20 text-fero-green-dark'
-                        : 'bg-slate-100 text-text-muted dark:bg-dark-surface-hover'
-                  }`}
-                >
-                  <span
-                    class={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${
-                      step() === s.id ? 'bg-white/20' : 'bg-white dark:bg-dark-surface'
-                    }`}
-                  >
-                    {s.id}
-                  </span>
-                  {s.label}
-                </button>
-                <Show when={i() < simulationSteps.length - 1}>
-                  <span class="hidden h-px w-6 bg-border sm:block dark:bg-dark-border" />
-                </Show>
-              </>
-            )}
-          </For>
-        </div>
+      <ModuleGuidanceBanner
+        tone="simulation"
+        title="¿Quieres despachar rutas de hoy?"
+        linkHref="/optimization"
+        linkLabel="Ir a Planificación operativa"
+      >
+        Esta pantalla evalúa escenarios y mide el impacto del algoritmo. Para generar y despachar rutas del día,
+      </ModuleGuidanceBanner>
 
-        <div class="flex flex-wrap items-center gap-3">
-          <div class="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 shadow-xs dark:bg-dark-surface dark:border-dark-border">
-            <span class="flex h-8 w-8 items-center justify-center rounded-md bg-violet-100 text-violet-600">
-              <ConditionIcon name={scenarioIcon()} />
-            </span>
-            <div>
-              <p class="text-[10px] font-medium uppercase tracking-wide text-text-muted">Escenario actual</p>
-              <p class="text-sm font-semibold text-text-primary dark:text-white">
-                {activeScenario()?.label ?? simulationState.scenarioId}
-              </p>
-            </div>
-          </div>
-          <Button
-            variant="primary"
-            class="gap-2 px-5 py-2.5"
-            icon={<Play size={16} />}
-            loading={simulationState.isOptimizing}
-            disabled={!canOptimize(authUser()?.role)}
-            onClick={() => void handleRun()}
-          >
-            Optimizar rutas con IA
-          </Button>
-          <Show when={hasResults()}>
-            <A href="/map">
-              <Button variant="outline" class="gap-2">
-                Ver rutas en mapa
-                <ArrowRight size={16} />
-              </Button>
-            </A>
-            <Button
-              variant="primary"
-              class="gap-2"
-              icon={<Route size={16} />}
-              loading={simulationState.isDispatching}
-              disabled={!canOptimize(authUser()?.role) || simulationState.lastSimulationId == null}
-              onClick={() => void handleDispatch()}
+      <div class="flex gap-1 overflow-x-auto border-b border-border dark:border-dark-border">
+        <For each={simulationPageTabs}>
+          {(item) => (
+            <button
+              type="button"
+              class={`shrink-0 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                pageTab() === item.id
+                  ? 'border-fero-green-mid text-fero-green-dark'
+                  : 'border-transparent text-text-muted hover:text-text-secondary'
+              }`}
+              onClick={() => setPageTab(item.id)}
             >
-              Despachar rutas
-            </Button>
-          </Show>
-        </div>
+              {item.label}
+            </button>
+          )}
+        </For>
       </div>
 
-      <Show when={dispatchError()}>
-        <p class="text-sm text-red-600">{dispatchError()}</p>
+      <Show when={pageTab() === 'flow'}>
+      <div class="space-y-4">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <WizardStepNav step={step()} hasResults={hasResults()} onStepChange={setStep} />
+      </div>
+
+      <Show when={runError() && step() !== 2}>
+        <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
+          {runError()}
+        </div>
       </Show>
-      <Show when={simulationState.lastDispatch}>
-        {(dispatch) => (
-          <div class="rounded-xl border border-fero-green/30 bg-fero-green/10 px-4 py-3 text-sm text-fero-green-dark">
-            Despachadas {dispatch().count} ruta(s) a operación
-            {dispatch().routeIds.length > 0 ? ` (IDs: ${dispatch().routeIds.join(', ')})` : ''}.
-          </div>
-        )}
-      </Show>
 
-      <div class="grid items-start gap-4 xl:grid-cols-12">
-        <Card class="self-start xl:col-span-3">
-          <CardHeader title="Configuración del escenario" />
-          <div class="mb-4">
-            <div class="mb-1.5 flex items-center justify-between">
-              <p class="text-sm font-semibold text-text-primary dark:text-white">Escenario</p>
-              <button type="button" class="text-text-muted hover:text-text-secondary" aria-label="Editar">
-                <Pencil size={14} />
-              </button>
-            </div>
-            <select
-              value={preset()}
-              onChange={(e) => handlePresetChange(e.currentTarget.value)}
-              class="w-full rounded-md border border-border bg-surface px-3 py-2.5 text-sm text-text-primary focus:border-fero-blue focus:outline-none dark:bg-dark-surface-hover dark:border-dark-border dark:text-white"
-            >
-              <For each={scenarioPresets()}>{(o) => <option value={o.id}>{o.label}</option>}</For>
-            </select>
+      {/* Paso 1 — Configuración */}
+      <Show when={step() === 1}>
+        <div class="grid items-start gap-4 xl:grid-cols-12">
+          <div class="xl:col-span-3">
+            <ConfigurationSummaryPanel
+              conditions={conditions()}
+              scenarios={simulationState.scenarios}
+              readiness={readiness()}
+              loadingReadiness={readiness.loading}
+              {...panelParams()}
+            />
           </div>
-
-          <p class="mb-1 text-sm font-semibold text-text-primary dark:text-white">Condiciones a simular</p>
-          <div class="mb-4 divide-y divide-border dark:divide-dark-border">
-            <For each={simulationConditions}>
-              {(c) => (
-                <Toggle
-                  label={c.label}
-                  icon={<ConditionRowIcon icon={c.icon} />}
-                  checked={conditions()[c.id]}
-                  onChange={() => toggleCondition(c.id)}
-                />
-              )}
-            </For>
+          <div class="space-y-4 xl:col-span-9">
+            <Card>
+              <CardHeader title="Configuración del escenario" />
+              <div class="mb-4 rounded-lg border border-fero-green/30 bg-fero-green/5 px-3 py-2.5 dark:border-fero-green/20">
+                <p class="text-[10px] font-semibold uppercase tracking-wide text-fero-green-dark">
+                  Escenario base
+                </p>
+                <p class="mt-1 text-sm font-semibold text-text-primary dark:text-white">
+                  {derivedScenario().label}
+                </p>
+                <p class="mt-1 text-xs text-text-secondary">{derivedScenario().description}</p>
+                <p class="mt-2 text-[11px] text-text-muted">{derivedScenario().source}</p>
+              </div>
+              <p class="mb-1 text-sm font-semibold text-text-primary dark:text-white">Condiciones a simular</p>
+              <div class="mb-4 divide-y divide-border dark:divide-dark-border">
+                <For each={simulationConditions}>
+                  {(c) => (
+                    <Toggle
+                      label={c.label}
+                      description={c.description}
+                      icon={<ConditionRowIcon icon={c.icon} />}
+                      checked={conditions()[c.id]}
+                      onChange={() => toggleCondition(c.id)}
+                    />
+                  )}
+                </For>
+              </div>
+              <p class="mb-1 text-sm font-semibold text-text-primary dark:text-white">Parámetros adicionales</p>
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div class="min-w-0">
+                  <label class="mb-1 block text-xs text-text-muted">
+                    Intensidad de lluvia <span class="text-fero-green-dark">(conectado)</span>
+                  </label>
+                  <select
+                    value={rainIntensity()}
+                    onChange={(e) => setRainIntensity(e.currentTarget.value)}
+                    disabled={derivedScenario().scenarioId !== 'rain'}
+                    class="w-full rounded-md border border-border bg-surface px-2.5 py-2 text-sm disabled:opacity-50 dark:bg-dark-surface-hover dark:border-dark-border dark:text-white"
+                  >
+                    <For each={rainIntensityOptions}>{(o) => <option value={o.value}>{o.label}</option>}</For>
+                  </select>
+                </div>
+                <div class="min-w-0">
+                  <label class="mb-1 block text-xs text-text-muted">
+                    Nivel de desechos <span class="text-fero-green-dark">(conectado)</span>
+                  </label>
+                  <select
+                    value={wasteLevel()}
+                    onChange={(e) => setWasteLevel(e.currentTarget.value)}
+                    disabled={derivedScenario().scenarioId !== 'saturated'}
+                    class="w-full rounded-md border border-border bg-surface px-2.5 py-2 text-sm disabled:opacity-50 dark:bg-dark-surface-hover dark:border-dark-border dark:text-white"
+                  >
+                    <For each={wasteLevelOptions}>{(o) => <option value={o.value}>{o.label}</option>}</For>
+                  </select>
+                </div>
+                <div class="min-w-0">
+                  <label class="mb-1 block text-xs text-text-muted">
+                    Duración estimada <span class="text-text-muted">(informativo)</span>
+                  </label>
+                  <select
+                    value={duration()}
+                    onChange={(e) => setDuration(e.currentTarget.value)}
+                    class="w-full rounded-md border border-border bg-surface px-2.5 py-2 text-sm dark:bg-dark-surface-hover dark:border-dark-border dark:text-white"
+                  >
+                    <For each={durationOptions}>{(o) => <option value={o.value}>{o.label}</option>}</For>
+                  </select>
+                </div>
+              </div>
+            </Card>
+            <Card>
+              <CardHeader title="Escenarios rápidos" />
+              <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <For each={quickScenarios()}>
+                  {(q) => (
+                    <div class="rounded-lg border border-border p-3 dark:border-dark-border">
+                      <div class="mb-2">
+                        <QuickIcon icon={q.icon} />
+                      </div>
+                      <p class="text-sm font-semibold text-text-primary dark:text-white">{q.title}</p>
+                      <p class="mt-1 text-xs text-text-muted">{q.description}</p>
+                      <button
+                        type="button"
+                        class="mt-2 text-xs font-semibold text-fero-blue hover:underline"
+                        onClick={() => applyQuick(q.conditions)}
+                      >
+                        Usar escenario
+                      </button>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Card>
           </div>
-
-          <p class="mb-2 text-sm font-semibold text-text-primary dark:text-white">Parámetros adicionales</p>
-          <div class="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div class="min-w-0">
-              <label class="mb-1 block text-xs text-text-muted">Intensidad de lluvia</label>
-              <select
-                value={rainIntensity()}
-                onChange={(e) => setRainIntensity(e.currentTarget.value)}
-                disabled={!conditions().rain}
-                class="w-full rounded-md border border-border bg-surface px-2.5 py-2 text-sm disabled:opacity-50 dark:bg-dark-surface-hover dark:border-dark-border dark:text-white"
-              >
-                <For each={rainIntensityOptions}>{(o) => <option value={o.value}>{o.label}</option>}</For>
-              </select>
-            </div>
-            <div class="min-w-0">
-              <label class="mb-1 block text-xs text-text-muted">Nivel de desechos</label>
-              <select
-                value={wasteLevel()}
-                onChange={(e) => setWasteLevel(e.currentTarget.value)}
-                disabled={!conditions().waste_surge}
-                class="w-full rounded-md border border-border bg-surface px-2.5 py-2 text-sm disabled:opacity-50 dark:bg-dark-surface-hover dark:border-dark-border dark:text-white"
-              >
-                <For each={wasteLevelOptions}>{(o) => <option value={o.value}>{o.label}</option>}</For>
-              </select>
-            </div>
-            <div class="min-w-0">
-              <label class="mb-1 block text-xs text-text-muted">Duración estimada</label>
-              <select
-                value={duration()}
-                onChange={(e) => setDuration(e.currentTarget.value)}
-                class="w-full rounded-md border border-border bg-surface px-2.5 py-2 text-sm dark:bg-dark-surface-hover dark:border-dark-border dark:text-white"
-              >
-                <For each={durationOptions}>{(o) => <option value={o.value}>{o.label}</option>}</For>
-              </select>
-            </div>
-          </div>
-
-          <Button variant="primary" class="w-full" icon={<Save size={16} />}>
-            Guardar escenario
+        </div>
+        <div class="flex justify-end border-t border-border pt-4 dark:border-dark-border">
+          <Button
+            variant="primary"
+            class="gap-2 px-6"
+            icon={<ArrowRight size={16} />}
+            disabled={!canOptimize(authUser()?.role)}
+            onClick={handleContinue}
+          >
+            Continuar
           </Button>
-        </Card>
+        </div>
+      </Show>
 
-        <div class="grid gap-4 xl:col-span-9 xl:grid-cols-9 xl:items-stretch">
-          <SimulationMapPanel hasResults={hasResults()} />
-
-          <div class="flex flex-col gap-4 xl:col-span-4">
+      {/* Paso 2 — Revisión y ejecución */}
+      <Show when={step() === 2}>
+        <div class="grid items-start gap-4 xl:grid-cols-12">
+          <div class="space-y-4 xl:col-span-3">
+            <ConfigurationSummaryPanel
+              conditions={conditions()}
+              scenarios={simulationState.scenarios}
+              readiness={readiness()}
+              loadingReadiness={readiness.loading}
+              {...panelParams()}
+            />
+            <Card>
+              <CardHeader title="Revisión previa" />
+              <ul class="space-y-2 text-sm text-text-secondary">
+                <li>
+                  <span class="font-semibold text-text-primary dark:text-white">Escenario:</span>{' '}
+                  {derivedScenario().label}
+                </li>
+                <li>
+                  <span class="font-semibold text-text-primary dark:text-white">Vehículos:</span>{' '}
+                  {readiness()?.assignableVehicles ?? '—'}
+                </li>
+                <li>
+                  <span class="font-semibold text-text-primary dark:text-white">Puntos activos:</span>{' '}
+                  {readiness()?.activePoints ?? '—'}
+                </li>
+              </ul>
+            </Card>
+          </div>
+          <div class="space-y-4 xl:col-span-9">
+            <ExecutionPanel
+              isRunning={simulationState.isOptimizing}
+              progress={simulationState.optimizationProgress}
+              logs={simulationState.logs}
+              error={runError()}
+            />
+            <Suspense fallback={<MapPanelFallback />}>
+              <SimulationMapPanel hasResults={false} />
+            </Suspense>
             <Card>
               <CardHeader title="Reportar contingencia" />
               <BreakdownReporter
@@ -516,185 +615,135 @@ export default function SimulationPage() {
                 onComplete={() => setIncidentsRefreshKey((value) => value + 1)}
               />
             </Card>
-
             <RecentIncidentsPanel refreshKey={incidentsRefreshKey()} compact />
-
-            <Card>
-              <CardHeader title="Resultados de la simulación" />
-              <Show
-                when={hasResults()}
-                fallback={
-                  <p class="py-10 text-center text-sm text-text-muted">
-                    Ejecuta una simulación para ver el impacto estimado.
-                  </p>
-                }
-              >
-                <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">Impacto general</p>
-                <div class="mb-3 overflow-x-auto">
-                  <table class="w-full text-sm">
-                    <thead>
-                      <tr class="border-b border-border text-left text-[10px] uppercase tracking-wide text-text-muted">
-                        <th class="pb-2 font-semibold">Métrica</th>
-                        <th class="pb-2 font-semibold">Actual</th>
-                        <th class="pb-2 font-semibold text-fero-green-dark">Simulado</th>
-                      </tr>
-                    </thead>
-                    <tbody class="divide-y divide-border dark:divide-dark-border">
-                      <For each={impactRows()}>
-                        {(row) => (
-                          <tr>
-                            <td class="py-2.5 text-text-secondary">{row.metric}</td>
-                            <td class="py-2.5 text-text-muted">{row.current}</td>
-                            <td class="py-2.5">
-                              <span class="font-semibold text-fero-green-dark">{row.simulated}</span>
-                              <span class="ml-1.5 text-xs font-medium text-fero-green-dark">
-                                {row.delta}%
-                              </span>
-                            </td>
-                          </tr>
-                        )}
-                      </For>
-                    </tbody>
-                  </table>
-                </div>
-
-                <div class="flex items-start gap-2.5 rounded-lg border border-fero-green/30 bg-fero-green/10 px-3 py-2.5">
-                  <Leaf size={18} class="mt-0.5 shrink-0 text-fero-green-dark" />
-                  <div>
-                    <p class="text-xs font-semibold text-fero-green-dark">Ahorro estimado</p>
-                    <p class="mt-0.5 text-sm font-medium text-text-primary dark:text-white">
-                      {savings().distanceKm} km · {savings().timeMin} min · {savings().fuelL} L ·{' '}
-                      {savings().co2Kg} kg CO₂ evitados
-                    </p>
-                  </div>
-                </div>
-              </Show>
-            </Card>
-
-            <Show when={hasResults()}>
-              <Card padding={false} class="overflow-hidden">
-                <div class="px-4 pt-4">
-                  <h3 class="font-heading font-semibold text-text-primary dark:text-white">
-                    Indicadores de desempeño
-                  </h3>
-                </div>
-                <div class="flex flex-col items-center gap-5 px-4 py-4 sm:flex-row sm:items-center">
-                  <EfficiencyGauge value={efficiencyValue()} />
-                  <ul class="w-full flex-1 space-y-3">
-                    <For each={performanceIndicators()}>
-                      {(ind) => <MetricBar label={ind.label} value={ind.value} />}
-                    </For>
-                  </ul>
-                </div>
-                <A
-                  href="/analytics"
-                  class="flex items-center justify-center border-t border-border px-4 py-3 text-sm font-semibold text-fero-blue transition-colors hover:bg-surface-hover dark:border-dark-border"
-                >
-                  <span class="flex-1 text-center">Ver análisis detallado</span>
-                  <ArrowRight size={16} class="shrink-0" />
-                </A>
-              </Card>
-            </Show>
           </div>
         </div>
-      </div>
-
-      <div class="grid gap-4 lg:grid-cols-5">
-        <Card class="lg:col-span-2">
-          <CardHeader title="Escenarios rápidos" />
-          <div class="grid gap-3 sm:grid-cols-2">
-            <For each={quickScenarios()}>
-              {(q) => (
-                <div class="rounded-lg border border-border p-3 dark:border-dark-border">
-                  <div class="mb-2">
-                    <QuickIcon icon={q.icon} />
-                  </div>
-                  <p class="text-sm font-semibold text-text-primary dark:text-white">{q.title}</p>
-                  <p class="mt-1 text-xs text-text-muted">{q.description}</p>
-                  <button
-                    type="button"
-                    class="mt-2 text-xs font-semibold text-fero-blue hover:underline"
-                    onClick={() => applyQuick(q.id)}
-                  >
-                    Usar escenario
-                  </button>
-                </div>
-              )}
-            </For>
-          </div>
-        </Card>
-
-        <Card class="lg:col-span-3">
-          <CardHeader title="Historial de simulaciones" />
-          <Show when={historyError()}>
-            <p class="mb-3 text-sm text-red-600">{historyError()}</p>
-          </Show>
-          <div class="overflow-x-auto">
-            <table class="w-full min-w-140 text-sm">
-              <thead>
-                <tr class="border-b border-border text-left text-[10px] uppercase tracking-wide text-text-muted dark:border-dark-border">
-                  <th class="pb-2 pr-3 font-semibold">Escenario</th>
-                  <th class="pb-2 pr-3 font-semibold">Fecha</th>
-                  <th class="pb-2 pr-3 font-semibold">Tipo</th>
-                  <th class="pb-2 pr-3 font-semibold">Resultado</th>
-                  <th class="pb-2 pr-3 font-semibold">Ahorro</th>
-                  <th class="pb-2 font-semibold">Acciones</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-border dark:divide-dark-border">
-                <For each={simulationState.history}>
-                  {(row) => (
-                    <tr>
-                      <td class="py-2.5 pr-3 font-medium text-text-primary dark:text-white">{row.name}</td>
-                      <td class="py-2.5 pr-3 text-xs text-text-muted">{row.datetime}</td>
-                      <td class="py-2.5 pr-3 text-xs text-text-secondary">
-                        {row.contingency ? 'Contingencia' : 'Optimización'}
-                      </td>
-                      <td class="py-2.5 pr-3">
-                        <Badge variant="success" dot>
-                          Completado
-                        </Badge>
-                      </td>
-                      <td class="py-2.5 pr-3 font-semibold text-text-primary dark:text-white">
-                        {row.efficiency > 0 ? `${row.efficiency}%` : '—'}
-                      </td>
-                      <td class="py-2.5">
-                        <div class="flex items-center gap-0.5">
-                          <button
-                            type="button"
-                            class="flex h-7 w-7 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover hover:text-fero-blue disabled:opacity-50"
-                            aria-label={`Ver simulación #${row.id}`}
-                            disabled={simulationState.isOptimizing}
-                            onClick={() => void handleViewHistory(row.id)}
-                          >
-                            <Eye size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            class="flex h-7 w-7 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover"
-                            aria-label="Descargar reporte CSV"
-                            title="Exportar simulaciones (CSV)"
-                            onClick={() => void downloadReport('csv')}
-                          >
-                            <Download size={14} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </For>
-              </tbody>
-            </table>
-          </div>
-          <A
-            href="/reports"
-            class="mt-4 inline-flex items-center gap-1 text-sm font-medium text-fero-blue hover:underline"
+        <div class="flex flex-wrap justify-between gap-2 border-t border-border pt-4 dark:border-dark-border">
+          <Button variant="outline" class="gap-2" icon={<ArrowLeft size={16} />} onClick={() => setStep(1)}>
+            Anterior
+          </Button>
+          <Button
+            variant="primary"
+            class="gap-2 px-6"
+            icon={<Play size={16} />}
+            loading={simulationState.isOptimizing}
+            disabled={!canRun() || simulationState.isOptimizing}
+            onClick={() => void handleRun()}
           >
-            Ver todos los escenarios
-            <ArrowRight size={14} />
-          </A>
-        </Card>
+            Ejecutar simulación
+          </Button>
+        </div>
+      </Show>
+
+      {/* Paso 3 — Resultados e impacto */}
+      <Show when={step() === 3}>
+        <Show
+          when={hasResults()}
+          fallback={
+            <Card>
+              <p class="py-12 text-center text-sm text-text-muted">
+                Aún no hay resultados. Vuelve al paso 2 y ejecuta una simulación.
+              </p>
+            </Card>
+          }
+        >
+          <div class="space-y-4">
+            <PostSimulationActions
+              simulationId={simulationState.lastSimulationId}
+              onNewSimulation={handleNewSimulation}
+            />
+            <ExecutiveSummary kpis={currentKpis()} />
+            <div class="grid items-start gap-4 xl:grid-cols-12">
+              <div class="xl:col-span-8">
+                <Suspense fallback={<MapPanelFallback />}>
+                  <SimulationMapPanel hasResults />
+                </Suspense>
+              </div>
+              <div class="space-y-4 xl:col-span-4">
+                <Card>
+                  <CardHeader title="Comparación de rutas" subtitle="Ruta actual vs ruta simulada" />
+                  <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                      <thead>
+                        <tr class="border-b border-border text-left text-[10px] uppercase tracking-wide text-text-muted">
+                          <th class="pb-2 font-semibold">Métrica</th>
+                          <th class="pb-2 font-semibold">Actual</th>
+                          <th class="pb-2 font-semibold text-fero-green-dark">Simulado</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-border dark:divide-dark-border">
+                        <For each={impactRows()}>
+                          {(row) => (
+                            <tr>
+                              <td class="py-2.5 text-text-secondary">{row.metric}</td>
+                              <td class="py-2.5 text-text-muted">{row.current}</td>
+                              <td class="py-2.5">
+                                <span class="font-semibold text-fero-green-dark">{row.simulated}</span>
+                                <span class="ml-1.5 text-xs font-medium text-fero-green-dark">
+                                  {row.delta}%
+                                </span>
+                              </td>
+                            </tr>
+                          )}
+                        </For>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="mt-3 flex items-start gap-2.5 rounded-lg border border-fero-green/30 bg-fero-green/10 px-3 py-2.5">
+                    <Leaf size={18} class="mt-0.5 shrink-0 text-fero-green-dark" />
+                    <div>
+                      <p class="text-xs font-semibold text-fero-green-dark">Ahorro estimado</p>
+                      <p class="mt-0.5 text-sm font-medium text-text-primary dark:text-white">
+                        {savings().distanceKm} km · {savings().timeMin} min · {savings().fuelL} L ·{' '}
+                        {savings().co2Kg} kg CO₂ evitados
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+                <Card padding={false} class="overflow-hidden">
+                  <div class="px-4 pt-4">
+                    <h3 class="font-heading font-semibold text-text-primary dark:text-white">
+                      Indicadores de desempeño
+                    </h3>
+                  </div>
+                  <div class="flex flex-col items-center gap-5 px-4 py-4 sm:flex-row sm:items-center">
+                    <EfficiencyGauge value={efficiencyValue()} />
+                    <ul class="w-full flex-1 space-y-3">
+                      <For each={performanceIndicators()}>
+                        {(ind) => <MetricBar label={ind.label} value={ind.value} />}
+                      </For>
+                    </ul>
+                  </div>
+                </Card>
+              </div>
+            </div>
+          </div>
+        </Show>
+        <div class="flex flex-wrap justify-between gap-2 border-t border-border pt-4 dark:border-dark-border">
+          <Button
+            variant="outline"
+            class="gap-2"
+            icon={<ArrowLeft size={16} />}
+            disabled={simulationState.isOptimizing}
+            onClick={() => setStep(2)}
+          >
+            Anterior
+          </Button>
+          <Button variant="outline" class="gap-2" icon={<Plus size={16} />} onClick={handleNewSimulation}>
+            Nueva simulación
+          </Button>
+        </div>
+      </Show>
       </div>
+      </Show>
+
+      <Show when={pageTab() === 'history'}>
+        <SimulationHistoryPanel
+          error={historyError()}
+          isLoading={simulationState.isOptimizing}
+          onView={(id) => void handleViewHistory(id)}
+        />
+      </Show>
     </div>
   );
 }

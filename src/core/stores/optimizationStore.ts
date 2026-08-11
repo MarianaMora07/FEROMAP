@@ -1,4 +1,8 @@
 import { createStore } from 'solid-js/store';
+/**
+ * Store de Planificación operativa (/optimization).
+ * Historial filtrado con recordOperationalRun(); despacho exclusivo de este módulo.
+ */
 import { useMocks } from '../api/client';
 import {
   fetchOptimizationHistory,
@@ -20,6 +24,7 @@ import { kpiByScenario } from '../../data/mock/kpis';
 import { loadRoutesWithRoadSnapping, showOptimizedRoute } from './appStore';
 import { loadDashboardData } from './dashboardStore';
 import { writeLastOptimizedCodes } from '../utils/collectionPointsOptimization';
+import { recordOperationalRun } from '../utils/operationalHistory';
 
 interface OptimizationState {
   context: OptimizationPageContext | null;
@@ -180,6 +185,9 @@ export async function executeOptimization(): Promise<void> {
 
     showOptimizedRoute(true);
     setState({ optimizationProgress: 100 });
+    if (state.lastSimulationId != null) {
+      recordOperationalRun(state.lastSimulationId);
+    }
     await refreshOptimizationHistory();
   } catch (error) {
     setState({

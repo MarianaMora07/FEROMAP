@@ -16,7 +16,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import CollectionPoint, OptimizedRoute, RouteWaypoint, Simulation, Vehicle
-from app.services.geo_service import fill_level_pct
+from app.services.scenario_parameters import (
+    apply_simulation_parameter_modifiers,
+    normalize_duration_hours,
+    normalize_rain_intensity,
+    normalize_waste_level_pct,
+)
 from app.services.graph_service import (
     DEPOT_LAT,
     DEPOT_LON,
@@ -25,6 +30,7 @@ from app.services.graph_service import (
     load_road_graph,
     nearest_node,
 )
+from app.services.geo_service import fill_level_pct
 from app.services.operations_service import dispatch_optimized_routes
 from app.services.scenario_utils import normalize_scenario_id
 from app.services.seed_loader import load_seed
@@ -521,6 +527,9 @@ def run_optimization_engine(
     db: Session,
     scenario_id: str,
     *,
+    rain_intensity: str | None = None,
+    waste_level_pct: int | None = None,
+    estimated_duration_hours: int | None = None,
     collection_point_ids: list[int] | None = None,
     exclude_vehicle_ids: list[int] | None = None,
     contingency_meta: dict[str, Any] | None = None,
@@ -536,6 +545,23 @@ def run_optimization_engine(
     scenario = scenarios[normalized]
     traffic_mult = float(scenario.get("trafficMultiplier", 1))
     fill_boost = float(scenario.get("fillLevelBoost", 0))
+
+    rain = normalize_rain_intensity(rain_intensity)
+    waste = normalize_waste_level_pct(waste_level_pct)
+    duration_h = normalize_duration_hours(estimated_duration_hours)
+    traffic_mult, fill_boost, applied_modifiers = apply_simulation_parameter_modifiers(
+        normalized,
+        traffic_mult,
+        fill_boost,
+        rain_intensity=rain,
+        waste_level_pct=waste,
+    )
+    simulation_parameters = {
+        "rainIntensity": rain,
+        "wasteLevelPct": waste,
+        "estimatedDurationHours": duration_h,
+        "appliedModifiers": applied_modifiers,
+    }
 
     graph = load_road_graph()
     graph = apply_scenario_weights(
@@ -653,6 +679,8 @@ def run_optimization_engine(
                 "routesGeojson": routes_payload,
                 "kpis": kpis,
                 "engine": "aco_vrp_osmnx",
+                "algorithm": "aco",
+                "simulationParameters": simulation_parameters,
                 "contingency": contingency_meta is not None,
                 **(contingency_meta or {}),
             },

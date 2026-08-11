@@ -54,9 +54,21 @@ export function fetchKpis(scenarioId: ScenarioId): Promise<KpiMetrics> {
   return apiGet<KpiMetrics>(`/api/v1/kpis?scenario=${scenarioId}`);
 }
 
-export async function runSimulationOptimize(scenarioId: ScenarioId): Promise<OptimizeResponse> {
+export interface SimulationRunParameters {
+  rainIntensity?: string;
+  wasteLevelPct?: number;
+  estimatedDurationHours?: number;
+}
+
+export async function runSimulationOptimize(
+  scenarioId: ScenarioId,
+  parameters?: SimulationRunParameters,
+): Promise<OptimizeResponse> {
   if (useMocks) return mockOptimizeResponse(scenarioId);
-  return apiPost<OptimizeResponse>('/api/v1/simulations/optimize', { scenarioId });
+  return apiPost<OptimizeResponse>('/api/v1/simulations/optimize', {
+    scenarioId,
+    ...parameters,
+  });
 }
 
 export async function fetchSimulationRoutes(scenarioId: ScenarioId): Promise<RouteCollection> {

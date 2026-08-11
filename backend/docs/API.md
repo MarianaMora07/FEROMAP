@@ -416,9 +416,27 @@ Estados API internos: `available`, `in_route`, `maintenance`, `inactive` (mapead
 
 ### `POST /simulations/optimize`
 
+Ejecuta el motor ACO sobre el grafo vial con el escenario indicado.
+
+**Request**
+
 ```json
-{ "scenarioId": "normal" }
+{
+  "scenarioId": "rain",
+  "rainIntensity": "alta",
+  "wasteLevelPct": 30,
+  "estimatedDurationHours": 4
+}
 ```
+
+| Campo | Tipo | Efecto en motor |
+|-------|------|-----------------|
+| `scenarioId` | string | **Requerido.** Escenario base (`normal`, `peak_traffic`, `rain`, `saturated`, `broken_vehicle`). |
+| `rainIntensity` | `baja` \| `media` \| `alta` | Solo si `scenarioId=rain`. Escala `trafficMultiplier` (×1.05, ×1.15, ×1.30). |
+| `wasteLevelPct` | 10 \| 20 \| 30 \| 50 | Solo si `scenarioId=saturated`. Suma puntos al `fillLevelBoost` del escenario. |
+| `estimatedDurationHours` | 1–12 | Se persiste en `simulationParameters`; **no** modifica el VRP. |
+
+**Algoritmo:** siempre ACO (`aco_vrp_osmnx`, 12 hormigas × 20 iteraciones). No hay selector de algoritmo en API.
 
 **Response**
 

@@ -1,5 +1,23 @@
+from pydantic import Field
+
 from app.schemas.common import CamelModel
 
 
 class OptimizeRequest(CamelModel):
     scenario_id: str = "normal"
+    rain_intensity: str | None = Field(
+        default=None,
+        description="Intensidad de lluvia (baja|media|alta). Solo aplica si scenarioId=rain.",
+    )
+    waste_level_pct: int | None = Field(
+        default=None,
+        ge=0,
+        le=50,
+        description="Incremento adicional de demanda (10|20|30|50). Solo aplica si scenarioId=saturated.",
+    )
+    estimated_duration_hours: int | None = Field(
+        default=None,
+        ge=1,
+        le=12,
+        description="Duración estimada de operación (horas). Se persiste; no modifica el motor VRP.",
+    )

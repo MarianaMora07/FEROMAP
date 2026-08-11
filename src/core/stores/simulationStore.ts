@@ -1,7 +1,11 @@
 import { createStore } from 'solid-js/store';
+/**
+ * Store de Simulación de escenarios (/simulation).
+ * Historial completo vía API. No registra corridas operativas.
+ */
 import { useMocks } from '../api/client';
 import { reportVehicleBreakdown, type ContingencyComparison, type VehicleBreakdownResponse } from '../api/contingencies';
-import { fetchKpis, fetchScenarios, runSimulationOptimize } from '../api/simulation';
+import { fetchKpis, fetchScenarios, runSimulationOptimize, type SimulationRunParameters } from '../api/simulation';
 import {
   dispatchOptimizedRoutes,
   fetchSimulationDetail,
@@ -110,60 +114,65 @@ function savingsPct(current: number, optimized: number): number {
   return Math.round((1 - optimized / current) * 100);
 }
 
-export async function runOptimization(): Promise<void> {
+export async function runOptimization(parameters?: SimulationRunParameters): Promise<void> {
   if (state.isOptimizing) return;
 
   setState({ isOptimizing: true, optimizationProgress: 0, logs: [] });
 
-  if (useMocks) {
-    for (let i = 0; i < optimizationLogMessages.length; i++) {
-      const entry = optimizationLogMessages[i];
-      await delay(400 + Math.random() * 300);
-      setState('optimizationProgress', Math.round(((i + 1) / optimizationLogMessages.length) * 100));
-      setState('logs', (logs) => [
-        ...logs,
-        {
-          id: `log-${Date.now()}-${i}`,
-          timestamp: new Date().toLocaleTimeString('es-VE'),
-          message: entry.message,
-          type: entry.type,
-        },
-      ]);
+  try {
+    if (useMocks) {
+      for (let i = 0; i < optimizationLogMessages.length; i++) {
+        const entry = optimizationLogMessages[i];
+        await delay(400 + Math.random() * 300);
+        setState('optimizationProgress', Math.round(((i + 1) / optimizationLogMessages.length) * 100));
+        setState('logs', (logs) => [
+          ...logs,
+          {
+            id: `log-${Date.now()}-${i}`,
+            timestamp: new Date().toLocaleTimeString('es-VE'),
+            message: entry.message,
+            type: entry.type,
+          },
+        ]);
+      }
+      const routes = getScenarioRoutes(state.scenarioId);
+      await loadRoutesWithRoadSnapping(routes);
+      setState({
+        kpis: kpiByScenario[state.scenarioId],
+        lastSimulationId: 1,
+      });
+      await loadDashboardData();
+    } else {
+      const result = await runSimulationOptimize(state.scenarioId, parameters);
+      for (let i = 0; i < result.logs.length; i++) {
+        await delay(350);
+        setState('optimizationProgress', Math.round(((i + 1) / result.logs.length) * 100));
+        setState('logs', (logs) => [...logs, result.logs[i]]);
+      }
+      const merged = mergeRouteCollections(result.routes.current, result.routes.optimized);
+      await loadRoutesWithRoadSnapping(merged);
+      await refreshAppRoutes();
+      setState({
+        kpis: result.kpis,
+        lastSimulationId: result.simulationId,
+      });
+      if (result.servedPointCodes?.length) {
+        writeLastOptimizedCodes(result.servedPointCodes);
+      }
+      await loadDashboardData();
     }
-    const routes = getScenarioRoutes(state.scenarioId);
-    await loadRoutesWithRoadSnapping(routes);
-    setState({
-      kpis: kpiByScenario[state.scenarioId],
-      lastSimulationId: 1,
-    });
-    await loadDashboardData();
-  } else {
-    const result = await runSimulationOptimize(state.scenarioId);
-    for (let i = 0; i < result.logs.length; i++) {
-      await delay(350);
-      setState('optimizationProgress', Math.round(((i + 1) / result.logs.length) * 100));
-      setState('logs', (logs) => [...logs, result.logs[i]]);
-    }
-    const merged = mergeRouteCollections(result.routes.current, result.routes.optimized);
-    await loadRoutesWithRoadSnapping(merged);
-    await refreshAppRoutes();
-    setState({
-      kpis: result.kpis,
-      lastSimulationId: result.simulationId,
-    });
-    if (result.servedPointCodes?.length) {
-      writeLastOptimizedCodes(result.servedPointCodes);
-    }
-    await loadDashboardData();
-  }
 
-  showOptimizedRoute(true);
-  setState({
-    isOptimizing: false,
-    optimizationProgress: 100,
-    lastOptimizedAt: new Date().toISOString(),
-  });
-  await refreshSimulationHistory();
+    showOptimizedRoute(true);
+    setState({
+      isOptimizing: false,
+      optimizationProgress: 100,
+      lastOptimizedAt: new Date().toISOString(),
+    });
+    await refreshSimulationHistory();
+  } catch (error) {
+    setState({ isOptimizing: false, optimizationProgress: 0 });
+    throw error;
+  }
 }
 
 export async function loadSimulationFromHistory(simulationId: number): Promise<void> {

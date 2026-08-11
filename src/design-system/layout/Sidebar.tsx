@@ -53,6 +53,14 @@ function navClass(active: boolean) {
   }`;
 }
 
+function navLabelClass(active: boolean) {
+  return active ? 'text-white' : 'text-white/65 group-hover:text-white';
+}
+
+function navDescriptionClass(active: boolean) {
+  return active ? 'text-white/75' : 'text-white/40 group-hover:text-white/55';
+}
+
 interface SidebarProps {
   open: boolean;
 }
@@ -92,14 +100,27 @@ export function Sidebar(props: SidebarProps) {
         <For each={nav().main}>
           {(item) => {
             const Icon = NAV_ICONS[item.href] ?? LayoutDashboard;
+            const active = () => isActive(item.href);
             return (
               <>
-                <Show when={item.href === '/alerts'}>
+                <Show when={item.sectionBefore}>
+                  <p class="mb-1 mt-3 px-3 text-[10px] font-semibold uppercase tracking-wider text-white/35 first:mt-0">
+                    {item.sectionBefore}
+                  </p>
+                </Show>
+                <Show when={item.href === '/alerts' && !item.sectionBefore}>
                   <div class="my-3 border-t border-white/10" />
                 </Show>
-                <A href={item.href} class={navClass(isActive(item.href))}>
-                  <Icon size={18} />
-                  <span class="truncate">{item.label}</span>
+                <A href={item.href} class={`group ${navClass(active())}`}>
+                  <Icon size={18} class="shrink-0" />
+                  <span class="min-w-0">
+                    <span class={`block truncate ${navLabelClass(active())}`}>{item.label}</span>
+                    <Show when={item.description}>
+                      <span class={`block truncate text-[10px] font-normal leading-tight ${navDescriptionClass(active())}`}>
+                        {item.description}
+                      </span>
+                    </Show>
+                  </span>
                 </A>
               </>
             );

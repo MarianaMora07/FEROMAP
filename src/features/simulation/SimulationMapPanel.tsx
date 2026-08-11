@@ -153,7 +153,7 @@ export function SimulationMapPanel(props: SimulationMapPanelProps) {
   });
 
   return (
-    <Card padding={false} class="flex min-h-0 flex-col overflow-hidden xl:col-span-5 xl:h-full">
+    <Card padding={false} class="overflow-hidden">
       <div class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 dark:border-dark-border">
         <h3 class="font-heading font-semibold text-text-primary dark:text-white">
           Visualización del escenario
@@ -176,10 +176,10 @@ export function SimulationMapPanel(props: SimulationMapPanelProps) {
         </div>
       </div>
 
-      <div class="relative min-h-64 flex-1 bg-slate-100 dark:bg-slate-900">
-        <div ref={mapContainer} class="absolute inset-0 h-full w-full" />
+      <div class="relative isolate h-72 bg-slate-100 dark:bg-slate-900 lg:h-85">
+        <div ref={mapContainer} class="absolute inset-0 h-full w-full touch-none" />
         <Show when={!appState.dataReady}>
-          <div class="absolute inset-0 flex items-center justify-center bg-surface/50 text-sm text-text-muted backdrop-blur-sm">
+          <div class="pointer-events-none absolute inset-0 flex items-center justify-center bg-surface/50 text-sm text-text-muted backdrop-blur-sm">
             Cargando sectores y contenedores…
           </div>
         </Show>

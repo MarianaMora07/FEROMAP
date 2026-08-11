@@ -1,4 +1,5 @@
 import { For, Show, createMemo, createSignal, onMount } from 'solid-js';
+import { A } from '@solidjs/router';
 import {
   Sparkles,
   MapPin,
@@ -7,7 +8,6 @@ import {
   Weight,
   Truck,
   Fuel,
-  Leaf,
   CheckCircle2,
   Send,
   Loader2,
@@ -34,21 +34,18 @@ import {
   updateOptimizationPreset,
 } from '../../core/stores/optimizationStore';
 import {
-  buildComparisonRows,
   buildResultsTotals,
   buildRouteResults,
-  buildSavingsBanner,
   buildScenarioInfoRows,
 } from '../../core/utils/optimizationResults';
 import {
-  algorithms,
   constraints as constraintDefs,
-  objectives,
   optimizationTabs,
   type OptimizationTabId,
 } from '../../data/mock/optimization';
 import type { OptimizationConstraints } from '../../core/api/optimization';
 import type { ScenarioId } from '../../data/types/simulation';
+import { ModuleGuidanceBanner } from '../shared/ModuleGuidanceBanner';
 import { OptimizationRouteMap } from './OptimizationRouteMap';
 
 const vehicleToneClass = {
@@ -98,12 +95,16 @@ function ParametersForm(props: { onGenerate: () => void; disabled?: boolean }) {
         }}
       >
         <TextField
-          label="Fecha de operación"
+          label="Fecha de operación (informativo)"
           type="date"
           name="operationDate"
           value={preset().operationDate}
           onInput={(e) => updateOptimizationPreset({ operationDate: e.currentTarget.value })}
         />
+
+        <p class="text-xs text-text-muted -mt-2">
+          Solo se guarda en este navegador; no se envía al motor de rutas.
+        </p>
 
         <div>
           <FieldLabel>Vehículos disponibles ({assignableVehicles().length})</FieldLabel>
@@ -134,7 +135,7 @@ function ParametersForm(props: { onGenerate: () => void; disabled?: boolean }) {
         </div>
 
         <SelectField
-          label="Escenario operativo"
+          label="Condición operativa del día"
           name="scenario"
           value={preset().scenarioId}
           onChange={(e) => setOptimizationScenario(e.currentTarget.value as ScenarioId)}
@@ -143,42 +144,63 @@ function ParametersForm(props: { onGenerate: () => void; disabled?: boolean }) {
             {(scenario) => <option value={scenario.id}>{scenario.label}</option>}
           </For>
         </SelectField>
+        <p class="-mt-2 text-xs text-text-muted">
+          Para evaluar escenarios de tesis (lluvia, saturación, impacto KPI), usa{' '}
+          <A href="/simulation" class="font-medium text-fero-blue hover:underline">
+            Simulación de escenarios
+          </A>
+          .
+        </p>
 
-        <SelectField
-          label="Algoritmo de optimización"
-          name="algorithm"
-          value={preset().algorithm}
-          onChange={(e) => updateOptimizationPreset({ algorithm: e.currentTarget.value })}
-        >
-          <For each={algorithms}>{(a) => <option value={a.id}>{a.label}</option>}</For>
-        </SelectField>
+        <div class="rounded-lg border border-border bg-surface px-3 py-2.5 dark:border-dark-border dark:bg-dark-surface-hover">
+          <p class="text-sm font-semibold text-text-primary dark:text-white">Algoritmo del motor</p>
+          <p class="mt-1 text-sm text-text-secondary">Colonia de Hormigas (ACO) — 12 hormigas × 20 iteraciones</p>
+          <p class="mt-2 text-xs text-text-muted">
+            Único algoritmo soportado por el backend en esta versión.
+          </p>
+        </div>
 
-        <SelectField
-          label="Objetivo principal"
-          name="objective"
-          value={preset().objective}
-          onChange={(e) => updateOptimizationPreset({ objective: e.currentTarget.value })}
-        >
-          <For each={objectives}>{(o) => <option value={o.id}>{o.label}</option>}</For>
-        </SelectField>
+        <div class="rounded-lg border border-dashed border-border px-3 py-2.5 dark:border-dark-border">
+          <p class="text-sm font-semibold text-text-muted">Objetivo de optimización</p>
+          <p class="mt-1 text-xs text-text-muted">
+            Próximamente — el motor minimiza distancia/tiempo con ACO.
+          </p>
+        </div>
 
         <div>
-          <FieldLabel>Restricciones (guardadas localmente)</FieldLabel>
+          <FieldLabel>Restricciones</FieldLabel>
           <ul class="space-y-2.5">
             <For each={constraintDefs}>
-              {(item) => (
-                <li>
-                  <label class="flex cursor-pointer items-center gap-2.5 text-sm text-text-secondary">
-                    <input
-                      type="checkbox"
-                      class="size-4 rounded border-border accent-fero-green-mid"
-                      checked={preset().constraints[item.id as keyof OptimizationConstraints]}
-                      onChange={() => toggleConstraint(item.id as keyof OptimizationConstraints)}
-                    />
-                    {item.label}
-                  </label>
-                </li>
-              )}
+              {(item) => {
+                const connected = item.id === 'avoid_traffic' || item.id === 'critical_first';
+                return (
+                  <li>
+                    <label
+                      class={`flex items-start gap-2.5 text-sm ${
+                        connected ? 'cursor-pointer text-text-secondary' : 'text-text-muted'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        class="mt-0.5 size-4 rounded border-border accent-fero-green-mid"
+                        checked={preset().constraints[item.id as keyof OptimizationConstraints]}
+                        disabled={!connected}
+                        onChange={() =>
+                          connected && toggleConstraint(item.id as keyof OptimizationConstraints)
+                        }
+                      />
+                      <span>
+                        {item.label}
+                        <span class="mt-0.5 block text-[11px] text-text-muted">
+                          {connected
+                            ? 'Influye en el escenario inferido si no eliges uno explícito.'
+                            : 'Próximamente — no modifica el motor actual.'}
+                        </span>
+                      </span>
+                    </label>
+                  </li>
+                );
+              }}
             </For>
           </ul>
         </div>
@@ -192,8 +214,8 @@ function ParametersForm(props: { onGenerate: () => void; disabled?: boolean }) {
           disabled={props.disabled || optimizationState.isOptimizing || !canOptimize(authUser()?.role)}
         >
           {optimizationState.isOptimizing
-            ? `Optimizando… ${optimizationState.optimizationProgress}%`
-            : 'Generar ruta óptima'}
+            ? `Ejecutando optimización… ${optimizationState.optimizationProgress}%`
+            : 'Generar ruta operativa'}
         </Button>
       </form>
     </Card>
@@ -213,7 +235,7 @@ function ScenarioInfoCard() {
 
   return (
     <Card>
-      <CardHeader title="Información del escenario" />
+      <CardHeader title="Resumen operativo del día" />
       <ul class="space-y-3">
         <For each={rows()}>
           {(row) => {
@@ -334,49 +356,6 @@ function ResultsCard(props: {
   );
 }
 
-function ComparisonCard(props: {
-  rows: ReturnType<typeof buildComparisonRows>;
-  savingsText: string;
-}) {
-  return (
-    <Card class="h-full">
-      <CardHeader title="Comparación de rutas" />
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="border-b border-border text-left text-xs uppercase tracking-wide text-text-muted">
-              <th class="pb-2 font-semibold">Métrica</th>
-              <th class="pb-2 font-semibold">Ruta actual</th>
-              <th class="pb-2 font-semibold text-fero-green-dark">Ruta optimizada</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-border">
-            <For each={props.rows}>
-              {(row) => (
-                <tr>
-                  <td class="py-3 text-text-secondary">{row.metric}</td>
-                  <td class="py-3 text-text-muted">{row.current}</td>
-                  <td class="py-3">
-                    <span class="font-semibold text-fero-green-dark">{row.optimized}</span>
-                    <span class="ml-2 text-xs font-medium text-fero-green-dark">
-                      {row.delta >= 0 ? '↑' : '↓'} {Math.abs(row.delta)}%
-                    </span>
-                  </td>
-                </tr>
-              )}
-            </For>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="mt-4 flex items-start gap-2 rounded-lg bg-fero-green/15 px-3 py-3 text-sm text-fero-green-dark">
-        <Leaf size={18} class="mt-0.5 shrink-0" />
-        <p class="font-medium leading-snug">{props.savingsText}</p>
-      </div>
-    </Card>
-  );
-}
-
 function HistoryTab() {
   const [error, setError] = createSignal<string | null>(null);
 
@@ -391,7 +370,14 @@ function HistoryTab() {
 
   return (
     <Card>
-      <CardHeader title="Historial de optimizaciones" />
+      <CardHeader title="Historial operativo" />
+      <div class="mb-4 rounded-lg border border-fero-blue/30 bg-fero-blue/10 px-3 py-2 text-sm text-text-secondary">
+        Solo muestra optimizaciones generadas desde esta pantalla. El historial completo de escenarios de tesis está en{' '}
+        <A href="/simulation?view=history" class="font-medium text-fero-blue hover:underline">
+          Simulación de escenarios
+        </A>
+        .
+      </div>
       <Show when={error()}>
         <p class="mb-3 text-sm text-red-500">{error()}</p>
       </Show>
@@ -411,42 +397,10 @@ function HistoryTab() {
         </For>
       </ul>
       <Show when={optimizationState.history.length === 0}>
-        <p class="py-8 text-center text-sm text-text-muted">Aún no hay optimizaciones guardadas.</p>
+        <p class="py-8 text-center text-sm text-text-muted">
+          Aún no hay optimizaciones operativas. Genera una ruta en la pestaña «Nueva optimización».
+        </p>
       </Show>
-    </Card>
-  );
-}
-
-function ScenariosTab() {
-  const scenarios = () => optimizationState.context?.scenarios ?? [];
-
-  return (
-    <Card>
-      <CardHeader title="Escenarios operativos" />
-      <ul class="space-y-3">
-        <For each={scenarios()}>
-          {(scenario) => (
-            <li class="rounded-lg border border-border p-3 dark:border-dark-border">
-              <div class="flex items-start justify-between gap-3">
-                <div>
-                  <p class="font-semibold text-text-primary dark:text-white">{scenario.label}</p>
-                  <p class="mt-1 text-sm text-text-secondary">{scenario.description}</p>
-                  <p class="mt-2 text-xs text-text-muted">
-                    Tráfico ×{scenario.trafficMultiplier} · Llenado +{scenario.fillLevelBoost}%
-                  </p>
-                </div>
-                <Button
-                  size="sm"
-                  variant={optimizationState.preset.scenarioId === scenario.id ? 'primary' : 'secondary'}
-                  onClick={() => setOptimizationScenario(scenario.id)}
-                >
-                  {optimizationState.preset.scenarioId === scenario.id ? 'Activo' : 'Usar'}
-                </Button>
-              </div>
-            </li>
-          )}
-        </For>
-      </ul>
     </Card>
   );
 }
@@ -466,9 +420,7 @@ export default function OptimizationPage() {
       };
     return buildRouteResults(optimized, kpis());
   });
-  const comparisonRows = createMemo(() => (hasResults() ? buildComparisonRows(kpis()) : []));
   const totals = createMemo(() => (hasResults() ? buildResultsTotals(kpis()) : null));
-  const savingsText = createMemo(() => (hasResults() ? buildSavingsBanner(kpis()) : ''));
   const driverByVehicleId = createMemo(() => {
     const map: Record<string, string> = {};
     for (const vehicle of optimizationState.context?.vehicles ?? []) {
@@ -503,6 +455,15 @@ export default function OptimizationPage() {
 
   return (
     <div class="space-y-4 md:space-y-5">
+      <ModuleGuidanceBanner
+        tone="optimization"
+        title="¿Quieres evaluar escenarios?"
+        linkHref="/simulation"
+        linkLabel="Ir a Simulación de escenarios"
+      >
+        Esta pantalla genera y despacha rutas operativas del día. Para comparar condiciones (tráfico, lluvia, saturación) y medir el impacto del algoritmo,
+      </ModuleGuidanceBanner>
+
       <div class="flex gap-1 overflow-x-auto border-b border-border">
         <For each={[...optimizationTabs]}>
           {(item) => (
@@ -580,18 +541,11 @@ export default function OptimizationPage() {
               <Show when={dispatchError()}>
                 <p class="text-sm text-red-500">{dispatchError()}</p>
               </Show>
-              <div class="grid grid-cols-1 items-start gap-4 lg:grid-cols-5">
-                <div class="lg:col-span-3">
-                  <ResultsCard
-                    routeResults={routeResults()}
-                    totals={totals()!}
-                    driverByVehicleId={driverByVehicleId()}
-                  />
-                </div>
-                <div class="lg:col-span-2">
-                  <ComparisonCard rows={comparisonRows()} savingsText={savingsText()} />
-                </div>
-              </div>
+              <ResultsCard
+                routeResults={routeResults()}
+                totals={totals()!}
+                driverByVehicleId={driverByVehicleId()}
+              />
             </Show>
           </div>
         </div>
@@ -599,10 +553,6 @@ export default function OptimizationPage() {
 
       <Show when={tab() === 'historial'}>
         <HistoryTab />
-      </Show>
-
-      <Show when={tab() === 'escenarios'}>
-        <ScenariosTab />
       </Show>
     </div>
   );

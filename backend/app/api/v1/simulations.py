@@ -30,7 +30,13 @@ def get_scenario_kpis(scenario: str = Query(default="normal")):
 @router.post("/simulations/optimize")
 def optimize_simulation(body: OptimizeRequest, db: DbSession, _: PlannerOrAdmin):
     try:
-        return run_optimization(db, body.scenario_id)
+        return run_optimization(
+            db,
+            body.scenario_id,
+            rain_intensity=body.rain_intensity,
+            waste_level_pct=body.waste_level_pct,
+            estimated_duration_hours=body.estimated_duration_hours,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

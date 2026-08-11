@@ -728,8 +728,8 @@ export default function CollectionPointsPage() {
                 icon={<ArrowRight size={17} />}
               >
                 {criticalCount() > 0
-                  ? `Ir a optimizar (${criticalCount()} críticos)`
-                  : 'Ir a Simulación'}
+                  ? `Nueva simulación (${criticalCount()} críticos)`
+                  : 'Nueva simulación'}
               </Button>
             </A>
             <Button

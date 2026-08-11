@@ -104,5 +104,5 @@ echo "════════════════════════�
 echo " ✅ Verificación pre-defensa completada"
 echo "   UI:  ${FRONT_BASE}"
 echo "   API: ${API_BASE}/health"
-echo "   Demo: /map → /simulation → Optimizar → /reports"
+echo "   Demo: / → Nueva simulación → /simulation → Ejecutar → Analítica/Reportes"
 echo "═══════════════════════════════════════════"
