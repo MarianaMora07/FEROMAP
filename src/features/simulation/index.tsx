@@ -66,6 +66,8 @@ import { ExecutionPanel } from './ExecutionPanel';
 import { PostSimulationActions } from './PostSimulationActions';
 import { SimulationHistoryPanel } from './SimulationHistoryPanel';
 import { WeeklyPlanTab } from './WeeklyPlanTab';
+import { PlanningGlossaryStrip } from '../planning/PlanningGlossaryStrip';
+import { ThesisVsOperationsNotice } from '../planning/ThesisVsOperationsNotice';
 import { WizardStepNav } from './WizardStepNav';
 import { CancelExecutionConfirmDialog } from './CancelExecutionConfirmDialog';
 import {
@@ -94,10 +96,10 @@ import {
 
 type SimulationPageTab = 'flow' | 'history' | 'weekly';
 
-const simulationPageTabs: { id: SimulationPageTab; label: string }[] = [
-  { id: 'flow', label: 'Flujo de simulación' },
-  { id: 'weekly', label: 'Plan semanal' },
-  { id: 'history', label: 'Historial' },
+const simulationPageTabs: { id: SimulationPageTab; label: string; hint: string }[] = [
+  { id: 'flow', label: 'Evaluar escenarios', hint: 'Tesis — algoritmo ACO, sin despacho real' },
+  { id: 'weekly', label: 'Plan semanal', hint: 'Directivo — aprobar la semana' },
+  { id: 'history', label: 'Historial de tesis', hint: 'Solo escenarios de investigación' },
 ];
 
 function Toggle(props: {
@@ -537,6 +539,8 @@ export default function SimulationPage() {
         Esta pantalla evalúa escenarios y mide el impacto del algoritmo. Para generar y despachar rutas del día,
       </ModuleGuidanceBanner>
 
+      <PlanningGlossaryStrip />
+
       <div class="flex gap-1 overflow-x-auto border-b border-border dark:border-dark-border">
         <For each={simulationPageTabs}>
           {(item) => (
@@ -554,6 +558,7 @@ export default function SimulationPage() {
           )}
         </For>
       </div>
+      <p class="text-xs text-text-muted">{simulationPageTabs.find((item) => item.id === pageTab())?.hint}</p>
 
       <Show when={pageTab() === 'flow'}>
       <CancelExecutionConfirmDialog
@@ -959,6 +964,7 @@ export default function SimulationPage() {
       </Show>
 
       <Show when={pageTab() === 'history'}>
+        <ThesisVsOperationsNotice variant="thesis" class="mb-4" />
         <SimulationHistoryPanel
           error={historyError()}
           isLoading={isSimulationBusy()}

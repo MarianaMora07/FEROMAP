@@ -945,12 +945,17 @@ def list_operational_history(db: Session, *, limit: int = 25) -> list[dict[str, 
         if simulation is None:
             continue
         parsed = parse_simulation(simulation)
+        final_ids = _json_list(plan.final_point_ids_json)
+        scheduled_ids = _json_list(plan.scheduled_point_ids_json)
+        point_count = len(final_ids) or len(scheduled_ids)
         rows.append(
             {
                 "id": simulation.id,
                 "dailyPlanId": plan.id,
                 "operationDate": plan.operation_date.isoformat(),
                 "status": plan.status,
+                "pointCount": point_count,
+                "distanceKm": float(parsed.get("distanceOptimizedKm") or 0),
                 "name": f"Operación {plan.operation_date.isoformat()} — {parsed.get('scenarioName', 'Ruta')}",
                 "datetime": simulation.executed_at.isoformat() if simulation.executed_at else None,
                 "efficiency": float(simulation.kpi_saving_percentage or 0),

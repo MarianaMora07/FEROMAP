@@ -17,8 +17,6 @@ import {
   TrafficCone,
   CirclePause,
   ArrowRight,
-  Brain,
-  Map,
   BarChart3,
   FileText,
 } from 'lucide-solid';
@@ -199,29 +197,7 @@ export default function DashboardPage() {
   return (
     <div class="space-y-4 md:space-y-5">
       <Show when={showPlannerActions()}>
-        <div class="flex flex-col gap-4 rounded-xl border border-fero-green/40 bg-linear-to-br from-fero-green/15 to-fero-blue/5 px-4 py-4 sm:flex-row sm:items-center sm:justify-between md:px-5">
-          <div class="min-w-0">
-            <p class="text-xs font-semibold uppercase tracking-wide text-fero-green-dark">Flujo principal</p>
-            <h2 class="mt-1 font-heading text-lg font-bold text-text-primary dark:text-white">
-              Evalúa escenarios de recolección
-            </h2>
-            <p class="mt-1 text-sm text-text-secondary">
-              Configura condiciones, ejecuta una simulación y compara el impacto del algoritmo.
-            </p>
-          </div>
-          <div class="flex shrink-0 flex-wrap gap-2">
-            <A href="/simulation">
-              <Button variant="primary" class="gap-2" icon={<Brain size={16} />}>
-                Nueva simulación
-              </Button>
-            </A>
-            <A href="/optimization">
-              <Button variant="outline" class="gap-2" icon={<Map size={16} />}>
-                Planificación operativa
-              </Button>
-            </A>
-          </div>
-        </div>
+        <PlanningWidgets />
       </Show>
       <Show when={residentSchedule()}>
         {(schedule) => (
@@ -275,8 +251,6 @@ export default function DashboardPage() {
           </div>
         )}
       </Show>
-
-      <PlanningWidgets />
 
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard

@@ -1,7 +1,12 @@
-import { For, Show, createResource } from 'solid-js';
+import { Show, createResource } from 'solid-js';
+import { A } from '@solidjs/router';
+import { CalendarDays } from 'lucide-solid';
 import { Line } from 'solid-chartjs';
 import { Card, CardHeader, KpiCard } from '../../design-system/components';
-import { fetchPlanningAnalytics } from '../../core/api/planningAnalytics';
+import { fetchPlanningAnalytics, fetchPlanningDashboardSnapshot } from '../../core/api/planningAnalytics';
+import { weeklyPlanHref } from '../../core/planning/weekendClosureUx';
+import { WeeklySummaryCard } from './WeeklySummaryCard';
+import { WeekendClosureChecklist } from './WeekendClosureChecklist';
 
 interface PlanningAnalyticsSectionProps {
   weekFrom: string;
@@ -13,6 +18,7 @@ export function PlanningAnalyticsSection(props: PlanningAnalyticsSectionProps) {
     () => ({ from: props.weekFrom, to: props.weekTo }),
     ({ from, to }) => fetchPlanningAnalytics(from, to),
   );
+  const [snapshot] = createResource(() => fetchPlanningDashboardSnapshot());
 
   const directivo = () => data()?.levels.directivo;
   const administrativo = () => data()?.levels.administrativo;
@@ -41,14 +47,32 @@ export function PlanningAnalyticsSection(props: PlanningAnalyticsSectionProps) {
 
   return (
     <div class="space-y-4">
-      <div>
-        <h2 class="font-heading text-lg font-bold text-text-primary dark:text-white">
-          Planificación por nivel
-        </h2>
-        <p class="text-sm text-text-secondary">
-          Tendencias directivas, administrativas y operativas en el rango seleccionado.
-        </p>
+      <div class="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 class="font-heading text-lg font-bold text-text-primary dark:text-white">
+            Planificación por nivel
+          </h2>
+          <p class="text-sm text-text-secondary">
+            Tendencias directivas, administrativas y operativas en el rango seleccionado.
+          </p>
+        </div>
+        <A
+          href={weeklyPlanHref(snapshot()?.weeklyPlan?.id)}
+          class="inline-flex items-center gap-1.5 text-sm font-semibold text-fero-blue hover:underline"
+        >
+          <CalendarDays size={16} />
+          Ver semana en plan semanal
+        </A>
       </div>
+
+      <Show when={data()}>
+        {(analytics) => (
+          <>
+            <WeeklySummaryCard analytics={analytics()} snapshot={snapshot() ?? null} />
+            <WeekendClosureChecklist weekFrom={props.weekFrom} weekTo={props.weekTo} />
+          </>
+        )}
+      </Show>
 
       <div class="grid gap-3 md:grid-cols-3">
         <KpiCard
@@ -78,6 +102,9 @@ export function PlanningAnalyticsSection(props: PlanningAnalyticsSectionProps) {
             <li>Planes diarios: {administrativo()?.dailyPlans ?? 0}</li>
             <li>Optimizados: {administrativo()?.optimizedDays ?? 0}</li>
             <li>Despachados: {administrativo()?.dispatchedDays ?? 0}</li>
+            <li>
+              Cerrados: {administrativo()?.closedDays ?? 0} / {administrativo()?.scheduledDays ?? '—'}
+            </li>
             <li>Pendientes abiertos: {administrativo()?.openPendingVisits ?? 0}</li>
           </ul>
         </Card>
@@ -91,7 +118,10 @@ export function PlanningAnalyticsSection(props: PlanningAnalyticsSectionProps) {
         </Card>
         <Card class="min-h-[220px]">
           <CardHeader title="Tendencias semanales" />
-          <Show when={(trends()?.labels.length ?? 0) > 0} fallback={<p class="text-sm text-text-secondary">Sin datos en el rango.</p>}>
+          <Show
+            when={(trends()?.labels.length ?? 0) > 0}
+            fallback={<p class="text-sm text-text-secondary">Sin datos en el rango.</p>}
+          >
             <div class="h-40">
               <Line
                 data={trendChart()}

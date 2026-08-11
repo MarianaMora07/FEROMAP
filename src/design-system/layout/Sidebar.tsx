@@ -1,6 +1,7 @@
 import { For, Show, createMemo } from 'solid-js';
 import { A, useLocation, useNavigate } from '@solidjs/router';
 import {
+  History,
   LayoutDashboard,
   Map,
   MapPin,
@@ -32,6 +33,8 @@ import { navItemsForRole } from '../../core/auth/permissions';
 const NAV_ICONS: Record<string, typeof LayoutDashboard> = {
   '/': LayoutDashboard,
   '/optimization': Map,
+  '/planning': LayoutDashboard,
+  '/planning/history': History,
   '/map': MapPin,
   '/vehicles': Truck,
   '/collection-points': Trash2,

@@ -1,10 +1,11 @@
 import { For, Show } from 'solid-js';
 import { A } from '@solidjs/router';
 import { ArrowRight, BarChart3, Download, Eye, FileText } from 'lucide-solid';
-import { Badge, Card, CardHeader } from '../../design-system/components';
+import { Card, CardHeader } from '../../design-system/components';
 import { downloadReport } from '../../core/api/reports';
 import { simulationState } from '../../core/stores/simulationStore';
 import { analyticsHref, reportsHref } from '../../core/utils/simulationLinks';
+import { PlanningStatusBadge } from '../planning/PlanningStatusBadge';
 
 interface SimulationHistoryPanelProps {
   error: string | null;
@@ -17,7 +18,7 @@ export function SimulationHistoryPanel(props: SimulationHistoryPanelProps) {
     <Card>
       <CardHeader
         title="Historial de simulaciones"
-        subtitle="Escenarios de tesis ejecutados y sus resultados"
+        subtitle="Escenarios de tesis ejecutados — no incluye planes operativos del día"
       />
       <Show when={props.error}>
         <p class="mb-3 text-sm text-red-600">{props.error}</p>
@@ -48,9 +49,7 @@ export function SimulationHistoryPanel(props: SimulationHistoryPanelProps) {
                       {row.contingency ? 'Contingencia' : 'Simulación'}
                     </td>
                     <td class="py-2.5 pr-3">
-                      <Badge variant="success" dot>
-                        Completado
-                      </Badge>
+                      <PlanningStatusBadge status="completed" />
                     </td>
                     <td class="py-2.5 pr-3 font-semibold text-text-primary dark:text-white">
                       {row.efficiency > 0 ? `${row.efficiency}%` : '—'}

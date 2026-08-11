@@ -1,5 +1,5 @@
-import { For, Show, createMemo, createSignal, onMount } from 'solid-js';
-import { A, useSearchParams } from '@solidjs/router';
+import { For, Show, createEffect, createMemo, createSignal, onMount } from 'solid-js';
+import { A, useNavigate, useSearchParams } from '@solidjs/router';
 import {
   Sparkles,
   MapPin,
@@ -29,9 +29,9 @@ import {
   executeOptimization,
   closeOptimizationDay,
   initOptimizationPage,
-  loadOptimizationFromHistory,
   optimizationState,
   refreshDailyPlan,
+  selectOperationDate,
   setOptimizationScenario,
   updateOptimizationPreset,
 } from '../../core/stores/optimizationStore';
@@ -48,9 +48,19 @@ import {
 import type { OptimizationConstraints } from '../../core/api/optimization';
 import type { ScenarioId } from '../../data/types/simulation';
 import { downloadDailyPlanPdf } from '../../core/api/planning';
+import { optimizationDateHref, tomorrowIso } from '../../core/planning/planningUx';
+import { monitoringHref, optimizationHref } from '../../core/planning/operationalLinks';
 import { PendingManagementPanel } from './PendingManagementPanel';
 import { ModuleGuidanceBanner } from '../shared/ModuleGuidanceBanner';
+import { PlanningContextualCta } from '../planning/PlanningContextualCta';
+import { PlanningEmptyState } from '../planning/PlanningEmptyState';
+import { PLANNING_EMPTY_PRESETS } from '../../core/planning/planningEmptyStates';
+import { PlanningLevelBanner } from '../planning/PlanningLevelBanner';
+import { PlanningStatusBadge } from '../planning/PlanningStatusBadge';
 import { OptimizationRouteMap } from './OptimizationRouteMap';
+import { OptimizationWeekCalendar } from './OptimizationWeekCalendar';
+import { DailyPlanTimeline } from './DailyPlanTimeline';
+import { OptimizationHistoryPanel } from './OptimizationHistoryPanel';
 
 const vehicleToneClass = {
   blue: 'bg-fero-blue/10 text-fero-blue border-fero-blue/20',
@@ -77,7 +87,11 @@ function FieldLabel(props: { children: string }) {
   );
 }
 
-function ParametersForm(props: { onGenerate: () => void; disabled?: boolean }) {
+function ParametersForm(props: {
+  onGenerate: () => void;
+  onDateChange: (date: string) => void;
+  disabled?: boolean;
+}) {
   const preset = () => optimizationState.preset;
   const context = () => optimizationState.context;
   const assignableVehicles = () => context()?.assignableVehicles ?? [];
@@ -103,11 +117,11 @@ function ParametersForm(props: { onGenerate: () => void; disabled?: boolean }) {
           type="date"
           name="operationDate"
           value={preset().operationDate}
-          onInput={(e) => updateOptimizationPreset({ operationDate: e.currentTarget.value })}
+          onInput={(e) => props.onDateChange(e.currentTarget.value)}
         />
 
         <p class="text-xs text-text-muted -mt-2">
-          El plan del día se carga desde el servidor según esta fecha.
+          También puedes elegir el día en el calendario semanal.
         </p>
 
         <div>
@@ -215,7 +229,13 @@ function ParametersForm(props: { onGenerate: () => void; disabled?: boolean }) {
           size="lg"
           class="w-full font-semibold"
           icon={optimizationState.isOptimizing ? <Loader2 size={18} class="animate-spin" /> : <Sparkles size={18} />}
-          disabled={props.disabled || optimizationState.isOptimizing || !canOptimize(authUser()?.role)}
+          disabled={
+            props.disabled ||
+            optimizationState.isOptimizing ||
+            !canOptimize(authUser()?.role) ||
+            !optimizationState.weeklyPlanApproved
+          }
+          title={!optimizationState.weeklyPlanApproved ? 'Falta aprobar plan semanal' : undefined}
         >
           {optimizationState.isOptimizing
             ? `Ejecutando optimización… ${optimizationState.optimizationProgress}%`
@@ -360,62 +380,16 @@ function ResultsCard(props: {
   );
 }
 
-function HistoryTab() {
-  const [error, setError] = createSignal<string | null>(null);
-
-  const handleLoad = async (id: number) => {
-    setError(null);
-    try {
-      await loadOptimizationFromHistory(id);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo cargar la optimización');
-    }
-  };
-
-  return (
-    <Card>
-      <CardHeader title="Historial operativo" />
-      <div class="mb-4 rounded-lg border border-fero-blue/30 bg-fero-blue/10 px-3 py-2 text-sm text-text-secondary">
-        Solo muestra optimizaciones generadas desde esta pantalla. El historial completo de escenarios de tesis está en{' '}
-        <A href="/simulation?view=history" class="font-medium text-fero-blue hover:underline">
-          Simulación de escenarios
-        </A>
-        .
-      </div>
-      <Show when={error()}>
-        <p class="mb-3 text-sm text-red-500">{error()}</p>
-      </Show>
-      <ul class="divide-y divide-border">
-        <For each={optimizationState.history}>
-          {(row) => (
-            <li class="flex items-center justify-between gap-3 py-3">
-              <div>
-                <p class="text-sm font-semibold text-text-primary dark:text-white">{row.name}</p>
-                <p class="text-xs text-text-muted">{row.datetime} · {row.efficiency}% ahorro</p>
-              </div>
-              <Button size="sm" variant="secondary" onClick={() => void handleLoad(row.id)}>
-                Ver
-              </Button>
-            </li>
-          )}
-        </For>
-      </ul>
-      <Show when={optimizationState.history.length === 0}>
-        <p class="py-8 text-center text-sm text-text-muted">
-          Aún no hay optimizaciones operativas. Genera una ruta en la pestaña «Nueva optimización».
-        </p>
-      </Show>
-    </Card>
-  );
-}
-
 export default function OptimizationPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [tab, setTab] = createSignal<OptimizationTabId>('nueva');
   const [dispatchError, setDispatchError] = createSignal<string | null>(null);
   const [closeNotice, setCloseNotice] = createSignal<string | null>(null);
+  const [showDispatchCta, setShowDispatchCta] = createSignal(false);
 
   const dailyPlan = () => optimizationState.dailyPlan;
+  const selectedDate = () => optimizationState.preset.operationDate;
 
   const hasResults = () => optimizationState.kpis != null;
   const kpis = () => optimizationState.kpis!;
@@ -439,9 +413,20 @@ export default function OptimizationPage() {
     return map;
   });
 
+  const navigateToDate = (date: string) => {
+    navigate(optimizationHref({ date }), { replace: true });
+    selectOperationDate(date);
+  };
+
   onMount(() => {
     const dateParam = Array.isArray(searchParams.date) ? searchParams.date[0] : searchParams.date;
-    void initOptimizationPage(dateParam);
+    void initOptimizationPage(dateParam ?? undefined);
+  });
+
+  createEffect(() => {
+    const dateParam = Array.isArray(searchParams.date) ? searchParams.date[0] : searchParams.date;
+    if (!dateParam || dateParam === optimizationState.preset.operationDate) return;
+    selectOperationDate(dateParam);
   });
 
   const handleGenerate = async () => {
@@ -455,8 +440,10 @@ export default function OptimizationPage() {
 
   const handleDispatch = async () => {
     setDispatchError(null);
+    setShowDispatchCta(false);
     try {
       await dispatchOptimizationResult();
+      setShowDispatchCta(true);
     } catch (error) {
       setDispatchError(error instanceof Error ? error.message : 'No se pudieron despachar las rutas');
     }
@@ -483,6 +470,11 @@ export default function OptimizationPage() {
     URL.revokeObjectURL(url);
   };
 
+  const handleViewDayFromHistory = (operationDate: string) => {
+    setTab('nueva');
+    navigateToDate(operationDate);
+  };
+
   return (
     <div class="space-y-4 md:space-y-5">
       <ModuleGuidanceBanner
@@ -494,17 +486,28 @@ export default function OptimizationPage() {
         Esta pantalla genera y despacha rutas operativas del día. Para comparar condiciones (tráfico, lluvia, saturación) y medir el impacto del algoritmo,
       </ModuleGuidanceBanner>
 
+      <PlanningLevelBanner level="administrativo" title="Planificación del día" />
+
+      <OptimizationWeekCalendar selectedDate={selectedDate()} onDateSelect={navigateToDate} />
+
+      <DailyPlanTimeline />
+
+      <Show when={!optimizationState.isLoadingDailyPlan && !optimizationState.weeklyPlanApproved}>
+        <Card>
+          <PlanningEmptyState {...PLANNING_EMPTY_PRESETS.noWeeklyApproved} />
+        </Card>
+      </Show>
+
       <Card>
-        <CardHeader title="Plan del día" subtitle="Nivel administrativo — programados + pendientes de ayer" />
+        <CardHeader title="Plan del día" subtitle="Programados + pendientes de ayer" />
         <Show
           when={!optimizationState.isLoadingDailyPlan}
           fallback={<p class="text-sm text-text-muted">Cargando plan del día…</p>}
         >
           <div class="space-y-3">
             <div class="flex flex-wrap items-center gap-3">
-              <Badge variant={dailyPlan()?.status === 'dispatched' ? 'success' : 'info'}>
-                {dailyPlan()?.status ?? 'sin plan'}
-              </Badge>
+              <PlanningStatusBadge status={dailyPlan()?.status ?? 'draft'} />
+              <span class="text-sm font-semibold text-text-primary dark:text-white">{selectedDate()}</span>
               <span class="text-sm text-text-secondary">
                 {dailyPlan()?.scheduledPoints.length ?? 0} programados ·{' '}
                 {dailyPlan()?.pendingPoints.length ?? 0} pendientes ·{' '}
@@ -533,14 +536,29 @@ export default function OptimizationPage() {
                 Exportar PDF del día
               </Button>
             </div>
+            <Show when={dailyPlan()?.status === 'dispatched'}>
+              <PlanningContextualCta
+                message="Plan despachado — supervisa el avance en campo."
+                href={monitoringHref({
+                  date: dailyPlan()?.operationDate ?? selectedDate(),
+                  dailyPlanId: dailyPlan()?.id,
+                })}
+                linkLabel="Ir a monitoreo"
+              />
+            </Show>
             <Show when={closeNotice()}>
-              <p class="text-sm text-fero-green-dark">{closeNotice()}</p>
+              <PlanningContextualCta
+                tone="info"
+                message="Día cerrado. Revisa los pendientes que pasan a mañana."
+                href={optimizationDateHref(tomorrowIso())}
+                linkLabel="Ver pendientes de mañana"
+              />
             </Show>
           </div>
         </Show>
       </Card>
 
-      <PendingManagementPanel operationDate={optimizationState.preset.operationDate} />
+      <PendingManagementPanel operationDate={selectedDate()} />
 
       <div class="flex gap-1 overflow-x-auto border-b border-border">
         <For each={[...optimizationTabs]}>
@@ -571,6 +589,7 @@ export default function OptimizationPage() {
           <div class="space-y-4 xl:col-span-3">
             <ParametersForm
               onGenerate={() => void handleGenerate()}
+              onDateChange={navigateToDate}
               disabled={optimizationState.isLoadingContext}
             />
             <ScenarioInfoCard />
@@ -609,8 +628,10 @@ export default function OptimizationPage() {
                   disabled={
                     optimizationState.isDispatching ||
                     optimizationState.lastSimulationId == null ||
-                    !canOptimize(authUser()?.role)
+                    !canOptimize(authUser()?.role) ||
+                    !optimizationState.weeklyPlanApproved
                   }
+                  title={!optimizationState.weeklyPlanApproved ? 'Falta aprobar plan semanal' : undefined}
                   onClick={() => void handleDispatch()}
                 >
                   {optimizationState.isDispatching ? 'Despachando…' : 'Despachar rutas'}
@@ -618,6 +639,16 @@ export default function OptimizationPage() {
               </div>
               <Show when={dispatchError()}>
                 <p class="text-sm text-red-500">{dispatchError()}</p>
+              </Show>
+              <Show when={showDispatchCta() || dailyPlan()?.status === 'dispatched'}>
+                <PlanningContextualCta
+                  message="Rutas despachadas. Sigue el avance en tiempo real."
+                  href={monitoringHref({
+                    date: dailyPlan()?.operationDate ?? selectedDate(),
+                    dailyPlanId: dailyPlan()?.id,
+                  })}
+                  linkLabel="Abrir monitoreo"
+                />
               </Show>
               <ResultsCard
                 routeResults={routeResults()}
@@ -630,7 +661,7 @@ export default function OptimizationPage() {
       </Show>
 
       <Show when={tab() === 'historial'}>
-        <HistoryTab />
+        <OptimizationHistoryPanel onViewDay={handleViewDayFromHistory} />
       </Show>
     </div>
   );

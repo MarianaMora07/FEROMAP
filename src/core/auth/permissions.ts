@@ -3,6 +3,8 @@ import type { UserRole } from '../types/auth';
 export const ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
   '/': ['administrador', 'planificador', 'conductor', 'residente'],
   '/optimization': ['administrador', 'planificador'],
+  '/planning': ['administrador', 'planificador'],
+  '/planning/history': ['administrador', 'planificador'],
   '/map': ['administrador', 'planificador', 'conductor', 'residente'],
   '/vehicles': ['administrador', 'planificador'],
   '/drivers': ['administrador', 'planificador'],
@@ -50,6 +52,8 @@ export const MAIN_NAV_ITEMS: NavItemDef[] = [
   {
     href: '/simulation',
     label: 'Simulación de escenarios',
+    description: 'Tesis — evaluar algoritmo ACO',
+    sectionBefore: 'Investigación',
     roles: ['administrador', 'planificador'],
   },
   { href: '/map', label: 'Mapa GIS', roles: ['administrador', 'planificador', 'conductor', 'residente'] },
@@ -64,13 +68,26 @@ export const MAIN_NAV_ITEMS: NavItemDef[] = [
   {
     href: '/monitoring',
     label: 'Monitoreo en Tiempo Real',
+    description: 'Monitoreo en caliente',
     roles: ['administrador', 'planificador', 'conductor'],
+  },
+  {
+    href: '/planning',
+    label: 'Hub de planificación',
+    description: 'Tu operación del día',
+    sectionBefore: 'Operación',
+    roles: ['administrador', 'planificador'],
   },
   {
     href: '/optimization',
     label: 'Planificación operativa',
-    description: 'Uso diario de rutas',
-    sectionBefore: 'Operación',
+    description: 'Día a día — optimizar y despachar',
+    roles: ['administrador', 'planificador'],
+  },
+  {
+    href: '/planning/history',
+    label: 'Historial de planificación',
+    description: 'Semana, día e incidencias',
     roles: ['administrador', 'planificador'],
   },
   {
@@ -110,6 +127,15 @@ export function canManageVehicles(role: UserRole | undefined): boolean {
 
 export function canAdvanceFleet(role: UserRole | undefined): boolean {
   return role === 'administrador' || role === 'planificador' || role === 'conductor';
+}
+
+/** Avance simulado de flota en mapa — solo conductor en campo (y admin en pruebas). */
+export function canSimulateFleetAdvance(role: UserRole | undefined): boolean {
+  return role === 'conductor' || role === 'administrador';
+}
+
+export function isOperationalSupervisor(role: UserRole | undefined): boolean {
+  return role === 'administrador' || role === 'planificador';
 }
 
 export function canReportBreakdown(role: UserRole | undefined): boolean {
