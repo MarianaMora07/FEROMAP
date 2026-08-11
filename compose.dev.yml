@@ -36,6 +36,13 @@ services:
       APP_ENV: ${APP_ENV:-local}
       DATABASE_URL: postgresql+psycopg://${DB_USERNAME:-feromap}:${DB_PASSWORD}@db:5432/${DB_DATABASE:-feromap}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      DATA_DIR: /app/data
+      ACO_ANTS: ${ACO_ANTS:-6}
+      ACO_ITERATIONS: ${ACO_ITERATIONS:-10}
+      ACO_PATIENCE: ${ACO_PATIENCE:-5}
+      ACO_PARALLEL_WORKERS: ${ACO_PARALLEL_WORKERS:-0}
+      OPTIMIZATION_MAX_WORKERS: ${OPTIMIZATION_MAX_WORKERS:-2}
+      MATRIX_INCREMENTAL_MAX_ADDITIONS: ${MATRIX_INCREMENTAL_MAX_ADDITIONS:-3}
     depends_on:
       - db
 
@@ -54,6 +61,7 @@ services:
       VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
       VITE_USE_MOCKS: ${VITE_USE_MOCKS:-false}
       VITE_API_PROXY_TARGET: ${VITE_API_PROXY_TARGET:-http://api:8000}
+      VITE_ACO_PRESET_DEFAULT: ${VITE_ACO_PRESET_DEFAULT:-}
     depends_on:
       - api
 

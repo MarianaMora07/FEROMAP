@@ -21,7 +21,7 @@ import type { KpiMetrics, ScenarioId } from '../../data/types/simulation';
 import { optimizationLogMessages } from '../../data/mock/kpis';
 import { getScenarioRoutes } from '../../data/mock/routes';
 import { kpiByScenario } from '../../data/mock/kpis';
-import { loadRoutesWithRoadSnapping, showOptimizedRoute } from './appStore';
+import { loadRoutesOnMap, showOptimizedRoute } from './appStore';
 import { loadDashboardData } from './dashboardStore';
 import { writeLastOptimizedCodes } from '../utils/collectionPointsOptimization';
 import { recordOperationalRun } from '../utils/operationalHistory';
@@ -127,7 +127,7 @@ export async function executeOptimization(): Promise<void> {
         ]);
       }
       const routes = getScenarioRoutes(state.preset.scenarioId);
-      await loadRoutesWithRoadSnapping(routes);
+      await loadRoutesOnMap(routes);
       const kpis = kpiByScenario[state.preset.scenarioId];
       setState({
         kpis,
@@ -170,7 +170,7 @@ export async function executeOptimization(): Promise<void> {
       }
 
       const merged = mergeRouteCollections(result.routes.current, result.routes.optimized);
-      await loadRoutesWithRoadSnapping(merged);
+      await loadRoutesOnMap(merged);
       setState({
         kpis: result.kpis,
         lastResult: result,

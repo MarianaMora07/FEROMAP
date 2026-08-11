@@ -1,39 +1,51 @@
 import { Route, Router } from '@solidjs/router';
-import { Suspense, lazy } from 'solid-js';
+import { Suspense, lazy, type Component } from 'solid-js';
+import { LoadingPanel } from '../design-system/components';
 import { AppShell } from '../design-system/layout/AppShell';
 import { AuthGate, GuestGate, RoleGate } from '../core/auth/AuthGate';
 
-const DashboardPage = lazy(() => import('../features/dashboard'));
-const OptimizationPage = lazy(() => import('../features/optimization'));
-const MapPage = lazy(() => import('../features/map'));
-const VehiclesPage = lazy(() => import('../features/vehicles'));
-const DriversPage = lazy(() => import('../features/drivers'));
-const CollectionPointsPage = lazy(() => import('../features/collection-points'));
-const SimulationPage = lazy(() => import('../features/simulation'));
-const MonitoringPage = lazy(() => import('../features/monitoring'));
-const AnalyticsPage = lazy(() => import('../features/analytics'));
-const ReportsPage = lazy(() => import('../features/reports'));
-const AlertsPage = lazy(() => import('../features/alerts'));
-const AdminPage = lazy(() => import('../features/admin'));
-const ResidentPage = lazy(() => import('../features/resident'));
-const ProfilePage = lazy(() => import('../features/profile'));
-const LoginPage = lazy(() => import('../features/auth'));
-
 function PageFallback() {
   return (
-    <div class="flex h-40 items-center justify-center text-sm text-text-muted">
-      Cargando...
-    </div>
+    <LoadingPanel
+      label="Cargando módulo…"
+      indeterminate
+      detail="Preparando la vista solicitada."
+    />
   );
 }
+
+function lazyPage(loader: () => Promise<{ default: Component }>) {
+  const Page = lazy(loader);
+  return function LazyPage() {
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <Page />
+      </Suspense>
+    );
+  };
+}
+
+const DashboardPage = lazyPage(() => import('../features/dashboard'));
+const OptimizationPage = lazyPage(() => import('../features/optimization'));
+const MapPage = lazyPage(() => import('../features/map'));
+const VehiclesPage = lazyPage(() => import('../features/vehicles'));
+const DriversPage = lazyPage(() => import('../features/drivers'));
+const CollectionPointsPage = lazyPage(() => import('../features/collection-points'));
+const SimulationPage = lazyPage(() => import('../features/simulation'));
+const MonitoringPage = lazyPage(() => import('../features/monitoring'));
+const AnalyticsPage = lazyPage(() => import('../features/analytics'));
+const ReportsPage = lazyPage(() => import('../features/reports'));
+const AlertsPage = lazyPage(() => import('../features/alerts'));
+const AdminPage = lazyPage(() => import('../features/admin'));
+const ResidentPage = lazyPage(() => import('../features/resident'));
+const ProfilePage = lazyPage(() => import('../features/profile'));
+const LoginPage = lazyPage(() => import('../features/auth'));
 
 function ProtectedShell(props: { children: unknown }) {
   return (
     <AuthGate>
       <RoleGate>
-        <AppShell>
-          <Suspense fallback={<PageFallback />}>{props.children}</Suspense>
-        </AppShell>
+        <AppShell>{props.children}</AppShell>
       </RoleGate>
     </AuthGate>
   );
@@ -42,32 +54,30 @@ function ProtectedShell(props: { children: unknown }) {
 export default function App() {
   return (
     <Router>
-      <Suspense fallback={<PageFallback />}>
-        <Route
-          path="/login"
-          component={() => (
-            <GuestGate>
-              <LoginPage />
-            </GuestGate>
-          )}
-        />
-        <Route path="/" component={ProtectedShell}>
-          <Route path="/" component={DashboardPage} />
-          <Route path="/optimization" component={OptimizationPage} />
-          <Route path="/map" component={MapPage} />
-          <Route path="/vehicles" component={VehiclesPage} />
-          <Route path="/drivers" component={DriversPage} />
-          <Route path="/collection-points" component={CollectionPointsPage} />
-          <Route path="/simulation" component={SimulationPage} />
-          <Route path="/monitoring" component={MonitoringPage} />
-          <Route path="/analytics" component={AnalyticsPage} />
-          <Route path="/reports" component={ReportsPage} />
-          <Route path="/resident" component={ResidentPage} />
-          <Route path="/alerts" component={AlertsPage} />
-          <Route path="/admin" component={AdminPage} />
-          <Route path="/profile" component={ProfilePage} />
-        </Route>
-      </Suspense>
+      <Route
+        path="/login"
+        component={() => (
+          <GuestGate>
+            <LoginPage />
+          </GuestGate>
+        )}
+      />
+      <Route path="/" component={ProtectedShell}>
+        <Route path="/" component={DashboardPage} />
+        <Route path="/optimization" component={OptimizationPage} />
+        <Route path="/map" component={MapPage} />
+        <Route path="/vehicles" component={VehiclesPage} />
+        <Route path="/drivers" component={DriversPage} />
+        <Route path="/collection-points" component={CollectionPointsPage} />
+        <Route path="/simulation" component={SimulationPage} />
+        <Route path="/monitoring" component={MonitoringPage} />
+        <Route path="/analytics" component={AnalyticsPage} />
+        <Route path="/reports" component={ReportsPage} />
+        <Route path="/resident" component={ResidentPage} />
+        <Route path="/alerts" component={AlertsPage} />
+        <Route path="/admin" component={AdminPage} />
+        <Route path="/profile" component={ProfilePage} />
+      </Route>
     </Router>
   );
 }

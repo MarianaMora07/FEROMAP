@@ -63,6 +63,19 @@ export function countAssignableVehicles(vehicles: Vehicle[]): number {
   return vehicles.filter((vehicle) => isAssignableVehicle(vehicle.status)).length;
 }
 
+export function hasAssignedDriver(vehicle: Vehicle): boolean {
+  if (vehicle.defaultDriverId != null || vehicle.driverId != null) return true;
+  const driver = vehicle.driver?.trim();
+  return !!driver && driver !== '—' && driver !== '-';
+}
+
+/** Listos para optimizar: estado asignable + conductor (igual que el motor VRP). */
+export function countSimulationReadyVehicles(vehicles: Vehicle[]): number {
+  return vehicles.filter(
+    (vehicle) => isAssignableVehicle(vehicle.status) && hasAssignedDriver(vehicle),
+  ).length;
+}
+
 function normalizeVehicle(vehicle: Vehicle): Vehicle & { maxCapacityKg: number } {
   return {
     ...vehicle,

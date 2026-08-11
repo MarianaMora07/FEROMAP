@@ -1,10 +1,11 @@
 import { For, Show } from 'solid-js';
 import { Loader2 } from 'lucide-solid';
 import { Card, CardHeader, ProgressBar } from '../../design-system/components';
-import type { SimulationLogEntry } from '../../data/types/simulation';
+import type { AcoConvergencePoint, SimulationLogEntry } from '../../data/types/simulation';
 import type { ExecutionPhaseId } from './executionPhases';
 import { formatExecutionPhaseTitle, getExecutionPhase } from './executionPhases';
 import { SimulationExecutionStepper } from './SimulationExecutionStepper';
+import { AcoConvergenceChart } from './AcoConvergenceChart';
 
 interface ExecutionNarrative {
   whatItDoes: string;
@@ -22,6 +23,7 @@ interface ExecutionPanelProps {
   executionTotalPhases: number;
   executionNarrative: ExecutionNarrative | null;
   scenarioLabel: string;
+  acoConvergence?: AcoConvergencePoint[];
 }
 
 export function ExecutionPanel(props: ExecutionPanelProps) {
@@ -94,7 +96,23 @@ export function ExecutionPanel(props: ExecutionPanelProps) {
                   </span>
                   <span>{props.progress}%</span>
                 </div>
-                <ProgressBar value={props.progress} color="green" />
+                <Show
+                  when={props.progress > 0 && props.progress < 100}
+                  fallback={
+                    <ProgressBar
+                      value={props.progress}
+                      indeterminate={props.isRunning}
+                      color="green"
+                    />
+                  }
+                >
+                  <ProgressBar value={props.progress} color="green" />
+                </Show>
+                <Show when={props.isRunning && props.progress >= 95}>
+                  <p class="mt-2 text-[11px] text-text-muted">
+                    Finalizando presentación en mapa y datos auxiliares…
+                  </p>
+                </Show>
               </div>
             </Show>
 
@@ -111,6 +129,15 @@ export function ExecutionPanel(props: ExecutionPanelProps) {
                   <p class="mt-1 text-xs text-text-secondary">{narrative().whyItMatters}</p>
                 </div>
               )}
+            </Show>
+
+            <Show when={(props.acoConvergence?.length ?? 0) > 0}>
+              <div class="rounded-lg border border-border px-3 py-2.5 dark:border-dark-border">
+                <p class="mb-2 text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+                  Convergencia ACO (en vivo)
+                </p>
+                <AcoConvergenceChart points={props.acoConvergence ?? []} compact />
+              </div>
             </Show>
 
             <div>

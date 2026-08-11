@@ -1,6 +1,6 @@
 import type { RouteCollection } from '../../core/types/geo';
 
-/** Orden de paradas; la geometría en pantalla se ajusta a vías con OSRM. */
+/** Orden de paradas; en API la geometría sigue el grafo OSMnx local (Unare). */
 const currentWaypoints: [number, number][] = [
   [-62.715, 8.295],
   [-62.724, 8.298],

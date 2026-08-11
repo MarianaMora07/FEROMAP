@@ -29,6 +29,7 @@ export function activeExecutionLegend(phaseId: ExecutionPhaseId | null): Executi
     case 'refinamiento_2opt':
       return 'mejorando';
     case 'persistencia':
+    case 'preparando_mapa':
     case 'listo':
       return 'ruta_final';
     default:
@@ -182,7 +183,7 @@ export function routeFeaturesForExecution(
     return features;
   }
 
-  if (phaseId === 'listo') {
+  if (phaseId === 'listo' || phaseId === 'preparando_mapa') {
     return routes.features.map((feature) => ({
       ...feature,
       properties: { ...feature.properties, kind: feature.properties.type },
@@ -240,5 +241,6 @@ export function executionOverlayMessage(phaseId: ExecutionPhaseId | null): strin
   if (!phaseId || phaseId === 'listo') return null;
   if (phaseId === 'preparando') return 'Preparando datos del escenario…';
   if (phaseId === 'persistencia') return 'Guardando rutas optimizadas…';
+  if (phaseId === 'preparando_mapa') return 'Cargando rutas en el mapa…';
   return null;
 }

@@ -11,7 +11,7 @@ import {
 } from '../../features/simulation/simulationExecutionRunner';
 
 describe('simulationExecutionRunner', () => {
-  it('avanza por fases y llega a listo con progreso creciente', async () => {
+  it('avanza por fases durante la reproducción mock', async () => {
     const phases: string[] = [];
     let progress = 0;
 
@@ -28,9 +28,9 @@ describe('simulationExecutionRunner', () => {
       handlers,
     );
 
-    expect(phases.at(-1)).toBe('listo');
-    expect(progress).toBe(100);
-    expect(phases.length).toBeGreaterThan(2);
+    expect(phases[0]).toBe('preparando');
+    expect(phases).not.toContain('listo');
+    expect(progress).toBeGreaterThan(0);
   });
 
   it('interrumpe con ExecutionCancelledError al cancelar', async () => {
@@ -51,13 +51,13 @@ describe('simulationExecutionRunner', () => {
 
 describe('executionPhases helpers', () => {
   it('formatea el sub-estado del wizard', () => {
-    expect(formatWizardExecutionSubstatus(3, 8, 'Distancias y tiempos')).toBe(
-      'Ejecutando — fase 3 de 8: Distancias y tiempos',
+    expect(formatWizardExecutionSubstatus(3, 9, 'Distancias y tiempos')).toBe(
+      'Ejecutando — fase 3 de 9: Distancias y tiempos',
     );
   });
 
-  it('mantiene el orden de las 8 fases', () => {
-    expect(EXECUTION_PHASES.map((phase) => phase.order)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+  it('mantiene el orden de las 9 fases', () => {
+    expect(EXECUTION_PHASES.map((phase) => phase.order)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
     expect(getExecutionPhase('aco').label).toBe('Búsqueda inteligente');
   });
 });

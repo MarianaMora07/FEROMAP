@@ -16,6 +16,33 @@ export interface DurationBreakdown {
   stopCount?: number;
 }
 
+export interface AcoConvergencePoint {
+  iteration: number;
+  bestDistanceKm: number;
+  iterationBestDistanceKm: number;
+}
+
+export interface EngineMetrics {
+  computationSeconds: number;
+  acoSeconds: number;
+  graphLoadSeconds: number;
+  overheadSeconds: number;
+  acoAnts: number;
+  acoIterations: number;
+  acoIterationsRun?: number;
+  acoStoppedEarly?: boolean;
+  acoPatience?: number;
+  matrixCacheHit?: boolean;
+  matrixCacheIncremental?: boolean;
+  matrixPatchedCells?: number;
+  matrixParentPointCount?: number;
+  graphLoadSource?: string;
+  acoConvergence?: AcoConvergencePoint[];
+  acoParallelWorkers?: number;
+  customers: number;
+  vehicles: number;
+}
+
 export interface KpiMetrics {
   distanceKm: { current: number; optimized: number };
   durationHours: { current: number; optimized: number };
@@ -29,6 +56,7 @@ export interface KpiMetrics {
   co2KgAvoided: number;
   criticalCoveragePct: { current: number; optimized: number };
   containersServed: number;
+  engineMetrics?: EngineMetrics;
 }
 
 export interface SimulationLogEntry {

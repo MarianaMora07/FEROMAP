@@ -1,5 +1,5 @@
 import type { RouteCollection } from '../types/geo';
-import type { DurationBreakdown, KpiMetrics } from '../../data/types/simulation';
+import type { DurationBreakdown, EngineMetrics, KpiMetrics } from '../../data/types/simulation';
 
 export type VehicleTone = 'blue' | 'green' | 'purple';
 
@@ -40,6 +40,22 @@ export function formatDurationHours(hours: number): string {
 
 export function formatDurationMinutes(minutes: number): string {
   return formatDurationHours(minutes / 60);
+}
+
+export function formatComputationSeconds(seconds: number): string {
+  if (seconds < 1) return `${Math.round(seconds * 1000)} ms`;
+  if (seconds < 60) return `${seconds.toFixed(1)} s`;
+  const totalMin = Math.floor(seconds / 60);
+  const rem = Math.round(seconds % 60);
+  if (totalMin <= 0) return `${rem} s`;
+  if (rem <= 0) return `${totalMin} min`;
+  return `${totalMin} min ${rem} s`;
+}
+
+export function formatEngineMetricsSummary(metrics: EngineMetrics): string {
+  return `Total ${formatComputationSeconds(metrics.computationSeconds)} · ACO ${formatComputationSeconds(
+    metrics.acoSeconds,
+  )} · Grafo ${formatComputationSeconds(metrics.graphLoadSeconds)}`;
 }
 
 export interface DurationBreakdownDisplayRow {

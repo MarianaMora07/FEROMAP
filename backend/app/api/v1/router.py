@@ -16,6 +16,7 @@ from app.api.v1 import (
     routes,
     sectors,
     simulations,
+    benchmarks,
 )
 
 api_router = APIRouter(prefix="/api/v1")
@@ -30,6 +31,7 @@ api_router.include_router(collection_points.router)
 api_router.include_router(routes.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(simulations.router)
+api_router.include_router(benchmarks.router)
 api_router.include_router(catalog.router)
 api_router.include_router(reports.router)
 api_router.include_router(analytics.router)

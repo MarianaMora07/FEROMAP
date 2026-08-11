@@ -45,7 +45,7 @@ test.describe('Simulación — ejecución y cancelación', () => {
 
     await expect(page.getByTestId('execution-stepper')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByTestId('wizard-execution-substatus')).toContainText(
-      /Ejecutando — fase \d+ de 8:/,
+      /Ejecutando — fase \d+ de 9:/,
       { timeout: 20_000 },
     );
 

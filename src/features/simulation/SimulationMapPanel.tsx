@@ -204,12 +204,12 @@ export function SimulationMapPanel(props: SimulationMapPanelProps) {
     map.setLayoutProperty(
       'sim-current',
       'visibility',
-      phase === 'refinamiento_2opt' || phase === 'persistencia' || phase === 'listo' ? 'visible' : 'none',
+      phase === 'refinamiento_2opt' || phase === 'persistencia' || phase === 'preparando_mapa' || phase === 'listo' ? 'visible' : 'none',
     );
     map.setLayoutProperty(
       'sim-optimized',
       'visibility',
-      phase === 'refinamiento_2opt' || phase === 'persistencia' || phase === 'listo' ? 'visible' : 'none',
+      phase === 'refinamiento_2opt' || phase === 'persistencia' || phase === 'preparando_mapa' || phase === 'listo' ? 'visible' : 'none',
     );
 
     syncContainerMarkers(shouldPulseCriticalContainers(phase));

@@ -1,9 +1,12 @@
+import { Show } from 'solid-js';
+
 interface ProgressBarProps {
   value: number;
   max?: number;
   color?: 'green' | 'blue' | 'amber' | 'red';
   size?: 'sm' | 'md' | 'lg';
   showLabel?: boolean;
+  indeterminate?: boolean;
   class?: string;
 }
 
@@ -33,18 +36,31 @@ export function ProgressBar(props: ProgressBarProps) {
 
   return (
     <div class={`w-full ${props.class ?? ''}`}>
-      {props.showLabel && (
+      {props.showLabel && !props.indeterminate && (
         <div class="flex justify-between mb-1">
           <span class="text-xs text-text-muted">{props.value} / {max()}</span>
           <span class="text-xs font-medium text-text-secondary">{Math.round(percentage())}%</span>
         </div>
       )}
-      <div class={`w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800 ${sizeClasses[props.size ?? 'md']}`}>
+      <Show
+        when={props.indeterminate}
+        fallback={
+          <div class={`w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800 ${sizeClasses[props.size ?? 'md']}`}>
+            <div
+              class={`${colorClasses[color()]} ${sizeClasses[props.size ?? 'md']} rounded-full transition-all duration-500 ease-out`}
+              style={{ width: `${percentage()}%` }}
+            />
+          </div>
+        }
+      >
         <div
-          class={`${colorClasses[color()]} ${sizeClasses[props.size ?? 'md']} rounded-full transition-all duration-500 ease-out`}
-          style={{ width: `${percentage()}%` }}
-        />
-      </div>
+          class={`relative w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800 ${sizeClasses[props.size ?? 'md']}`}
+          role="progressbar"
+          aria-valuetext="En progreso"
+        >
+          <div class={`progress-indeterminate absolute inset-y-0 w-1/3 rounded-full ${colorClasses[color()]}`} />
+        </div>
+      </Show>
     </div>
   );
 }

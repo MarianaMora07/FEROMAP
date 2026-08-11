@@ -440,7 +440,9 @@ Encola una optimización ACO y devuelve de inmediato un `jobId`. El cliente debe
   "rainIntensity": "alta",
   "wasteLevelPct": 30,
   "estimatedDurationHours": 4,
-  "operatorsShortage": 2
+  "operatorsShortage": 2,
+  "acoAnts": 12,
+  "acoIterations": 20
 }
 ```
 
@@ -451,8 +453,22 @@ Encola una optimización ACO y devuelve de inmediato un `jobId`. El cliente debe
 | `wasteLevelPct` | 10 \| 20 \| 30 \| 50 | Solo si `scenarioId=saturated`. Suma puntos al `fillLevelBoost` del escenario. |
 | `estimatedDurationHours` | 1–12 | Se persiste en `simulationParameters`; **no** modifica el VRP. |
 | `operatorsShortage` | 0–5 | Operarios de **campo** ausentes en el turno. Se persiste en `simulationParameters`; afecta **KPIs de duración** (ACO sigue minimizando distancia). |
+| `acoAnts` | 4–30 | Hormigas por iteración del ACO. Si se omite, usa `ACO_ANTS` del servidor (default según `APP_ENV`: local 6, staging/prod 12). |
+| `acoIterations` | 5–60 | Iteraciones del ACO. Si se omite, usa `ACO_ITERATIONS` del servidor (default según `APP_ENV`: local 10, staging/prod 20). |
 
-`simulationParameters` también incluye `appliedCrewModifiers` cuando `operatorsShortage > 0` (tiempo por punto, dotación efectiva de referencia, narrativa).
+`simulationParameters` también incluye `acoAnts`, `acoIterations` y `appliedCrewModifiers` cuando aplica.
+
+**Optimizaciones del motor (Fase A–B):**
+
+| Variable | Default | Efecto |
+|----------|---------|--------|
+| `ACO_PATIENCE` | `5` | Parada anticipada si la mejor distancia no mejora en N iteraciones (`0` = desactivado). |
+| Matriz en caché | `data/cache/matrices/` | Reutiliza distancias si coinciden depósito, puntos, escenario y `trafficMultiplier`. |
+| `ACO_PARALLEL_WORKERS` | `0` (auto) | Hormigas por iteración en procesos paralelos (`1` = secuencial, `N` = workers explícitos). |
+| `OPTIMIZATION_MAX_WORKERS` | `2` | Máximo de jobs de optimización ejecutándose a la vez en el servidor. |
+| `MATRIX_INCREMENTAL_MAX_ADDITIONS` | `3` | Máximo de puntos nuevos al parchear matriz desde caché padre. |
+
+`engineMetrics.acoParallelWorkers` indica cuántos procesos usó el ACO. `graphLoadSource` puede ser `memory`, `disk`, `graphml` u `osmnx`. La matriz incremental reutiliza una corrida anterior como submatriz (contingencia) o parchea filas/columnas nuevas. El grafo se pre-calienta con `just seed` o `just warm-graph` en `data/cache/unare_graph.pkl`.
 
 **Matriz objetivo vs reporte (ADR-003):** el ACO minimiza **distancia**; los KPIs y `estimatedDurationSeconds` de rutas incluyen **viaje + tiempo en paradas** según dotación.
 
@@ -471,9 +487,80 @@ Encola una optimización ACO y devuelve de inmediato un `jobId`. El cliente debe
     }
   },
   "exceedsWorkday": { "current": false, "optimized": false },
-  "workdayHours": 8
+  "workdayHours": 8,
+  "engineMetrics": {
+    "computationSeconds": 12.4,
+    "acoSeconds": 3.8,
+    "graphLoadSeconds": 6.1,
+    "overheadSeconds": 2.5,
+    "acoAnts": 12,
+    "acoIterations": 20,
+    "acoIterationsRun": 14,
+    "acoStoppedEarly": true,
+    "acoPatience": 5,
+    "matrixCacheHit": true,
+    "acoParallelWorkers": 2,
+    "acoConvergence": [
+      { "iteration": 1, "bestDistanceKm": 32.4, "iterationBestDistanceKm": 32.4 },
+      { "iteration": 14, "bestDistanceKm": 23.0, "iterationBestDistanceKm": 23.4 }
+    ],
+    "customers": 20,
+    "vehicles": 4
+  }
 }
 ```
+
+`engineMetrics` mide el **tiempo real de CPU/servidor** (no la duración operativa de la ruta). Variables de entorno: `ACO_ANTS`, `ACO_ITERATIONS`, `ACO_PATIENCE`, `ACO_PARALLEL_WORKERS`, `OPTIMIZATION_MAX_WORKERS` (ver `.env.example`). En producción/defensa: `VITE_ACO_PRESET_DEFAULT=precise` preselecciona el perfil «Preciso» en la UI.
+
+**Observabilidad (Fase D — tesis):**
+
+| Métrica / artefacto | Dónde | Uso en defensa |
+|---------------------|-------|----------------|
+| `graphLoadSeconds`, `acoSeconds`, `overheadSeconds` | `engineMetrics` | Desglose de tiempo de CPU vs. calidad |
+| `acoConvergence` | `engineMetrics` y polling del job | Curva `best_cost` por iteración ACO |
+| Benchmark 5×3 | `GET/POST /benchmarks/aco` | Tabla y gráfico tiempo vs. % ahorro km |
+
+`acoConvergence` registra por iteración la mejor distancia global (`bestDistanceKm`) y la mejor de la iteración (`iterationBestDistanceKm`), en km. Durante la ejecución el cliente puede leer `acoConvergence` en `GET /simulations/jobs/{id}` para dibujar la curva en vivo.
+
+### Benchmark ACO — `/api/v1/benchmarks/aco`
+
+Ejecuta **5 escenarios** (`normal`, `peak_traffic`, `rain`, `saturated`, `broken_vehicle`) × **3 perfiles** (Rápido 6×10, Estándar 12×20, Preciso 20×40) sin persistir simulaciones. Guarda el resultado en `data/cache/benchmarks/aco_latest.json`.
+
+| Método | Ruta | Rol | Descripción |
+|--------|------|-----|-------------|
+| GET | `/benchmarks/aco` | Planificador/Admin | Último benchmark generado (404 si no existe) |
+| POST | `/benchmarks/aco` | Planificador/Admin | Regenera el benchmark (puede tardar varios minutos) |
+
+CLI equivalente: `just benchmark-aco`.
+
+**Response (extracto)**
+
+```json
+{
+  "generatedAt": "2026-08-10T16:00:00+00:00",
+  "durationSeconds": 142.5,
+  "scenarioCount": 5,
+  "profileCount": 3,
+  "runs": [
+    {
+      "scenarioId": "normal",
+      "scenarioLabel": "Tráfico normal",
+      "profileId": "standard",
+      "profileLabel": "Estándar",
+      "computationSeconds": 8.4,
+      "graphLoadSeconds": 0.1,
+      "acoSeconds": 2.1,
+      "overheadSeconds": 1.7,
+      "savingPct": 31.0,
+      "acoIterationsRun": 14,
+      "acoStoppedEarly": true,
+      "matrixCacheHit": true
+    }
+  ]
+}
+```
+
+Interpretación para la defensa: más hormigas/iteraciones no siempre son proporcionales al ahorro de km; **early stop** + **caché de matriz** suelen capturar ~80 % de la ganancia con mucho menos CPU.
 
 `estimatedDurationHours` en el request define `workdayHours` para la bandera `exceedsWorkday` (default 8 h si se omite).
 
@@ -509,7 +596,7 @@ durationSec      = travelSec + stopCount × serviceTimeSec
 
 El conductor **no** se resta con `operatorsShortage`. Código: `backend/app/domain/crew_service_time.py`. ADR: [docs/fase-8/adr-dotacion-tiempo-servicio.md](../../docs/fase-8/adr-dotacion-tiempo-servicio.md).
 
-**Algoritmo:** siempre ACO (`aco_vrp_osmnx`, 12 hormigas × 20 iteraciones). No hay selector de algoritmo en API.
+**Algoritmo:** ACO (`aco_vrp_osmnx`). Defaults por `APP_ENV`: local `6×10`, staging/prod `12×20`. Parada anticipada (`ACO_PATIENCE`), hormigas en paralelo (`ACO_PARALLEL_WORKERS`) y cola de jobs (`OPTIMIZATION_MAX_WORKERS`). No hay selector de algoritmo en API.
 
 **Response (201)**
 
@@ -539,6 +626,10 @@ Devuelve el estado en tiempo real del job: fase del motor, progreso (0–100), l
       "type": "info",
       "phaseId": "aco"
     }
+  ],
+  "acoConvergence": [
+    { "iteration": 1, "bestDistanceKm": 32.1, "iterationBestDistanceKm": 32.4 },
+    { "iteration": 2, "bestDistanceKm": 30.8, "iterationBestDistanceKm": 31.2 }
   ],
   "result": null,
   "error": null

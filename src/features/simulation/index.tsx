@@ -1,4 +1,4 @@
-import { For, Show, Suspense, createMemo, createResource, createSignal, lazy, onMount, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import { useSearchParams } from '@solidjs/router';
 import {
   AlertTriangle,
@@ -19,9 +19,10 @@ import {
   Button,
   Card,
   CardHeader,
+  LoadingPanel,
 } from '../../design-system/components';
 import { fetchCollectionPointsSummary } from '../../core/api/collectionPoints';
-import { fetchVehiclesSummary } from '../../core/api/vehicles';
+import { countSimulationReadyVehicles, fetchVehicles } from '../../core/api/vehicles';
 import { canOptimize } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
 import { fetchMonitoringStatus } from '../../core/api/monitoring';
@@ -33,6 +34,7 @@ import {
   executionPhaseIndex,
   executionTotalPhases,
   initSimulationData,
+  isSimulationBusy,
   kpiImpactRows,
   kpiSavingsSummary,
   loadSimulationFromHistory,
@@ -49,6 +51,7 @@ import {
   buildSimulationReadiness,
   buildSimulationRunParameters,
   describeDerivedScenario,
+  type SimulationReadiness,
 } from '../../core/utils/simulationWizard';
 import { parseSimulationIdParam } from '../../core/utils/simulationLinks';
 import { BreakdownReporter, ContingencyResultBanner } from '../contingency/BreakdownReporter';
@@ -58,6 +61,7 @@ import type { ScenarioId } from '../../data/types/simulation';
 import { ConfigurationSummaryPanel } from './ConfigurationSummaryPanel';
 import { ExecutiveSummary } from './ExecutiveSummary';
 import { DurationBreakdownPanel } from './DurationBreakdownPanel';
+import { EngineComputationPanel } from './EngineComputationPanel';
 import { ExecutionPanel } from './ExecutionPanel';
 import { PostSimulationActions } from './PostSimulationActions';
 import { SimulationHistoryPanel } from './SimulationHistoryPanel';
@@ -66,7 +70,7 @@ import { CancelExecutionConfirmDialog } from './CancelExecutionConfirmDialog';
 import {
   EXECUTION_CANCEL_MESSAGES,
   formatWizardExecutionSubstatus,
-  getExecutionPhase,
+  tryGetExecutionPhase,
 } from './executionPhases';
 
 import {
@@ -74,24 +78,18 @@ import {
   defaultConditions,
   durationOptions,
   operatorsShortageOptions,
+  acoAntsOptions,
+  acoIterationsOptions,
+  acoPresetOptions,
+  acoValuesForPreset,
   CREW_SHORTAGE_NARRATIVE,
   rainIntensityOptions,
+  resolveDefaultAcoPreset,
   simulationConditions,
   wasteLevelOptions,
+  type AcoPresetId,
   type ConditionId,
 } from './simulationConfig';
-
-const SimulationMapPanel = lazy(() =>
-  import('./SimulationMapPanel').then((module) => ({ default: module.SimulationMapPanel })),
-);
-
-function MapPanelFallback() {
-  return (
-    <div class="flex h-72 items-center justify-center rounded-xl border border-border bg-slate-50 text-sm text-text-muted dark:border-dark-border dark:bg-dark-surface-hover">
-      Cargando mapa…
-    </div>
-  );
-}
 
 type SimulationPageTab = 'flow' | 'history';
 
@@ -224,12 +222,12 @@ function MetricBar(props: { label: string; value: number }) {
 }
 
 async function fetchReadiness() {
-  const [vehiclesSummary, pointsSummary] = await Promise.all([
-    fetchVehiclesSummary(),
+  const [vehicles, pointsSummary] = await Promise.all([
+    fetchVehicles(),
     fetchCollectionPointsSummary(),
   ]);
   const activePoints = pointsSummary.kpis.total - pointsSummary.kpis.fueraDeServicio;
-  return buildSimulationReadiness(vehiclesSummary.assignableCount, activePoints);
+  return buildSimulationReadiness(countSimulationReadyVehicles(vehicles), activePoints);
 }
 
 export default function SimulationPage() {
@@ -247,6 +245,9 @@ export default function SimulationPage() {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
   };
 
+  const initialAcoPreset = resolveDefaultAcoPreset();
+  const initialAcoValues = acoValuesForPreset(initialAcoPreset);
+
   const [step, setStep] = createSignal(1);
   const [pageTab, setPageTab] = createSignal<SimulationPageTab>(
     params.view === 'history' ? 'history' : 'flow',
@@ -257,18 +258,38 @@ export default function SimulationPage() {
   const [duration, setDuration] = createSignal('4');
   const [crewShortageEnabled, setCrewShortageEnabled] = createSignal(false);
   const [operatorsShortage, setOperatorsShortage] = createSignal('2');
+  const [acoPreset, setAcoPreset] = createSignal<AcoPresetId>(initialAcoPreset);
+  const [acoAnts, setAcoAnts] = createSignal(initialAcoValues.ants);
+  const [acoIterations, setAcoIterations] = createSignal(initialAcoValues.iterations);
   const [hasResults, setHasResults] = createSignal(false);
   const [historyError, setHistoryError] = createSignal<string | null>(null);
   const [runError, setRunError] = createSignal<string | null>(null);
   const [runNotice, setRunNotice] = createSignal<string | null>(null);
   const [incidentsRefreshKey, setIncidentsRefreshKey] = createSignal(0);
   const [cancelConfirmOpen, setCancelConfirmOpen] = createSignal(false);
+  const [readiness, setReadiness] = createSignal<SimulationReadiness | undefined>();
+  const [loadingReadiness, setLoadingReadiness] = createSignal(true);
+  const [monitoringData, setMonitoringData] = createSignal<Awaited<ReturnType<typeof fetchMonitoringStatus>> | undefined>();
 
-  const [monitoringData] = createResource(
-    () => (step() >= 2 ? step() : undefined),
-    () => fetchMonitoringStatus(),
-  );
-  const [readiness, { refetch: refetchReadiness }] = createResource(fetchReadiness);
+  const loadReadiness = async () => {
+    setLoadingReadiness(true);
+    try {
+      setReadiness(await fetchReadiness());
+    } catch {
+      setReadiness(undefined);
+    } finally {
+      setLoadingReadiness(false);
+    }
+  };
+
+  const loadMonitoring = async () => {
+    try {
+      setMonitoringData(await fetchMonitoringStatus());
+    } catch {
+      setMonitoringData(undefined);
+    }
+  };
+
   const fleetForBreakdown = () =>
     (monitoringData()?.liveFleet ?? []).map((v) => ({
       id: v.id,
@@ -288,6 +309,9 @@ export default function SimulationPage() {
       scenarioId: derivedScenario().scenarioId,
       crewShortageEnabled: crewShortageEnabled(),
       operatorsShortage: operatorsShortage(),
+      acoPreset: acoPreset(),
+      acoAnts: acoAnts(),
+      acoIterations: acoIterations(),
     });
 
   const panelParams = () => ({
@@ -296,7 +320,29 @@ export default function SimulationPage() {
     durationHours: duration(),
     crewShortageEnabled: crewShortageEnabled(),
     operatorsShortage: operatorsShortage(),
+    acoPreset: acoPreset(),
+    acoAnts: acoAnts(),
+    acoIterations: acoIterations(),
   });
+
+  const applyAcoPreset = (preset: AcoPresetId) => {
+    setAcoPreset(preset);
+    const match = acoPresetOptions.find((option) => option.value === preset);
+    if (match && preset !== 'custom') {
+      setAcoAnts(String(match.ants));
+      setAcoIterations(String(match.iterations));
+    }
+  };
+
+  const handleAcoAntsChange = (value: string) => {
+    setAcoAnts(value);
+    setAcoPreset('custom');
+  };
+
+  const handleAcoIterationsChange = (value: string) => {
+    setAcoIterations(value);
+    setAcoPreset('custom');
+  };
   const efficiencyValue = createMemo(() =>
     hasResults() ? scenarioEfficiencyPct(currentKpis()) : 0,
   );
@@ -318,7 +364,8 @@ export default function SimulationPage() {
     if (step() !== 2 || !simulationState.isOptimizing || !simulationState.executionPhase) {
       return null;
     }
-    const phase = getExecutionPhase(simulationState.executionPhase);
+    const phase = tryGetExecutionPhase(simulationState.executionPhase);
+    if (!phase) return null;
     return formatWizardExecutionSubstatus(phase.order, executionTotalPhases(), phase.label);
   });
 
@@ -350,7 +397,7 @@ export default function SimulationPage() {
     const ready = readiness();
     if (!ready?.ready) {
       setRunError(ready?.issues.join(' ') ?? 'No se pudo verificar los recursos del sistema.');
-      void refetchReadiness();
+      void loadReadiness();
       return;
     }
     setStep(2);
@@ -366,9 +413,11 @@ export default function SimulationPage() {
       return;
     }
     try {
-      await runOptimization(simulationParams());
-      if (wasExecutionCancelled()) {
-        setRunNotice(EXECUTION_CANCEL_MESSAGES.done);
+      const completed = await runOptimization(simulationParams());
+      if (!completed || wasExecutionCancelled()) {
+        if (wasExecutionCancelled()) {
+          setRunNotice(EXECUTION_CANCEL_MESSAGES.done);
+        }
         return;
       }
       setHasResults(true);
@@ -404,8 +453,14 @@ export default function SimulationPage() {
     }
   };
 
+  createEffect(() => {
+    if (step() >= 2) {
+      void loadMonitoring();
+    }
+  });
+
   onMount(() => {
-    void refetchReadiness();
+    void loadReadiness();
     void initSimulationData().then(() => {
       const simulationId = parseSimulationIdParam(params.simulationId);
       if (simulationId) {
@@ -424,11 +479,26 @@ export default function SimulationPage() {
       requestCancelExecution();
     };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    onCleanup(() => {
+      window.removeEventListener('keydown', onKeyDown);
+      if (simulationState.isOptimizing) {
+        cancelOptimization();
+      }
+    });
   });
 
   return (
     <div class="space-y-5">
+      <Show when={simulationState.isLoadingDetail}>
+        <Card>
+          <LoadingPanel
+            label="Cargando simulación guardada…"
+            progress={simulationState.optimizationProgress}
+            indeterminate={simulationState.optimizationProgress === 0}
+            detail="Recuperando KPIs del historial."
+          />
+        </Card>
+      </Show>
       <Show when={vehiclesFromFleet() > 0}>
         <div class="rounded-xl border border-fero-green/40 bg-fero-green/10 px-4 py-3">
           <p class="text-sm font-semibold text-fero-green-dark">
@@ -510,7 +580,7 @@ export default function SimulationPage() {
               conditions={conditions()}
               scenarios={simulationState.scenarios}
               readiness={readiness()}
-              loadingReadiness={readiness.loading}
+              loadingReadiness={loadingReadiness()}
               {...panelParams()}
             />
           </div>
@@ -567,6 +637,56 @@ export default function SimulationPage() {
                     <p class="mt-2 text-xs text-text-muted">{CREW_SHORTAGE_NARRATIVE}</p>
                   </div>
                 </Show>
+              </div>
+              <div class="mb-4 rounded-lg border border-border px-3 py-2.5 dark:border-dark-border">
+                <p class="mb-2 text-sm font-semibold text-text-primary dark:text-white">
+                  Motor de optimización (ACO)
+                </p>
+                <p class="mb-3 text-xs text-text-muted">
+                  Más hormigas e iteraciones exploran más soluciones (mejor calidad posible, más tiempo de cálculo).
+                </p>
+                <label class="mb-1 block text-xs text-text-muted">
+                  Perfil <span class="text-fero-green-dark">(conectado)</span>
+                </label>
+                <select
+                  value={acoPreset()}
+                  onChange={(e) => applyAcoPreset(e.currentTarget.value as AcoPresetId)}
+                  class="mb-3 w-full rounded-md border border-border bg-surface px-2.5 py-2 text-sm dark:bg-dark-surface-hover dark:border-dark-border dark:text-white"
+                >
+                  <For each={acoPresetOptions}>
+                    {(option) => <option value={option.value}>{option.label}</option>}
+                  </For>
+                </select>
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label class="mb-1 block text-xs text-text-muted">
+                      Hormigas por iteración <span class="text-fero-green-dark">(conectado)</span>
+                    </label>
+                    <select
+                      value={acoAnts()}
+                      onChange={(e) => handleAcoAntsChange(e.currentTarget.value)}
+                      class="w-full rounded-md border border-border bg-surface px-2.5 py-2 text-sm dark:bg-dark-surface-hover dark:border-dark-border dark:text-white"
+                    >
+                      <For each={acoAntsOptions}>
+                        {(option) => <option value={option.value}>{option.label}</option>}
+                      </For>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="mb-1 block text-xs text-text-muted">
+                      Iteraciones <span class="text-fero-green-dark">(conectado)</span>
+                    </label>
+                    <select
+                      value={acoIterations()}
+                      onChange={(e) => handleAcoIterationsChange(e.currentTarget.value)}
+                      class="w-full rounded-md border border-border bg-surface px-2.5 py-2 text-sm dark:bg-dark-surface-hover dark:border-dark-border dark:text-white"
+                    >
+                      <For each={acoIterationsOptions}>
+                        {(option) => <option value={option.value}>{option.label}</option>}
+                      </For>
+                    </select>
+                  </div>
+                </div>
               </div>
               <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div class="min-w-0">
@@ -632,7 +752,7 @@ export default function SimulationPage() {
               conditions={conditions()}
               scenarios={simulationState.scenarios}
               readiness={readiness()}
-              loadingReadiness={readiness.loading}
+              loadingReadiness={loadingReadiness()}
               {...panelParams()}
             />
             <Card>
@@ -656,6 +776,10 @@ export default function SimulationPage() {
                     {operatorsShortage()} operario(s) de campo ausentes
                   </li>
                 </Show>
+                <li>
+                  <span class="font-semibold text-text-primary dark:text-white">Motor ACO:</span>{' '}
+                  {acoAnts()} hormigas × {acoIterations()} iteraciones
+                </li>
               </ul>
             </Card>
           </div>
@@ -671,16 +795,8 @@ export default function SimulationPage() {
               executionTotalPhases={executionTotalPhases()}
               executionNarrative={executionNarrative()}
               scenarioLabel={derivedScenario().label}
+              acoConvergence={simulationState.acoConvergenceLive}
             />
-            <Suspense fallback={<MapPanelFallback />}>
-              <SimulationMapPanel
-                hasResults={false}
-                executionMode={simulationState.isOptimizing || simulationState.executionPhase === 'listo'}
-                executionPhase={simulationState.executionPhase}
-                isRunning={simulationState.isOptimizing}
-                executionProgress={simulationState.optimizationProgress}
-              />
-            </Suspense>
             <Card>
               <CardHeader title="Reportar contingencia" />
               <BreakdownReporter
@@ -696,7 +812,7 @@ export default function SimulationPage() {
             variant="outline"
             class="gap-2"
             icon={<ArrowLeft size={16} />}
-            disabled={simulationState.isOptimizing}
+            disabled={isSimulationBusy()}
             onClick={() => setStep(1)}
           >
             Anterior
@@ -755,69 +871,63 @@ export default function SimulationPage() {
             </Show>
             <ExecutiveSummary kpis={currentKpis()} />
             <DurationBreakdownPanel kpis={currentKpis()} />
-            <div class="grid items-start gap-4 xl:grid-cols-12">
-              <div class="xl:col-span-8">
-                <Suspense fallback={<MapPanelFallback />}>
-                  <SimulationMapPanel hasResults />
-                </Suspense>
-              </div>
-              <div class="space-y-4 xl:col-span-4">
-                <Card>
-                  <CardHeader title="Comparación de rutas" subtitle="Ruta actual vs ruta simulada" />
-                  <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                      <thead>
-                        <tr class="border-b border-border text-left text-[10px] uppercase tracking-wide text-text-muted">
-                          <th class="pb-2 font-semibold">Métrica</th>
-                          <th class="pb-2 font-semibold">Actual</th>
-                          <th class="pb-2 font-semibold text-fero-green-dark">Simulado</th>
-                        </tr>
-                      </thead>
-                      <tbody class="divide-y divide-border dark:divide-dark-border">
-                        <For each={impactRows()}>
-                          {(row) => (
-                            <tr>
-                              <td class="py-2.5 text-text-secondary">{row.metric}</td>
-                              <td class="py-2.5 text-text-muted">{row.current}</td>
-                              <td class="py-2.5">
-                                <span class="font-semibold text-fero-green-dark">{row.simulated}</span>
-                                <span class="ml-1.5 text-xs font-medium text-fero-green-dark">
-                                  {row.delta}%
-                                </span>
-                              </td>
-                            </tr>
-                          )}
-                        </For>
-                      </tbody>
-                    </table>
-                  </div>
-                  <div class="mt-3 flex items-start gap-2.5 rounded-lg border border-fero-green/30 bg-fero-green/10 px-3 py-2.5">
-                    <Leaf size={18} class="mt-0.5 shrink-0 text-fero-green-dark" />
-                    <div>
-                      <p class="text-xs font-semibold text-fero-green-dark">Ahorro estimado</p>
-                      <p class="mt-0.5 text-sm font-medium text-text-primary dark:text-white">
-                        {savings().distanceKm} km · {savings().timeMin} min · {savings().fuelL} L ·{' '}
-                        {savings().co2Kg} kg CO₂ evitados
-                      </p>
-                    </div>
-                  </div>
-                </Card>
-                <Card padding={false} class="overflow-hidden">
-                  <div class="px-4 pt-4">
-                    <h3 class="font-heading font-semibold text-text-primary dark:text-white">
-                      Indicadores de desempeño
-                    </h3>
-                  </div>
-                  <div class="flex flex-col items-center gap-5 px-4 py-4 sm:flex-row sm:items-center">
-                    <EfficiencyGauge value={efficiencyValue()} />
-                    <ul class="w-full flex-1 space-y-3">
-                      <For each={performanceIndicators()}>
-                        {(ind) => <MetricBar label={ind.label} value={ind.value} />}
+            <EngineComputationPanel kpis={currentKpis()} />
+            <div class="grid items-start gap-4 xl:grid-cols-2">
+              <Card>
+                <CardHeader title="Comparación de rutas" subtitle="Ruta actual vs ruta simulada" />
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="border-b border-border text-left text-[10px] uppercase tracking-wide text-text-muted">
+                        <th class="pb-2 font-semibold">Métrica</th>
+                        <th class="pb-2 font-semibold">Actual</th>
+                        <th class="pb-2 font-semibold text-fero-green-dark">Simulado</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-border dark:divide-dark-border">
+                      <For each={impactRows()}>
+                        {(row) => (
+                          <tr>
+                            <td class="py-2.5 text-text-secondary">{row.metric}</td>
+                            <td class="py-2.5 text-text-muted">{row.current}</td>
+                            <td class="py-2.5">
+                              <span class="font-semibold text-fero-green-dark">{row.simulated}</span>
+                              <span class="ml-1.5 text-xs font-medium text-fero-green-dark">
+                                {row.delta}%
+                              </span>
+                            </td>
+                          </tr>
+                        )}
                       </For>
-                    </ul>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="mt-3 flex items-start gap-2.5 rounded-lg border border-fero-green/30 bg-fero-green/10 px-3 py-2.5">
+                  <Leaf size={18} class="mt-0.5 shrink-0 text-fero-green-dark" />
+                  <div>
+                    <p class="text-xs font-semibold text-fero-green-dark">Ahorro estimado</p>
+                    <p class="mt-0.5 text-sm font-medium text-text-primary dark:text-white">
+                      {savings().distanceKm} km · {savings().timeMin} min · {savings().fuelL} L ·{' '}
+                      {savings().co2Kg} kg CO₂ evitados
+                    </p>
                   </div>
-                </Card>
-              </div>
+                </div>
+              </Card>
+              <Card padding={false} class="overflow-hidden">
+                <div class="px-4 pt-4">
+                  <h3 class="font-heading font-semibold text-text-primary dark:text-white">
+                    Indicadores de desempeño
+                  </h3>
+                </div>
+                <div class="flex flex-col items-center gap-5 px-4 py-4 sm:flex-row sm:items-center">
+                  <EfficiencyGauge value={efficiencyValue()} />
+                  <ul class="w-full flex-1 space-y-3">
+                    <For each={performanceIndicators()}>
+                      {(ind) => <MetricBar label={ind.label} value={ind.value} />}
+                    </For>
+                  </ul>
+                </div>
+              </Card>
             </div>
           </div>
         </Show>
@@ -826,7 +936,7 @@ export default function SimulationPage() {
             variant="outline"
             class="gap-2"
             icon={<ArrowLeft size={16} />}
-            disabled={simulationState.isOptimizing}
+            disabled={isSimulationBusy()}
             onClick={() => setStep(2)}
           >
             Anterior
@@ -842,7 +952,7 @@ export default function SimulationPage() {
       <Show when={pageTab() === 'history'}>
         <SimulationHistoryPanel
           error={historyError()}
-          isLoading={simulationState.isOptimizing}
+          isLoading={isSimulationBusy()}
           onView={(id) => void handleViewHistory(id)}
         />
       </Show>

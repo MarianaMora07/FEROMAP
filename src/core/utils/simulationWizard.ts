@@ -66,7 +66,9 @@ export function buildSimulationReadiness(
 ): SimulationReadiness {
   const issues: string[] = [];
   if (assignableVehicles <= 0) {
-    issues.push('No hay vehículos asignables. Asigne conductores y verifique que no estén en mantenimiento.');
+    issues.push(
+      'No hay vehículos asignables (disponible o en ruta con conductor asignado). Revise la flota en Vehículos.',
+    );
   }
   if (activePoints <= 0) {
     issues.push('No hay puntos de recolección activos para simular.');
@@ -106,6 +108,9 @@ export interface SimulationUiParameters {
   scenarioId: ScenarioId;
   crewShortageEnabled?: boolean;
   operatorsShortage?: string;
+  acoPreset?: string;
+  acoAnts?: string;
+  acoIterations?: string;
 }
 
 export interface ParameterEffectNote {
@@ -160,6 +165,15 @@ export function buildParameterEffectNotes(params: SimulationUiParameters): Param
     });
   }
 
+  const ants = Number(params.acoAnts) || 12;
+  const iterations = Number(params.acoIterations) || 20;
+  notes.push({
+    label: `Motor ACO (${ants} hormigas × ${iterations} iteraciones)`,
+    status: 'connected',
+    detail:
+      'Controla cuánto explora la metaheurística antes de devolver la ruta. Más valores = mejor calidad posible, más tiempo de CPU.',
+  });
+
   return notes;
 }
 
@@ -169,8 +183,12 @@ export function buildSimulationRunParameters(params: SimulationUiParameters) {
     wasteLevelPct?: number;
     estimatedDurationHours?: number;
     operatorsShortage?: number;
+    acoAnts?: number;
+    acoIterations?: number;
   } = {
     estimatedDurationHours: Number(params.durationHours) || undefined,
+    acoAnts: Number(params.acoAnts) || 12,
+    acoIterations: Number(params.acoIterations) || 20,
   };
 
   if (params.conditions.rain && params.scenarioId === 'rain') {

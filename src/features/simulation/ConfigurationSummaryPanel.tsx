@@ -19,6 +19,9 @@ interface ConfigurationSummaryPanelProps {
   durationHours?: string;
   crewShortageEnabled?: boolean;
   operatorsShortage?: string;
+  acoPreset?: string;
+  acoAnts?: string;
+  acoIterations?: string;
 }
 
 export function ConfigurationSummaryPanel(props: ConfigurationSummaryPanelProps) {
@@ -33,6 +36,9 @@ export function ConfigurationSummaryPanel(props: ConfigurationSummaryPanelProps)
       scenarioId: derived().scenarioId,
       crewShortageEnabled: props.crewShortageEnabled ?? false,
       operatorsShortage: props.operatorsShortage ?? '2',
+      acoPreset: props.acoPreset ?? 'standard',
+      acoAnts: props.acoAnts ?? '12',
+      acoIterations: props.acoIterations ?? '20',
     });
 
   return (

@@ -12,6 +12,7 @@ export type ExecutionPhaseId =
   | 'aco'
   | 'refinamiento_2opt'
   | 'persistencia'
+  | 'preparando_mapa'
   | 'listo';
 
 export type ExecutionTerminalPhaseId = 'cancelado' | 'error';
@@ -119,7 +120,7 @@ export const EXECUTION_PHASES: readonly ExecutionPhaseDefinition[] = [
       'Prueba muchas combinaciones de rutas con el algoritmo de colonia de hormigas (ACO) hasta acercarse a la mejor solución.',
     whyItMatters:
       'Es el núcleo de la tesis: reduce distancia, tiempo y combustible frente a la ruta actual del municipio.',
-    progressWeight: 35,
+    progressWeight: 30,
     simulatedDurationMs: 3200,
     mapAnimation: 'aco_explore',
     logMatchers: ['aco', 'hormigas', 'metaheurística', 'evaluando', 'soluciones candidatas', 'iteración'],
@@ -132,7 +133,7 @@ export const EXECUTION_PHASES: readonly ExecutionPhaseDefinition[] = [
     whatItDoes:
       'Elimina recodos innecesarios en cada ruta con un ajuste local llamado 2-opt.',
     whyItMatters: 'La búsqueda encuentra buenas rutas; este paso las deja listas para mostrar al planificador.',
-    progressWeight: 15,
+    progressWeight: 14,
     simulatedDurationMs: 1200,
     mapAnimation: 'two_opt_refine',
     logMatchers: ['2-opt', 'refin', 'convergente', 'optimizada:', 'tiempo en paradas'],
@@ -152,8 +153,22 @@ export const EXECUTION_PHASES: readonly ExecutionPhaseDefinition[] = [
     logMatchers: ['persistiendo', 'postgresql', 'geojson', 'guardando'],
   },
   {
-    id: 'listo',
+    id: 'preparando_mapa',
     order: 8,
+    label: 'Preparando mapa',
+    panelTitle: 'Preparando mapa',
+    whatItDoes:
+      'Carga las rutas en el mapa con la geometría vial que el servidor ya calculó sobre el grafo OSMnx de Unare (sin servicios externos).',
+    whyItMatters:
+      'El trazado en pantalla coincide con el que usó el optimizador; es instantáneo y funciona sin internet.',
+    progressWeight: 6,
+    simulatedDurationMs: 300,
+    mapAnimation: 'route_complete',
+    logMatchers: ['mapa', 'geometría vial', 'rutas en el mapa', 'osmnx local'],
+  },
+  {
+    id: 'listo',
+    order: 9,
     label: 'Listo',
     panelTitle: 'Simulación completada',
     whatItDoes:
@@ -173,6 +188,18 @@ const phaseById = new Map(EXECUTION_PHASES.map((phase) => [phase.id, phase]));
 
 export function getExecutionPhase(id: ExecutionPhaseId): ExecutionPhaseDefinition {
   return phaseById.get(id)!;
+}
+
+const EXECUTION_PHASE_IDS = new Set(EXECUTION_PHASES.map((phase) => phase.id));
+
+export function isExecutionPhaseId(value: string | null | undefined): value is ExecutionPhaseId {
+  if (!value) return false;
+  return EXECUTION_PHASE_IDS.has(value as ExecutionPhaseId);
+}
+
+export function tryGetExecutionPhase(id: string | null | undefined): ExecutionPhaseDefinition | null {
+  if (!isExecutionPhaseId(id)) return null;
+  return getExecutionPhase(id);
 }
 
 export function getExecutionPhaseByOrder(order: number): ExecutionPhaseDefinition | undefined {

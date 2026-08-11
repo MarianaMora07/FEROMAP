@@ -1,1 +1,14 @@
 @import "./design-system/tokens.css";
+
+@keyframes progress-indeterminate-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(420%);
+  }
+}
+
+.progress-indeterminate {
+  animation: progress-indeterminate-slide 1.35s ease-in-out infinite;
+}

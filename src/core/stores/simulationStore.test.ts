@@ -5,8 +5,7 @@ vi.mock('../api/client', () => ({
 }));
 
 vi.mock('./appStore', () => ({
-  loadRoutesWithRoadSnapping: vi.fn().mockResolvedValue(undefined),
-  refreshAppRoutes: vi.fn().mockResolvedValue(undefined),
+  loadRoutesOnMap: vi.fn().mockResolvedValue(undefined),
   showOptimizedRoute: vi.fn(),
 }));
 
@@ -40,6 +39,7 @@ import {
   wasExecutionCancelled,
 } from './simulationStore';
 import { ExecutionCancelledError } from '../../features/simulation/simulationExecutionRunner';
+import { loadRoutesOnMap } from './appStore';
 
 describe('simulationStore execution', () => {
   beforeEach(() => {
@@ -57,12 +57,14 @@ describe('simulationStore execution', () => {
       handlers.setProgress(100);
     });
 
-    await runOptimization();
+    const completed = await runOptimization();
+    expect(completed).toBe(true);
 
     expect(simulationState.executionPhase).toBe('listo');
     expect(simulationState.optimizationProgress).toBe(100);
     expect(simulationState.executionStatus).toBe('listo');
     expect(simulationState.isOptimizing).toBe(false);
+    expect(loadRoutesOnMap).not.toHaveBeenCalled();
   });
 
   it('cancela y deja el estado limpio', async () => {
@@ -78,7 +80,9 @@ describe('simulationStore execution', () => {
     const runPromise = runOptimization();
     await new Promise((resolve) => setTimeout(resolve, 30));
     cancelOptimization();
-    await runPromise;
+    const completed = await runPromise;
+
+    expect(completed).toBe(false);
 
     expect(wasExecutionCancelled()).toBe(true);
     expect(simulationState.isOptimizing).toBe(false);
@@ -96,7 +100,8 @@ describe('simulationStore execution', () => {
       handlers.setProgress(100);
     });
 
-    await runOptimization();
-    expect(executionPhaseIndex()).toBe(8);
+    const completed = await runOptimization();
+    expect(completed).toBe(true);
+    expect(executionPhaseIndex()).toBe(9);
   });
 });

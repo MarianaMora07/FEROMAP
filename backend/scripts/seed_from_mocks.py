@@ -31,6 +31,7 @@ from app.db.models import (
 from app.db.session import SessionLocal
 from app.services.alert_service import seed_alerts_from_json
 from app.services.admin_service import ensure_default_settings
+from app.services.graph_service import warm_road_graph_cache
 from app.services.profile_service import ensure_user_preferences
 
 SEEDS_DIR = Path(settings.data_dir) / "seeds"
@@ -335,6 +336,15 @@ def seed() -> None:
         ensure_default_settings(session)
 
         session.commit()
+
+        try:
+            graph_meta = warm_road_graph_cache()
+            print(
+                "   road_graph_cache:",
+                f"{graph_meta['source']} ({graph_meta['nodes']} nodos, {graph_meta['edges']} aristas)",
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(f"   road_graph_cache: omitido ({exc})")
 
         sectors_count = len(sectors_data)
         points_count = len(collection_points)

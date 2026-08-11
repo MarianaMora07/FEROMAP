@@ -37,6 +37,12 @@ services:
       DATABASE_URL: postgresql+psycopg://${DB_USERNAME:-feromap}:${DB_PASSWORD}@db:5432/${DB_DATABASE:-feromap}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
       DATA_DIR: /app/data
+      ACO_ANTS: ${ACO_ANTS:-12}
+      ACO_ITERATIONS: ${ACO_ITERATIONS:-20}
+      ACO_PATIENCE: ${ACO_PATIENCE:-5}
+      ACO_PARALLEL_WORKERS: ${ACO_PARALLEL_WORKERS:-0}
+      OPTIMIZATION_MAX_WORKERS: ${OPTIMIZATION_MAX_WORKERS:-2}
+      MATRIX_INCREMENTAL_MAX_ADDITIONS: ${MATRIX_INCREMENTAL_MAX_ADDITIONS:-3}
     depends_on:
       - db
     healthcheck:

@@ -154,13 +154,21 @@ def list_vehicles(db: Session) -> list[dict[str, Any]]:
     ]
 
 
-def build_summary_from_vehicles(vehicles: list[Vehicle]) -> dict[str, Any]:
+def build_summary_from_vehicles(
+    vehicles: list[Vehicle],
+    *,
+    active_routes: dict[int, OptimizedRoute] | None = None,
+) -> dict[str, Any]:
     by_status = {ui: 0 for ui in STATUS_TO_UI.values()}
     assignable = 0
+    routes = active_routes or {}
     for vehicle in vehicles:
         ui_status = STATUS_TO_UI.get(vehicle.status, vehicle.status)
         by_status[ui_status] = by_status.get(ui_status, 0) + 1
-        if vehicle.status in ASSIGNABLE_STATUSES:
+        if vehicle.status in ASSIGNABLE_STATUSES and resolve_vehicle_driver_id(
+            vehicle,
+            active_route=routes.get(vehicle.id),
+        ):
             assignable += 1
     return {
         "total": len(vehicles),
@@ -170,8 +178,11 @@ def build_summary_from_vehicles(vehicles: list[Vehicle]) -> dict[str, Any]:
 
 
 def vehicles_summary(db: Session) -> dict[str, Any]:
-    vehicles = db.scalars(select(Vehicle)).all()
-    return build_summary_from_vehicles(vehicles)
+    vehicles = db.scalars(
+        select(Vehicle).options(joinedload(Vehicle.default_driver))
+    ).unique().all()
+    active_routes = get_active_routes_by_vehicle_id(db)
+    return build_summary_from_vehicles(vehicles, active_routes=active_routes)
 
 
 def vehicle_detail(db: Session, code: str) -> dict[str, Any]:

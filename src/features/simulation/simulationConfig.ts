@@ -77,6 +77,50 @@ export const durationOptions = [
   { value: '8', label: '8 horas' },
 ];
 
+export const acoPresetOptions = [
+  { value: 'fast', label: 'Rápido (6 × 10)', ants: 6, iterations: 10 },
+  { value: 'standard', label: 'Estándar (12 × 20)', ants: 12, iterations: 20 },
+  { value: 'precise', label: 'Preciso (20 × 40)', ants: 20, iterations: 40 },
+  { value: 'custom', label: 'Personalizado', ants: 12, iterations: 20 },
+] as const;
+
+export type AcoPresetId = (typeof acoPresetOptions)[number]['value'];
+
+export function resolveDefaultAcoPreset(): AcoPresetId {
+  const fromEnv = import.meta.env.VITE_ACO_PRESET_DEFAULT?.trim().toLowerCase();
+  if (fromEnv === 'fast' || fromEnv === 'standard' || fromEnv === 'precise' || fromEnv === 'custom') {
+    return fromEnv;
+  }
+  return 'standard';
+}
+
+export function acoValuesForPreset(preset: AcoPresetId): { ants: string; iterations: string } {
+  const match = acoPresetOptions.find((option) => option.value === preset) ?? acoPresetOptions[1]!;
+  return { ants: String(match.ants), iterations: String(match.iterations) };
+}
+
+export const acoAntsOptions = [
+  { value: '4', label: '4 hormigas' },
+  { value: '6', label: '6 hormigas' },
+  { value: '8', label: '8 hormigas' },
+  { value: '12', label: '12 hormigas' },
+  { value: '16', label: '16 hormigas' },
+  { value: '20', label: '20 hormigas' },
+  { value: '24', label: '24 hormigas' },
+  { value: '30', label: '30 hormigas' },
+];
+
+export const acoIterationsOptions = [
+  { value: '5', label: '5 iteraciones' },
+  { value: '10', label: '10 iteraciones' },
+  { value: '15', label: '15 iteraciones' },
+  { value: '20', label: '20 iteraciones' },
+  { value: '30', label: '30 iteraciones' },
+  { value: '40', label: '40 iteraciones' },
+  { value: '50', label: '50 iteraciones' },
+  { value: '60', label: '60 iteraciones' },
+];
+
 /** Operarios de campo ausentes en el turno (ADR-003). */
 export const operatorsShortageOptions = [
   { value: '1', label: '1 operario de campo ausente' },

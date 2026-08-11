@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.config import settings
 from app.domain.crew_service_time import (
     BASE_SERVICE_SECONDS,
     DEFAULT_IDEAL_OPERATORS,
@@ -38,6 +39,18 @@ def normalize_duration_hours(value: int | None) -> int | None:
     if 1 <= value <= 12:
         return value
     return None
+
+
+def normalize_aco_ants(value: int | None) -> int:
+    if value is None:
+        return settings.aco_ants
+    return max(settings.aco_ants_min, min(settings.aco_ants_max, value))
+
+
+def normalize_aco_iterations(value: int | None) -> int:
+    if value is None:
+        return settings.aco_iterations
+    return max(settings.aco_iterations_min, min(settings.aco_iterations_max, value))
 
 
 def apply_simulation_parameter_modifiers(

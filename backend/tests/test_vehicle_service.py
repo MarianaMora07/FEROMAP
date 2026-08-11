@@ -85,18 +85,19 @@ def _route(
 
 
 def test_build_summary_from_vehicles_counts_by_status_and_assignable():
+    driver = _driver()
     vehicles = [
-        _vehicle("TR-01", vehicle_id=1, status="available"),
-        _vehicle("TR-02", vehicle_id=2, status="in_route"),
-        _vehicle("TR-03", vehicle_id=3, status="maintenance"),
-        _vehicle("TR-04", vehicle_id=4, status="inactive"),
+        _vehicle("TR-01", vehicle_id=1, status="available", default_driver=driver),
+        _vehicle("TR-02", vehicle_id=2, status="in_route", default_driver=driver),
+        _vehicle("TR-03", vehicle_id=3, status="maintenance", default_driver=driver),
+        _vehicle("TR-04", vehicle_id=4, status="inactive", default_driver=driver),
         _vehicle("TR-05", vehicle_id=5, status="available"),
     ]
 
     summary = build_summary_from_vehicles(vehicles)
 
     assert summary["total"] == 5
-    assert summary["assignableCount"] == 3
+    assert summary["assignableCount"] == 2
     assert summary["byStatus"]["disponible"] == 2
     assert summary["byStatus"]["en-ruta"] == 1
     assert summary["byStatus"]["mantenimiento"] == 1
@@ -340,12 +341,16 @@ def test_filter_vehicle_rows_status_and_search():
 
 
 def test_vehicles_summary_from_database():
+    driver = _driver()
     vehicles = [
-        _vehicle("TR-01", vehicle_id=1, status="available"),
-        _vehicle("TR-02", vehicle_id=2, status="maintenance"),
+        _vehicle("TR-01", vehicle_id=1, status="available", default_driver=driver),
+        _vehicle("TR-02", vehicle_id=2, status="maintenance", default_driver=driver),
     ]
     db = MagicMock()
-    db.scalars.return_value = MagicMock(all=MagicMock(return_value=vehicles))
+    db.scalars.side_effect = [
+        MagicMock(unique=MagicMock(return_value=MagicMock(all=MagicMock(return_value=vehicles)))),
+        MagicMock(unique=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))),
+    ]
 
     summary = vehicles_summary(db)
 

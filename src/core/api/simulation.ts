@@ -79,6 +79,10 @@ export interface SimulationRunParameters {
   estimatedDurationHours?: number;
   /** Operarios de campo ausentes en el turno (0–5). ADR-003. */
   operatorsShortage?: number;
+  /** Hormigas por iteración del ACO (4–30). */
+  acoAnts?: number;
+  /** Iteraciones del ACO (5–60). */
+  acoIterations?: number;
 }
 
 export async function runSimulationOptimize(

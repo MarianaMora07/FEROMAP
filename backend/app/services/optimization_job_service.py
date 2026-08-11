@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+from app.config import settings
 from app.db.session import SessionLocal
 from app.services.optimization_service import OptimizationCancelledError, run_optimization_engine
 
@@ -17,10 +18,28 @@ PHASE_END_PROGRESS: dict[str, int] = {
     "matriz_costos": 30,
     "instancia_vrp": 40,
     "aco": 75,
-    "refinamiento_2opt": 90,
-    "persistencia": 98,
-    "listo": 100,
+    "refinamiento_2opt": 88,
+    "persistencia": 95,
 }
+
+_optimization_slot: threading.Semaphore | None = None
+_slot_init_lock = threading.Lock()
+
+
+def _get_optimization_slot() -> threading.Semaphore:
+    global _optimization_slot
+    with _slot_init_lock:
+        if _optimization_slot is None:
+            _optimization_slot = threading.Semaphore(max(1, settings.optimization_max_workers))
+        return _optimization_slot
+
+
+def reset_optimization_slot_for_tests(max_workers: int | None = None) -> None:
+    """Reinicia el semáforo global (solo tests)."""
+    global _optimization_slot
+    with _slot_init_lock:
+        workers = max_workers if max_workers is not None else settings.optimization_max_workers
+        _optimization_slot = threading.Semaphore(max(1, workers))
 
 
 @dataclass
@@ -32,12 +51,15 @@ class OptimizationJob:
     waste_level_pct: int | None
     estimated_duration_hours: int | None
     operators_shortage: int | None = None
+    aco_ants: int | None = None
+    aco_iterations: int | None = None
     phase: str | None = None
     progress: int = 0
     logs: list[dict[str, Any]] = field(default_factory=list)
     result: dict[str, Any] | None = None
     error: str | None = None
     cancel_requested: bool = False
+    aco_convergence: list[dict[str, Any]] = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
 
@@ -69,15 +91,31 @@ class JobProgressReporter:
                 }
             )
 
-    def set_aco_progress(self, iteration: int, total: int) -> None:
+    def set_aco_progress(
+        self,
+        iteration: int,
+        total: int,
+        *,
+        best_cost_m: float = 0.0,
+        iteration_best_m: float = 0.0,
+    ) -> None:
         self.check_cancelled()
         start = PHASE_END_PROGRESS["instancia_vrp"]
         end = PHASE_END_PROGRESS["aco"]
         span = max(end - start, 1)
         progress = start + int(span * (iteration / max(total, 1)))
+        point = {
+            "iteration": iteration,
+            "bestDistanceKm": round(best_cost_m / 1000, 3),
+            "iterationBestDistanceKm": round(iteration_best_m / 1000, 3),
+        }
         with self._job.lock:
             self._job.phase = "aco"
             self._job.progress = min(end, progress)
+            if not self._job.aco_convergence or self._job.aco_convergence[-1]["iteration"] != iteration:
+                self._job.aco_convergence.append(point)
+            else:
+                self._job.aco_convergence[-1] = point
 
 
 _jobs: dict[str, OptimizationJob] = {}
@@ -92,6 +130,7 @@ def _serialize_job(job: OptimizationJob) -> dict[str, Any]:
             "phase": job.phase,
             "progress": job.progress,
             "logs": list(job.logs),
+            "acoConvergence": list(job.aco_convergence),
             "result": job.result,
             "error": job.error,
         }
@@ -104,6 +143,8 @@ def create_optimization_job(
     waste_level_pct: int | None = None,
     estimated_duration_hours: int | None = None,
     operators_shortage: int | None = None,
+    aco_ants: int | None = None,
+    aco_iterations: int | None = None,
 ) -> OptimizationJob:
     job = OptimizationJob(
         id=str(uuid.uuid4()),
@@ -113,6 +154,8 @@ def create_optimization_job(
         waste_level_pct=waste_level_pct,
         estimated_duration_hours=estimated_duration_hours,
         operators_shortage=operators_shortage,
+        aco_ants=aco_ants,
+        aco_iterations=aco_iterations,
     )
     with _jobs_lock:
         _jobs[job.id] = job
@@ -147,19 +190,44 @@ def cancel_optimization_job(job_id: str) -> dict[str, Any]:
     return {"jobId": job.id, "status": "cancelled"}
 
 
+def _acquire_optimization_slot(job: OptimizationJob) -> bool:
+    slot = _get_optimization_slot()
+    acquired = False
+    try:
+        while not acquired:
+            with job.lock:
+                if job.cancel_requested:
+                    job.status = "cancelled"
+                    return False
+            acquired = slot.acquire(timeout=0.25)
+        with job.lock:
+            if job.cancel_requested:
+                job.status = "cancelled"
+                return False
+        return True
+    except Exception:
+        if acquired:
+            slot.release()
+        raise
+
+
 def _run_job_worker(job_id: str) -> None:
     job = get_optimization_job(job_id)
     if job is None:
         return
 
-    with job.lock:
-        job.status = "running"
-        job.phase = "preparando"
-        job.progress = 0
+    if not _acquire_optimization_slot(job):
+        return
 
+    slot = _get_optimization_slot()
     db = SessionLocal()
     reporter = JobProgressReporter(job)
     try:
+        with job.lock:
+            job.status = "running"
+            job.phase = "preparando"
+            job.progress = 0
+
         result = run_optimization_engine(
             db,
             job.scenario_id,
@@ -167,6 +235,8 @@ def _run_job_worker(job_id: str) -> None:
             waste_level_pct=job.waste_level_pct,
             estimated_duration_hours=job.estimated_duration_hours,
             operators_shortage=job.operators_shortage,
+            aco_ants=job.aco_ants,
+            aco_iterations=job.aco_iterations,
             reporter=reporter,
         )
         with job.lock:
@@ -175,7 +245,7 @@ def _run_job_worker(job_id: str) -> None:
                 job.status = "cancelled"
             else:
                 job.status = "completed"
-                job.phase = "listo"
+                job.phase = "persistencia"
                 job.progress = 100
                 result["logs"] = list(job.logs)
                 job.result = result
@@ -190,3 +260,4 @@ def _run_job_worker(job_id: str) -> None:
             job.error = str(exc)
     finally:
         db.close()
+        slot.release()

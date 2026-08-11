@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import math
-import random
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -15,6 +15,7 @@ import networkx as nx
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
+from app.config import settings
 from app.db.models import CollectionPoint, OptimizedRoute, RouteWaypoint, Simulation, Vehicle
 from app.domain.crew_service_time import (
     BASE_SERVICE_SECONDS,
@@ -27,17 +28,23 @@ from app.domain.crew_service_time import (
 from app.services.scenario_parameters import (
     apply_simulation_parameter_modifiers,
     build_applied_crew_modifiers,
+    normalize_aco_ants,
+    normalize_aco_iterations,
     normalize_duration_hours,
     normalize_rain_intensity,
     normalize_waste_level_pct,
 )
+from app.services.aco_parallel import resolve_aco_parallel_workers, run_ant_solutions
+from app.services.distance_matrix_cache import resolve_distance_matrix
 from app.services.graph_service import (
     DEPOT_LAT,
     DEPOT_LON,
     apply_scenario_weights,
     build_tour_coordinates,
+    graph_load_source,
     load_road_graph,
     nearest_node,
+    path_metrics_between_nodes,
 )
 from app.services.geo_service import fill_level_pct
 from app.services.operations_service import dispatch_optimized_routes
@@ -52,8 +59,9 @@ from app.services.vehicle_service import (
 
 logger = logging.getLogger(__name__)
 
-ACO_ANTS = 12
-ACO_ITERATIONS = 20
+ACO_ANTS = settings.aco_ants
+ACO_ITERATIONS = settings.aco_iterations
+ACO_PATIENCE = settings.aco_patience
 ACO_ALPHA = 1.0
 ACO_BETA = 3.0
 ACO_RHO = 0.12
@@ -70,7 +78,14 @@ class OptimizationProgressReporter(Protocol):
     def cancelled(self) -> bool: ...
     def check_cancelled(self) -> None: ...
     def advance(self, phase: str, message: str, log_type: str = "info") -> None: ...
-    def set_aco_progress(self, iteration: int, total: int) -> None: ...
+    def set_aco_progress(
+        self,
+        iteration: int,
+        total: int,
+        *,
+        best_cost_m: float = 0.0,
+        iteration_best_m: float = 0.0,
+    ) -> None: ...
 
 
 @dataclass
@@ -99,6 +114,10 @@ class RouteSolution:
     vehicle_routes: list[list[int]] = field(default_factory=list)
     distance_m: float = 0.0
     duration_s: float = 0.0
+    aco_iterations_run: int = 0
+    aco_stopped_early: bool = False
+    aco_parallel_workers: int = 1
+    aco_convergence: list[dict[str, float | int]] = field(default_factory=list)
 
 
 def _haversine_m(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
@@ -110,17 +129,59 @@ def _haversine_m(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
     return 2 * r * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
-def _build_distance_matrix(
+def _matrix_pair_metrics(
     graph: nx.MultiDiGraph,
+    depot_node: int,
+    customers: list[CustomerNode],
+    i: int,
+    j: int,
+) -> tuple[float, float]:
+    graph_nodes = [depot_node] + [c.graph_node for c in customers]
+
+    def coords_for(index: int) -> tuple[float, float]:
+        if index == 0:
+            return DEPOT_LON, DEPOT_LAT
+        customer = customers[index - 1]
+        return customer.lon, customer.lat
+
+    d_m, t_s = path_metrics_between_nodes(graph, graph_nodes[i], graph_nodes[j])
+    if not math.isfinite(d_m) or d_m <= 0:
+        lon_i, lat_i = coords_for(i)
+        lon_j, lat_j = coords_for(j)
+        d_m = _haversine_m(lon_i, lat_i, lon_j, lat_j)
+        t_s = d_m / 1000 / AVG_SPEED_KMH * 3600
+    return d_m, t_s
+
+
+def _build_distance_matrix(
+    graph: nx.MultiDiGraph | None,
     depot_node: int,
     customers: list[CustomerNode],
 ) -> tuple[list[list[float]], list[list[float]]]:
     """Matriz de distancias (metros) y tiempos (segundos) depósito + clientes."""
-    points = [(DEPOT_LON, DEPOT_LAT)] + [(c.lon, c.lat) for c in customers]
-    n = len(points)
+    n = 1 + len(customers)
     dist = [[0.0] * n for _ in range(n)]
     time = [[0.0] * n for _ in range(n)]
 
+    if graph is not None:
+        graph_nodes = [depot_node] + [c.graph_node for c in customers]
+        for i in range(n):
+            for j in range(n):
+                if i == j:
+                    continue
+                d_m, t_s = path_metrics_between_nodes(graph, graph_nodes[i], graph_nodes[j])
+                if not math.isfinite(d_m) or d_m <= 0:
+                    c_i = customers[i - 1] if i > 0 else None
+                    c_j = customers[j - 1] if j > 0 else None
+                    lon_i, lat_i = (DEPOT_LON, DEPOT_LAT) if i == 0 else (c_i.lon, c_i.lat)  # type: ignore[union-attr]
+                    lon_j, lat_j = (DEPOT_LON, DEPOT_LAT) if j == 0 else (c_j.lon, c_j.lat)  # type: ignore[union-attr]
+                    d_m = _haversine_m(lon_i, lat_i, lon_j, lat_j)
+                    t_s = d_m / 1000 / AVG_SPEED_KMH * 3600
+                dist[i][j] = d_m
+                time[i][j] = t_s
+        return dist, time
+
+    points = [(DEPOT_LON, DEPOT_LAT)] + [(c.lon, c.lat) for c in customers]
     for i in range(n):
         for j in range(n):
             if i == j:
@@ -286,102 +347,106 @@ def _aco_cvrp(
     dist_matrix: list[list[float]],
     time_matrix: list[list[float]],
     *,
+    aco_ants: int = ACO_ANTS,
+    aco_iterations: int = ACO_ITERATIONS,
+    aco_patience: int = ACO_PATIENCE,
     seed: int = 42,
     cancel_check: Callable[[], bool] | None = None,
-    on_iteration: Callable[[int, int], None] | None = None,
+    on_iteration: Callable[[int, int, float, float], None] | None = None,
 ) -> RouteSolution:
     """Ant Colony Optimization para CVRP con múltiples vehículos."""
-    rng = random.Random(seed)
     n_vehicles = len(capacities)
-    customer_indices = list(range(1, n_customers + 1))
+    parallel_workers = resolve_aco_parallel_workers(aco_ants)
+    process_pool = None
+    if parallel_workers > 1:
+        from concurrent.futures import ProcessPoolExecutor
+
+        process_pool = ProcessPoolExecutor(max_workers=parallel_workers)
 
     pheromone = [[1.0 / max(dist_matrix[i][j], 1.0) for j in range(n_customers + 1)] for i in range(n_customers + 1)]
 
     best_routes: list[list[int]] = []
     best_cost = float("inf")
     best_time = float("inf")
+    stall_count = 0
+    iterations_run = 0
+    stopped_early = False
+    patience = max(0, aco_patience)
+    convergence: list[dict[str, float | int]] = []
 
-    for iteration in range(ACO_ITERATIONS):
-        if cancel_check and cancel_check():
-            raise OptimizationCancelledError()
-        if on_iteration:
-            on_iteration(iteration + 1, ACO_ITERATIONS)
+    try:
+        for iteration in range(aco_iterations):
+            iterations_run = iteration + 1
+            if cancel_check and cancel_check():
+                raise OptimizationCancelledError()
 
-        iteration_best: list[list[int]] = []
-        iteration_cost = float("inf")
+            iteration_best: list[list[int]] = []
+            iteration_cost = float("inf")
+            improved = False
 
-        for _ant in range(ACO_ANTS):
-            unvisited = set(customer_indices)
-            routes: list[list[int]] = []
+            ant_seeds = [seed + iteration * aco_ants + ant_idx for ant_idx in range(aco_ants)]
+            ant_results = run_ant_solutions(
+                ant_seeds=ant_seeds,
+                n_customers=n_customers,
+                demands=demands,
+                capacities=capacities,
+                dist_matrix=dist_matrix,
+                time_matrix=time_matrix,
+                pheromone=pheromone,
+                max_workers=parallel_workers,
+                executor=process_pool,
+            )
+            for routes, cost, _dur in ant_results:
+                if cost < iteration_cost:
+                    iteration_cost = cost
+                    iteration_best = [route[:] for route in routes]
 
-            for v_idx in range(n_vehicles):
-                route = [0]
-                load = 0.0
-                current = 0
-                while unvisited:
-                    candidates = [c for c in unvisited if load + demands[c - 1] <= capacities[v_idx]]
-                    if not candidates:
-                        break
-                    weights = []
-                    for c in candidates:
-                        tau = pheromone[current][c] ** ACO_ALPHA
-                        eta = (1.0 / max(dist_matrix[current][c], 1.0)) ** ACO_BETA
-                        weights.append(tau * eta)
-                    total = sum(weights)
-                    if total <= 0:
-                        chosen = rng.choice(candidates)
-                    else:
-                        r = rng.random() * total
-                        acc = 0.0
-                        chosen = candidates[-1]
-                        for c, w in zip(candidates, weights):
-                            acc += w
-                            if acc >= r:
-                                chosen = c
-                                break
-                    route.append(chosen)
-                    load += demands[chosen - 1]
-                    unvisited.remove(chosen)
-                    current = chosen
-                route.append(0)
-                if len(route) > 2:
-                    routes.append(_two_opt(route, dist_matrix))
+            if iteration_best and iteration_cost < best_cost:
+                best_cost = iteration_cost
+                best_routes = iteration_best
+                _, best_time = _evaluate_solution(best_routes, dist_matrix, time_matrix)
+                improved = True
 
-            if unvisited:
-                remaining = sorted(unvisited, key=lambda c: demands[c - 1], reverse=True)
-                for c in remaining:
-                    placed = False
-                    for r_idx, route in enumerate(routes):
-                        v_cap = capacities[min(r_idx, n_vehicles - 1)]
-                        route_load = sum(demands[n - 1] for n in route if n != 0)
-                        if route_load + demands[c - 1] <= v_cap:
-                            route.insert(-1, c)
-                            routes[r_idx] = _two_opt(route, dist_matrix)
-                            placed = True
-                            break
-                    if not placed and routes:
-                        routes[-1].insert(-1, c)
-                        routes[-1] = _two_opt(routes[-1], dist_matrix)
+            record_best = best_cost if math.isfinite(best_cost) else iteration_cost
+            record_iter = iteration_cost if math.isfinite(iteration_cost) else record_best
+            convergence.append(
+                {
+                    "iteration": iterations_run,
+                    "bestDistanceKm": round(record_best / 1000, 3),
+                    "iterationBestDistanceKm": round(record_iter / 1000, 3),
+                }
+            )
+            if on_iteration:
+                on_iteration(iterations_run, aco_iterations, record_best, record_iter)
 
-            cost, dur = _evaluate_solution(routes, dist_matrix, time_matrix)
-            if cost < iteration_cost:
-                iteration_cost = cost
-                iteration_best = [r[:] for r in routes]
+            if improved:
+                stall_count = 0
+            elif patience > 0:
+                stall_count += 1
+                if stall_count >= patience:
+                    stopped_early = True
+                    break
 
-        if iteration_best and iteration_cost < best_cost:
-            best_cost = iteration_cost
-            best_routes = iteration_best
-            _, best_time = _evaluate_solution(best_routes, dist_matrix, time_matrix)
+            for i in range(n_customers + 1):
+                for j in range(n_customers + 1):
+                    pheromone[i][j] *= 1 - ACO_RHO
+            if iteration_best:
+                for route in iteration_best:
+                    for i, j in zip(route[:-1], route[1:]):
+                        pheromone[i][j] += 1.0 / max(iteration_cost, 1.0)
+    finally:
+        if process_pool is not None:
+            process_pool.shutdown(wait=True)
 
-        for i in range(n_customers + 1):
-            for j in range(n_customers + 1):
-                pheromone[i][j] *= 1 - ACO_RHO
-        if iteration_best:
-            for route in iteration_best:
-                for i, j in zip(route[:-1], route[1:]):
-                    pheromone[i][j] += 1.0 / max(iteration_cost, 1.0)
-
-    return RouteSolution(vehicle_routes=best_routes, distance_m=best_cost, duration_s=best_time)
+    return RouteSolution(
+        vehicle_routes=best_routes,
+        distance_m=best_cost,
+        duration_s=best_time,
+        aco_iterations_run=iterations_run,
+        aco_stopped_early=stopped_early,
+        aco_parallel_workers=parallel_workers,
+        aco_convergence=convergence,
+    )
 
 
 def _baseline_route(
@@ -586,6 +651,64 @@ def _compute_kpis(
     }
 
 
+def _build_engine_metrics(
+    *,
+    computation_seconds: float,
+    aco_seconds: float,
+    graph_seconds: float,
+    customer_count: int,
+    vehicle_count: int,
+    aco_ants: int,
+    aco_iterations: int,
+    aco_iterations_run: int,
+    aco_stopped_early: bool,
+    aco_patience: int,
+    matrix_cache_hit: bool,
+    matrix_cache_incremental: bool,
+    matrix_patched_cells: int,
+    matrix_parent_point_count: int,
+    graph_load_source: str,
+    aco_parallel_workers: int,
+    aco_convergence: list[dict[str, float | int]],
+) -> dict[str, Any]:
+    overhead = max(0.0, computation_seconds - aco_seconds - graph_seconds)
+    return {
+        "computationSeconds": round(computation_seconds, 2),
+        "acoSeconds": round(aco_seconds, 2),
+        "graphLoadSeconds": round(graph_seconds, 2),
+        "overheadSeconds": round(overhead, 2),
+        "acoAnts": aco_ants,
+        "acoIterations": aco_iterations,
+        "acoIterationsRun": aco_iterations_run,
+        "acoStoppedEarly": aco_stopped_early,
+        "acoPatience": aco_patience,
+        "matrixCacheHit": matrix_cache_hit,
+        "matrixCacheIncremental": matrix_cache_incremental,
+        "matrixPatchedCells": matrix_patched_cells,
+        "matrixParentPointCount": matrix_parent_point_count,
+        "graphLoadSource": graph_load_source,
+        "acoParallelWorkers": aco_parallel_workers,
+        "acoConvergence": aco_convergence,
+        "customers": customer_count,
+        "vehicles": vehicle_count,
+    }
+
+
+def _format_computation_log_message(metrics: dict[str, Any]) -> str:
+    total = metrics["computationSeconds"]
+    aco = metrics["acoSeconds"]
+    iterations_run = metrics.get("acoIterationsRun", metrics["acoIterations"])
+    early = " · parada anticipada" if metrics.get("acoStoppedEarly") else ""
+    cache = " · matriz en caché" if metrics.get("matrixCacheHit") else ""
+    incremental = " · matriz incremental" if metrics.get("matrixCacheIncremental") else ""
+    graph_src = metrics.get("graphLoadSource")
+    graph = f" · grafo {graph_src}" if graph_src and graph_src != "unknown" else ""
+    return (
+        f"Cálculo completado en {total} s (ACO: {aco} s · "
+        f"{metrics['acoAnts']}×{iterations_run}/{metrics['acoIterations']}{early}{cache}{incremental}{graph})"
+    )
+
+
 def _optimization_logs(scenario_label: str, n_points: int, n_vehicles: int) -> list[dict[str, str]]:
     now = datetime.now(timezone.utc).strftime("%H:%M:%S")
     return [
@@ -738,6 +861,8 @@ def run_optimization_engine(
     waste_level_pct: int | None = None,
     estimated_duration_hours: int | None = None,
     operators_shortage: int | None = None,
+    aco_ants: int | None = None,
+    aco_iterations: int | None = None,
     collection_point_ids: list[int] | None = None,
     exclude_vehicle_ids: list[int] | None = None,
     contingency_meta: dict[str, Any] | None = None,
@@ -746,6 +871,9 @@ def run_optimization_engine(
     reporter: OptimizationProgressReporter | None = None,
 ) -> dict[str, Any]:
     """Ejecuta el motor real de optimización y persiste resultados."""
+    computation_started = time.perf_counter()
+    aco_seconds = 0.0
+    graph_seconds = 0.0
 
     def report(phase: str, message: str, log_type: str = "info") -> None:
         if reporter is not None:
@@ -773,6 +901,8 @@ def run_optimization_engine(
     waste = normalize_waste_level_pct(waste_level_pct)
     duration_h = normalize_duration_hours(estimated_duration_hours)
     shortage = normalize_operators_shortage(operators_shortage)
+    resolved_aco_ants = normalize_aco_ants(aco_ants)
+    resolved_aco_iterations = normalize_aco_iterations(aco_iterations)
     traffic_mult, fill_boost, applied_modifiers = apply_simulation_parameter_modifiers(
         normalized,
         traffic_mult,
@@ -786,6 +916,8 @@ def run_optimization_engine(
         "wasteLevelPct": waste,
         "estimatedDurationHours": duration_h,
         "operatorsShortage": shortage or 0,
+        "acoAnts": resolved_aco_ants,
+        "acoIterations": resolved_aco_iterations,
         "appliedModifiers": applied_modifiers,
         "appliedCrewModifiers": applied_crew_modifiers,
     }
@@ -801,9 +933,11 @@ def run_optimization_engine(
         )
 
     report("grafo_vial", f"Cargando grafo OSMnx — red vial de Unare")
-    graph = load_road_graph()
+    graph_started = time.perf_counter()
+    base_graph = load_road_graph()
+    graph_source = graph_load_source()
     graph = apply_scenario_weights(
-        graph,
+        base_graph.copy(),
         traffic_multiplier=traffic_mult,
         scenario_id=normalized,
     )
@@ -863,12 +997,38 @@ def run_optimization_engine(
 
     report("matriz_costos", "Construyendo matriz de costos sobre red vial (NetworkX shortest path)")
     depot_node = nearest_node(graph, DEPOT_LON, DEPOT_LAT)
-    dist_matrix, time_matrix = _build_distance_matrix(graph, depot_node, customers)
-    if traffic_mult != 1.0:
-        for i in range(len(time_matrix)):
-            for j in range(len(time_matrix[i])):
-                if i != j:
-                    time_matrix[i][j] *= traffic_mult
+
+    def build_full_matrix() -> tuple[list[list[float]], list[list[float]]]:
+        return _build_distance_matrix(graph, depot_node, customers)
+
+    def pair_fn(i: int, j: int) -> tuple[float, float]:
+        return _matrix_pair_metrics(graph, depot_node, customers, i, j)
+
+    dist_matrix, time_matrix, matrix_meta = resolve_distance_matrix(
+        depot_node=depot_node,
+        customers=customers,
+        scenario_id=normalized,
+        traffic_multiplier=traffic_mult,
+        build_full_matrix=build_full_matrix,
+        pair_fn=pair_fn,
+    )
+    matrix_cache_hit = matrix_meta["matrixCacheHit"]
+    if matrix_cache_hit:
+        report(
+            "matriz_costos",
+            f"Matriz de costos reutilizada desde caché ({len(customers)} puntos)",
+            "info",
+        )
+    elif matrix_meta["matrixCacheIncremental"]:
+        report(
+            "matriz_costos",
+            (
+                f"Matriz incremental desde caché ({matrix_meta['matrixParentPointCount']} → "
+                f"{len(customers)} puntos, {matrix_meta['matrixPatchedCells']} celdas recalculadas)"
+            ),
+            "info",
+        )
+    graph_seconds = time.perf_counter() - graph_started
 
     report(
         "instancia_vrp",
@@ -877,18 +1037,42 @@ def run_optimization_engine(
     current_solution = _baseline_route(len(customers), dist_matrix, time_matrix)
     report(
         "aco",
-        f"Ejecutando metaheurística ACO ({ACO_ANTS} hormigas × {ACO_ITERATIONS} iteraciones)",
+        f"Ejecutando metaheurística ACO ({resolved_aco_ants} hormigas × {resolved_aco_iterations} iteraciones)",
         "progress",
     )
+    aco_started = time.perf_counter()
+
+    def aco_progress(iteration: int, total: int, best_cost_m: float, iteration_best_m: float) -> None:
+        if reporter is not None:
+            reporter.set_aco_progress(
+                iteration,
+                total,
+                best_cost_m=best_cost_m,
+                iteration_best_m=iteration_best_m,
+            )
+
     optimized_solution = _aco_cvrp(
         len(customers),
         [c.demand_kg for c in customers],
         [v.capacity_kg for v in vehicles],
         dist_matrix,
         time_matrix,
+        aco_ants=resolved_aco_ants,
+        aco_iterations=resolved_aco_iterations,
+        aco_patience=ACO_PATIENCE,
         cancel_check=cancelled,
-        on_iteration=(reporter.set_aco_progress if reporter is not None else None),
+        on_iteration=aco_progress,
     )
+    aco_seconds = time.perf_counter() - aco_started
+    if optimized_solution.aco_stopped_early:
+        report(
+            "aco",
+            (
+                f"ACO detenido por convergencia tras {optimized_solution.aco_iterations_run} "
+                f"iteraciones (paciencia={ACO_PATIENCE})"
+            ),
+            "info",
+        )
     report("refinamiento_2opt", "Aplicando 2-opt local sobre rutas candidatas", "progress")
 
     served_codes: set[str] = set()
@@ -908,6 +1092,29 @@ def run_optimization_engine(
         operators_shortage=shortage_for_engine,
         workday_hours=duration_h,
     )
+
+    computation_seconds = time.perf_counter() - computation_started
+    engine_metrics = _build_engine_metrics(
+        computation_seconds=computation_seconds,
+        aco_seconds=aco_seconds,
+        graph_seconds=graph_seconds,
+        customer_count=len(customers),
+        vehicle_count=len(vehicles),
+        aco_ants=resolved_aco_ants,
+        aco_iterations=resolved_aco_iterations,
+        aco_iterations_run=optimized_solution.aco_iterations_run,
+        aco_stopped_early=optimized_solution.aco_stopped_early,
+        aco_patience=ACO_PATIENCE,
+        matrix_cache_hit=matrix_cache_hit,
+        matrix_cache_incremental=matrix_meta["matrixCacheIncremental"],
+        matrix_patched_cells=matrix_meta["matrixPatchedCells"],
+        matrix_parent_point_count=matrix_meta["matrixParentPointCount"],
+        graph_load_source=graph_source,
+        aco_parallel_workers=optimized_solution.aco_parallel_workers,
+        aco_convergence=optimized_solution.aco_convergence,
+    )
+    kpis["engineMetrics"] = engine_metrics
+    simulation_parameters["engineMetrics"] = engine_metrics
 
     opt_breakdown = kpis["durationBreakdown"]["optimized"]
     service_min = round(opt_breakdown["serviceHours"] * 60)
@@ -1024,7 +1231,7 @@ def run_optimization_engine(
         db.flush()
         db.refresh(simulation)
 
-    report("listo", "Optimización completada — GeoJSON generado desde grafo vial", "success")
+    report("persistencia", _format_computation_log_message(engine_metrics), "success")
 
     log_entries = _optimization_logs(scenario_label, len(customers), len(vehicles))
     if contingency_meta:
@@ -1054,4 +1261,5 @@ def run_optimization_engine(
         "dispatch": dispatch,
         "contingency": contingency_meta,
         "servedPointCodes": sorted(served_codes),
+        "engineMetrics": engine_metrics,
     }

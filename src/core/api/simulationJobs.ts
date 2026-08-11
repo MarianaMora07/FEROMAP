@@ -1,6 +1,6 @@
 import type { SimulationCrewParameters, VehicleCrewFields } from '../../data/types/crewServiceTime';
 import type { RouteCollection } from '../../data/types/geo';
-import type { KpiMetrics, ScenarioId, SimulationLogEntry } from '../../data/types/simulation';
+import type { KpiMetrics, ScenarioId, SimulationLogEntry, AcoConvergencePoint } from '../../data/types/simulation';
 import type { ExecutionPhaseId } from '../../features/simulation/executionPhases';
 import { apiGet, apiPost } from './client';
 import type { SimulationRunParameters } from './simulation';
@@ -15,6 +15,7 @@ export interface SimulationOptimizationJob {
   phase: ExecutionPhaseId | null;
   progress: number;
   logs: SimulationLogEntry[];
+  acoConvergence?: AcoConvergencePoint[];
   result: OptimizeJobResult | null;
   error: string | null;
 }

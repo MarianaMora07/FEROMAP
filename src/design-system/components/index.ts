@@ -3,6 +3,7 @@ export { Card, CardHeader } from './Card';
 export { KpiCard } from './KpiCard';
 export { Badge, StatusBadge } from './Badge';
 export { ProgressBar } from './ProgressBar';
+export { LoadingPanel } from './LoadingPanel';
 export { ToastContainer, createToastStore } from './Toast';
 export { Modal } from './Modal';
 export { Drawer } from './Drawer';

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import pickle
 from functools import lru_cache
@@ -65,6 +66,29 @@ BLOCKED_HIGHWAY_TYPES = frozenset({"motorway", "trunk", "primary"})
 PEAK_PENALTY_HIGHWAYS = frozenset({"primary", "trunk", "motorway"})
 
 _graph_cache: dict[str, Any] = {}
+_last_graph_load_source: str = "unknown"
+
+
+def graph_load_source() -> str:
+    return _last_graph_load_source
+
+
+def warm_road_graph_cache(*, force_reload: bool = False) -> dict[str, Any]:
+    """Pre-calienta el pickle del grafo OSMnx (seed/deploy). Evita descarga en la 1.ª optimización."""
+    graph = load_road_graph(force_reload=force_reload)
+    meta = {
+        "source": _last_graph_load_source,
+        "nodes": graph.number_of_nodes(),
+        "edges": graph.number_of_edges(),
+        "picklePath": str(_pickle_path()),
+        "graphmlPath": str(_graphml_path()),
+    }
+    meta_path = _cache_dir() / "unare_graph.meta.json"
+    try:
+        meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    except OSError as exc:
+        logger.warning("No se pudo escribir metadata del grafo: %s", exc)
+    return meta
 
 
 def _cache_dir() -> Path:
@@ -88,8 +112,11 @@ def _pickle_path() -> Path:
 
 
 def load_road_graph(*, force_reload: bool = False) -> nx.MultiDiGraph:
-    """Carga el grafo desde GraphML con cache en data/cache/."""
+    """Carga el grafo desde GraphML con cache en memoria y data/cache/."""
+    global _last_graph_load_source
+
     if not force_reload and "graph" in _graph_cache:
+        _last_graph_load_source = "memory"
         return _graph_cache["graph"]
 
     graphml = _graphml_path()
@@ -102,6 +129,7 @@ def load_road_graph(*, force_reload: bool = False) -> nx.MultiDiGraph:
                 with pkl.open("rb") as fh:
                     graph = pickle.load(fh)
                 _graph_cache["graph"] = graph
+                _last_graph_load_source = "disk"
                 logger.info("Grafo cargado desde cache %s", pkl)
                 return graph
             except Exception:
@@ -110,6 +138,7 @@ def load_road_graph(*, force_reload: bool = False) -> nx.MultiDiGraph:
     if graphml.exists():
         logger.info("Cargando grafo desde %s", graphml)
         graph = ox.load_graphml(graphml)
+        _last_graph_load_source = "graphml"
     else:
         logger.info("GraphML no encontrado; descargando OSMnx bbox Unare")
         graph = ox.graph_from_bbox(
@@ -119,6 +148,7 @@ def load_road_graph(*, force_reload: bool = False) -> nx.MultiDiGraph:
         )
         graphml.parent.mkdir(parents=True, exist_ok=True)
         ox.save_graphml(graph, graphml)
+        _last_graph_load_source = "osmnx"
 
     graph = ox.add_edge_speeds(graph)
     graph = ox.add_edge_travel_times(graph)
@@ -170,10 +200,12 @@ def nearest_node(graph: nx.MultiDiGraph, lon: float, lat: float) -> int:
     return ox.distance.nearest_nodes(graph, lon, lat)
 
 
-@lru_cache(maxsize=512)
-def shortest_path_cost(graph_id: int, orig: int, dest: int) -> tuple[float, float]:
-    """Retorna (distancia_metros, tiempo_segundos) entre dos nodos."""
-    graph = _graph_cache["graph"]
+def path_metrics_between_nodes(
+    graph: nx.MultiDiGraph,
+    orig: int,
+    dest: int,
+) -> tuple[float, float]:
+    """Distancia (m) y tiempo (s) por camino mínimo en el grafo vial."""
     try:
         path = nx.shortest_path(graph, orig, dest, weight="weight")
     except nx.NetworkXNoPath:
@@ -182,10 +214,20 @@ def shortest_path_cost(graph_id: int, orig: int, dest: int) -> tuple[float, floa
     dist_m = 0.0
     time_s = 0.0
     for u, v in zip(path[:-1], path[1:]):
-        edge = min(graph[u][v].values(), key=lambda d: d.get("weight", float("inf")))
+        edge_data = graph.get_edge_data(u, v)
+        if not edge_data:
+            continue
+        edge = min(edge_data.values(), key=lambda d: d.get("weight", float("inf")))
         dist_m += float(edge.get("length", 0))
         time_s += float(edge.get("travel_time", edge.get("weight", 0)))
     return dist_m, time_s
+
+
+@lru_cache(maxsize=512)
+def shortest_path_cost(graph_id: int, orig: int, dest: int) -> tuple[float, float]:
+    """Retorna (distancia_metros, tiempo_segundos) entre dos nodos."""
+    graph = _graph_cache["graph"]
+    return path_metrics_between_nodes(graph, orig, dest)
 
 
 def route_path_coordinates(graph: nx.MultiDiGraph, path_nodes: list[int]) -> list[list[float]]:

@@ -30,6 +30,18 @@ class OptimizeRequest(CamelModel):
             "Se persiste en simulationParameters; tiempo de servicio en KPIs — Fase 2 (ADR-003)."
         ),
     )
+    aco_ants: int | None = Field(
+        default=None,
+        ge=4,
+        le=30,
+        description="Hormigas por iteración del ACO. Si se omite, usa ACO_ANTS del servidor.",
+    )
+    aco_iterations: int | None = Field(
+        default=None,
+        ge=5,
+        le=60,
+        description="Iteraciones del ACO. Si se omite, usa ACO_ITERATIONS del servidor.",
+    )
 
 
 class OptimizeJobCreated(CamelModel):
@@ -52,6 +64,7 @@ class OptimizeJobStatus(CamelModel):
     logs: list[SimulationLogEntry] = Field(default_factory=list)
     result: dict | None = None
     error: str | None = None
+    aco_convergence: list[dict] = Field(default_factory=list, alias="acoConvergence")
 
 
 class OptimizeJobCancelResponse(CamelModel):

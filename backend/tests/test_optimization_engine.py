@@ -12,8 +12,10 @@ from app.services.optimization_service import (
     _aco_cvrp,
     _baseline_route,
     _build_distance_matrix,
+    _build_engine_metrics,
     _critical_coverage_pct,
     _evaluate_solution,
+    _format_computation_log_message,
     _haversine_m,
     _route_cost,
     _two_opt,
@@ -148,3 +150,116 @@ def test_route_solution_dataclass_defaults():
     sol = RouteSolution()
     assert sol.vehicle_routes == []
     assert sol.distance_m == 0.0
+
+
+def test_build_engine_metrics_rounds_and_overhead():
+    metrics = _build_engine_metrics(
+        computation_seconds=10.456,
+        aco_seconds=3.2,
+        graph_seconds=5.1,
+        customer_count=18,
+        vehicle_count=3,
+        aco_ants=8,
+        aco_iterations=15,
+        aco_iterations_run=9,
+        aco_stopped_early=True,
+        aco_patience=5,
+        matrix_cache_hit=True,
+        matrix_cache_incremental=False,
+        matrix_patched_cells=0,
+        matrix_parent_point_count=0,
+        graph_load_source="disk",
+        aco_parallel_workers=2,
+        aco_convergence=[
+            {"iteration": 1, "bestDistanceKm": 10.0, "iterationBestDistanceKm": 10.5},
+        ],
+    )
+    assert metrics["computationSeconds"] == 10.46
+    assert metrics["acoSeconds"] == 3.2
+    assert metrics["graphLoadSeconds"] == 5.1
+    assert metrics["overheadSeconds"] == pytest.approx(2.16, abs=0.01)
+    assert metrics["customers"] == 18
+    assert metrics["vehicles"] == 3
+    assert metrics["acoAnts"] == 8
+    assert metrics["acoIterations"] == 15
+    assert metrics["acoIterationsRun"] == 9
+    assert metrics["acoStoppedEarly"] is True
+    assert metrics["acoPatience"] == 5
+    assert metrics["matrixCacheHit"] is True
+    assert metrics["graphLoadSource"] == "disk"
+    assert metrics["acoParallelWorkers"] == 2
+    assert len(metrics["acoConvergence"]) == 1
+    assert metrics["acoConvergence"][0]["iteration"] == 1
+
+
+def test_aco_cvrp_records_convergence_curve():
+    n_customers = 4
+    demands = [5.0, 5.0, 5.0, 5.0]
+    capacities = [20.0]
+    dist, time = _symmetric_matrix(n_customers + 1, base=100.0)
+
+    solution = _aco_cvrp(
+        n_customers,
+        demands,
+        capacities,
+        dist,
+        time,
+        aco_ants=4,
+        aco_iterations=6,
+        aco_patience=0,
+        seed=3,
+    )
+
+    assert len(solution.aco_convergence) == 6
+    assert solution.aco_convergence[0]["iteration"] == 1
+    assert solution.aco_convergence[-1]["iteration"] == 6
+    assert solution.aco_convergence[-1]["bestDistanceKm"] <= solution.aco_convergence[0]["bestDistanceKm"]
+
+
+def test_format_computation_log_message():
+    msg = _format_computation_log_message(
+        {
+            "computationSeconds": 8.4,
+            "acoSeconds": 2.1,
+            "acoAnts": 12,
+            "acoIterations": 20,
+        }
+    )
+    assert "8.4 s" in msg
+    assert "ACO: 2.1 s" in msg
+    assert "12×20" in msg
+
+
+def test_normalize_aco_parameters_use_defaults_and_clamp():
+    from app.services.scenario_parameters import normalize_aco_ants, normalize_aco_iterations
+
+    assert normalize_aco_ants(None) >= 4
+    assert normalize_aco_iterations(None) >= 5
+    assert normalize_aco_ants(2) == 4
+    assert normalize_aco_ants(99) == 30
+    assert normalize_aco_iterations(3) == 5
+    assert normalize_aco_iterations(80) == 60
+
+
+def test_aco_early_stops_when_no_improvement(monkeypatch):
+    monkeypatch.setattr("app.services.optimization_service.ACO_PATIENCE", 2)
+    n_customers = 4
+    demands = [5.0, 5.0, 5.0, 5.0]
+    capacities = [20.0]
+    dist, time = _symmetric_matrix(n_customers + 1, base=100.0)
+
+    solution = _aco_cvrp(
+        n_customers,
+        demands,
+        capacities,
+        dist,
+        time,
+        aco_ants=4,
+        aco_iterations=30,
+        aco_patience=2,
+        seed=1,
+    )
+
+    assert solution.aco_iterations_run < 30
+    assert solution.aco_stopped_early is True
+    assert solution.distance_m > 0

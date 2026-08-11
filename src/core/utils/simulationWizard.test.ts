@@ -12,7 +12,11 @@ describe('buildSimulationRunParameters', () => {
   };
 
   it('omits operatorsShortage when crew shortage toggle is off', () => {
-    expect(buildSimulationRunParameters(base)).toEqual({ estimatedDurationHours: 4 });
+    expect(buildSimulationRunParameters(base)).toEqual({
+      estimatedDurationHours: 4,
+      acoAnts: 12,
+      acoIterations: 20,
+    });
   });
 
   it('sends operatorsShortage when crew shortage is enabled', () => {
@@ -25,6 +29,22 @@ describe('buildSimulationRunParameters', () => {
     ).toEqual({
       estimatedDurationHours: 4,
       operatorsShortage: 2,
+      acoAnts: 12,
+      acoIterations: 20,
+    });
+  });
+
+  it('sends custom aco parameters', () => {
+    expect(
+      buildSimulationRunParameters({
+        ...base,
+        acoAnts: '6',
+        acoIterations: '10',
+      }),
+    ).toEqual({
+      estimatedDurationHours: 4,
+      acoAnts: 6,
+      acoIterations: 10,
     });
   });
 });

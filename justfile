@@ -35,9 +35,13 @@ down-volumes: _check
 migrate: _check
     {{compose}} exec api alembic upgrade head
 
-# Pobla la BD desde data/seeds/*.json.
+# Pobla la BD desde data/seeds/*.json y pre-calienta el grafo OSMnx.
 seed: _check
     {{compose}} exec api python -m scripts.seed_from_mocks
+
+# Solo pre-calienta data/cache/unare_graph.pkl (sin tocar la BD).
+warm-graph: _check
+    {{compose}} exec api python -c "from app.services.graph_service import warm_road_graph_cache; print(warm_road_graph_cache())"
 
 # Exporta mocks TS → data/seeds/*.json (en el host).
 export-seeds:
@@ -68,6 +72,10 @@ test: _check
 # Tests en el host (requiere pip install -r backend/requirements.txt).
 test-local:
     cd backend && python -m pytest tests/ -v --tb=short
+
+# Benchmark ACO: 5 escenarios × 3 perfiles → data/cache/benchmarks/aco_latest.json
+benchmark-aco: _check
+    {{compose}} exec api python -m scripts.benchmark_aco
 
 # Tests frontend: vitest + playwright (API en :8000, VITE_USE_MOCKS=true).
 test-frontend:

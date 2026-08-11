@@ -1,4 +1,4 @@
-import type { SimulationLogEntry } from '../../data/types/simulation';
+import type { AcoConvergencePoint, SimulationLogEntry } from '../../data/types/simulation';
 import {
   EXECUTION_PHASES,
   getPhaseProgressPercent,
@@ -11,6 +11,7 @@ export interface ExecutionUpdateHandlers {
   setPhase: (phaseId: ExecutionPhaseId) => void;
   setProgress: (percent: number) => void;
   appendLog: (log: SimulationLogEntry) => void;
+  setAcoConvergence?: (points: AcoConvergencePoint[]) => void;
   isCancelled?: () => boolean;
 }
 
@@ -52,6 +53,7 @@ async function replayLogs(
   handlers: ExecutionUpdateHandlers,
   pauseMs = 300,
 ): Promise<void> {
+  let acoSimulated = false;
   for (const raw of logs) {
     const log = enrichLog(raw);
     if (log.phaseId) {
@@ -59,7 +61,33 @@ async function replayLogs(
       handlers.setProgress(getPhaseProgressPercent(log.phaseId));
     }
     handlers.appendLog(log);
+    if (
+      !acoSimulated &&
+      handlers.setAcoConvergence &&
+      (log.phaseId === 'aco' || log.message.toLowerCase().includes('aco'))
+    ) {
+      acoSimulated = true;
+      await simulateMockAcoConvergence(handlers);
+    }
     await waitUnlessCancelled(pauseMs, handlers.isCancelled);
+  }
+}
+
+async function simulateMockAcoConvergence(handlers: ExecutionUpdateHandlers): Promise<void> {
+  if (!handlers.setAcoConvergence) return;
+  handlers.setPhase('aco');
+  const points: AcoConvergencePoint[] = [];
+  let bestKm = 32.8;
+  for (let iteration = 1; iteration <= 10; iteration++) {
+    bestKm = Math.max(20.1, bestKm - 0.35 - Math.random() * 0.25);
+    const iterationBestKm = bestKm + Math.random() * 0.6;
+    points.push({
+      iteration,
+      bestDistanceKm: Number(bestKm.toFixed(3)),
+      iterationBestDistanceKm: Number(iterationBestKm.toFixed(3)),
+    });
+    handlers.setAcoConvergence([...points]);
+    await waitUnlessCancelled(120, handlers.isCancelled);
   }
 }
 
@@ -80,7 +108,6 @@ export async function runPhasedMockExecution(
   await waitUnlessCancelled(500, handlers.isCancelled);
 
   await replayLogs(logs, handlers, 380 + Math.random() * 220);
-  await finishPhases(handlers);
 }
 
 /**

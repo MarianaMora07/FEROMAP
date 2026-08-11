@@ -15,7 +15,7 @@ import { fetchCollectionPoints } from '../api/collectionPoints';
 import { fetchSectors } from '../api/sectors';
 import { fetchAllRoutes } from '../api/routes';
 import { loadDashboardData } from './dashboardStore';
-import { snapRoutesToRoads } from '../services/routeSnapping';
+import { useRoutesAsComputed } from '../services/routeSnapping';
 
 interface AppState {
   layers: LayerVisibility;
@@ -133,20 +133,22 @@ export function setRoutes(routes: RouteCollection) {
   setState('routes', routes);
 }
 
+export async function loadRoutesOnMap(routes: RouteCollection) {
+  setState({
+    routes: useRoutesAsComputed(routes),
+    routesOnRoads: true,
+    routesSnapping: false,
+  });
+}
+
+/** @deprecated Usar loadRoutesOnMap — las rutas del API ya vienen sobre el grafo OSMnx. */
 export async function loadRoutesWithRoadSnapping(routes: RouteCollection) {
-  setState('routesSnapping', true);
-  try {
-    const snapped = await snapRoutesToRoads(routes);
-    setState('routes', snapped);
-    setState('routesOnRoads', true);
-  } finally {
-    setState('routesSnapping', false);
-  }
+  await loadRoutesOnMap(routes);
 }
 
 export async function initRoadSnappedRoutes() {
   await initAppData();
-  await loadRoutesWithRoadSnapping(state.routes);
+  await loadRoutesOnMap(state.routes);
 }
 
 export function showOptimizedRoute(show: boolean) {
