@@ -1,4 +1,4 @@
-import type { Scenario, ScenarioId } from '../../data/types/simulation';
+import type { ScenarioId } from '../../data/types/simulation';
 
 export const simulationSteps = [
   { id: 1, label: 'Configuración' },
@@ -128,37 +128,4 @@ export function conditionsForScenario(scenarioId: ScenarioId): Record<ConditionI
     default:
       return base;
   }
-}
-
-export function quickScenariosFromApi(scenarios: Scenario[]) {
-  const icons: Record<ScenarioId, 'cloud-rain' | 'trash' | 'chart' | 'truck' | 'alert'> = {
-    normal: 'chart',
-    peak_traffic: 'alert',
-    rain: 'cloud-rain',
-    saturated: 'trash',
-    broken_vehicle: 'truck',
-  };
-
-  const quickIds: ScenarioId[] = ['peak_traffic', 'rain', 'saturated', 'broken_vehicle'];
-
-  const fromApi = scenarios
-    .filter((scenario) => quickIds.includes(scenario.id))
-    .map((scenario) => ({
-      id: scenario.id,
-      title: scenario.label,
-      description: scenario.description,
-      icon: icons[scenario.id],
-      conditions: conditionsForScenario(scenario.id),
-    }));
-
-  return [
-    ...fromApi,
-    {
-      id: 'waste_surge',
-      title: 'Aumento de desechos',
-      description: 'Incremento estimado de carga sobre la media de recolección.',
-      icon: 'chart' as const,
-      conditions: { ...defaultConditions(), waste_surge: true },
-    },
-  ];
 }

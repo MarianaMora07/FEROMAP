@@ -75,7 +75,6 @@ import {
   durationOptions,
   operatorsShortageOptions,
   CREW_SHORTAGE_NARRATIVE,
-  quickScenariosFromApi,
   rainIntensityOptions,
   simulationConditions,
   wasteLevelOptions,
@@ -224,24 +223,6 @@ function MetricBar(props: { label: string; value: number }) {
   );
 }
 
-function QuickIcon(props: { icon: 'cloud-rain' | 'trash' | 'chart' | 'truck' | 'alert' }) {
-  const wrap = (node: JSX.Element, tone: string) => (
-    <span class={`flex h-9 w-9 items-center justify-center rounded-lg ${tone}`}>{node}</span>
-  );
-  switch (props.icon) {
-    case 'cloud-rain':
-      return wrap(<CloudRain size={18} />, 'bg-violet-100 text-violet-600');
-    case 'trash':
-      return wrap(<Trash2 size={18} />, 'bg-amber-100 text-amber-600');
-    case 'chart':
-      return wrap(<TrendingUp size={18} />, 'bg-fero-green/15 text-fero-green-dark');
-    case 'truck':
-      return wrap(<Truck size={18} />, 'bg-violet-100 text-violet-600');
-    case 'alert':
-      return wrap(<AlertTriangle size={18} />, 'bg-red-100 text-red-600');
-  }
-}
-
 async function fetchReadiness() {
   const [vehiclesSummary, pointsSummary] = await Promise.all([
     fetchVehiclesSummary(),
@@ -295,7 +276,6 @@ export default function SimulationPage() {
       status: v.status,
     }));
 
-  const quickScenarios = createMemo(() => quickScenariosFromApi(simulationState.scenarios));
   const derivedScenario = createMemo(() =>
     describeDerivedScenario(conditions(), simulationState.scenarios),
   );
@@ -362,13 +342,6 @@ export default function SimulationPage() {
     const next = { ...conditions(), [id]: !conditions()[id] };
     setConditions(next);
     applySimulationScenario(deriveScenarioId(next));
-  };
-
-  const applyQuick = (nextConditions: Record<ConditionId, boolean>) => {
-    setConditions(nextConditions);
-    applySimulationScenario(deriveScenarioId(nextConditions));
-    setStep(1);
-    setRunError(null);
   };
 
   const handleContinue = () => {
@@ -634,29 +607,6 @@ export default function SimulationPage() {
                     <For each={durationOptions}>{(o) => <option value={o.value}>{o.label}</option>}</For>
                   </select>
                 </div>
-              </div>
-            </Card>
-            <Card>
-              <CardHeader title="Escenarios rápidos" />
-              <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <For each={quickScenarios()}>
-                  {(q) => (
-                    <div class="rounded-lg border border-border p-3 dark:border-dark-border">
-                      <div class="mb-2">
-                        <QuickIcon icon={q.icon} />
-                      </div>
-                      <p class="text-sm font-semibold text-text-primary dark:text-white">{q.title}</p>
-                      <p class="mt-1 text-xs text-text-muted">{q.description}</p>
-                      <button
-                        type="button"
-                        class="mt-2 text-xs font-semibold text-fero-blue hover:underline"
-                        onClick={() => applyQuick(q.conditions)}
-                      >
-                        Usar escenario
-                      </button>
-                    </div>
-                  )}
-                </For>
               </div>
             </Card>
           </div>

@@ -98,37 +98,6 @@ export const mapMarkerLegend = [
   { id: 'block', label: 'Bloqueo de vía', icon: 'cone' as const, class: 'text-red-600' },
 ];
 
-export const quickScenarios = [
-  {
-    id: 'peak_traffic',
-    title: 'Tráfico alto',
-    description: 'Congestión en avenidas principales durante hora pico.',
-    icon: 'car' as const,
-    conditions: { traffic: true, rain: false, broken_vehicle: false, critical_bin: false, roadblock: false, waste_surge: false, accident: false },
-  },
-  {
-    id: 'rain',
-    title: 'Lluvia intensa',
-    description: 'Reducción de velocidad y posibles desvíos por inundación.',
-    icon: 'cloud-rain' as const,
-    conditions: { traffic: false, rain: true, broken_vehicle: false, critical_bin: false, roadblock: false, waste_surge: false, accident: false },
-  },
-  {
-    id: 'saturated',
-    title: 'Contenedor crítico',
-    description: 'Prioriza puntos con nivel de llenado superior al 90%.',
-    icon: 'trash' as const,
-    conditions: { traffic: false, rain: false, broken_vehicle: false, critical_bin: true, roadblock: false, waste_surge: false, accident: false },
-  },
-  {
-    id: 'waste_surge',
-    title: 'Aumento desechos',
-    description: 'Incremento estimado de carga en +30% sobre la media.',
-    icon: 'chart' as const,
-    conditions: { traffic: false, rain: false, broken_vehicle: false, critical_bin: false, roadblock: false, waste_surge: true, accident: false },
-  },
-];
-
 export const simulationHistory = [
   {
     id: 'sim-01',
