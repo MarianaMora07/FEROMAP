@@ -13,6 +13,7 @@ class Vehicle(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     license_plate: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     code: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
+    vehicle_type: Mapped[str] = mapped_column(String(50), nullable=False, server_default="Compactadora")
     max_capacity_kg: Mapped[Decimal] = mapped_column(Numeric(8, 2), nullable=False)
     fuel_consumption_rate: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
     ideal_operators_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="6")

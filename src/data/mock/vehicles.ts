@@ -47,15 +47,14 @@ export const vehicleStatusOptions = [
 
 export const vehicleTypeOptions = [
   { value: '', label: 'Tipo: Todos' },
-  { value: 'Compactador', label: 'Compactador' },
+  { value: 'Compactadora', label: 'Compactadora' },
   { value: 'Volteo', label: 'Volteo' },
-  { value: 'Recolector', label: 'Recolector' },
 ];
 
 export const vehiclesList: Vehicle[] = [
   {
     id: 'TR-08',
-    type: 'Compactador',
+    type: 'Compactadora',
     plate: 'A12BC3D',
     status: 'en-ruta',
     driver: 'Juan Pérez',
@@ -98,7 +97,7 @@ export const vehiclesList: Vehicle[] = [
   },
   {
     id: 'TR-11',
-    type: 'Compactador',
+    type: 'Compactadora',
     plate: 'C78GH9I',
     status: 'en-ruta',
     driver: 'Ana Pérez',
@@ -120,7 +119,7 @@ export const vehiclesList: Vehicle[] = [
   },
   {
     id: 'TR-07',
-    type: 'Recolector',
+    type: 'Compactadora',
     plate: 'D01JK2L',
     status: 'mantenimiento',
     driver: '—',
@@ -137,7 +136,7 @@ export const vehiclesList: Vehicle[] = [
   },
   {
     id: 'TR-04',
-    type: 'Compactador',
+    type: 'Compactadora',
     plate: 'E34MN5O',
     status: 'disponible',
     driver: 'Luis Méndez',
@@ -172,7 +171,7 @@ export const vehiclesList: Vehicle[] = [
   },
   {
     id: 'TR-02',
-    type: 'Recolector',
+    type: 'Compactadora',
     plate: 'G90ST1U',
     status: 'en-ruta',
     driver: 'María Gómez',
@@ -191,7 +190,7 @@ export const vehiclesList: Vehicle[] = [
   },
   {
     id: 'TR-19',
-    type: 'Compactador',
+    type: 'Compactadora',
     plate: 'H23VW4X',
     status: 'mantenimiento',
     driver: 'Pedro Silva',
@@ -227,7 +226,7 @@ export const vehiclesList: Vehicle[] = [
   },
   {
     id: 'TR-12',
-    type: 'Recolector',
+    type: 'Compactadora',
     plate: 'J89BC0D',
     status: 'en-ruta',
     driver: 'Diego Torres',

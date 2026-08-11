@@ -10,8 +10,6 @@ import { apiDownload, apiGet, apiPatch, withMockFallback } from './client';
 const DEFAULT_IMAGE =
   'https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&w=480&h=320&q=80';
 
-const VEHICLE_TYPES = ['Compactador', 'Volteo', 'Recolector'] as const;
-
 export interface ApiVehicle {
   id: string;
   plate: string;
@@ -87,7 +85,9 @@ function mapApiVehicle(row: ApiVehicle, index: number): Vehicle {
   const capacityM3 = row.capacityM3 ?? row.maxCapacityKg / 1000;
   return normalizeVehicle({
     id: row.id,
-    type: (row.type ?? VEHICLE_TYPES[index % VEHICLE_TYPES.length]) as Vehicle['type'],
+    type: (row.type === 'Volteo' || row.type === 'Compactadora'
+      ? row.type
+      : 'Compactadora') as Vehicle['type'],
     plate: row.plate,
     status: row.status,
     driver: row.driver ?? '—',

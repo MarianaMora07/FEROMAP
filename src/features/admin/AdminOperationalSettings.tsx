@@ -1,10 +1,13 @@
 import { For, Show, createSignal, onMount } from 'solid-js';
+import { useNavigate } from '@solidjs/router';
 import { Button, Card, SelectField, TextField } from '../../design-system/components';
 import {
   fetchAdminSettings,
+  runAdminSeed,
   updateAdminSettings,
   type OperationalSettings,
 } from '../../core/api/admin';
+import { logout } from '../../core/stores/authStore';
 import {
   dateFormatOptions,
   fillThresholdOptions,
@@ -54,8 +57,10 @@ function ToggleSwitch(props: {
 }
 
 export function AdminOperationalSettings(props: { onFlash: (message: string) => void }) {
+  const navigate = useNavigate();
   const [settings, setSettings] = createSignal<OperationalSettings | null>(null);
   const [saving, setSaving] = createSignal(false);
+  const [seeding, setSeeding] = createSignal(false);
 
   onMount(() => {
     void fetchAdminSettings().then(setSettings);
@@ -76,6 +81,26 @@ export function AdminOperationalSettings(props: { onFlash: (message: string) => 
       })
       .catch(() => props.onFlash('No se pudo guardar la configuración.'))
       .finally(() => setSaving(false));
+  };
+
+  const loadSeeds = () => {
+    const ok = window.confirm(
+      'Esto borra los datos actuales y recarga los seeds demo. Deberás iniciar sesión de nuevo (admin@fero.com). ¿Continuar?',
+    );
+    if (!ok) return;
+    setSeeding(true);
+    void runAdminSeed()
+      .then(async (result) => {
+        props.onFlash(
+          `Seeds cargados: ${result.sectors} sectores, ${result.collectionPoints} puntos, ${result.vehicles} vehículos.`,
+        );
+        await logout();
+        navigate('/login', { replace: true });
+      })
+      .catch(() => {
+        props.onFlash('No se pudieron cargar los seeds.');
+        setSeeding(false);
+      });
   };
 
   return (
@@ -226,6 +251,19 @@ export function AdminOperationalSettings(props: { onFlash: (message: string) => 
                 onInput={(e) => patch({ workEnd: e.currentTarget.value })}
               />
             </div>
+          </Card>
+
+          <Card class="space-y-3 p-4">
+            <h3 class="font-heading text-base font-semibold text-text-primary dark:text-white">
+              Datos demo (seeds)
+            </h3>
+            <p class="text-sm text-text-muted">
+              Recarga parroquia, sectores, puntos, flota, conductores, rutas y alertas desde{' '}
+              <code class="text-xs">data/seeds</code>. Reemplaza todos los datos operativos.
+            </p>
+            <Button type="button" variant="secondary" size="sm" loading={seeding()} onClick={loadSeeds}>
+              Cargar seeds
+            </Button>
           </Card>
 
           <div class="flex justify-end">

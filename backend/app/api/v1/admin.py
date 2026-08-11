@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request, status
 
 from app.api.deps import AdminOnly, DbSession
+from app.db.session import SessionLocal
 from app.schemas.admin import (
     AdminUser,
     AdminUserCreate,
@@ -10,6 +11,7 @@ from app.schemas.admin import (
     IntegrationSettingsUpdate,
     OperationalSettings,
     OperationalSettingsUpdate,
+    SeedResult,
 )
 from app.services.admin_service import (
     create_user,
@@ -18,10 +20,12 @@ from app.services.admin_service import (
     list_audit_log,
     list_roles,
     list_users,
+    log_audit,
     update_integration_settings,
     update_operational_settings,
     update_user,
 )
+from app.services.seed_service import run_seed
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -118,3 +122,43 @@ def get_admin_audit_log(
     limit: int = Query(50, ge=1, le=200),
 ):
     return list_audit_log(db, limit=limit)
+
+
+@router.post("/seed", response_model=SeedResult)
+def post_admin_seed(request: Request, actor: AdminOnly):
+    actor_email = actor.email
+    ip_address = request.client.host if request.client else None
+    try:
+        summary = run_seed()
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al cargar seeds: {exc}",
+        ) from exc
+
+    with SessionLocal() as session:
+        log_audit(
+            session,
+            actor=None,
+            actor_email=actor_email,
+            action="seed",
+            resource="database",
+            details=summary,
+            ip_address=ip_address,
+        )
+        session.commit()
+
+    return {
+        "parishes": summary["parishes"],
+        "sectors": summary["sectors"],
+        "collection_points": summary["collectionPoints"],
+        "vehicles": summary["vehicles"],
+        "drivers": summary["drivers"],
+        "users": summary["users"],
+        "optimized_routes": summary["optimizedRoutes"],
+        "simulations": summary["simulations"],
+        "system_alerts": summary["systemAlerts"],
+        "demo_password": summary["demoPassword"],
+    }

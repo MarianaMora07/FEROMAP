@@ -5,8 +5,9 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.services.analytics_filters import AnalyticsFilters
+
 from app.services.analytics_filters import (
-    AnalyticsFilters,
     bucket_evolution_series,
     hourly_distribution_from_rows,
     load_simulation_rows,

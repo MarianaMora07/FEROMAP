@@ -1,5 +1,5 @@
 export type VehicleStatus = 'en-ruta' | 'disponible' | 'mantenimiento' | 'fuera-de-servicio';
-export type VehicleType = 'Compactador' | 'Volteo' | 'Recolector';
+export type VehicleType = 'Volteo' | 'Compactadora';
 
 export interface Vehicle {
   id: string;
