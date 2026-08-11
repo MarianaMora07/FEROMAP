@@ -54,6 +54,7 @@ def _vehicle(
         code=code,
         license_plate=license_plate,
         status=status,
+        vehicle_type="Compactadora",
         max_capacity_kg=Decimal(str(max_capacity_kg)),
         fuel_consumption_rate=Decimal("0.35"),
         ideal_operators_count=6,

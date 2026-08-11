@@ -78,6 +78,7 @@ import { authUser } from '../../core/stores/authStore';
 import { appState } from '../../core/stores/appStore';
 import { CollectionPointActionsMenu } from './CollectionPointActionsMenu';
 import { CollectionPointOptimizationBadges } from './CollectionPointOptimizationBadges';
+import { VisitScheduleEditor } from './VisitScheduleEditor';
 import {
   CollectionPointFormModal,
   type CollectionPointFormValues,
@@ -1063,7 +1064,11 @@ export default function CollectionPointsPage() {
                 </div>
               </dl>
 
-              <div class="flex flex-wrap gap-2">
+              <Show when={canManage()}>
+                <VisitScheduleEditor pointCode={p().code} />
+              </Show>
+
+              <div class="mt-4 flex flex-wrap gap-2">
                 <Button variant="primary" size="sm" onClick={() => setHistoryDrawerOpen(true)}>
                   Ver historial
                 </Button>

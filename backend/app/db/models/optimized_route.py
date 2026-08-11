@@ -18,11 +18,15 @@ class OptimizedRoute(Base):
     total_distance_meters: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     estimated_duration_seconds: Mapped[int | None] = mapped_column(nullable=True)
     status: Mapped[str] = mapped_column(String(50), nullable=False, server_default="pending")
+    daily_plan_id: Mapped[int | None] = mapped_column(ForeignKey("daily_plans.id"), nullable=True)
+    simulation_id: Mapped[int | None] = mapped_column(ForeignKey("simulations.id"), nullable=True)
+    planning_level: Mapped[str | None] = mapped_column(String(30), nullable=True)
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
+    daily_plan: Mapped["DailyPlan | None"] = relationship(back_populates="routes")
     vehicle: Mapped["Vehicle"] = relationship(back_populates="routes")
     driver: Mapped["Driver"] = relationship(back_populates="routes")
     waypoints: Mapped[list["RouteWaypoint"]] = relationship(back_populates="route", cascade="all, delete-orphan")

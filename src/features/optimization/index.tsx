@@ -1,5 +1,5 @@
 import { For, Show, createMemo, createSignal, onMount } from 'solid-js';
-import { A } from '@solidjs/router';
+import { A, useSearchParams } from '@solidjs/router';
 import {
   Sparkles,
   MapPin,
@@ -27,9 +27,11 @@ import { appState } from '../../core/stores/appStore';
 import {
   dispatchOptimizationResult,
   executeOptimization,
+  closeOptimizationDay,
   initOptimizationPage,
   loadOptimizationFromHistory,
   optimizationState,
+  refreshDailyPlan,
   setOptimizationScenario,
   updateOptimizationPreset,
 } from '../../core/stores/optimizationStore';
@@ -45,6 +47,8 @@ import {
 } from '../../data/mock/optimization';
 import type { OptimizationConstraints } from '../../core/api/optimization';
 import type { ScenarioId } from '../../data/types/simulation';
+import { downloadDailyPlanPdf } from '../../core/api/planning';
+import { PendingManagementPanel } from './PendingManagementPanel';
 import { ModuleGuidanceBanner } from '../shared/ModuleGuidanceBanner';
 import { OptimizationRouteMap } from './OptimizationRouteMap';
 
@@ -95,7 +99,7 @@ function ParametersForm(props: { onGenerate: () => void; disabled?: boolean }) {
         }}
       >
         <TextField
-          label="Fecha de operación (informativo)"
+          label="Fecha de operación"
           type="date"
           name="operationDate"
           value={preset().operationDate}
@@ -103,7 +107,7 @@ function ParametersForm(props: { onGenerate: () => void; disabled?: boolean }) {
         />
 
         <p class="text-xs text-text-muted -mt-2">
-          Solo se guarda en este navegador; no se envía al motor de rutas.
+          El plan del día se carga desde el servidor según esta fecha.
         </p>
 
         <div>
@@ -406,8 +410,12 @@ function HistoryTab() {
 }
 
 export default function OptimizationPage() {
+  const [searchParams] = useSearchParams();
   const [tab, setTab] = createSignal<OptimizationTabId>('nueva');
   const [dispatchError, setDispatchError] = createSignal<string | null>(null);
+  const [closeNotice, setCloseNotice] = createSignal<string | null>(null);
+
+  const dailyPlan = () => optimizationState.dailyPlan;
 
   const hasResults = () => optimizationState.kpis != null;
   const kpis = () => optimizationState.kpis!;
@@ -432,7 +440,8 @@ export default function OptimizationPage() {
   });
 
   onMount(() => {
-    void initOptimizationPage();
+    const dateParam = Array.isArray(searchParams.date) ? searchParams.date[0] : searchParams.date;
+    void initOptimizationPage(dateParam);
   });
 
   const handleGenerate = async () => {
@@ -453,6 +462,27 @@ export default function OptimizationPage() {
     }
   };
 
+  const handleCloseDay = async () => {
+    setCloseNotice(null);
+    try {
+      await closeOptimizationDay();
+      setCloseNotice('Día cerrado. Los puntos no visitados quedaron como pendientes.');
+    } catch (error) {
+      setDispatchError(error instanceof Error ? error.message : 'No se pudo cerrar el día');
+    }
+  };
+
+  const handleDownloadDailyPdf = async () => {
+    if (!dailyPlan()?.id) return;
+    const blob = await downloadDailyPlanPdf(dailyPlan()!.id);
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `plan-diario-${dailyPlan()!.operationDate}.pdf`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div class="space-y-4 md:space-y-5">
       <ModuleGuidanceBanner
@@ -463,6 +493,54 @@ export default function OptimizationPage() {
       >
         Esta pantalla genera y despacha rutas operativas del día. Para comparar condiciones (tráfico, lluvia, saturación) y medir el impacto del algoritmo,
       </ModuleGuidanceBanner>
+
+      <Card>
+        <CardHeader title="Plan del día" subtitle="Nivel administrativo — programados + pendientes de ayer" />
+        <Show
+          when={!optimizationState.isLoadingDailyPlan}
+          fallback={<p class="text-sm text-text-muted">Cargando plan del día…</p>}
+        >
+          <div class="space-y-3">
+            <div class="flex flex-wrap items-center gap-3">
+              <Badge variant={dailyPlan()?.status === 'dispatched' ? 'success' : 'info'}>
+                {dailyPlan()?.status ?? 'sin plan'}
+              </Badge>
+              <span class="text-sm text-text-secondary">
+                {dailyPlan()?.scheduledPoints.length ?? 0} programados ·{' '}
+                {dailyPlan()?.pendingPoints.length ?? 0} pendientes ·{' '}
+                {dailyPlan()?.finalPointIds.length ?? 0} total
+              </span>
+            </div>
+            <Show when={(dailyPlan()?.pendingPoints.length ?? 0) > 0}>
+              <ul class="space-y-1 text-sm text-text-secondary">
+                <For each={dailyPlan()?.pendingPoints ?? []}>
+                  {(visit) => (
+                    <li>
+                      {visit.code} — origen {visit.originOperationDate} ({visit.reason})
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </Show>
+            <div class="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={() => void refreshDailyPlan()}>
+                Actualizar pendientes
+              </Button>
+              <Button variant="outline" onClick={() => void handleCloseDay()}>
+                Cerrar día
+              </Button>
+              <Button variant="outline" disabled={!dailyPlan()?.id} onClick={() => void handleDownloadDailyPdf()}>
+                Exportar PDF del día
+              </Button>
+            </div>
+            <Show when={closeNotice()}>
+              <p class="text-sm text-fero-green-dark">{closeNotice()}</p>
+            </Show>
+          </div>
+        </Show>
+      </Card>
+
+      <PendingManagementPanel operationDate={optimizationState.preset.operationDate} />
 
       <div class="flex gap-1 overflow-x-auto border-b border-border">
         <For each={[...optimizationTabs]}>

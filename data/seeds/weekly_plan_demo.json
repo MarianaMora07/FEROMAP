@@ -1,0 +1,32 @@
+{
+  "status": "approved",
+  "scenarioId": "normal",
+  "notes": "Plan semanal demo para defensa de tesis",
+  "days": [
+    {
+      "weekdayOffset": 0,
+      "collectionPointCodes": ["CNT-001", "CNT-002", "CNT-003", "CNT-004", "CNT-005"]
+    },
+    {
+      "weekdayOffset": 1,
+      "collectionPointCodes": ["CNT-006", "CNT-007", "CNT-008"]
+    },
+    {
+      "weekdayOffset": 2,
+      "collectionPointCodes": ["CNT-001", "CNT-003", "CNT-009", "CNT-010"]
+    },
+    {
+      "weekdayOffset": 3,
+      "collectionPointCodes": ["CNT-004", "CNT-005", "CNT-011", "CNT-012"]
+    },
+    {
+      "weekdayOffset": 4,
+      "collectionPointCodes": ["CNT-002", "CNT-013", "CNT-014", "CNT-015"]
+    }
+  ],
+  "pendingVisits": [
+    { "pointCode": "CNT-016", "reason": "not_visited", "daysAgo": 1 },
+    { "pointCode": "CNT-017", "reason": "skipped_breakdown", "daysAgo": 1 },
+    { "pointCode": "CNT-018", "reason": "not_visited", "daysAgo": 2 }
+  ]
+}

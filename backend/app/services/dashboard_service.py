@@ -12,6 +12,7 @@ from app.services.auth_service import role_label
 from app.services.geo_service import fill_level_pct, fleet_summary, route_geojson, seed_meta_by_code
 from app.services.alert_service import list_alerts as list_persisted_alerts
 from app.services.operations_service import active_routes_view
+from app.services.planning_analytics_service import planning_dashboard_snapshot
 from app.services.optimization_service import run_optimization_engine
 from app.services.scenario_utils import normalize_scenario_id
 from app.services.seed_loader import load_seed
@@ -198,6 +199,7 @@ def dashboard_summary(db: Session, *, current_user: User | None = None) -> dict[
         "activeRoutes": active_routes_view(db),
         "weeklyTons": _weekly_tons_from_simulations(db),
         "recentAlerts": _recent_alerts_view(db),
+        "planningSnapshot": planning_dashboard_snapshot(db),
     }
 
 

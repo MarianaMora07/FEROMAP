@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -17,9 +17,12 @@ from app.core.security import hash_password
 from app.db.models import (
     AlertActivity,
     CollectionPoint,
+    DailyPlan,
     Driver,
     OptimizedRoute,
     Parish,
+    PendingVisit,
+    PlanVersion,
     RouteWaypoint,
     Sector,
     Simulation,
@@ -28,10 +31,20 @@ from app.db.models import (
     UserRole,
     Vehicle,
     VehicleIncident,
+    VisitSchedule,
+    WeeklyPlan,
+    WeeklyPlanDay,
 )
 from app.db.session import SessionLocal
 from app.services.admin_service import ensure_default_settings
 from app.services.alert_service import seed_alerts_from_json
+from app.services.planning_service import (
+    seed_daily_plan_demo,
+    seed_pending_visits_demo,
+    seed_visit_schedules,
+    seed_weekly_plan_demo,
+    week_range,
+)
 from app.services.profile_service import ensure_user_preferences
 
 SEEDS_DIR = Path(settings.data_dir) / "seeds"
@@ -66,6 +79,12 @@ def nearest_collection_point_id(
 
 
 def clear_tables(session: Session) -> None:
+    session.execute(delete(PlanVersion))
+    session.execute(delete(PendingVisit))
+    session.execute(delete(DailyPlan))
+    session.execute(delete(WeeklyPlanDay))
+    session.execute(delete(WeeklyPlan))
+    session.execute(delete(VisitSchedule))
     session.execute(delete(AlertActivity))
     session.execute(delete(SystemAlert))
     session.execute(delete(RouteWaypoint))
@@ -339,6 +358,62 @@ def seed_into_session(session: Session) -> dict[str, Any]:
         ensure_user_preferences(session, user)
 
     ensure_default_settings(session)
+
+    try:
+        visit_schedules_data = load_json("visit_schedules.json")
+        seed_visit_schedules(session, visit_schedules_data)
+    except FileNotFoundError:
+        visit_schedules_data = []
+
+    try:
+        weekly_demo = load_json("weekly_plan_demo.json")
+        week_start, _ = week_range(date.today())
+        days = []
+        for day in weekly_demo.get("days", []):
+            operation_date = week_start + timedelta(days=int(day["weekdayOffset"]))
+            point_codes = day.get("collectionPointCodes", [])
+            point_ids = [
+                point.id
+                for point in collection_points
+                if point.code in point_codes
+            ]
+            days.append(
+                {
+                    "operationDate": operation_date.isoformat(),
+                    "collectionPointIds": point_ids,
+                }
+            )
+        seed_weekly_plan_demo(
+            session,
+            {
+                "weekStartDate": week_start.isoformat(),
+                "status": weekly_demo.get("status", "approved"),
+                "scenarioId": weekly_demo.get("scenarioId", "normal"),
+                "notes": weekly_demo.get("notes"),
+                "days": days,
+            },
+        )
+        pending_rows = []
+        for row in weekly_demo.get("pendingVisits", []):
+            origin = date.today() - timedelta(days=int(row.get("daysAgo", 1)))
+            pending_rows.append(
+                {
+                    "pointCode": row["pointCode"],
+                    "originOperationDate": origin.isoformat(),
+                    "reason": row.get("reason", "not_visited"),
+                }
+            )
+        seed_pending_visits_demo(session, pending_rows)
+        seed_daily_plan_demo(
+            session,
+            {
+                "operationDate": date.today().isoformat(),
+                "status": "draft",
+            },
+        )
+    except FileNotFoundError:
+        pass
+
     session.commit()
 
     return {

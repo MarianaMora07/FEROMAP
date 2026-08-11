@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -128,13 +128,24 @@ def handle_vehicle_breakdown(
         )
     ).all()
     if not available_vehicles:
+        for point_id in pending_point_ids:
+            from app.services.planning_service import create_pending_visit
+
+            create_pending_visit(
+                db,
+                collection_point_id=point_id,
+                origin_operation_date=date.today(),
+                reason="skipped_breakdown",
+                source_incident_id=incident.id,
+                priority=120,
+            )
         db.commit()
         return {
             "incident": _incident_payload(incident, vehicle, route),
             "skippedWaypoints": skipped_waypoints,
             "pendingPoints": len(pending_point_ids),
             "recalculation": None,
-            "message": "Avería registrada. Sin vehículos disponibles para recálculo inmediato.",
+            "message": "Avería registrada. Sin vehículos disponibles; puntos quedaron como pendientes.",
         }
 
     before_km = float(parent_simulation.kpi_total_distance_optimized or 0) if parent_simulation else 0
@@ -155,6 +166,7 @@ def handle_vehicle_breakdown(
             "beforeDistanceKm": before_km,
         },
         auto_dispatch=True,
+        planning_level="operational",
         auto_commit=False,
     )
 

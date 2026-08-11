@@ -88,6 +88,7 @@ export interface DashboardSummary {
   activeRoutes?: DashboardActiveRoute[];
   weeklyTons?: DashboardWeeklyTons;
   recentAlerts?: DashboardRecentAlert[];
+  planningSnapshot?: import('./planningAnalytics').PlanningDashboardSnapshot;
 }
 
 export interface DashboardViewModel {

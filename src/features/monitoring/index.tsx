@@ -33,6 +33,7 @@ import {
   fetchMonitoringStatus,
   type MonitoringKpi,
 } from '../../core/api/monitoring';
+import { fetchDailyPlan } from '../../core/api/planning';
 import { MAP_CONTEXT_POLL_MS } from '../../core/api/map';
 import {
   ensureOperationalRouteLayer,
@@ -43,6 +44,7 @@ import { appState } from '../../core/stores/appStore';
 import { canAdvanceFleet } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
 import { BreakdownReporter, ContingencyResultBanner } from '../contingency/BreakdownReporter';
+import { CriticalContainerRecalc } from './CriticalContainerRecalc';
 import { RecentIncidentsPanel } from '../contingency/RecentIncidentsPanel';
 import { bindMapTheme, mapStyleForTheme } from '../../core/utils/mapStyle';
 import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
@@ -136,6 +138,7 @@ export default function MonitoringPage() {
   const binMarkers: Marker[] = [];
 
   const [monitoringData, { refetch }] = createResource(fetchMonitoringStatus);
+  const [dailyPlan] = createResource(() => fetchDailyPlan(new Date().toISOString().slice(0, 10)));
   const [advancing, setAdvancing] = createSignal(false);
   const monitoringKpis = () => monitoringData()?.kpis ?? [];
   const liveFleet = () => monitoringData()?.liveFleet ?? [];
@@ -285,6 +288,19 @@ export default function MonitoringPage() {
     <div class="space-y-5">
       <ContingencyResultBanner />
 
+      <Show when={dailyPlan()}>
+        {(plan) => (
+          <div class="rounded-xl border border-fero-blue/30 bg-fero-blue/5 px-4 py-3">
+            <p class="text-sm font-semibold text-fero-blue">
+              Plan del día {plan().operationDate} — {plan().status}
+            </p>
+            <p class="mt-1 text-sm text-text-secondary">
+              {plan().finalPointIds.length} puntos en plan · {plan().pendingPoints.length} pendientes incorporados
+            </p>
+          </div>
+        )}
+      </Show>
+
       <div class="flex flex-wrap items-center justify-between gap-3">
         <p class="text-sm text-text-secondary">
           Datos en vivo desde la API · {monitoringData()?.fleetCounts.inRoute ?? 0} vehículos en ruta
@@ -297,6 +313,12 @@ export default function MonitoringPage() {
               void refetch();
               setIncidentsRefreshKey((value) => value + 1);
             }}
+          />
+          <CriticalContainerRecalc
+            compact
+            containers={monitoringData()?.containers}
+            dailyPlanId={dailyPlan()?.id}
+            onComplete={() => void refetch()}
           />
           <Button
           variant="primary"

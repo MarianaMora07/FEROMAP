@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 from app.config import settings
@@ -53,6 +53,13 @@ class OptimizationJob:
     operators_shortage: int | None = None
     aco_ants: int | None = None
     aco_iterations: int | None = None
+    collection_point_ids: list[int] | None = None
+    auto_dispatch: bool = False
+    operation_date: date | None = None
+    daily_plan_id: int | None = None
+    weekly_plan_id: int | None = None
+    planning_level: str | None = None
+    fleet_limit: int | None = None
     phase: str | None = None
     progress: int = 0
     logs: list[dict[str, Any]] = field(default_factory=list)
@@ -145,7 +152,17 @@ def create_optimization_job(
     operators_shortage: int | None = None,
     aco_ants: int | None = None,
     aco_iterations: int | None = None,
+    collection_point_ids: list[int] | None = None,
+    auto_dispatch: bool | None = None,
+    operation_date: date | None = None,
+    daily_plan_id: int | None = None,
+    weekly_plan_id: int | None = None,
+    planning_level: str | None = None,
+    fleet_limit: int | None = None,
 ) -> OptimizationJob:
+    resolved_auto_dispatch = auto_dispatch
+    if resolved_auto_dispatch is None:
+        resolved_auto_dispatch = planning_level == "operational"
     job = OptimizationJob(
         id=str(uuid.uuid4()),
         status="pending",
@@ -156,6 +173,13 @@ def create_optimization_job(
         operators_shortage=operators_shortage,
         aco_ants=aco_ants,
         aco_iterations=aco_iterations,
+        collection_point_ids=collection_point_ids,
+        auto_dispatch=resolved_auto_dispatch,
+        operation_date=operation_date,
+        daily_plan_id=daily_plan_id,
+        weekly_plan_id=weekly_plan_id,
+        planning_level=planning_level,
+        fleet_limit=fleet_limit,
     )
     with _jobs_lock:
         _jobs[job.id] = job
@@ -237,6 +261,13 @@ def _run_job_worker(job_id: str) -> None:
             operators_shortage=job.operators_shortage,
             aco_ants=job.aco_ants,
             aco_iterations=job.aco_iterations,
+            collection_point_ids=job.collection_point_ids,
+            auto_dispatch=job.auto_dispatch,
+            operation_date=job.operation_date,
+            daily_plan_id=job.daily_plan_id,
+            weekly_plan_id=job.weekly_plan_id,
+            planning_level=job.planning_level,
+            fleet_limit=job.fleet_limit,
             reporter=reporter,
         )
         with job.lock:

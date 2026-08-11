@@ -47,4 +47,26 @@ export function fetchRecentIncidents(): Promise<IncidentPayload[]> {
   return apiGet<IncidentPayload[]>('/api/v1/contingencies/recent');
 }
 
+export interface CriticalContainerRecalcRequest {
+  collectionPointCode: string;
+  dailyPlanId?: number;
+  operationDate?: string;
+}
+
+export interface CriticalContainerRecalcResponse {
+  collectionPoint: { code: string; fillLevel: number; id: number };
+  dailyPlanId: number;
+  operationDate: string;
+  remainingPoints: number;
+  recalculation: OptimizeResponse | null;
+  notifications: Array<{ id: number; eventType: string; message?: string }>;
+  message: string;
+}
+
+export function recalcCriticalContainer(
+  payload: CriticalContainerRecalcRequest,
+): Promise<CriticalContainerRecalcResponse> {
+  return apiPost<CriticalContainerRecalcResponse>('/api/v1/contingencies/critical-container-recalc', payload);
+}
+
 export type { KpiMetrics };

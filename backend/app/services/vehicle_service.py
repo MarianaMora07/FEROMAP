@@ -219,7 +219,7 @@ def update_vehicle(db: Session, code: str, payload: VehicleUpdate) -> dict[str, 
         next_status = data["status"]
         if next_status not in ALLOWED_VEHICLE_STATUSES:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=f"Estado de vehículo inválido: {next_status}",
             )
         vehicle.status = next_status
@@ -240,7 +240,7 @@ def update_vehicle(db: Session, code: str, payload: VehicleUpdate) -> dict[str, 
         else:
             if assigned < 1 or assigned > ideal:
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail=f"assignedOperatorsCount debe estar entre 1 y {ideal} (dotación ideal del vehículo).",
                 )
             vehicle.assigned_operators_count = assigned

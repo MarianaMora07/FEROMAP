@@ -188,7 +188,7 @@ def _serialize_activity(activity: AlertActivity) -> dict[str, Any]:
 
 def update_alert_status(db: Session, alert_id: str, lifecycle_status: str) -> dict[str, Any]:
     if lifecycle_status not in {"open", "acknowledged", "resolved"}:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Estado inválido")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Estado inválido")
 
     alert = db.get(SystemAlert, alert_id)
     if alert is None:

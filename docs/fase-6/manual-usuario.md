@@ -77,10 +77,28 @@
 
 1. Menú → **Planificación operativa**.
 2. Lea el banner: para evaluar escenarios, use Simulación.
-3. Configure **fecha de operación** (informativa), **condición operativa del día** y **restricciones**.
-4. Pulse **Generar ruta operativa**.
-5. Revise rutas por vehículo y pulse **Despachar rutas**.
-6. El **Historial operativo** solo lista corridas iniciadas desde esta pantalla.
+3. Configure **fecha de operación** (persistida en el servidor).
+4. Revise el panel **Plan del día**: puntos programados + pendientes de días anteriores.
+5. Pulse **Generar ruta operativa** (optimización sin despacho automático).
+6. Pulse **Despachar rutas** en un paso separado.
+7. Al finalizar la jornada, use **Cerrar día** para generar pendientes del día siguiente.
+8. El **Historial operativo** solo lista corridas iniciadas desde esta pantalla.
+
+### 4.1 Plan semanal (nivel directivo)
+
+1. Menú → **Simulación de escenarios** → pestaña **Plan semanal** (`/simulation?view=weekly`).
+2. Asigne puntos por día de la semana (lun–vie).
+3. **Validar con simulación** (sin despacho).
+4. **Aprobar plan** para habilitar la planificación diaria.
+
+### 4.2 Frecuencias por punto
+
+En **Puntos de Recolección**, seleccione un punto y configure **Frecuencia semanal** (visitas/semana y días lun–dom). Estas frecuencias alimentan el botón **Autocompletar desde frecuencias** en el plan semanal.
+
+### 4.3 Versiones y reportes
+
+- En **Plan semanal**: **Ver versiones**, comparar cambios y **Exportar PDF**.
+- En **Planificación operativa**: **Exportar PDF del día** y panel de **Gestión de pendientes** con filtros.
 
 ---
 

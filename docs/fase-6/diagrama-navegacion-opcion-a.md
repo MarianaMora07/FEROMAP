@@ -19,8 +19,10 @@ flowchart TB
         SIM["/simulation"]
         SIM_FLOW["Flujo: Configuración → Ejecución → Resultados"]
         SIM_HIST["/simulation?view=history<br/>Historial de tesis"]
+        SIM_WEEK["/simulation?view=weekly<br/>Plan semanal (directivo)"]
         SIM --> SIM_FLOW
         SIM --> SIM_HIST
+        SIM --> SIM_WEEK
     end
 
     subgraph evidencia [Seguimiento post-simulación]
@@ -74,6 +76,8 @@ flowchart TB
 |-----|--------|
 | `/simulation?simulationId={id}` | Abre resultados de una simulación |
 | `/simulation?view=history` | Pestaña Historial (tesis) |
+| `/simulation?view=weekly` | Pestaña Plan semanal (directivo) |
+| `/optimization?date=YYYY-MM-DD` | Plan del día administrativo |
 | `/analytics?simulationId={id}` | Analítica con banner de contexto |
 | `/reports?simulationId={id}` | Reportes con banner de contexto |
 

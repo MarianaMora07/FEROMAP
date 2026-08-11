@@ -34,10 +34,19 @@ export interface OptimizeJobResult {
 
 export function startSimulationOptimizeJob(
   scenarioId: ScenarioId,
-  parameters?: SimulationRunParameters,
+  parameters?: SimulationRunParameters & {
+    planningLevel?: string;
+    autoDispatch?: boolean;
+    collectionPointIds?: number[];
+    dailyPlanId?: number;
+    weeklyPlanId?: number;
+    operationDate?: string;
+  },
 ): Promise<{ jobId: string }> {
   return apiPost<{ jobId: string }>('/api/v1/simulations/optimize', {
     scenarioId,
+    planningLevel: parameters?.planningLevel ?? 'simulation',
+    autoDispatch: parameters?.autoDispatch ?? false,
     ...parameters,
   });
 }

@@ -41,6 +41,7 @@ import type { AnalyticsGranularity, AnalyticsHeatmapGeoJson } from '../../core/t
 import { defaultDateRange } from '../../core/utils/analyticsFilters';
 import { parseSimulationIdParam } from '../../core/utils/simulationLinks';
 import { SimulationContextBanner } from '../simulation/SimulationContextBanner';
+import { PlanningAnalyticsSection } from './PlanningAnalyticsSection';
 import {
   analyticsEfficiencyIndicators as mockEfficiency,
   analyticsInsights as mockInsights,
@@ -374,6 +375,8 @@ export default function AnalyticsPage() {
           )}
         </For>
       </div>
+
+      <PlanningAnalyticsSection weekFrom={dateFrom()} weekTo={dateTo()} />
 
       <div class="grid gap-4 xl:grid-cols-5">
         <Card class="xl:col-span-3">

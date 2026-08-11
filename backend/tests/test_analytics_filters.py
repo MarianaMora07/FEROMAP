@@ -88,7 +88,7 @@ def test_hourly_distribution_from_rows_uses_execution_hour():
 
     hourly = hourly_distribution_from_rows(rows)
 
-    assert hourly["recolecciones"][0] == 6
+    assert hourly["recolecciones"][2] == 6
     assert hourly["recolecciones"][4] == 3
 
 

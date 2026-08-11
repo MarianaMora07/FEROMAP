@@ -41,7 +41,18 @@ def _uploads_dir() -> Path:
 def ensure_user_preferences(db: Session, user: User) -> UserPreferences:
     if user.preferences is not None:
         return user.preferences
-    prefs = UserPreferences(user_id=user.id)
+    prefs = UserPreferences(
+        user_id=user.id,
+        theme="light",
+        language="es",
+        units="metric",
+        default_view="dashboard",
+        report_frequency="daily",
+        page_size=20,
+        email_notifications=True,
+        system_notifications=True,
+        timezone="America/Caracas",
+    )
     db.add(prefs)
     db.flush()
     user.preferences = prefs

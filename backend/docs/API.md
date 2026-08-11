@@ -803,6 +803,55 @@ Registro de auditoría de acciones administrativas.
 
 ---
 
+## Planificación operativa — `/api/v1/planning`
+
+### Semanal
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/weekly` | Listar planes semanales |
+| GET | `/weekly/current` | Plan aprobado de la semana ISO actual |
+| POST | `/weekly` | Crear borrador (`weekStartDate` = lunes) |
+| PATCH | `/weekly/{id}` | Actualizar días/escenario |
+| POST | `/weekly/{id}/validate` | Job de simulación (`auto_dispatch=false`) |
+| POST | `/weekly/{id}/approve` | Aprobar plan semanal |
+
+### Diario
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/daily/{operation_date}` | Obtener o crear plan del día |
+| POST | `/daily/{operation_date}/open` | Consolidar programados + `pending_visits` |
+| POST | `/daily/{id}/optimize` | Optimizar puntos del día (`auto_dispatch=false`) |
+| POST | `/daily/{id}/dispatch` | Despachar rutas del plan |
+| POST | `/daily/{id}/close` | Cierre → genera `pending_visits` |
+
+### Pendientes
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/pending` | Listar visitas pendientes abiertas |
+| POST | `/weekly/{id}/autofill-from-schedules` | Generar días desde `visit_schedules` |
+| GET | `/weekly/{id}/versions` | Historial de versiones |
+| GET | `/weekly/{id}/versions/compare?versionA=&versionB=` | Diff entre versiones |
+| GET | `/weekly/{id}/export.pdf` | PDF del plan semanal |
+| GET | `/operational-history` | Historial administrativo (API, sin localStorage) |
+| GET | `/daily/{id}/export.pdf` | PDF órdenes del día |
+| POST | `/pending/{id}/cancel` | Cancelar pendiente |
+
+`GET /planning/pending` acepta `status`, `targetDate`, `originFrom`, `originTo`.
+
+### Frecuencias por punto
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/collection-points/{code}/visit-schedule` | Frecuencia semanal del punto |
+| PATCH | `/collection-points/{code}/visit-schedule` | Crear/actualizar frecuencia (días lun–dom) |
+
+`POST /simulations/optimize` acepta además: `planningLevel`, `operationDate`, `collectionPointIds`, `dailyPlanId`, `weeklyPlanId`, `autoDispatch` (default `false` para simulación).
+
+---
+
 ## Contingencias — `/api/v1/contingencies`
 
 ### `POST /contingencies/vehicle-breakdown`

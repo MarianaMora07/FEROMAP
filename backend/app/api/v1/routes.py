@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 
 from app.api.deps import DbSession, OperationsStaff, PlannerOrAdmin
+from app.schemas.planning import DailyDispatchRequest
 from app.services.geo_service import route_geojson
 from app.services.operations_service import (
     advance_active_routes,
@@ -22,8 +23,16 @@ def get_optimized_route(db: DbSession):
 
 
 @router.post("/dispatch")
-def post_dispatch_routes(db: DbSession, _: PlannerOrAdmin):
-    result = dispatch_optimized_routes(db)
+def post_dispatch_routes(
+    db: DbSession,
+    _: PlannerOrAdmin,
+    body: DailyDispatchRequest | None = None,
+):
+    result = dispatch_optimized_routes(db, daily_plan_id=body.daily_plan_id if body else None)
+    if body and body.daily_plan_id is not None:
+        from app.services.planning_service import mark_daily_plan_dispatched
+
+        mark_daily_plan_dispatched(db, body.daily_plan_id)
     db.commit()
     return result
 
