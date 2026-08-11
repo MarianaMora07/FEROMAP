@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
-import { A } from '@solidjs/router';
+import { A, useSearchParams } from '@solidjs/router';
 import maplibregl, { type Map as MapLibreMap, type Marker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import {
@@ -41,11 +41,16 @@ import {
   syncFleetMarkers,
 } from '../../core/map/operationalMapLayers';
 import { appState } from '../../core/stores/appStore';
-import { canAdvanceFleet } from '../../core/auth/permissions';
+import { canSimulateFleetAdvance, isOperationalSupervisor } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
+import { optimizationHref } from '../../core/planning/operationalLinks';
 import { BreakdownReporter, ContingencyResultBanner } from '../contingency/BreakdownReporter';
 import { CriticalContainerRecalc } from './CriticalContainerRecalc';
 import { RecentIncidentsPanel } from '../contingency/RecentIncidentsPanel';
+import { PlanningLevelBanner } from '../planning/PlanningLevelBanner';
+import { PlanningStatusBadge } from '../planning/PlanningStatusBadge';
+import { PlanningEmptyState } from '../planning/PlanningEmptyState';
+import { PLANNING_EMPTY_PRESETS } from '../../core/planning/planningEmptyStates';
 import { bindMapTheme, mapStyleForTheme } from '../../core/utils/mapStyle';
 import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
 import {
@@ -132,13 +137,27 @@ function statusForBadge(status: FleetLiveStatus) {
 }
 
 export default function MonitoringPage() {
+  const [searchParams] = useSearchParams();
   let mapContainer!: HTMLDivElement;
   const mapRef: { current?: MapLibreMap } = {};
   const markersById = new Map<string, Marker>();
   const binMarkers: Marker[] = [];
 
+  const operationDate = () => {
+    const date = Array.isArray(searchParams.date) ? searchParams.date[0] : searchParams.date;
+    return date || new Date().toISOString().slice(0, 10);
+  };
+  const dailyPlanIdParam = () => {
+    const raw = Array.isArray(searchParams.dailyPlanId)
+      ? searchParams.dailyPlanId[0]
+      : searchParams.dailyPlanId;
+    if (!raw) return undefined;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+
   const [monitoringData, { refetch }] = createResource(fetchMonitoringStatus);
-  const [dailyPlan] = createResource(() => fetchDailyPlan(new Date().toISOString().slice(0, 10)));
+  const [dailyPlan] = createResource(operationDate, (date) => fetchDailyPlan(date));
   const [advancing, setAdvancing] = createSignal(false);
   const monitoringKpis = () => monitoringData()?.kpis ?? [];
   const liveFleet = () => monitoringData()?.liveFleet ?? [];
@@ -286,14 +305,45 @@ export default function MonitoringPage() {
 
   return (
     <div class="space-y-5">
+      <PlanningLevelBanner
+        level="operativo"
+        title={isOperationalSupervisor(authUser()?.role) ? 'Supervisión operativa' : 'Monitoreo en tiempo real'}
+      >
+        <Show when={isOperationalSupervisor(authUser()?.role)}>
+          <p class="text-sm text-text-secondary">
+            Modo supervisión — revisa flota e incidencias sin operar como conductor.{' '}
+            <A
+              href={optimizationHref({
+                date: operationDate(),
+                dailyPlanId: dailyPlan()?.id ?? dailyPlanIdParam(),
+              })}
+              class="font-semibold text-fero-blue hover:underline"
+            >
+              Volver al plan del día
+            </A>
+          </p>
+        </Show>
+      </PlanningLevelBanner>
       <ContingencyResultBanner />
 
       <Show when={dailyPlan()}>
         {(plan) => (
           <div class="rounded-xl border border-fero-blue/30 bg-fero-blue/5 px-4 py-3">
-            <p class="text-sm font-semibold text-fero-blue">
-              Plan del día {plan().operationDate} — {plan().status}
-            </p>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="text-sm font-semibold text-fero-blue">Plan del día {plan().operationDate}</p>
+                <PlanningStatusBadge status={plan().status} />
+              </div>
+              <A
+                href={optimizationHref({
+                  date: plan().operationDate,
+                  dailyPlanId: plan().id ?? dailyPlanIdParam(),
+                })}
+                class="text-xs font-semibold text-fero-blue hover:underline"
+              >
+                Abrir en optimización
+              </A>
+            </div>
             <p class="mt-1 text-sm text-text-secondary">
               {plan().finalPointIds.length} puntos en plan · {plan().pendingPoints.length} pendientes incorporados
             </p>
@@ -304,6 +354,9 @@ export default function MonitoringPage() {
       <div class="flex flex-wrap items-center justify-between gap-3">
         <p class="text-sm text-text-secondary">
           Datos en vivo desde la API · {monitoringData()?.fleetCounts.inRoute ?? 0} vehículos en ruta
+          <Show when={operationDate() !== new Date().toISOString().slice(0, 10)}>
+            <span class="ml-1 text-text-muted">· Contexto: {operationDate()}</span>
+          </Show>
         </p>
         <div class="flex flex-wrap items-center gap-2">
           <BreakdownReporter
@@ -317,19 +370,30 @@ export default function MonitoringPage() {
           <CriticalContainerRecalc
             compact
             containers={monitoringData()?.containers}
-            dailyPlanId={dailyPlan()?.id}
+            dailyPlanId={dailyPlan()?.id ?? dailyPlanIdParam()}
             onComplete={() => void refetch()}
           />
-          <Button
-          variant="primary"
-          size="sm"
-          class="gap-2"
-          icon={<FastForward size={16} />}
-          disabled={advancing() || !monitoringData()?.fleetCounts.inRoute || !canAdvanceFleet(authUser()?.role)}
-          onClick={() => void handleAdvance()}
-        >
-          {advancing() ? 'Avanzando…' : 'Simular avance de flota'}
-        </Button>
+          <Show
+            when={canSimulateFleetAdvance(authUser()?.role)}
+            fallback={
+              <Show when={isOperationalSupervisor(authUser()?.role)}>
+                <p class="max-w-xs text-xs text-text-muted">
+                  El avance simulado de flota es solo para conductores en campo.
+                </p>
+              </Show>
+            }
+          >
+            <Button
+              variant="primary"
+              size="sm"
+              class="gap-2"
+              icon={<FastForward size={16} />}
+              disabled={advancing() || !monitoringData()?.fleetCounts.inRoute}
+              onClick={() => void handleAdvance()}
+            >
+              {advancing() ? 'Avanzando…' : 'Simular avance de flota'}
+            </Button>
+          </Show>
         </div>
       </div>
 
@@ -438,6 +502,19 @@ export default function MonitoringPage() {
             </A>
           </div>
           <ul class="min-h-0 flex-1 divide-y divide-border overflow-y-auto dark:divide-dark-border">
+            <Show
+              when={filteredFleet().length > 0}
+              fallback={
+                <li>
+                  <PlanningEmptyState
+                    {...(liveFleet().length === 0
+                      ? PLANNING_EMPTY_PRESETS.noVehicles
+                      : PLANNING_EMPTY_PRESETS.noFleetMatch)}
+                    compact
+                  />
+                </li>
+              }
+            >
             <For each={filteredFleet()}>
               {(v) => (
                 <li>
@@ -473,6 +550,7 @@ export default function MonitoringPage() {
                 </li>
               )}
             </For>
+            </Show>
           </ul>
           <div class="border-t border-border px-4 py-2.5 dark:border-dark-border">
             <A href="/vehicles" class="text-sm font-medium text-fero-blue hover:underline">

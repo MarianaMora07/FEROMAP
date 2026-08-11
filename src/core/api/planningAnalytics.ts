@@ -72,6 +72,8 @@ const mockPlanningAnalytics: PlanningAnalyticsSummary = {
       dailyPlans: 5,
       optimizedDays: 4,
       dispatchedDays: 3,
+      closedDays: 4,
+      scheduledDays: 5,
       openPendingVisits: 6,
     },
     operativo: {

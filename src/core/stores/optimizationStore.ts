@@ -20,6 +20,17 @@ import {
   type OptimizationPreset,
   type OptimizeResponse,
 } from '../api/optimization';
+import {
+  fetchCurrentWeeklyPlan,
+  fetchDailyPlansInRange,
+  fetchPendingVisits,
+} from '../api/planning';
+import {
+  mapDailyStatusToCalendar,
+  mondayOfDate,
+  weekDaysFromMonday,
+  type DailyCalendarStatus,
+} from '../planning/dailyPlanningUx';
 import { mergeRouteCollections } from '../api/routes';
 import { fetchSimulationDetail } from '../api/simulationOperations';
 import type { KpiMetrics, ScenarioId } from '../../data/types/simulation';
@@ -31,11 +42,21 @@ import { loadDashboardData } from './dashboardStore';
 import { writeLastOptimizedCodes } from '../utils/collectionPointsOptimization';
 import { recordOperationalRun } from '../utils/operationalHistory';
 
+interface WeekCalendarDay {
+  operationDate: string;
+  status: DailyCalendarStatus;
+  pendingCount: number;
+}
+
 interface OptimizationState {
   context: OptimizationPageContext | null;
   preset: OptimizationPreset;
   dailyPlan: DailyPlan | null;
+  weekCalendar: WeekCalendarDay[];
+  weekStartDate: string;
+  weeklyPlanApproved: boolean;
   isLoadingDailyPlan: boolean;
+  isLoadingCalendar: boolean;
   kpis: KpiMetrics | null;
   lastResult: OptimizeResponse | null;
   lastSimulationId: number | null;
@@ -53,7 +74,11 @@ const [state, setState] = createStore<OptimizationState>({
   context: null,
   preset: loadOptimizationPreset(),
   dailyPlan: null,
+  weekCalendar: [],
+  weekStartDate: mondayOfDate(loadOptimizationPreset().operationDate),
+  weeklyPlanApproved: true,
   isLoadingDailyPlan: false,
+  isLoadingCalendar: false,
   kpis: null,
   lastResult: null,
   lastSimulationId: null,
@@ -69,27 +94,71 @@ const [state, setState] = createStore<OptimizationState>({
 
 let contextLoaded = false;
 
+async function resolveWeeklyPlanApproved(operationDate: string): Promise<boolean> {
+  try {
+    await fetchCurrentWeeklyPlan(operationDate);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function refreshWeekCalendar(weekStart?: string): Promise<void> {
+  const start = weekStart ?? mondayOfDate(state.preset.operationDate);
+  const days = weekDaysFromMonday(start);
+  const end = days[6]!;
+  setState({ isLoadingCalendar: true, weekStartDate: start });
+  try {
+    const [dailyPlans, pending] = await Promise.all([
+      fetchDailyPlansInRange(start, end),
+      fetchPendingVisits({ status: 'open' }).catch(() => ({ items: [] })),
+    ]);
+    const statusByDate = new Map(
+      dailyPlans.items.map((row) => [row.operationDate, mapDailyStatusToCalendar(row.status)]),
+    );
+    const pendingByDate = new Map<string, number>();
+    for (const visit of pending.items) {
+      const target = visit.targetOperationDate ?? state.preset.operationDate;
+      pendingByDate.set(target, (pendingByDate.get(target) ?? 0) + 1);
+    }
+    setState({
+      weekCalendar: days.map((operationDate) => ({
+        operationDate,
+        status: statusByDate.get(operationDate) ?? 'none',
+        pendingCount: pendingByDate.get(operationDate) ?? 0,
+      })),
+    });
+  } finally {
+    setState({ isLoadingCalendar: false });
+  }
+}
+
 export async function initOptimizationPage(operationDate?: string): Promise<void> {
   const dateValue = operationDate ?? state.preset.operationDate;
   if (contextLoaded && state.context && state.dailyPlan?.operationDate === dateValue) return;
   setState({ isLoadingContext: true, isLoadingDailyPlan: true, error: null });
   try {
-    const [context, history, dailyPlan] = await Promise.all([
+    const [context, history, dailyPlan, weeklyPlanApproved] = await Promise.all([
       fetchOptimizationPageContext(),
       fetchOptimizationHistory(),
       openDailyPlanForDate(dateValue).catch(() => loadDailyPlanForDate(dateValue)),
+      resolveWeeklyPlanApproved(dateValue),
     ]);
     setState({
       context,
       history,
       dailyPlan,
+      weeklyPlanApproved,
       preset: {
         ...state.preset,
         operationDate: dateValue,
         scenarioId: dailyPlan.scenarioId ?? state.preset.scenarioId,
       },
+      lastSimulationId: dailyPlan.simulationId ?? state.lastSimulationId,
+      kpis: dailyPlan.simulationId ? state.kpis : null,
     });
     saveOptimizationPreset(state.preset);
+    await refreshWeekCalendar(mondayOfDate(dateValue));
     contextLoaded = true;
   } catch (error) {
     setState({
@@ -100,12 +169,25 @@ export async function initOptimizationPage(operationDate?: string): Promise<void
   }
 }
 
+export function selectOperationDate(operationDate: string): void {
+  if (operationDate === state.preset.operationDate) return;
+  contextLoaded = false;
+  setState({
+    lastResult: null,
+    lastDispatch: null,
+    kpis: null,
+    logs: [],
+  });
+  updateOptimizationPreset({ operationDate });
+}
+
 export async function refreshDailyPlan(): Promise<void> {
   const dateValue = state.preset.operationDate;
   setState({ isLoadingDailyPlan: true, error: null });
   try {
     const dailyPlan = await openDailyPlanForDate(dateValue);
     setState({ dailyPlan });
+    await refreshWeekCalendar();
   } catch (error) {
     setState({
       error: error instanceof Error ? error.message : 'No se pudo actualizar el plan del día',
@@ -231,6 +313,7 @@ export async function executeOptimization(): Promise<void> {
       recordOperationalRun(state.lastSimulationId);
     }
     await refreshOptimizationHistory();
+    await refreshWeekCalendar();
   } catch (error) {
     setState({
       error: error instanceof Error ? error.message : 'No se pudo ejecutar la optimización',
@@ -308,6 +391,7 @@ export async function dispatchOptimizationResult(): Promise<void> {
     if (!useMocks) {
       await loadDashboardData();
     }
+    await refreshWeekCalendar();
   } finally {
     setState({ isDispatching: false });
   }
@@ -341,6 +425,7 @@ export async function closeOptimizationDay(): Promise<void> {
       },
     ],
   });
+  await refreshWeekCalendar();
 }
 
 export { state as optimizationState };

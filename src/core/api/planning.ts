@@ -82,6 +82,22 @@ function mondayIso(value = new Date()): string {
   return date.toISOString().slice(0, 10);
 }
 
+export { mondayIso };
+
+export function addWeeksToMonday(weekStartIso: string, weeks: number): string {
+  const date = new Date(weekStartIso);
+  date.setDate(date.getDate() + weeks * 7);
+  return date.toISOString().slice(0, 10);
+}
+
+export function isPastWeek(weekStartDate: string, reference = new Date()): boolean {
+  return weekStartDate < mondayIso(reference);
+}
+
+export function isCurrentWeek(weekStartDate: string, reference = new Date()): boolean {
+  return weekStartDate === mondayIso(reference);
+}
+
 function mockWeeklyPlan(): WeeklyPlan {
   const start = mondayIso();
   const days: WeeklyPlanDay[] = [];
@@ -134,13 +150,87 @@ function mockDailyPlan(operationDate: string): DailyPlan {
 }
 
 export function fetchWeeklyPlans(): Promise<{ items: WeeklyPlan[]; count: number }> {
-  if (useMocks) return Promise.resolve({ items: [mockWeeklyPlan()], count: 1 });
+  if (useMocks) {
+    const current = mondayIso();
+    const prev = addWeeksToMonday(current, -1);
+    const next = addWeeksToMonday(current, 1);
+    const nextEnd = new Date(next);
+    nextEnd.setDate(nextEnd.getDate() + 4);
+    return Promise.resolve({
+      items: [
+        {
+          ...mockWeeklyPlan(),
+          id: 3,
+          weekStartDate: next,
+          weekEndDate: nextEnd.toISOString().slice(0, 10),
+          status: 'draft',
+          days: [],
+        },
+        { ...mockWeeklyPlan(), id: 1, weekStartDate: current, status: 'approved' },
+        {
+          ...mockWeeklyPlan(),
+          id: 2,
+          weekStartDate: prev,
+          status: 'approved',
+        },
+      ],
+      count: 3,
+    });
+  }
   return apiGet('/api/v1/planning/weekly');
 }
 
-export function fetchCurrentWeeklyPlan(): Promise<WeeklyPlan> {
+export function fetchWeeklyPlanById(planId: number): Promise<WeeklyPlan> {
+  if (useMocks) return Promise.resolve({ ...mockWeeklyPlan(), id: planId });
+  return apiGet(`/api/v1/planning/weekly/${planId}`);
+}
+
+export function archiveWeeklyPlan(planId: number): Promise<WeeklyPlan> {
+  if (useMocks) return Promise.resolve({ ...mockWeeklyPlan(), id: planId, status: 'archived' });
+  return apiPost(`/api/v1/planning/weekly/${planId}/archive`, {});
+}
+
+export function fetchCurrentWeeklyPlan(referenceDate?: string): Promise<WeeklyPlan> {
   if (useMocks) return Promise.resolve(mockWeeklyPlan());
-  return apiGet('/api/v1/planning/weekly/current');
+  const query = referenceDate ? `?reference=${referenceDate}` : '';
+  return apiGet(`/api/v1/planning/weekly/current${query}`);
+}
+
+export interface DailyPlanSummary {
+  id: number;
+  operationDate: string;
+  status: string;
+  scenarioId: ScenarioId;
+  simulationId?: number | null;
+}
+
+export function fetchDailyPlansInRange(
+  fromDate: string,
+  toDate: string,
+): Promise<{ items: DailyPlanSummary[] }> {
+  if (useMocks) {
+    const items: DailyPlanSummary[] = [];
+    const start = new Date(fromDate);
+    const end = new Date(toDate);
+    const statuses = ['draft', 'optimized', 'dispatched', 'completed', 'draft', 'none', 'none'] as const;
+    let index = 0;
+    for (let cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
+      const operationDate = cursor.toISOString().slice(0, 10);
+      const status = statuses[index % statuses.length];
+      if (status !== 'none') {
+        items.push({
+          id: index + 1,
+          operationDate,
+          status,
+          scenarioId: 'normal',
+          simulationId: status === 'draft' ? null : 1,
+        });
+      }
+      index += 1;
+    }
+    return Promise.resolve({ items });
+  }
+  return apiGet(`/api/v1/planning/daily?from=${fromDate}&to=${toDate}`);
 }
 
 export function createWeeklyPlan(payload: {
@@ -297,5 +387,3 @@ export function cancelPendingVisit(pendingId: number, reason?: string): Promise<
   }
   return apiPost(`/api/v1/planning/pending/${pendingId}/cancel`, { reason });
 }
-
-export { mondayIso };

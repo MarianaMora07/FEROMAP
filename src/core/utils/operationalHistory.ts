@@ -5,6 +5,8 @@ export interface OperationalHistoryRow extends SimulationHistoryRow {
   dailyPlanId?: number;
   operationDate?: string;
   status?: string;
+  pointCount?: number;
+  distanceKm?: number;
 }
 
 /** Historial administrativo desde API (planificación diaria con simulation_id). */

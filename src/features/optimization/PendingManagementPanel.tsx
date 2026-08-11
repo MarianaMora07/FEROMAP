@@ -1,5 +1,6 @@
-import { For, Show, createSignal } from 'solid-js';
-import { Badge, Button, Card, CardHeader, TextField } from '../../design-system/components';
+import { For, Show, createEffect, createSignal } from 'solid-js';
+import { Button, Card, CardHeader, TextField } from '../../design-system/components';
+import { PlanningStatusBadge } from '../planning/PlanningStatusBadge';
 import {
   cancelPendingVisit,
   fetchPendingVisits,
@@ -36,7 +37,10 @@ export function PendingManagementPanel(props: PendingManagementPanelProps) {
     }
   };
 
-  void load();
+  createEffect(() => {
+    props.operationDate;
+    void load();
+  });
 
   const handleCancel = async (id: number) => {
     await cancelPendingVisit(id, 'Cancelado desde planificación operativa');
@@ -44,8 +48,11 @@ export function PendingManagementPanel(props: PendingManagementPanelProps) {
   };
 
   return (
-    <Card>
-      <CardHeader title="Gestión de pendientes" subtitle="Filtros por estado y fecha de origen" />
+    <Card id="pendientes">
+      <CardHeader
+        title="Gestión de pendientes"
+        subtitle={`Carry-over y visitas para el ${props.operationDate}`}
+      />
       <div class="grid gap-3 md:grid-cols-4">
         <TextField label="Estado" value={status()} onInput={(e) => setStatus(e.currentTarget.value)} />
         <TextField
@@ -69,6 +76,9 @@ export function PendingManagementPanel(props: PendingManagementPanelProps) {
       <Show when={error()}>
         <p class="mt-2 text-sm text-red-500">{error()}</p>
       </Show>
+      <Show when={items().length === 0 && !loading()}>
+        <p class="mt-4 text-sm text-text-muted">No hay pendientes para esta fecha.</p>
+      </Show>
       <ul class="mt-4 space-y-2">
         <For each={items()}>
           {(visit) => (
@@ -78,9 +88,7 @@ export function PendingManagementPanel(props: PendingManagementPanelProps) {
                 <span class="ml-2 text-text-muted">
                   origen {visit.originOperationDate} · prioridad {visit.priority}
                 </span>
-                <Badge variant="info" class="ml-2">
-                  {visit.status}
-                </Badge>
+                <PlanningStatusBadge status={visit.status} class="ml-2" />
               </div>
               <Show when={visit.status === 'open'}>
                 <Button size="sm" variant="outline" onClick={() => void handleCancel(visit.id)}>
