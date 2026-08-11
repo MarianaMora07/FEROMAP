@@ -24,7 +24,7 @@ No hace falta explicar “dos pantallas parecidas”: los banners y el menú ya 
 | **1:30–2:00** | Paso 1 → **Continuar** | Revisar resumen lateral (vehículos, puntos) | «Antes de calcular, valida que hay camiones y contenedores suficientes.» |
 | **2:00–4:00** | Paso 2 | **Ejecutar simulación** | **Señalar el wizard:** aparece «Ejecutando — fase X de 8». **Stepper izquierdo:** 8 etapas en español claro. **Panel central:** «Qué está haciendo ahora» + barra de progreso real. **Mapa:** animación según la fase (red de calles → exploración → ruta final). |
 | **4:00–4:30** | Paso 2 (opcional) | Pulsar **Cancelar ejecución** o **Esc** | «El usuario puede interrumpir; el sistema confirma y no guarda un resultado a medias.» (solo si quieres demostrar cancelación; luego re-ejecutar). |
-| **4:30–5:30** | Paso 3 | KPIs comparativos, ahorro estimado, mapa | «Aquí está el ahorro: distancia, tiempo, combustible y CO₂ evitado frente a la ruta actual.» |
+| **4:30–5:30** | Paso 3 | KPIs comparativos, **desglose Viaje · Paradas · Total**, mapa | «El algoritmo minimiza **kilómetros**; la **duración** suma viaje más tiempo en paradas según la dotación. Aquí veo el desglose: viaje, paradas con dotación 6/6, y total.» |
 | **5:30–6:15** | Paso 3 acciones | **Ver en analítica** (deep link con `simulationId`) | «Desde el resultado sigo el análisis sin perder el contexto de esta corrida.» |
 | **6:15–6:45** | `/simulation?view=history` | Pestaña Historial — una corrida anterior | «Historial de escenarios de tesis; no es el despacho operativo del día.» |
 | **6:45–7:15** | `/optimization` (opcional) | Banner + **Generar ruta operativa** | «Aquí es operación diaria; la evaluación de escenarios está en Simulación.» |
@@ -57,6 +57,36 @@ Usa esta secuencia al narrar mientras corre la ejecución:
 
 ---
 
+## Demo dotación y ausentismo (Fase 8 — ~2 min, muy valorada en defensa)
+
+**Mensaje clave:** misma ruta optimizada en **kilómetros**, distinta **duración** si faltan operarios de campo.
+
+### Secuencia
+
+1. **Corrida A — turno completo** (paso 1: ausentismo **desactivado**).
+   - Ejecutar y llegar al paso 3.
+   - Señalar el desglose: **Viaje · Paradas (6/6) · Total**.
+   - Decir: «Con cuadrilla completa, cada parada toma 5 minutos de servicio (300 s).»
+
+2. **Corrida B — mismo escenario + ausentismo** (paso 1: activar **Ausentismo del turno**, p. ej. **2 operarios de campo ausentes**).
+   - Re-ejecutar **sin cambiar** condiciones de tráfico ni lluvia.
+   - En paso 3, comparar:
+     - **Distancia optimizada:** debe ser **igual o muy similar** (misma secuencia ACO).
+     - **Paradas (4/6):** sube el tiempo en paradas; **Total** aumenta.
+   - Decir: «El conductor siempre está en el camión; el ausentismo resta solo a los 5 operarios de campo. Con 2 ausentes, cada punto pasa de 5 min a **6 min** (360 s).»
+
+3. **Cierre narrativo (posible segundo día):**
+   > «La ruta sigue siendo la más corta en la red vial, pero la jornada ya no cierra: si el total supera las 8 h de referencia, el sistema avisa que haría falta **otro día de trabajo** — aunque los kilómetros no cambien.»
+
+### Frases listas
+
+- «El ACO minimiza **distancia**; los KPIs de **tiempo** incluyen el vaciado en cada contenedor.»
+- «Menos operarios no empeora la ruta en el mapa; empeora la **factibilidad operativa del turno**.»
+
+Documentación técnica: [docs/fase-8/adr-dotacion-tiempo-servicio.md](../fase-8/adr-dotacion-tiempo-servicio.md).
+
+---
+
 ## Plan B (si el motor tarda)
 
 - Tener una simulación previa en historial → abrir con `?simulationId=…`
@@ -77,7 +107,7 @@ Usa esta secuencia al narrar mientras corre la ejecución:
 - [ ] Login planificador OK
 - [ ] Pestaña del navegador en `/simulation`
 - [ ] Sin ventanas de error en consola
-- [ ] Probar una corrida completa y ver «Ejecutando — fase X de 8» en el wizard
+- [ ] Probar una corrida con **ausentismo del turno** y ver desglose «Paradas (4/6)» en paso 3
 - [ ] (Opcional) Probar Esc → confirmar cancelación
 - [ ] (Opcional) Una corrida previa en historial por si falla la red
 - [ ] `npm test` (unit) en verde

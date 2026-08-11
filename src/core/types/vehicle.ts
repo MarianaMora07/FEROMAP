@@ -15,6 +15,9 @@ export interface Vehicle {
   capacityPct: number | null;
   capacityM3: number;
   maxCapacityKg?: number;
+  idealOperatorsCount?: number;
+  assignedOperatorsCount?: number | null;
+  effectiveAssignedOperatorsCount?: number;
   model: string;
   year: number;
   mileageKm: number;

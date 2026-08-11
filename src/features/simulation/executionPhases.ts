@@ -135,7 +135,7 @@ export const EXECUTION_PHASES: readonly ExecutionPhaseDefinition[] = [
     progressWeight: 15,
     simulatedDurationMs: 1200,
     mapAnimation: 'two_opt_refine',
-    logMatchers: ['2-opt', 'refin', 'convergente', 'optimizada:'],
+    logMatchers: ['2-opt', 'refin', 'convergente', 'optimizada:', 'tiempo en paradas'],
   },
   {
     id: 'persistencia',

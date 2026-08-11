@@ -16,8 +16,17 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import CollectionPoint, OptimizedRoute, RouteWaypoint, Simulation, Vehicle
+from app.domain.crew_service_time import (
+    BASE_SERVICE_SECONDS,
+    DEFAULT_IDEAL_OPERATORS,
+    normalize_operators_shortage,
+    resolve_effective_assigned,
+    route_service_seconds,
+    service_time_seconds_per_stop,
+)
 from app.services.scenario_parameters import (
     apply_simulation_parameter_modifiers,
+    build_applied_crew_modifiers,
     normalize_duration_hours,
     normalize_rain_intensity,
     normalize_waste_level_pct,
@@ -34,7 +43,12 @@ from app.services.geo_service import fill_level_pct
 from app.services.operations_service import dispatch_optimized_routes
 from app.services.scenario_utils import normalize_scenario_id
 from app.services.seed_loader import load_seed
-from app.services.vehicle_service import ASSIGNABLE_STATUSES, get_active_routes_by_vehicle_id, resolve_vehicle_driver_id
+from app.services.vehicle_service import (
+    ASSIGNABLE_STATUSES,
+    get_active_routes_by_vehicle_id,
+    resolve_vehicle_assigned_operators,
+    resolve_vehicle_driver_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +90,8 @@ class VehicleUnit:
     driver_id: int
     capacity_kg: float
     fuel_rate: float
+    ideal_operators: int
+    assigned_operators: int
 
 
 @dataclass
@@ -128,6 +144,105 @@ def _route_cost(
         d += dist_matrix[i][j]
         t += time_matrix[i][j]
     return d, t
+
+
+def compute_service_time_sec(
+    vehicle: VehicleUnit,
+    operators_shortage: int | None = None,
+) -> int:
+    """Segundos de servicio por parada según dotación efectiva del vehículo."""
+    assigned_effective = resolve_effective_assigned(
+        vehicle.assigned_operators,
+        ideal=vehicle.ideal_operators,
+        operators_shortage=operators_shortage,
+    )
+    return service_time_seconds_per_stop(assigned_effective, ideal=vehicle.ideal_operators)
+
+
+def _route_stop_count(route: list[int]) -> int:
+    return sum(1 for idx in route if idx > 0)
+
+
+def _route_operational_duration(
+    route: list[int],
+    dist_matrix: list[list[float]],
+    time_matrix: list[list[float]],
+    vehicle: VehicleUnit,
+    operators_shortage: int | None = None,
+) -> tuple[float, float, int]:
+    """Distancia (m), viaje (s) y duración operativa total (viaje + servicio en paradas)."""
+    distance_m, travel_s = _route_cost(route, dist_matrix, time_matrix)
+    stops = _route_stop_count(route)
+    service_s = route_service_seconds(
+        stops,
+        resolve_effective_assigned(
+            vehicle.assigned_operators,
+            ideal=vehicle.ideal_operators,
+            operators_shortage=operators_shortage,
+        ),
+        ideal=vehicle.ideal_operators,
+    )
+    return distance_m, travel_s, int(round(travel_s)) + service_s
+
+
+def _fleet_crew_summary(assignments: list[tuple[int, int]]) -> tuple[str, str]:
+    if not assignments:
+        ideal = DEFAULT_IDEAL_OPERATORS
+        return f"{ideal}/{ideal}", f"{ideal}/{ideal} (conductor + {ideal - 1} operarios)"
+    ideals = {ideal for _, ideal in assignments}
+    ideal = ideals.pop() if len(ideals) == 1 else DEFAULT_IDEAL_OPERATORS
+    assigned_values = [assigned for assigned, _ in assignments]
+    lo, hi = min(assigned_values), max(assigned_values)
+    if lo == hi:
+        field = max(0, lo - 1)
+        return f"{lo}/{ideal}", f"{lo}/{ideal} (conductor + {field} operarios)"
+    return f"{lo}–{hi}/{ideal}", f"{lo}–{hi}/{ideal} (dotación variable por ruta)"
+
+
+def _solution_operational_metrics(
+    solution: RouteSolution,
+    dist_matrix: list[list[float]],
+    time_matrix: list[list[float]],
+    vehicles: list[VehicleUnit],
+    operators_shortage: int | None = None,
+) -> dict[str, Any]:
+    travel_s = 0.0
+    service_s = 0
+    stop_count = 0
+    crew_assignments: list[tuple[int, int]] = []
+
+    for v_idx, route in enumerate(solution.vehicle_routes):
+        if len(route) <= 2:
+            continue
+        vehicle = vehicles[min(v_idx, len(vehicles) - 1)]
+        _, route_travel, route_total = _route_operational_duration(
+            route,
+            dist_matrix,
+            time_matrix,
+            vehicle,
+            operators_shortage,
+        )
+        stops = _route_stop_count(route)
+        route_service = route_total - int(round(route_travel))
+        travel_s += route_travel
+        service_s += route_service
+        stop_count += stops
+        assigned_effective = resolve_effective_assigned(
+            vehicle.assigned_operators,
+            ideal=vehicle.ideal_operators,
+            operators_shortage=operators_shortage,
+        )
+        crew_assignments.append((assigned_effective, vehicle.ideal_operators))
+
+    crew_assignment, crew_label = _fleet_crew_summary(crew_assignments)
+    return {
+        "travel_s": travel_s,
+        "service_s": service_s,
+        "total_s": int(round(travel_s)) + service_s,
+        "stop_count": stop_count,
+        "crew_assignment": crew_assignment,
+        "crew_label": crew_label,
+    }
 
 
 def _evaluate_solution(
@@ -351,13 +466,26 @@ def _routes_to_geojson(
     *,
     kind: str,
     label: str,
+    vehicles: list[VehicleUnit] | None = None,
+    operators_shortage: int | None = None,
 ) -> dict[str, Any]:
     features = []
     for v_idx, route_indices in enumerate(solution.vehicle_routes):
         if len(route_indices) < 2:
             continue
         coords = _route_geometry(graph, customers, route_indices)
-        d, t = _route_cost(route_indices, dist_matrix, time_matrix)
+        vehicle = vehicles[min(v_idx, len(vehicles) - 1)] if vehicles else None
+        if vehicle is not None:
+            d, _, total_s = _route_operational_duration(
+                route_indices,
+                dist_matrix,
+                time_matrix,
+                vehicle,
+                operators_shortage,
+            )
+        else:
+            d, t = _route_cost(route_indices, dist_matrix, time_matrix)
+            total_s = int(round(t))
 
         features.append(
             _build_geojson_feature(
@@ -366,7 +494,7 @@ def _routes_to_geojson(
                 kind=kind,
                 label=label if v_idx == 0 else f"{label} — vehículo {v_idx + 1}",
                 distance_km=d / 1000,
-                duration_min=int(t / 60),
+                duration_min=int(total_s / 60),
             )
         )
     return {"type": "FeatureCollection", "features": features}
@@ -405,18 +533,49 @@ def _compute_kpis(
     optimized: RouteSolution,
     customers: list[CustomerNode],
     served_codes: set[str],
+    vehicles: list[VehicleUnit],
+    dist_matrix: list[list[float]],
+    time_matrix: list[list[float]],
+    *,
+    operators_shortage: int | None = None,
+    workday_hours: int | None = None,
 ) -> dict[str, Any]:
     cur_km = current.distance_m / 1000
     opt_km = optimized.distance_m / 1000
-    cur_h = current.duration_s / 3600
-    opt_h = optimized.duration_s / 3600
+    cur_metrics = _solution_operational_metrics(
+        current, dist_matrix, time_matrix, vehicles, operators_shortage
+    )
+    opt_metrics = _solution_operational_metrics(
+        optimized, dist_matrix, time_matrix, vehicles, operators_shortage
+    )
+    cur_h = cur_metrics["total_s"] / 3600
+    opt_h = opt_metrics["total_s"] / 3600
+    workday_h = workday_hours or 8
     cur_fuel = cur_km * FUEL_L_PER_KM
     opt_fuel = opt_km * FUEL_L_PER_KM
     co2_avoided = max(0, (cur_fuel - opt_fuel) * CO2_KG_PER_LITER)
 
+    def _breakdown(metrics: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "travelHours": round(metrics["travel_s"] / 3600, 2),
+            "serviceHours": round(metrics["service_s"] / 3600, 2),
+            "crewLabel": metrics["crew_label"],
+            "crewAssignment": metrics["crew_assignment"],
+            "stopCount": metrics["stop_count"],
+        }
+
     return {
         "distanceKm": {"current": round(cur_km, 1), "optimized": round(opt_km, 1)},
         "durationHours": {"current": round(cur_h, 2), "optimized": round(opt_h, 2)},
+        "durationBreakdown": {
+            "current": _breakdown(cur_metrics),
+            "optimized": _breakdown(opt_metrics),
+        },
+        "exceedsWorkday": {
+            "current": cur_h > workday_h,
+            "optimized": opt_h > workday_h,
+        },
+        "workdayHours": workday_h,
         "fuelLiters": {"current": round(cur_fuel, 1), "optimized": round(opt_fuel, 1)},
         "co2KgAvoided": round(co2_avoided, 1),
         "criticalCoveragePct": {
@@ -481,9 +640,40 @@ def build_optimization_vehicle_units(
                 driver_id=driver_id,
                 capacity_kg=float(vehicle.max_capacity_kg),
                 fuel_rate=float(vehicle.fuel_consumption_rate or 1.5),
+                ideal_operators=vehicle.ideal_operators_count or DEFAULT_IDEAL_OPERATORS,
+                assigned_operators=resolve_vehicle_assigned_operators(vehicle),
             )
         )
     return units
+
+
+def _resolve_fleet_crew(
+    vehicles: list[VehicleUnit],
+    operators_shortage: int | None,
+) -> list[VehicleUnit]:
+    """Aplica ausentismo global antes del motor: assigned_efectivo por vehículo."""
+    shortage = normalize_operators_shortage(operators_shortage) or 0
+    if shortage == 0:
+        return vehicles
+
+    resolved: list[VehicleUnit] = []
+    for unit in vehicles:
+        effective = resolve_effective_assigned(
+            unit.assigned_operators,
+            ideal=unit.ideal_operators,
+            operators_shortage=shortage,
+        )
+        resolved.append(
+            VehicleUnit(
+                vehicle_id=unit.vehicle_id,
+                driver_id=unit.driver_id,
+                capacity_kg=unit.capacity_kg,
+                fuel_rate=unit.fuel_rate,
+                ideal_operators=unit.ideal_operators,
+                assigned_operators=effective,
+            )
+        )
+    return resolved
 
 
 def _persist_routes(
@@ -494,6 +684,9 @@ def _persist_routes(
     optimized_solution: RouteSolution,
     customers: list[CustomerNode],
     routes_geojson: dict[str, Any],
+    dist_matrix: list[list[float]],
+    time_matrix: list[list[float]],
+    operators_shortage: int | None = None,
 ) -> None:
     """Guarda rutas y waypoints en BD."""
     for kind, solution in [("current", current_solution), ("optimized", optimized_solution)]:
@@ -501,24 +694,20 @@ def _persist_routes(
             if len(route_indices) <= 2:
                 continue
             vehicle = vehicles[min(v_idx, len(vehicles) - 1)]
-            d, t = 0.0, 0.0
-            for i, j in zip(route_indices[:-1], route_indices[1:]):
-                pass  # computed at solution level
-
-            if kind == "current":
-                d, t = current_solution.distance_m, current_solution.duration_s
-            else:
-                d, t = optimized_solution.distance_m, optimized_solution.duration_s
-            if v_idx > 0:
-                d /= max(len(solution.vehicle_routes), 1)
-                t /= max(len(solution.vehicle_routes), 1)
+            d, _, total_s = _route_operational_duration(
+                route_indices,
+                dist_matrix,
+                time_matrix,
+                vehicle,
+                operators_shortage,
+            )
 
             db_route = OptimizedRoute(
                 vehicle_id=vehicle.vehicle_id,
                 driver_id=vehicle.driver_id,
                 route_kind=kind,
                 total_distance_meters=Decimal(str(round(d, 2))),
-                estimated_duration_seconds=int(t),
+                estimated_duration_seconds=total_s,
                 status="pending" if kind == "optimized" else "completed",
             )
             db.add(db_route)
@@ -548,6 +737,7 @@ def run_optimization_engine(
     rain_intensity: str | None = None,
     waste_level_pct: int | None = None,
     estimated_duration_hours: int | None = None,
+    operators_shortage: int | None = None,
     collection_point_ids: list[int] | None = None,
     exclude_vehicle_ids: list[int] | None = None,
     contingency_meta: dict[str, Any] | None = None,
@@ -582,6 +772,7 @@ def run_optimization_engine(
     rain = normalize_rain_intensity(rain_intensity)
     waste = normalize_waste_level_pct(waste_level_pct)
     duration_h = normalize_duration_hours(estimated_duration_hours)
+    shortage = normalize_operators_shortage(operators_shortage)
     traffic_mult, fill_boost, applied_modifiers = apply_simulation_parameter_modifiers(
         normalized,
         traffic_mult,
@@ -589,12 +780,25 @@ def run_optimization_engine(
         rain_intensity=rain,
         waste_level_pct=waste,
     )
+    applied_crew_modifiers = build_applied_crew_modifiers(shortage)
     simulation_parameters = {
         "rainIntensity": rain,
         "wasteLevelPct": waste,
         "estimatedDurationHours": duration_h,
+        "operatorsShortage": shortage or 0,
         "appliedModifiers": applied_modifiers,
+        "appliedCrewModifiers": applied_crew_modifiers,
     }
+
+    if shortage:
+        report(
+            "preparando",
+            (
+                f"Ausentismo del turno: {shortage} operario(s) de campo ausentes. "
+                "El conductor permanece en cada camión; se aplica antes del cálculo de duración."
+            ),
+            "warning",
+        )
 
     report("grafo_vial", f"Cargando grafo OSMnx — red vial de Unare")
     graph = load_road_graph()
@@ -654,6 +858,9 @@ def run_optimization_engine(
     if not vehicles:
         raise RuntimeError("No hay vehículos con conductor asignado para la optimización")
 
+    vehicles = _resolve_fleet_crew(vehicles, shortage)
+    shortage_for_engine = None
+
     report("matriz_costos", "Construyendo matriz de costos sobre red vial (NetworkX shortest path)")
     depot_node = nearest_node(graph, DEPOT_LON, DEPOT_LAT)
     dist_matrix, time_matrix = _build_distance_matrix(graph, depot_node, customers)
@@ -690,20 +897,69 @@ def run_optimization_engine(
             if idx > 0:
                 served_codes.add(customers[idx - 1].code)
 
-    kpis = _compute_kpis(current_solution, optimized_solution, customers, served_codes)
+    kpis = _compute_kpis(
+        current_solution,
+        optimized_solution,
+        customers,
+        served_codes,
+        vehicles,
+        dist_matrix,
+        time_matrix,
+        operators_shortage=shortage_for_engine,
+        workday_hours=duration_h,
+    )
+
+    opt_breakdown = kpis["durationBreakdown"]["optimized"]
+    service_min = round(opt_breakdown["serviceHours"] * 60)
+    crew_assign = opt_breakdown.get("crewAssignment", "6/6")
+    report(
+        "refinamiento_2opt",
+        f"Tiempo en paradas: {service_min} min (dotación {crew_assign})",
+        "info",
+    )
+    if shortage:
+        per_stop = applied_crew_modifiers.get("serviceSecondsPerStop", BASE_SERVICE_SECONDS)
+        report(
+            "refinamiento_2opt",
+            (
+                f"Tiempo por punto con ausentismo: {per_stop // 60} min {per_stop % 60} s "
+                f"({shortage} operario(s) de campo ausentes en el turno)"
+            ),
+            "info",
+        )
+    if kpis["exceedsWorkday"]["optimized"]:
+        report(
+            "refinamiento_2opt",
+            f"La duración optimizada supera la jornada de referencia ({duration_h or 8} h)",
+            "warning",
+        )
 
     current_geo = _merge_route_features(
         _routes_to_geojson(
-            graph, current_solution, customers, dist_matrix, time_matrix,
-            kind="current", label="Ruta actual (estática)",
+            graph,
+            current_solution,
+            customers,
+            dist_matrix,
+            time_matrix,
+            kind="current",
+            label="Ruta actual (estática)",
+            vehicles=vehicles,
+            operators_shortage=shortage_for_engine,
         )["features"],
         "current",
         "Ruta actual (estática)",
     )
     optimized_geo = _merge_route_features(
         _routes_to_geojson(
-            graph, optimized_solution, customers, dist_matrix, time_matrix,
-            kind="optimized", label="Ruta optimizada (IA)",
+            graph,
+            optimized_solution,
+            customers,
+            dist_matrix,
+            time_matrix,
+            kind="optimized",
+            label="Ruta optimizada (IA)",
+            vehicles=vehicles,
+            operators_shortage=shortage_for_engine,
         )["features"],
         "optimized",
         "Ruta optimizada (IA)",
@@ -751,6 +1007,9 @@ def run_optimization_engine(
         optimized_solution,
         customers,
         routes_payload,
+        dist_matrix,
+        time_matrix,
+        operators_shortage=shortage_for_engine,
     )
     dispatch = {"dispatchedRouteIds": [], "count": 0}
     if auto_dispatch:

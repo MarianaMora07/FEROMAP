@@ -8,9 +8,23 @@ export interface Scenario {
   fillLevelBoost: number;
 }
 
+export interface DurationBreakdown {
+  travelHours: number;
+  serviceHours: number;
+  crewLabel: string;
+  crewAssignment?: string;
+  stopCount?: number;
+}
+
 export interface KpiMetrics {
   distanceKm: { current: number; optimized: number };
   durationHours: { current: number; optimized: number };
+  durationBreakdown?: {
+    current: DurationBreakdown;
+    optimized: DurationBreakdown;
+  };
+  exceedsWorkday?: { current: boolean; optimized: boolean };
+  workdayHours?: number;
   fuelLiters: { current: number; optimized: number };
   co2KgAvoided: number;
   criticalCoveragePct: { current: number; optimized: number };

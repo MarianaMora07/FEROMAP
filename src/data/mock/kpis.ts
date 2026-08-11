@@ -42,6 +42,24 @@ export const kpiByScenario: Record<string, KpiMetrics> = {
   normal: {
     distanceKm: { current: 28.4, optimized: 20.1 },
     durationHours: { current: 2.37, optimized: 1.63 },
+    durationBreakdown: {
+      current: {
+        travelHours: 1.37,
+        serviceHours: 1.0,
+        crewLabel: '6/6 (conductor + 5 operarios)',
+        crewAssignment: '6/6',
+        stopCount: 20,
+      },
+      optimized: {
+        travelHours: 0.93,
+        serviceHours: 0.7,
+        crewLabel: '6/6 (conductor + 5 operarios)',
+        crewAssignment: '6/6',
+        stopCount: 20,
+      },
+    },
+    exceedsWorkday: { current: false, optimized: false },
+    workdayHours: 8,
     fuelLiters: { current: 42.6, optimized: 30.2 },
     co2KgAvoided: 28.4,
     criticalCoveragePct: { current: 62, optimized: 94 },

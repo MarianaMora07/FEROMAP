@@ -33,6 +33,8 @@ export interface ApiVehicle {
   updatedAt?: string;
   image?: string;
   idealOperatorsCount?: number;
+  assignedOperatorsCount?: number | null;
+  effectiveAssignedOperatorsCount?: number;
   currentRoute?: string | null;
   activeRouteId?: number;
 }
@@ -90,6 +92,13 @@ function mapApiVehicle(row: ApiVehicle, index: number): Vehicle {
     currentRoute: row.currentRoute ?? undefined,
     updatedAt: row.updatedAt ?? new Date().toLocaleString('es-VE'),
     image: row.image ?? DEFAULT_IMAGE,
+    idealOperatorsCount: row.idealOperatorsCount ?? 6,
+    assignedOperatorsCount: row.assignedOperatorsCount ?? null,
+    effectiveAssignedOperatorsCount:
+      row.effectiveAssignedOperatorsCount ??
+      row.assignedOperatorsCount ??
+      row.idealOperatorsCount ??
+      6,
   });
 }
 
@@ -220,6 +229,16 @@ export type VehicleStatusUpdate = 'available' | 'maintenance';
 export interface VehicleUpdatePayload {
   status?: VehicleStatusUpdate;
   defaultDriverId?: number | null;
+  assignedOperatorsCount?: number | null;
+}
+
+export function formatCrewAssignmentLabel(
+  vehicle: Pick<Vehicle, 'idealOperatorsCount' | 'assignedOperatorsCount' | 'effectiveAssignedOperatorsCount'>,
+): string {
+  const ideal = vehicle.idealOperatorsCount ?? 6;
+  const effective = vehicle.effectiveAssignedOperatorsCount ?? vehicle.assignedOperatorsCount ?? ideal;
+  const fieldOps = Math.max(0, effective - 1);
+  return `${effective}/${ideal} (conductor + ${fieldOps} operarios)`;
 }
 
 export function updateVehicleStatus(

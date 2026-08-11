@@ -2,7 +2,12 @@ import { For, Show, createEffect, createSignal, onMount } from 'solid-js';
 import { X } from 'lucide-solid';
 import { Button, SelectField } from '../../design-system/components';
 import { driverDisplayName, fetchDrivers, type Driver } from '../../core/api/drivers';
-import { updateVehicle, type VehicleStatusUpdate } from '../../core/api/vehicles';
+import {
+  formatCrewAssignmentLabel,
+  updateVehicle,
+  type VehicleStatusUpdate,
+} from '../../core/api/vehicles';
+import { DEFAULT_IDEAL_OPERATORS } from '../../data/types/crewServiceTime';
 import type { Vehicle } from '../../core/types/vehicle';
 
 export function VehicleEditModal(props: {
@@ -15,7 +20,11 @@ export function VehicleEditModal(props: {
   const [drivers, setDrivers] = createSignal<Driver[]>([]);
   const [driverId, setDriverId] = createSignal<string>('');
   const [status, setStatus] = createSignal<VehicleStatusUpdate>('available');
+  const [assignedOperators, setAssignedOperators] = createSignal<string>('');
+  const [useFullCrew, setUseFullCrew] = createSignal(true);
   const [saving, setSaving] = createSignal(false);
+
+  const idealCount = () => props.vehicle?.idealOperatorsCount ?? DEFAULT_IDEAL_OPERATORS;
 
   onMount(() => {
     void fetchDrivers().then(setDrivers);
@@ -30,6 +39,14 @@ export function VehicleEditModal(props: {
     } else {
       setStatus('available');
     }
+    const assigned = vehicle.assignedOperatorsCount;
+    if (assigned == null) {
+      setUseFullCrew(true);
+      setAssignedOperators(String(idealCount()));
+    } else {
+      setUseFullCrew(false);
+      setAssignedOperators(String(assigned));
+    }
   });
 
   const save = async () => {
@@ -37,11 +54,25 @@ export function VehicleEditModal(props: {
     if (!vehicle) return;
     setSaving(true);
     try {
-      const payload: { defaultDriverId: number | null; status?: VehicleStatusUpdate } = {
+      const payload: {
+        defaultDriverId: number | null;
+        status?: VehicleStatusUpdate;
+        assignedOperatorsCount?: number | null;
+      } = {
         defaultDriverId: driverId() ? Number(driverId()) : null,
       };
       if (vehicle.status === 'disponible' || vehicle.status === 'mantenimiento') {
         payload.status = status();
+      }
+      if (useFullCrew()) {
+        payload.assignedOperatorsCount = null;
+      } else {
+        const parsed = Number(assignedOperators());
+        if (!Number.isFinite(parsed) || parsed < 1 || parsed > idealCount()) {
+          props.onError(`Indique entre 1 y ${idealCount()} operarios asignados (incluye conductor).`);
+          return;
+        }
+        payload.assignedOperatorsCount = parsed;
       }
       const updated = await updateVehicle(vehicle.id, payload);
       props.onSaved(updated);
@@ -77,6 +108,47 @@ export function VehicleEditModal(props: {
             </div>
 
             <div class="space-y-4">
+              <div class="rounded-lg border border-border bg-slate-50/80 px-3 py-2.5 dark:border-dark-border dark:bg-dark-surface-hover/50">
+                <p class="text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+                  Dotación ideal
+                </p>
+                <p class="text-sm font-semibold text-text-primary dark:text-white">
+                  {idealCount()} personas (1 conductor + {idealCount() - 1} operarios)
+                </p>
+              </div>
+
+              <div class="space-y-2">
+                <label class="flex items-center gap-2 text-sm text-text-secondary">
+                  <input
+                    type="checkbox"
+                    checked={useFullCrew()}
+                    onChange={(e) => setUseFullCrew(e.currentTarget.checked)}
+                  />
+                  Cuadrilla completa hoy
+                </label>
+                <Show when={!useFullCrew()}>
+                  <label class="block text-xs font-medium text-text-muted">
+                    Operarios asignados hoy (conductor incluido)
+                    <input
+                      type="number"
+                      min={1}
+                      max={idealCount()}
+                      class="mt-1 w-full rounded-md border border-border bg-surface px-2.5 py-2 text-sm dark:border-dark-border dark:bg-dark-surface-hover"
+                      value={assignedOperators()}
+                      onInput={(e) => setAssignedOperators(e.currentTarget.value)}
+                    />
+                  </label>
+                  <p class="text-[11px] text-text-muted">
+                    Vista previa:{' '}
+                    {formatCrewAssignmentLabel({
+                      idealOperatorsCount: idealCount(),
+                      assignedOperatorsCount: Number(assignedOperators()) || idealCount(),
+                      effectiveAssignedOperatorsCount: Number(assignedOperators()) || idealCount(),
+                    })}
+                  </p>
+                </Show>
+              </div>
+
               <SelectField
                 label="Conductor asignado"
                 value={driverId()}

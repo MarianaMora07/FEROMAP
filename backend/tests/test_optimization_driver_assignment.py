@@ -19,6 +19,7 @@ def _vehicle(
     vehicle_id: int,
     status: str = "available",
     default_driver_id: int | None = None,
+    assigned: int | None = None,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         id=vehicle_id,
@@ -26,6 +27,8 @@ def _vehicle(
         status=status,
         max_capacity_kg=Decimal("12000"),
         fuel_consumption_rate=Decimal("0.35"),
+        ideal_operators_count=6,
+        assigned_operators_count=assigned,
         default_driver_id=default_driver_id,
         default_driver=_driver(default_driver_id) if default_driver_id else None,
     )
@@ -46,8 +49,22 @@ def test_build_optimization_vehicle_units_uses_default_driver():
     units = build_optimization_vehicle_units(db, limit=4)
 
     assert units == [
-        VehicleUnit(vehicle_id=1, driver_id=10, capacity_kg=12000.0, fuel_rate=0.35),
-        VehicleUnit(vehicle_id=2, driver_id=20, capacity_kg=12000.0, fuel_rate=0.35),
+        VehicleUnit(
+            vehicle_id=1,
+            driver_id=10,
+            capacity_kg=12000.0,
+            fuel_rate=0.35,
+            ideal_operators=6,
+            assigned_operators=6,
+        ),
+        VehicleUnit(
+            vehicle_id=2,
+            driver_id=20,
+            capacity_kg=12000.0,
+            fuel_rate=0.35,
+            ideal_operators=6,
+            assigned_operators=6,
+        ),
     ]
 
 
@@ -65,6 +82,22 @@ def test_build_optimization_vehicle_units_prefers_active_route_driver():
 
     assert len(units) == 1
     assert units[0].driver_id == 99
+
+
+def test_build_optimization_vehicle_units_carries_crew_counts():
+    vehicles = [
+        _vehicle("TR-03", vehicle_id=1, default_driver_id=10, assigned=4),
+    ]
+    db = MagicMock()
+    db.scalars.side_effect = [
+        MagicMock(unique=MagicMock(return_value=MagicMock(all=MagicMock(return_value=vehicles)))),
+        MagicMock(unique=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))),
+    ]
+
+    units = build_optimization_vehicle_units(db, limit=4)
+
+    assert units[0].ideal_operators == 6
+    assert units[0].assigned_operators == 4
 
 
 def test_build_optimization_vehicle_units_skips_unassigned():

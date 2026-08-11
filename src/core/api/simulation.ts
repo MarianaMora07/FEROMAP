@@ -77,6 +77,8 @@ export interface SimulationRunParameters {
   rainIntensity?: string;
   wasteLevelPct?: number;
   estimatedDurationHours?: number;
+  /** Operarios de campo ausentes en el turno (0–5). ADR-003. */
+  operatorsShortage?: number;
 }
 
 export async function runSimulationOptimize(

@@ -55,3 +55,18 @@ Que cualquier evaluador entienda en **menos de 10 segundos** qué está haciendo
 ## Verificación
 
 Revisar [checklist-aceptacion-fase-0.md](./checklist-aceptacion-fase-0.md) antes de iniciar Fase 1.
+
+## Relación con Fase 8 — Dotación y duración operativa
+
+Tras la Fase 7 (ejecución explicativa), la **Fase 8** añade realismo en **tiempo de paradas** sin cambiar el objetivo del ACO:
+
+| Capa | Qué optimiza / reporta |
+|------|-------------------------|
+| **ACO + 2-opt** (paso 2) | **Distancia** en la red vial |
+| **KPIs y paso 3** | **Duración** = viaje + paradas × tiempo de servicio según dotación |
+
+En el paso 3, el panel **Desglose de duración** muestra: **Viaje · Paradas (dotación) · Total**. El guion de defensa incluye una demo de **misma ruta, menos operarios → más horas** (posible segundo día).
+
+- ADR y fórmulas: [docs/fase-8/adr-dotacion-tiempo-servicio.md](../fase-8/adr-dotacion-tiempo-servicio.md)
+- Guión demo (sección dotación): [docs/fase-6/guion-demo-defensa.md](../fase-6/guion-demo-defensa.md)
+- Contrato API: `backend/docs/API.md` → simulación y `durationBreakdown`

@@ -287,6 +287,8 @@ Campos opcionales: `sectorId`, `latitude`, `longitude`, `maxCapacityKg`, `curren
   "driverPhone": "+58 414-555-0192",
   "defaultDriverId": 1,
   "driverId": 1,
+  "idealOperatorsCount": 6,
+  "assignedOperatorsCount": null,
   "type": "Compactador",
   "fuelPct": 78,
   "capacityPct": 65,
@@ -301,16 +303,26 @@ Campos opcionales: `sectorId`, `latitude`, `longitude`, `maxCapacityKg`, `curren
 
 Estados API internos: `available`, `in_route`, `maintenance`, `inactive` (mapeados a español en frontend).
 
+#### Dotación de cuadrilla (ADR-003)
+
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| `idealOperatorsCount` | int | Dotación ideal del camión: **6 = 1 conductor + 5 operarios** (default tras Fase 1). |
+| `assignedOperatorsCount` | int \| null | Cuadrilla asignada hoy (`1…ideal`). `null` = dotación completa. **PATCH Fase 1.** |
+
+El tiempo de servicio por parada se calcula a partir de estos valores en **KPIs** (no en el fitness del ACO). Ver [docs/fase-8/adr-dotacion-tiempo-servicio.md](../docs/fase-8/adr-dotacion-tiempo-servicio.md).
+
 ### `PATCH /vehicles/{code}`
 
 ```json
 {
   "status": "maintenance",
-  "defaultDriverId": 3
+  "defaultDriverId": 3,
+  "assignedOperatorsCount": 5
 }
 ```
 
-`defaultDriverId: null` desasigna el conductor por defecto. `driverId` en la respuesta refleja el conductor efectivo (ruta activa o default).
+`defaultDriverId: null` desasigna el conductor por defecto. `driverId` en la respuesta refleja el conductor efectivo (ruta activa o default). `assignedOperatorsCount` (contrato Fase 1) — cuadrilla total en el camión, conductor incluido.
 
 ---
 
@@ -427,7 +439,8 @@ Encola una optimización ACO y devuelve de inmediato un `jobId`. El cliente debe
   "scenarioId": "rain",
   "rainIntensity": "alta",
   "wasteLevelPct": 30,
-  "estimatedDurationHours": 4
+  "estimatedDurationHours": 4,
+  "operatorsShortage": 2
 }
 ```
 
@@ -437,6 +450,64 @@ Encola una optimización ACO y devuelve de inmediato un `jobId`. El cliente debe
 | `rainIntensity` | `baja` \| `media` \| `alta` | Solo si `scenarioId=rain`. Escala `trafficMultiplier` (×1.05, ×1.15, ×1.30). |
 | `wasteLevelPct` | 10 \| 20 \| 30 \| 50 | Solo si `scenarioId=saturated`. Suma puntos al `fillLevelBoost` del escenario. |
 | `estimatedDurationHours` | 1–12 | Se persiste en `simulationParameters`; **no** modifica el VRP. |
+| `operatorsShortage` | 0–5 | Operarios de **campo** ausentes en el turno. Se persiste en `simulationParameters`; afecta **KPIs de duración** (ACO sigue minimizando distancia). |
+
+`simulationParameters` también incluye `appliedCrewModifiers` cuando `operatorsShortage > 0` (tiempo por punto, dotación efectiva de referencia, narrativa).
+
+**Matriz objetivo vs reporte (ADR-003):** el ACO minimiza **distancia**; los KPIs y `estimatedDurationSeconds` de rutas incluyen **viaje + tiempo en paradas** según dotación.
+
+**KPIs de duración (`result.kpis`):**
+
+```json
+{
+  "durationHours": { "current": 4.2, "optimized": 3.1 },
+  "durationBreakdown": {
+    "optimized": {
+      "travelHours": 2.4,
+      "serviceHours": 0.7,
+      "crewLabel": "4/6 (conductor + 3 operarios)",
+      "crewAssignment": "4/6",
+      "stopCount": 12
+    }
+  },
+  "exceedsWorkday": { "current": false, "optimized": false },
+  "workdayHours": 8
+}
+```
+
+`estimatedDurationHours` en el request define `workdayHours` para la bandera `exceedsWorkday` (default 8 h si se omite).
+
+### Decisión de diseño: ACO en distancia, KPIs en tiempo operativo
+
+| Pregunta | Respuesta |
+|----------|-----------|
+| ¿Qué minimiza el ACO? | **Distancia recorrida** (metros en la red vial). El fitness y el 2-opt **no** incluyen tiempo de servicio en paradas. |
+| ¿Qué reportan los KPIs? | **Duración operativa** = tiempo de viaje + Σ (paradas × tiempo de servicio por dotación). |
+| ¿Por qué separar? | Dos corridas con la **misma ruta en km** pueden tener **distinta duración** si cambia la dotación — riesgo de no cerrar la jornada aunque la ruta sea óptima en distancia. |
+
+### Fórmula de tiempo de servicio (ADR-003)
+
+Constantes: `BASE_SERVICE_SECONDS = 300` (5 min/punto con dotación completa), penalización `30` s por operario de campo faltante.
+
+```
+assignedEfectivo = max(1, assignedVehículo − operatorsShortage)
+fieldIdeal       = idealOperators − 1
+fieldAssigned    = max(0, assignedEfectivo − 1)
+missingField     = max(0, fieldIdeal − fieldAssigned)
+
+serviceTimeSec   = 300 + missingField × 30
+durationSec      = travelSec + stopCount × serviceTimeSec
+```
+
+**Ejemplos (ideal = 6, dotación completa en vehículo):**
+
+| operatorsShortage | assignedEfectivo | s/punto | min/punto |
+|-------------------|------------------|---------|-----------|
+| 0 | 6 | 300 | 5:00 |
+| 1 | 5 | 330 | 5:30 |
+| 2 | 4 | 360 | 6:00 |
+
+El conductor **no** se resta con `operatorsShortage`. Código: `backend/app/domain/crew_service_time.py`. ADR: [docs/fase-8/adr-dotacion-tiempo-servicio.md](../../docs/fase-8/adr-dotacion-tiempo-servicio.md).
 
 **Algoritmo:** siempre ACO (`aco_vrp_osmnx`, 12 hormigas × 20 iteraciones). No hay selector de algoritmo en API.
 

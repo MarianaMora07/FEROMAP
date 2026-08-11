@@ -21,6 +21,15 @@ class OptimizeRequest(CamelModel):
         le=12,
         description="Duración estimada de operación (horas). Se persiste; no modifica el motor VRP.",
     )
+    operators_shortage: int | None = Field(
+        default=None,
+        ge=0,
+        le=5,
+        description=(
+            "Operarios de campo ausentes en el turno (0–5). "
+            "Se persiste en simulationParameters; tiempo de servicio en KPIs — Fase 2 (ADR-003)."
+        ),
+    )
 
 
 class OptimizeJobCreated(CamelModel):

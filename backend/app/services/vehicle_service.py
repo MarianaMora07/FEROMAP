@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import Driver, OptimizedRoute, Vehicle, VehicleIncident
+from app.domain.crew_service_time import DEFAULT_IDEAL_OPERATORS, normalize_assigned_operators
 from app.schemas.vehicle import VehicleUpdate
 from app.services.driver_service import validate_driver_assignment
 
@@ -89,6 +90,12 @@ def _format_updated_at(vehicle: Vehicle) -> str:
     return timestamp.astimezone(timezone.utc).strftime("%d/%m/%Y %H:%M")
 
 
+def resolve_vehicle_assigned_operators(vehicle: Vehicle) -> int:
+    """Dotación efectiva hoy; null en BD = dotación completa (ideal)."""
+    ideal = vehicle.ideal_operators_count or DEFAULT_IDEAL_OPERATORS
+    return normalize_assigned_operators(vehicle.assigned_operators_count, ideal=ideal)
+
+
 def _serialize_vehicle(
     vehicle: Vehicle,
     *,
@@ -123,6 +130,8 @@ def _serialize_vehicle(
         "updatedAt": _format_updated_at(vehicle),
         "image": DEFAULT_VEHICLE_IMAGE,
         "idealOperatorsCount": vehicle.ideal_operators_count,
+        "assignedOperatorsCount": vehicle.assigned_operators_count,
+        "effectiveAssignedOperatorsCount": resolve_vehicle_assigned_operators(vehicle),
         "currentRoute": current_route,
     }
     if active_route is not None:
@@ -211,6 +220,19 @@ def update_vehicle(db: Session, code: str, payload: VehicleUpdate) -> dict[str, 
         else:
             validate_driver_assignment(db, driver_id)
             vehicle.default_driver_id = driver_id
+
+    if "assigned_operators_count" in payload.model_fields_set:
+        ideal = vehicle.ideal_operators_count or DEFAULT_IDEAL_OPERATORS
+        assigned = data.get("assigned_operators_count")
+        if assigned is None:
+            vehicle.assigned_operators_count = None
+        else:
+            if assigned < 1 or assigned > ideal:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"assignedOperatorsCount debe estar entre 1 y {ideal} (dotación ideal del vehículo).",
+                )
+            vehicle.assigned_operators_count = assigned
 
     db.flush()
     return vehicle_detail(db, code)

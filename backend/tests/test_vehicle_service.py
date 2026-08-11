@@ -56,7 +56,8 @@ def _vehicle(
         status=status,
         max_capacity_kg=Decimal(str(max_capacity_kg)),
         fuel_consumption_rate=Decimal("0.35"),
-        ideal_operators_count=2,
+        ideal_operators_count=6,
+        assigned_operators_count=None,
         default_driver_id=default_driver.id if default_driver else None,
         default_driver=default_driver,
         created_at=now,
@@ -227,6 +228,58 @@ def test_update_vehicle_clears_default_driver():
 
     assert vehicle.default_driver_id is None
     assert result["defaultDriverId"] is None
+
+
+def test_update_vehicle_rejects_assigned_above_ideal():
+    vehicle = _vehicle("TR-03", status="available")
+    vehicle.ideal_operators_count = 6
+    db = MagicMock()
+    db.scalar.return_value = vehicle
+
+    from app.schemas.vehicle import VehicleUpdate
+
+    with pytest.raises(HTTPException) as exc:
+        update_vehicle(db, "TR-03", VehicleUpdate(assigned_operators_count=7))
+
+    assert exc.value.status_code == 422
+
+
+def test_update_vehicle_sets_assigned_operators():
+    vehicle = _vehicle("TR-03", status="available")
+    vehicle.ideal_operators_count = 6
+    db = MagicMock()
+    db.scalar.side_effect = [vehicle, vehicle]
+    db.scalars.side_effect = [
+        MagicMock(all=MagicMock(return_value=[vehicle])),
+        MagicMock(unique=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))),
+    ]
+
+    from app.schemas.vehicle import VehicleUpdate
+
+    result = update_vehicle(db, "TR-03", VehicleUpdate(assigned_operators_count=4))
+
+    assert vehicle.assigned_operators_count == 4
+    assert result["assignedOperatorsCount"] == 4
+    assert result["effectiveAssignedOperatorsCount"] == 4
+
+
+def test_update_vehicle_clears_assigned_to_full_crew():
+    vehicle = _vehicle("TR-03", status="available")
+    vehicle.ideal_operators_count = 6
+    vehicle.assigned_operators_count = 4
+    db = MagicMock()
+    db.scalar.side_effect = [vehicle, vehicle]
+    db.scalars.side_effect = [
+        MagicMock(all=MagicMock(return_value=[vehicle])),
+        MagicMock(unique=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))),
+    ]
+
+    from app.schemas.vehicle import VehicleUpdate
+
+    result = update_vehicle(db, "TR-03", VehicleUpdate(assigned_operators_count=None))
+
+    assert vehicle.assigned_operators_count is None
+    assert result["effectiveAssignedOperatorsCount"] == 6
 
 
 def test_update_vehicle_rejects_invalid_status():

@@ -39,6 +39,7 @@ def optimize_simulation(body: OptimizeRequest, _: PlannerOrAdmin):
             rain_intensity=body.rain_intensity,
             waste_level_pct=body.waste_level_pct,
             estimated_duration_hours=body.estimated_duration_hours,
+            operators_shortage=body.operators_shortage,
         )
         return {"jobId": job.id}
     except ValueError as exc:

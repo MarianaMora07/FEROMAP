@@ -17,6 +17,8 @@ interface ConfigurationSummaryPanelProps {
   rainIntensity?: string;
   wasteLevel?: string;
   durationHours?: string;
+  crewShortageEnabled?: boolean;
+  operatorsShortage?: string;
 }
 
 export function ConfigurationSummaryPanel(props: ConfigurationSummaryPanelProps) {
@@ -29,6 +31,8 @@ export function ConfigurationSummaryPanel(props: ConfigurationSummaryPanelProps)
       durationHours: props.durationHours ?? '4',
       conditions: props.conditions,
       scenarioId: derived().scenarioId,
+      crewShortageEnabled: props.crewShortageEnabled ?? false,
+      operatorsShortage: props.operatorsShortage ?? '2',
     });
 
   return (

@@ -1,5 +1,5 @@
 import type { RouteCollection } from '../types/geo';
-import type { KpiMetrics } from '../../data/types/simulation';
+import type { DurationBreakdown, KpiMetrics } from '../../data/types/simulation';
 
 export type VehicleTone = 'blue' | 'green' | 'purple';
 
@@ -40,6 +40,46 @@ export function formatDurationHours(hours: number): string {
 
 export function formatDurationMinutes(minutes: number): string {
   return formatDurationHours(minutes / 60);
+}
+
+export interface DurationBreakdownDisplayRow {
+  travel: string;
+  service: string;
+  crewAssignment: string;
+  total: string;
+}
+
+export interface DurationBreakdownDisplay {
+  current: DurationBreakdownDisplayRow;
+  optimized: DurationBreakdownDisplayRow;
+}
+
+function synthesizeBreakdown(hours: number): DurationBreakdown {
+  return {
+    travelHours: +(hours * 0.58).toFixed(2),
+    serviceHours: +(hours * 0.42).toFixed(2),
+    crewLabel: '6/6 (conductor + 5 operarios)',
+    crewAssignment: '6/6',
+  };
+}
+
+function toDisplayRow(breakdown: DurationBreakdown, totalHours: number): DurationBreakdownDisplayRow {
+  return {
+    travel: formatDurationHours(breakdown.travelHours),
+    service: formatDurationHours(breakdown.serviceHours),
+    crewAssignment: breakdown.crewAssignment ?? breakdown.crewLabel.split(' ')[0] ?? '6/6',
+    total: formatDurationHours(totalHours),
+  };
+}
+
+/** Desglose Viaje · Paradas (dotación) · Total para el paso 3 de simulación. */
+export function buildDurationBreakdownDisplay(kpis: KpiMetrics): DurationBreakdownDisplay {
+  const currentBd = kpis.durationBreakdown?.current ?? synthesizeBreakdown(kpis.durationHours.current);
+  const optimizedBd = kpis.durationBreakdown?.optimized ?? synthesizeBreakdown(kpis.durationHours.optimized);
+  return {
+    current: toDisplayRow(currentBd, kpis.durationHours.current),
+    optimized: toDisplayRow(optimizedBd, kpis.durationHours.optimized),
+  };
 }
 
 function savingsPct(current: number, optimized: number): number {

@@ -1,6 +1,7 @@
 import type { Scenario, ScenarioId } from '../../data/types/simulation';
+import { serviceTimeSecondsPerStop } from '../../data/types/crewServiceTime';
 import type { ConditionId } from '../../features/simulation/simulationConfig';
-import { simulationConditions } from '../../features/simulation/simulationConfig';
+import { CREW_SHORTAGE_NARRATIVE, simulationConditions } from '../../features/simulation/simulationConfig';
 import { deriveScenarioId } from './simulationScenario';
 
 export interface ConditionMapping {
@@ -103,6 +104,8 @@ export interface SimulationUiParameters {
   durationHours: string;
   conditions: Record<ConditionId, boolean>;
   scenarioId: ScenarioId;
+  crewShortageEnabled?: boolean;
+  operatorsShortage?: string;
 }
 
 export interface ParameterEffectNote {
@@ -145,6 +148,18 @@ export function buildParameterEffectNotes(params: SimulationUiParameters): Param
     detail: 'Se registra en la simulación; no modifica el cálculo del motor VRP.',
   });
 
+  if (params.crewShortageEnabled) {
+    const shortage = Number(params.operatorsShortage) || 0;
+    const effectiveAssigned = Math.max(1, 6 - shortage);
+    const perStopSec = serviceTimeSecondsPerStop(effectiveAssigned);
+    const perStopMin = perStopSec / 60;
+    notes.push({
+      label: `Ausentismo del turno (−${shortage} operario${shortage === 1 ? '' : 's'} de campo)`,
+      status: 'connected',
+      detail: `${CREW_SHORTAGE_NARRATIVE} Tiempo por punto: ${perStopMin} min (${perStopSec} s).`,
+    });
+  }
+
   return notes;
 }
 
@@ -153,6 +168,7 @@ export function buildSimulationRunParameters(params: SimulationUiParameters) {
     rainIntensity?: string;
     wasteLevelPct?: number;
     estimatedDurationHours?: number;
+    operatorsShortage?: number;
   } = {
     estimatedDurationHours: Number(params.durationHours) || undefined,
   };
@@ -162,6 +178,12 @@ export function buildSimulationRunParameters(params: SimulationUiParameters) {
   }
   if (params.scenarioId === 'saturated' && (params.conditions.waste_surge || params.conditions.critical_bin)) {
     payload.wasteLevelPct = Number(params.wasteLevel) || undefined;
+  }
+  if (params.crewShortageEnabled) {
+    const shortage = Number(params.operatorsShortage);
+    if (shortage >= 1 && shortage <= 5) {
+      payload.operatorsShortage = shortage;
+    }
   }
 
   return payload;

@@ -192,7 +192,8 @@ def seed() -> None:
                 code=row["code"],
                 max_capacity_kg=Decimal(str(row["maxCapacityKg"])),
                 fuel_consumption_rate=Decimal(str(row.get("fuelConsumptionRate", 0.35))),
-                ideal_operators_count=int(row.get("idealOperatorsCount", 2)),
+                ideal_operators_count=int(row.get("idealOperatorsCount", 6)),
+                assigned_operators_count=row.get("assignedOperatorsCount"),
                 default_driver_id=default_driver_row.id if default_driver_row else None,
                 status=row.get("status", "available"),
             )

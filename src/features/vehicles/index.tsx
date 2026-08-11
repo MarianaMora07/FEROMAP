@@ -23,6 +23,7 @@ import {
   Building2,
   Route,
   Clock,
+  Users,
 } from 'lucide-solid';
 import {
   Button,
@@ -50,6 +51,7 @@ import {
   fetchVehiclesSummary,
   fetchVehicleIncidents,
   formatCapacityKg,
+  formatCrewAssignmentLabel,
   isAssignableVehicle,
   updateVehicleStatus,
 } from '../../core/api/vehicles';
@@ -711,6 +713,16 @@ export default function VehiclesPage() {
                           </Show>
                         </div>
                       </li>
+                      <DetailRow
+                        icon={<Users size={16} />}
+                        label="Dotación ideal"
+                        value={`${v().idealOperatorsCount ?? 6} (1 conductor + ${(v().idealOperatorsCount ?? 6) - 1} operarios)`}
+                      />
+                      <DetailRow
+                        icon={<Users size={16} />}
+                        label="Operarios asignados hoy"
+                        value={formatCrewAssignmentLabel(v())}
+                      />
                       <DetailRow icon={<Building2 size={16} />} label="Base asignada" value={v().base} />
                       <DetailRow
                         icon={<Route size={16} />}

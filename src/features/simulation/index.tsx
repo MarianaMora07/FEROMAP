@@ -12,6 +12,7 @@ import {
   Trash2,
   TrendingUp,
   Truck,
+  Users,
   Wrench,
 } from 'lucide-solid';
 import {
@@ -56,6 +57,7 @@ import { RecentIncidentsPanel } from '../contingency/RecentIncidentsPanel';
 import type { ScenarioId } from '../../data/types/simulation';
 import { ConfigurationSummaryPanel } from './ConfigurationSummaryPanel';
 import { ExecutiveSummary } from './ExecutiveSummary';
+import { DurationBreakdownPanel } from './DurationBreakdownPanel';
 import { ExecutionPanel } from './ExecutionPanel';
 import { PostSimulationActions } from './PostSimulationActions';
 import { SimulationHistoryPanel } from './SimulationHistoryPanel';
@@ -71,6 +73,8 @@ import {
   conditionsForScenario,
   defaultConditions,
   durationOptions,
+  operatorsShortageOptions,
+  CREW_SHORTAGE_NARRATIVE,
   quickScenariosFromApi,
   rainIntensityOptions,
   simulationConditions,
@@ -270,6 +274,8 @@ export default function SimulationPage() {
   const [rainIntensity, setRainIntensity] = createSignal('alta');
   const [wasteLevel, setWasteLevel] = createSignal('30');
   const [duration, setDuration] = createSignal('4');
+  const [crewShortageEnabled, setCrewShortageEnabled] = createSignal(false);
+  const [operatorsShortage, setOperatorsShortage] = createSignal('2');
   const [hasResults, setHasResults] = createSignal(false);
   const [historyError, setHistoryError] = createSignal<string | null>(null);
   const [runError, setRunError] = createSignal<string | null>(null);
@@ -300,12 +306,16 @@ export default function SimulationPage() {
       durationHours: duration(),
       conditions: conditions(),
       scenarioId: derivedScenario().scenarioId,
+      crewShortageEnabled: crewShortageEnabled(),
+      operatorsShortage: operatorsShortage(),
     });
 
   const panelParams = () => ({
     rainIntensity: rainIntensity(),
     wasteLevel: wasteLevel(),
     durationHours: duration(),
+    crewShortageEnabled: crewShortageEnabled(),
+    operatorsShortage: operatorsShortage(),
   });
   const efficiencyValue = createMemo(() =>
     hasResults() ? scenarioEfficiencyPct(currentKpis()) : 0,
@@ -315,6 +325,13 @@ export default function SimulationPage() {
   );
   const impactRows = () => kpiImpactRows(currentKpis());
   const savings = () => kpiSavingsSummary(currentKpis());
+  const workdayWarning = () => {
+    const kpis = currentKpis();
+    if (!kpis.exceedsWorkday?.optimized) return null;
+    const hours = kpis.workdayHours ?? 8;
+    const optimized = kpis.durationHours.optimized;
+    return `La duración optimizada (${optimized.toFixed(1)} h) supera la jornada de referencia (${hours} h). Revisa la dotación o el número de paradas.`;
+  };
   const canRun = () => canOptimize(authUser()?.role) && (readiness()?.ready ?? false);
 
   const wizardExecutionSubstatus = createMemo(() => {
@@ -552,6 +569,32 @@ export default function SimulationPage() {
                 </For>
               </div>
               <p class="mb-1 text-sm font-semibold text-text-primary dark:text-white">Parámetros adicionales</p>
+              <div class="mb-4 rounded-lg border border-border px-3 py-2.5 dark:border-dark-border">
+                <Toggle
+                  label="Ausentismo del turno"
+                  description="Falta personal en cuadrillas. El conductor siempre está presente; el ausentismo afecta solo a los 5 operarios de campo."
+                  icon={<Users size={14} />}
+                  checked={crewShortageEnabled()}
+                  onChange={() => setCrewShortageEnabled((value) => !value)}
+                />
+                <Show when={crewShortageEnabled()}>
+                  <div class="mt-3 border-t border-border pt-3 dark:border-dark-border">
+                    <label class="mb-1 block text-xs text-text-muted">
+                      Operarios de campo ausentes <span class="text-fero-green-dark">(conectado)</span>
+                    </label>
+                    <select
+                      value={operatorsShortage()}
+                      onChange={(e) => setOperatorsShortage(e.currentTarget.value)}
+                      class="w-full rounded-md border border-border bg-surface px-2.5 py-2 text-sm dark:bg-dark-surface-hover dark:border-dark-border dark:text-white"
+                    >
+                      <For each={operatorsShortageOptions}>
+                        {(o) => <option value={o.value}>{o.label}</option>}
+                      </For>
+                    </select>
+                    <p class="mt-2 text-xs text-text-muted">{CREW_SHORTAGE_NARRATIVE}</p>
+                  </div>
+                </Show>
+              </div>
               <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div class="min-w-0">
                   <label class="mb-1 block text-xs text-text-muted">
@@ -657,6 +700,12 @@ export default function SimulationPage() {
                   <span class="font-semibold text-text-primary dark:text-white">Puntos activos:</span>{' '}
                   {readiness()?.activePoints ?? '—'}
                 </li>
+                <Show when={crewShortageEnabled()}>
+                  <li>
+                    <span class="font-semibold text-text-primary dark:text-white">Ausentismo:</span>{' '}
+                    {operatorsShortage()} operario(s) de campo ausentes
+                  </li>
+                </Show>
               </ul>
             </Card>
           </div>
@@ -746,7 +795,16 @@ export default function SimulationPage() {
               simulationId={simulationState.lastSimulationId}
               onNewSimulation={handleNewSimulation}
             />
+            <Show when={workdayWarning()}>
+              {(message) => (
+                <div class="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+                  <AlertTriangle size={18} class="mt-0.5 shrink-0" />
+                  <p>{message()}</p>
+                </div>
+              )}
+            </Show>
             <ExecutiveSummary kpis={currentKpis()} />
+            <DurationBreakdownPanel kpis={currentKpis()} />
             <div class="grid items-start gap-4 xl:grid-cols-12">
               <div class="xl:col-span-8">
                 <Suspense fallback={<MapPanelFallback />}>

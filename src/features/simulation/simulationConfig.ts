@@ -77,6 +77,18 @@ export const durationOptions = [
   { value: '8', label: '8 horas' },
 ];
 
+/** Operarios de campo ausentes en el turno (ADR-003). */
+export const operatorsShortageOptions = [
+  { value: '1', label: '1 operario de campo ausente' },
+  { value: '2', label: '2 operarios de campo ausentes' },
+  { value: '3', label: '3 operarios de campo ausentes' },
+  { value: '4', label: '4 operarios de campo ausentes' },
+  { value: '5', label: '5 operarios de campo ausentes' },
+];
+
+export const CREW_SHORTAGE_NARRATIVE =
+  'El conductor siempre está en el camión. El ausentismo resta solo operarios de campo (máx. 5) en todas las cuadrillas.';
+
 export const mapRouteLegend = [
   { id: 'current', label: 'Ruta actual', style: 'dashed-slate' as const },
   { id: 'optimized', label: 'Ruta optimizada', style: 'solid-green' as const },

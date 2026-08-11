@@ -31,6 +31,7 @@ class OptimizationJob:
     rain_intensity: str | None
     waste_level_pct: int | None
     estimated_duration_hours: int | None
+    operators_shortage: int | None = None
     phase: str | None = None
     progress: int = 0
     logs: list[dict[str, Any]] = field(default_factory=list)
@@ -102,6 +103,7 @@ def create_optimization_job(
     rain_intensity: str | None = None,
     waste_level_pct: int | None = None,
     estimated_duration_hours: int | None = None,
+    operators_shortage: int | None = None,
 ) -> OptimizationJob:
     job = OptimizationJob(
         id=str(uuid.uuid4()),
@@ -110,6 +112,7 @@ def create_optimization_job(
         rain_intensity=rain_intensity,
         waste_level_pct=waste_level_pct,
         estimated_duration_hours=estimated_duration_hours,
+        operators_shortage=operators_shortage,
     )
     with _jobs_lock:
         _jobs[job.id] = job
@@ -163,6 +166,7 @@ def _run_job_worker(job_id: str) -> None:
             rain_intensity=job.rain_intensity,
             waste_level_pct=job.waste_level_pct,
             estimated_duration_hours=job.estimated_duration_hours,
+            operators_shortage=job.operators_shortage,
             reporter=reporter,
         )
         with job.lock:

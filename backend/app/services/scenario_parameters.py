@@ -2,6 +2,14 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.domain.crew_service_time import (
+    BASE_SERVICE_SECONDS,
+    DEFAULT_IDEAL_OPERATORS,
+    normalize_operators_shortage,
+    resolve_effective_assigned,
+    service_time_seconds_per_stop,
+)
+
 RAIN_INTENSITY_FACTORS: dict[str, float] = {
     "baja": 1.05,
     "media": 1.15,
@@ -56,3 +64,37 @@ def apply_simulation_parameter_modifiers(
         applied["wasteLevelPct"] = waste
 
     return traffic_mult, fill_boost, applied
+
+
+def build_applied_crew_modifiers(
+    operators_shortage: int | None,
+    *,
+    reference_assigned: int = DEFAULT_IDEAL_OPERATORS,
+    reference_ideal: int = DEFAULT_IDEAL_OPERATORS,
+) -> dict[str, Any]:
+    """Describe el efecto del ausentismo global en tiempo de servicio (ADR-003)."""
+    shortage = normalize_operators_shortage(operators_shortage)
+    if shortage is None or shortage == 0:
+        return {}
+
+    effective = resolve_effective_assigned(
+        reference_assigned,
+        ideal=reference_ideal,
+        operators_shortage=shortage,
+    )
+    per_stop = service_time_seconds_per_stop(effective, ideal=reference_ideal)
+    field_missing = max(0, (reference_ideal - 1) - max(0, effective - 1))
+    return {
+        "operatorsShortage": shortage,
+        "resolution": "max(1, assignedVehicle - operatorsShortage)",
+        "referenceAssignedOperators": reference_assigned,
+        "effectiveAssignedOperators": effective,
+        "fieldOperatorsMissing": field_missing,
+        "serviceSecondsPerStop": per_stop,
+        "baselineServiceSecondsPerStop": BASE_SERVICE_SECONDS,
+        "penaltySecondsPerStop": per_stop - BASE_SERVICE_SECONDS,
+        "narrative": (
+            "El conductor siempre está en el camión; el ausentismo resta solo "
+            "operarios de campo (máx. 5)."
+        ),
+    }

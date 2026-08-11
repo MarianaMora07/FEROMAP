@@ -1,8 +1,11 @@
-import type { KpiMetrics, ScenarioId, SimulationLogEntry } from '../../data/types/simulation';
+import type { SimulationCrewParameters, VehicleCrewFields } from '../../data/types/crewServiceTime';
 import type { RouteCollection } from '../../data/types/geo';
+import type { KpiMetrics, ScenarioId, SimulationLogEntry } from '../../data/types/simulation';
 import type { ExecutionPhaseId } from '../../features/simulation/executionPhases';
 import { apiGet, apiPost } from './client';
 import type { SimulationRunParameters } from './simulation';
+
+export type { SimulationCrewParameters, VehicleCrewFields };
 
 export type OptimizationJobStatus = 'pending' | 'running' | 'completed' | 'cancelled' | 'failed';
 
