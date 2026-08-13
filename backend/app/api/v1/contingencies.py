@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from app.api.deps import DbSession, OperationsStaff
 from app.schemas.contingency import CriticalContainerRecalcRequest, VehicleBreakdownRequest
@@ -19,8 +19,19 @@ def report_vehicle_breakdown(body: VehicleBreakdownRequest, db: DbSession, _: Op
 
 
 @router.get("/recent")
-def get_recent_incidents(db: DbSession, _: OperationsStaff):
-    return list_recent_incidents(db)
+def get_recent_incidents(
+    db: DbSession,
+    _: OperationsStaff,
+    vehicle_id: str | None = Query(default=None, alias="vehicleId"),
+    hours: int | None = Query(default=None, ge=1, le=168),
+    limit: int = Query(default=10, ge=1, le=50),
+):
+    return list_recent_incidents(
+        db,
+        limit=limit,
+        vehicle_id=vehicle_id,
+        hours=hours,
+    )
 
 
 @router.post("/critical-container-recalc")

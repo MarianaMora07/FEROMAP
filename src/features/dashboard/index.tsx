@@ -28,7 +28,7 @@ import {
   KpiCard,
   ProgressBar,
 } from '../../design-system/components';
-import { canOptimize } from '../../core/auth/permissions';
+import { canOptimize, isConductor } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
 import {
   activeRoutes as mockActiveRoutes,
@@ -42,6 +42,7 @@ import { dashboardView, loadDashboardData } from '../../core/stores/dashboardSto
 import { analyticsHref, reportsHref, simulationResultsHref } from '../../core/utils/simulationLinks';
 import { DashboardMiniMap } from './DashboardMiniMap';
 import { PlanningWidgets } from './PlanningWidgets';
+import { OperatorHubSection } from '../operator/OperatorHubSection';
 
 const alertIcon: Record<'danger' | 'warning' | 'info', () => JSX.Element> = {
   danger: () => <AlertTriangle size={16} />,
@@ -193,9 +194,14 @@ export default function DashboardPage() {
   const activeRoutes = () => dashboardView()?.activeRoutes ?? mockActiveRoutes;
 
   const showPlannerActions = () => canOptimize(authUser()?.role);
+  const showOperatorView = () => isConductor(authUser()?.role);
 
   return (
     <div class="space-y-4 md:space-y-5">
+      <Show when={showOperatorView()}>
+        <OperatorHubSection variant="dashboard" />
+      </Show>
+
       <Show when={showPlannerActions()}>
         <PlanningWidgets />
       </Show>
@@ -210,7 +216,7 @@ export default function DashboardPage() {
           </div>
         )}
       </Show>
-      <Show when={lastOptimization()}>
+      <Show when={lastOptimization() && !showOperatorView()}>
         {(opt) => (
           <div class="rounded-xl border border-fero-green/30 bg-fero-green/10 px-4 py-3">
             <div class="flex flex-wrap items-start justify-between gap-2">
@@ -252,6 +258,7 @@ export default function DashboardPage() {
         )}
       </Show>
 
+      <Show when={!showOperatorView()}>
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           title="Residuos recolectados hoy"
@@ -352,6 +359,7 @@ export default function DashboardPage() {
           <ViewAllLink href="/alerts">Ver todas las alertas</ViewAllLink>
         </Card>
       </div>
+      </Show>
     </div>
   );
 }

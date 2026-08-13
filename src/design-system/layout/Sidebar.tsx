@@ -18,6 +18,7 @@ import {
   Sun,
   ChevronDown,
   LogOut,
+  ClipboardList,
 } from 'lucide-solid';
 import { appState, toggleDarkMode } from '../../core/stores/appStore';
 import { dashboardSummary } from '../../core/stores/dashboardStore';
@@ -32,6 +33,7 @@ import { navItemsForRole } from '../../core/auth/permissions';
 
 const NAV_ICONS: Record<string, typeof LayoutDashboard> = {
   '/': LayoutDashboard,
+  '/operator': ClipboardList,
   '/optimization': Map,
   '/planning': LayoutDashboard,
   '/planning/history': History,

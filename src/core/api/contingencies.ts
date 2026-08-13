@@ -17,6 +17,7 @@ export interface IncidentPayload {
   description: string | null;
   reportedAt: string | null;
   affectsActiveRoute: boolean;
+  relatedAlertId?: string | null;
 }
 
 export interface ContingencyComparison {
@@ -43,8 +44,17 @@ export function reportVehicleBreakdown(
   return apiPost<VehicleBreakdownResponse>('/api/v1/contingencies/vehicle-breakdown', payload);
 }
 
-export function fetchRecentIncidents(): Promise<IncidentPayload[]> {
-  return apiGet<IncidentPayload[]>('/api/v1/contingencies/recent');
+export function fetchRecentIncidents(params?: {
+  vehicleId?: string;
+  hours?: number;
+  limit?: number;
+}): Promise<IncidentPayload[]> {
+  const query = new URLSearchParams();
+  if (params?.vehicleId) query.set('vehicleId', params.vehicleId);
+  if (params?.hours != null) query.set('hours', String(params.hours));
+  if (params?.limit != null) query.set('limit', String(params.limit));
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return apiGet<IncidentPayload[]>(`/api/v1/contingencies/recent${suffix}`);
 }
 
 export interface CriticalContainerRecalcRequest {

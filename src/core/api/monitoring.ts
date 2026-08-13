@@ -106,4 +106,10 @@ export function advanceActiveRoutes(): Promise<{ advanced: number; routes: unkno
   return apiPost('/api/v1/routes/advance', {});
 }
 
+export function advanceRouteById(
+  routeId: number,
+): Promise<{ routeId: number; progress: number; routeCompleted: boolean }> {
+  return apiPost(`/api/v1/routes/${routeId}/advance`, {});
+}
+
 export type { FleetLiveStatus, LiveVehicle };

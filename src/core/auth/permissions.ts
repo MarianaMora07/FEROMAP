@@ -2,6 +2,8 @@ import type { UserRole } from '../types/auth';
 
 export const ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
   '/': ['administrador', 'planificador', 'conductor', 'residente'],
+  '/operator': ['administrador', 'planificador', 'conductor'],
+  '/operator/plan': ['administrador', 'planificador', 'conductor'],
   '/optimization': ['administrador', 'planificador'],
   '/planning': ['administrador', 'planificador'],
   '/planning/history': ['administrador', 'planificador'],
@@ -22,7 +24,7 @@ export const ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
 export const DEFAULT_HOME_BY_ROLE: Record<UserRole, string> = {
   administrador: '/',
   planificador: '/',
-  conductor: '/monitoring',
+  conductor: '/operator',
   residente: '/resident',
 };
 
@@ -100,6 +102,20 @@ export const MAIN_NAV_ITEMS: NavItemDef[] = [
   { href: '/alerts', label: 'Alertas', roles: ['administrador', 'planificador', 'conductor', 'residente'] },
 ];
 
+/** Nav lateral reducida para conductores en campo. */
+export const OPERATOR_MAIN_NAV_ITEMS: NavItemDef[] = [
+  { href: '/', label: 'Dashboard', roles: ['conductor'] },
+  {
+    href: '/operator',
+    label: 'Mi operación',
+    description: 'Tu ruta en campo',
+    sectionBefore: 'Campo',
+    roles: ['conductor'],
+  },
+  { href: '/map', label: 'Mapa GIS', roles: ['conductor'] },
+  { href: '/alerts', label: 'Alertas', roles: ['conductor'] },
+];
+
 export const BOTTOM_NAV_ITEMS: NavItemDef[] = [
   { href: '/admin', label: 'Administración', roles: ['administrador'] },
   { href: '/profile', label: 'Perfil', roles: ['administrador', 'planificador', 'conductor', 'residente'] },
@@ -107,10 +123,25 @@ export const BOTTOM_NAV_ITEMS: NavItemDef[] = [
 
 export function navItemsForRole(role: UserRole | undefined) {
   if (!role) return { main: [], bottom: [] };
+  if (isConductor(role)) {
+    return {
+      main: OPERATOR_MAIN_NAV_ITEMS,
+      bottom: BOTTOM_NAV_ITEMS.filter((item) => item.roles.includes(role)),
+    };
+  }
   return {
     main: MAIN_NAV_ITEMS.filter((item) => item.roles.includes(role)),
     bottom: BOTTOM_NAV_ITEMS.filter((item) => item.roles.includes(role)),
   };
+}
+
+export function isConductor(role: UserRole | undefined): boolean {
+  return role === 'conductor';
+}
+
+export function isOperatorHome(path: string): boolean {
+  const normalized = path.split('?')[0] ?? path;
+  return normalized === '/operator' || normalized === '/monitoring';
 }
 
 export function canOptimize(role: UserRole | undefined): boolean {

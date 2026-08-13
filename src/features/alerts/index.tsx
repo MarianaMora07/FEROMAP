@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from 'solid-js';
-import { A } from '@solidjs/router';
+import { A, useSearchParams } from '@solidjs/router';
 import {
   Chart,
   ArcElement,
@@ -58,6 +58,17 @@ import {
   statsToKpis,
   updateAlertStatus,
 } from '../../core/api/alerts';
+import { fetchOperatorRouteSnapshot } from '../../core/api/operator';
+import { fetchRecentIncidents } from '../../core/api/contingencies';
+import { isConductor } from '../../core/auth/permissions';
+import { authUser } from '../../core/stores/authStore';
+import {
+  buildOperatorAlertContext,
+  filterOperatorAlerts,
+} from '../../core/operator/operatorAlertsUx';
+import { operatorMapHref, parseVehicleIdParam } from '../../core/operator/operatorDeepLinks';
+import { OPERATOR_EMPTY_PRESETS } from '../../core/operator/operatorEmptyStates';
+import { PlanningEmptyState } from '../planning/PlanningEmptyState';
 
 function KpiIcon(props: { name: (typeof alertsKpis)[number]['icon'] }) {
   switch (props.name) {
@@ -123,6 +134,17 @@ function createAlertPin(color: string) {
 }
 
 export default function AlertsPage() {
+  const [searchParams] = useSearchParams();
+  const highlightAlertId = () => {
+    const raw = searchParams.id;
+    return Array.isArray(raw) ? raw[0] : raw;
+  };
+  const operatorScope = () => {
+    const scope = Array.isArray(searchParams.scope) ? searchParams.scope[0] : searchParams.scope;
+    return isConductor(authUser()?.role) || scope === 'mine';
+  };
+  const operationDate = () => new Date().toISOString().slice(0, 10);
+
   let mapContainer!: HTMLDivElement;
   const mapRef: { current?: MapLibreMap } = {};
   const markers: Marker[] = [];
@@ -130,17 +152,49 @@ export default function AlertsPage() {
   const [refreshToken, setRefreshToken] = createSignal(0);
   const [alertsData] = createResource(refreshToken, () => fetchAlerts());
   const [activityData] = createResource(refreshToken, () => fetchAlertActivity());
+  const [routeSnapshot] = createResource(
+    () => (operatorScope() ? operationDate() : null),
+    (date) => (date ? fetchOperatorRouteSnapshot(date) : Promise.resolve(undefined)),
+  );
+  const vehicleId = () =>
+    parseVehicleIdParam(searchParams.vehicleId) ?? routeSnapshot()?.vehicleId ?? undefined;
+  const [incidents] = createResource(
+    () => (operatorScope() ? vehicleId() : null),
+    (id) => (id ? fetchRecentIncidents({ vehicleId: id, hours: 48 }) : Promise.resolve([])),
+  );
+  const operatorAlertContext = createMemo(() =>
+    buildOperatorAlertContext({
+      vehicleId: vehicleId(),
+      stops: routeSnapshot()?.stops,
+      incidentAlertIds: (incidents() ?? [])
+        .map((incident) => incident.relatedAlertId)
+        .filter((id): id is string => Boolean(id)),
+    }),
+  );
   const [actionLoading, setActionLoading] = createSignal<string | null>(null);
   const [openMenuId, setOpenMenuId] = createSignal<string | null>(null);
 
   const alertsListData = () => alertsData()?.alerts ?? alertsList.filter((a) => a.status !== 'resuelta');
+  const operatorAlertsList = createMemo(() => {
+    if (!operatorScope()) return alertsListData();
+    return filterOperatorAlerts(alertsListData(), operatorAlertContext());
+  });
+  const activeAlertsList = () => (operatorScope() ? operatorAlertsList() : alertsListData());
+  const showOperatorRouteEmpty = () =>
+    operatorScope() && !alertsData.loading && operatorAlertsList().length === 0;
+  const operatorMapLink = () =>
+    operatorMapHref({
+      date: operationDate(),
+      vehicleId: vehicleId(),
+      focus: 'route',
+    });
   const alertsKpisData = () =>
     alertsData()?.stats ? statsToKpis(alertsData()!.stats) : alertsKpis;
   const recentActivity = () => activityData() ?? [];
   const alertsDistribution = () =>
-    alertsListData().length ? computeAlertsDistribution(alertsListData()) : { total: 0, items: [] };
+    activeAlertsList().length ? computeAlertsDistribution(activeAlertsList()) : { total: 0, items: [] };
   const alertsByCategory = () =>
-    alertsListData().length ? computeAlertsByCategory(alertsListData()) : [];
+    activeAlertsList().length ? computeAlertsByCategory(activeAlertsList()) : [];
 
   const refetchAlerts = () => setRefreshToken((value) => value + 1);
 
@@ -168,7 +222,7 @@ export default function AlertsPage() {
     if (!map || !map.isStyleLoaded()) return;
     markers.forEach((m) => m.remove());
     markers.length = 0;
-    for (const a of alertsListData()) {
+    for (const a of activeAlertsList()) {
       const marker = new maplibregl.Marker({ element: createAlertPin(priorityColor[a.priority]) })
         .setLngLat([a.lng, a.lat])
         .setPopup(
@@ -188,7 +242,7 @@ export default function AlertsPage() {
   );
 
   createEffect(() => {
-    alertsListData();
+    activeAlertsList();
     syncAlertMarkers();
   });
 
@@ -235,7 +289,7 @@ export default function AlertsPage() {
     const cat = categoryFilter();
     const st = statusFilter();
     const pr = priorityFilter();
-    return alertsListData().filter((a) => {
+    return activeAlertsList().filter((a) => {
       if (pr && a.priority !== pr) return false;
       if (cat && a.category !== cat) return false;
       if (st && a.status !== st) return false;
@@ -265,6 +319,20 @@ export default function AlertsPage() {
     return `Mostrando ${from} a ${to} de ${total()} alertas`;
   };
 
+  createEffect(() => {
+    const targetId = highlightAlertId();
+    if (!targetId || alertsData.loading) return;
+    const index = activeAlertsList().findIndex((alert) => alert.id === targetId);
+    if (index < 0) return;
+    setPage(Math.floor(index / pageSize) + 1);
+    queueMicrotask(() => {
+      document.getElementById(`alert-row-${targetId}`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    });
+  });
+
   const focusCritical = () => {
     setPriorityFilter('critica');
     setStatusFilter('');
@@ -287,10 +355,23 @@ export default function AlertsPage() {
 
   const maxCategory = () => Math.max(...alertsByCategory().map((c) => c.count), 1);
   const criticalCount = () =>
-    alertsListData().filter((a) => a.priority === 'critica').length;
+    activeAlertsList().filter((a) => a.priority === 'critica').length;
 
   return (
     <div class="space-y-5">
+      <Show when={operatorScope()}>
+        <div class="rounded-xl border border-fero-blue/30 bg-fero-blue/5 px-4 py-3">
+          <p class="text-sm font-semibold text-fero-blue">Alertas que te afectan hoy</p>
+          <p class="mt-0.5 text-xs text-text-secondary">
+            Prioridad: tu ruta
+            <Show when={vehicleId()}>
+              {' '}
+              ({vehicleId()})
+            </Show>
+            , sector y averías reportadas por ti.
+          </p>
+        </div>
+      </Show>
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <For each={alertsKpisData()}>
           {(kpi) => (
@@ -380,14 +461,30 @@ export default function AlertsPage() {
                   each={pageItems()}
                   fallback={
                     <tr>
-                      <td colSpan={7} class="px-3 py-8 text-center text-sm text-text-muted">
-                        No se encontraron alertas
+                      <td colSpan={7} class="px-3 py-2">
+                        <Show
+                          when={showOperatorRouteEmpty()}
+                          fallback={
+                            <p class="py-6 text-center text-sm text-text-muted">No se encontraron alertas</p>
+                          }
+                        >
+                          <PlanningEmptyState
+                            {...OPERATOR_EMPTY_PRESETS.noAlertsOnRoute}
+                            actionHref={operatorMapLink()}
+                            compact
+                          />
+                        </Show>
                       </td>
                     </tr>
                   }
                 >
                   {(a) => (
-                    <tr class="hover:bg-surface-hover">
+                    <tr
+                      id={`alert-row-${a.id}`}
+                      class={`hover:bg-surface-hover ${
+                        highlightAlertId() === a.id ? 'bg-fero-blue/10 ring-1 ring-inset ring-fero-blue/30' : ''
+                      }`}
+                    >
                       <td class="px-3 py-2.5">
                         <PriorityBadge priority={a.priority} />
                       </td>
