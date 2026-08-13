@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import CollectionPoint, OptimizedRoute, RouteWaypoint, Simulation, Vehicle, VehicleIncident
+from app.db.models import CollectionPoint, OptimizedRoute, RouteWaypoint, Simulation, SystemAlert, Vehicle, VehicleIncident
 from app.services.operations_service import dispatch_optimized_routes
 from app.services.optimization_service import run_optimization_engine
 
@@ -64,6 +64,31 @@ def _latest_simulation(db: Session) -> Simulation | None:
     return db.scalars(select(Simulation).order_by(Simulation.executed_at.desc()).limit(1)).first()
 
 
+def _create_incident_alert(db: Session, incident: VehicleIncident, vehicle: Vehicle) -> str:
+    alert_id = f"al-inc-{incident.id}"
+    existing = db.get(SystemAlert, alert_id)
+    if existing is not None:
+        return alert_id
+
+    db.add(
+        SystemAlert(
+            id=alert_id,
+            source_key=f"incident-{incident.id}",
+            priority="advertencia",
+            title=f"Avería reportada — {vehicle.code}",
+            detail=incident.description or f"Incidencia #{incident.id} en campo",
+            source=f"Vehículo {vehicle.code}",
+            location="Operación en campo",
+            category="mantenimiento",
+            longitude=-62.715,
+            latitude=8.295,
+            lifecycle_status="open",
+            occurred_at=incident.reported_at or datetime.now(timezone.utc),
+        )
+    )
+    return alert_id
+
+
 def handle_vehicle_breakdown(
     db: Session,
     *,
@@ -98,6 +123,7 @@ def handle_vehicle_breakdown(
     )
     db.add(incident)
     db.flush()
+    related_alert_id = _create_incident_alert(db, incident, vehicle)
 
     vehicle.status = "maintenance"
 
@@ -114,7 +140,7 @@ def handle_vehicle_breakdown(
     if not pending_point_ids:
         db.commit()
         return {
-            "incident": _incident_payload(incident, vehicle, route),
+            "incident": _incident_payload(incident, vehicle, route, related_alert_id=related_alert_id),
             "skippedWaypoints": skipped_waypoints,
             "pendingPoints": 0,
             "recalculation": None,
@@ -141,7 +167,7 @@ def handle_vehicle_breakdown(
             )
         db.commit()
         return {
-            "incident": _incident_payload(incident, vehicle, route),
+            "incident": _incident_payload(incident, vehicle, route, related_alert_id=related_alert_id),
             "skippedWaypoints": skipped_waypoints,
             "pendingPoints": len(pending_point_ids),
             "recalculation": None,
@@ -183,7 +209,7 @@ def handle_vehicle_breakdown(
     }
 
     return {
-        "incident": _incident_payload(incident, vehicle, route),
+        "incident": _incident_payload(incident, vehicle, route, related_alert_id=related_alert_id),
         "skippedWaypoints": skipped_waypoints,
         "pendingPoints": len(pending_point_ids),
         "recalculation": recalc,
@@ -199,6 +225,8 @@ def _incident_payload(
     incident: VehicleIncident,
     vehicle: Vehicle,
     route: OptimizedRoute | None,
+    *,
+    related_alert_id: str | None = None,
 ) -> dict[str, Any]:
     return {
         "id": incident.id,
@@ -209,18 +237,34 @@ def _incident_payload(
         "description": incident.description,
         "reportedAt": incident.reported_at.isoformat() if incident.reported_at else None,
         "affectsActiveRoute": incident.affects_active_route,
+        "relatedAlertId": related_alert_id or f"al-inc-{incident.id}",
     }
 
 
-def list_recent_incidents(db: Session, limit: int = 10) -> list[dict[str, Any]]:
-    incidents = db.scalars(
+def list_recent_incidents(
+    db: Session,
+    *,
+    limit: int = 10,
+    vehicle_id: str | None = None,
+    hours: int | None = None,
+) -> list[dict[str, Any]]:
+    stmt = (
         select(VehicleIncident)
         .options(joinedload(VehicleIncident.vehicle), joinedload(VehicleIncident.route))
         .order_by(VehicleIncident.reported_at.desc())
-        .limit(limit)
-    ).all()
-    return [
-        _incident_payload(incident, incident.vehicle, incident.route)
-        for incident in incidents
-        if incident.vehicle is not None
-    ]
+    )
+    if hours is not None:
+        since = datetime.now(timezone.utc) - timedelta(hours=hours)
+        stmt = stmt.where(VehicleIncident.reported_at >= since)
+    incidents = db.scalars(stmt.limit(limit * 3 if vehicle_id else limit)).all()
+
+    items: list[dict[str, Any]] = []
+    for incident in incidents:
+        if incident.vehicle is None:
+            continue
+        if vehicle_id and incident.vehicle.code != vehicle_id:
+            continue
+        items.append(_incident_payload(incident, incident.vehicle, incident.route))
+        if len(items) >= limit:
+            break
+    return items

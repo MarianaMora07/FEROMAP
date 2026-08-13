@@ -30,10 +30,12 @@ import {
 } from '../../design-system/components';
 import {
   advanceActiveRoutes,
+  advanceRouteById,
   fetchMonitoringStatus,
   type MonitoringKpi,
 } from '../../core/api/monitoring';
 import { fetchDailyPlan } from '../../core/api/planning';
+import { fetchOperatorRouteSnapshot } from '../../core/api/operator';
 import { MAP_CONTEXT_POLL_MS } from '../../core/api/map';
 import {
   ensureOperationalRouteLayer,
@@ -41,16 +43,25 @@ import {
   syncFleetMarkers,
 } from '../../core/map/operationalMapLayers';
 import { appState } from '../../core/stores/appStore';
-import { canSimulateFleetAdvance, isOperationalSupervisor } from '../../core/auth/permissions';
+import { canSimulateFleetAdvance, isConductor, isOperationalSupervisor } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
 import { optimizationHref } from '../../core/planning/operationalLinks';
 import { BreakdownReporter, ContingencyResultBanner } from '../contingency/BreakdownReporter';
+import { OperatorContingencyBanner } from '../contingency/OperatorContingencyBanner';
+import { OperatorMyIncidents } from '../contingency/OperatorMyIncidents';
 import { CriticalContainerRecalc } from './CriticalContainerRecalc';
 import { RecentIncidentsPanel } from '../contingency/RecentIncidentsPanel';
 import { PlanningLevelBanner } from '../planning/PlanningLevelBanner';
 import { PlanningStatusBadge } from '../planning/PlanningStatusBadge';
 import { PlanningEmptyState } from '../planning/PlanningEmptyState';
 import { PLANNING_EMPTY_PRESETS } from '../../core/planning/planningEmptyStates';
+import { OPERATOR_EMPTY_PRESETS } from '../../core/operator/operatorEmptyStates';
+import { fleetForOperatorField } from '../../core/operator/operatorMonitoringUx';
+import { parseVehicleIdParam } from '../../core/operator/operatorDeepLinks';
+import {
+  OperatorFieldBottomPanel,
+  OperatorNextStopCard,
+} from './OperatorFieldPanel';
 import { bindMapTheme, mapStyleForTheme } from '../../core/utils/mapStyle';
 import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
 import {
@@ -158,7 +169,11 @@ export default function MonitoringPage() {
 
   const [monitoringData, { refetch }] = createResource(fetchMonitoringStatus);
   const [dailyPlan] = createResource(operationDate, (date) => fetchDailyPlan(date));
+  const [routeSnapshot, { refetch: refetchRouteSnapshot }] = createResource(operationDate, (date) =>
+    fetchOperatorRouteSnapshot(date),
+  );
   const [advancing, setAdvancing] = createSignal(false);
+  const fieldMode = () => isConductor(authUser()?.role);
   const monitoringKpis = () => monitoringData()?.kpis ?? [];
   const liveFleet = () => monitoringData()?.liveFleet ?? [];
   const routeProgress = () => monitoringData()?.routeProgress ?? [];
@@ -173,6 +188,23 @@ export default function MonitoringPage() {
   const [mapReady, setMapReady] = createSignal(false);
   const [legendOpen, setLegendOpen] = createSignal(false);
   const [incidentsRefreshKey, setIncidentsRefreshKey] = createSignal(0);
+  const [fieldPanelOpen, setFieldPanelOpen] = createSignal(true);
+
+  const vehicleIdParam = () => parseVehicleIdParam(searchParams.vehicleId);
+
+  const operatorFleet = createMemo(() => {
+    let fleet = fieldMode() ? fleetForOperatorField(liveFleet(), authUser()) : liveFleet();
+    const param = vehicleIdParam();
+    if (fieldMode() && param) {
+      const match =
+        liveFleet().find((vehicle) => vehicle.id === param) ??
+        fleet.find((vehicle) => vehicle.id === param);
+      if (match) fleet = [match];
+    }
+    return fleet;
+  });
+  const operatorVehicle = createMemo(() => operatorFleet()[0] ?? null);
+  const mapFleet = createMemo(() => (fieldMode() ? operatorFleet() : liveFleet()));
 
   const filteredFleet = createMemo(() => {
     const q = search().trim().toLowerCase();
@@ -198,7 +230,7 @@ export default function MonitoringPage() {
       createMarkerElement: (color) => createPin(color, trashSvg('#fff'), 24),
     });
 
-    syncFleetMarkers(map, liveFleet(), markersById, {
+    syncFleetMarkers(map, mapFleet(), markersById, {
       createMarkerElement: (vehicle) => {
         const el = createPin(vehicle.color, truckSvg('#fff'), 30);
         el.addEventListener('click', (e) => {
@@ -210,8 +242,26 @@ export default function MonitoringPage() {
       buildPopupHtml: buildVehiclePopup,
     });
 
-    const first = liveFleet()[0];
-    if (first && !selectedId()) setSelectedId(first.id);
+    const first = mapFleet()[0];
+    if (first && (!selectedId() || fieldMode())) setSelectedId(first.id);
+  };
+
+  const centerOnVehicle = (id: string) => {
+    const v = mapFleet().find((vehicle) => vehicle.id === id) ?? liveFleet().find((vehicle) => vehicle.id === id);
+    const map = mapRef.current;
+    if (!v || !map) return;
+    map.flyTo({ center: [v.lng, v.lat], zoom: Math.max(map.getZoom(), 14.5), essential: true });
+  };
+
+  const navigateToNextStop = () => {
+    const next = routeSnapshot()?.nextStop;
+    const map = mapRef.current;
+    if (next?.lng != null && next?.lat != null && map) {
+      map.flyTo({ center: [next.lng, next.lat], zoom: 15, essential: true });
+      return;
+    }
+    const vehicle = operatorVehicle();
+    if (vehicle) centerOnVehicle(vehicle.id);
   };
 
   const openVehiclePopup = (id: string) => {
@@ -230,8 +280,14 @@ export default function MonitoringPage() {
   const handleAdvance = async () => {
     setAdvancing(true);
     try {
-      await advanceActiveRoutes();
+      const routeId = operatorVehicle()?.routeId ?? routeSnapshot()?.routeId;
+      if (fieldMode() && routeId != null) {
+        await advanceRouteById(routeId);
+      } else {
+        await advanceActiveRoutes();
+      }
       await refetch();
+      await refetchRouteSnapshot();
       syncOperationalMap();
     } finally {
       setAdvancing(false);
@@ -263,7 +319,7 @@ export default function MonitoringPage() {
       map.resize();
       setupMonitoringMap(map);
       setMapReady(true);
-      const first = liveFleet()[0];
+      const first = mapFleet()[0];
       if (first) openVehiclePopup(first.id);
     });
 
@@ -300,15 +356,53 @@ export default function MonitoringPage() {
 
   createEffect(() => {
     monitoringData();
+    routeSnapshot();
     if (mapReady()) syncOperationalMap();
   });
 
+  createEffect(() => {
+    if (!fieldMode()) return;
+    const param = vehicleIdParam();
+    const vehicle = param
+      ? operatorFleet().find((row) => row.id === param) ?? operatorVehicle()
+      : operatorVehicle();
+    if (!vehicle) return;
+    if (selectedId() !== vehicle.id) {
+      setSelectedId(vehicle.id);
+    }
+    if (mapReady()) {
+      centerOnVehicle(vehicle.id);
+    }
+  });
+
+  const monitoringBannerTitle = () => {
+    if (isConductor(authUser()?.role)) return 'Operación en campo';
+    if (isOperationalSupervisor(authUser()?.role)) return 'Supervisión operativa';
+    return 'Monitoreo en tiempo real';
+  };
+
+  const fleetEmptyPreset = () => {
+    if (isConductor(authUser()?.role)) {
+      return liveFleet().length === 0
+        ? OPERATOR_EMPTY_PRESETS.noFleetInMonitoring
+        : OPERATOR_EMPTY_PRESETS.noFleetMatch;
+    }
+    return liveFleet().length === 0
+      ? PLANNING_EMPTY_PRESETS.noVehicles
+      : PLANNING_EMPTY_PRESETS.noFleetMatch;
+  };
+
   return (
-    <div class="space-y-5">
-      <PlanningLevelBanner
-        level="operativo"
-        title={isOperationalSupervisor(authUser()?.role) ? 'Supervisión operativa' : 'Monitoreo en tiempo real'}
-      >
+    <div class={`space-y-5 ${fieldMode() ? 'pb-36 md:pb-5' : ''}`}>
+      <PlanningLevelBanner level="operativo" title={monitoringBannerTitle()}>
+        <Show when={isConductor(authUser()?.role)}>
+          <p class="text-sm text-text-secondary">
+            Ejecuta tu ruta, reporta incidencias y consulta el avance.{' '}
+            <A href="/operator" class="font-semibold text-fero-blue hover:underline">
+              Volver a Mi operación
+            </A>
+          </p>
+        </Show>
         <Show when={isOperationalSupervisor(authUser()?.role)}>
           <p class="text-sm text-text-secondary">
             Modo supervisión — revisa flota e incidencias sin operar como conductor.{' '}
@@ -324,7 +418,12 @@ export default function MonitoringPage() {
           </p>
         </Show>
       </PlanningLevelBanner>
-      <ContingencyResultBanner />
+      <Show when={fieldMode()}>
+        <OperatorContingencyBanner />
+      </Show>
+      <Show when={!fieldMode()}>
+        <ContingencyResultBanner />
+      </Show>
 
       <Show when={dailyPlan()}>
         {(plan) => (
@@ -334,15 +433,17 @@ export default function MonitoringPage() {
                 <p class="text-sm font-semibold text-fero-blue">Plan del día {plan().operationDate}</p>
                 <PlanningStatusBadge status={plan().status} />
               </div>
-              <A
-                href={optimizationHref({
-                  date: plan().operationDate,
-                  dailyPlanId: plan().id ?? dailyPlanIdParam(),
-                })}
-                class="text-xs font-semibold text-fero-blue hover:underline"
-              >
-                Abrir en optimización
-              </A>
+              <Show when={!isConductor(authUser()?.role)}>
+                <A
+                  href={optimizationHref({
+                    date: plan().operationDate,
+                    dailyPlanId: plan().id ?? dailyPlanIdParam(),
+                  })}
+                  class="text-xs font-semibold text-fero-blue hover:underline"
+                >
+                  Abrir en optimización
+                </A>
+              </Show>
             </div>
             <p class="mt-1 text-sm text-text-secondary">
               {plan().finalPointIds.length} puntos en plan · {plan().pendingPoints.length} pendientes incorporados
@@ -353,26 +454,55 @@ export default function MonitoringPage() {
 
       <div class="flex flex-wrap items-center justify-between gap-3">
         <p class="text-sm text-text-secondary">
-          Datos en vivo desde la API · {monitoringData()?.fleetCounts.inRoute ?? 0} vehículos en ruta
+          <Show
+            when={fieldMode()}
+            fallback={
+              <>
+                Datos en vivo desde la API · {monitoringData()?.fleetCounts.inRoute ?? 0} vehículos en ruta
+              </>
+            }
+          >
+            Tu vehículo en campo
+            <Show when={operatorVehicle()}>
+              {(vehicle) => <span class="font-semibold text-text-primary dark:text-white"> · {vehicle().id}</span>}
+            </Show>
+          </Show>
           <Show when={operationDate() !== new Date().toISOString().slice(0, 10)}>
             <span class="ml-1 text-text-muted">· Contexto: {operationDate()}</span>
           </Show>
         </p>
-        <div class="flex flex-wrap items-center gap-2">
+        <div id="reportar-averia" class="flex flex-wrap items-center gap-2">
           <BreakdownReporter
-            compact
-            vehicles={liveFleet().map((v) => ({ id: v.id, routeId: v.routeId, status: v.status }))}
+            variant={fieldMode() ? 'operator' : 'planner'}
+            compact={!fieldMode()}
+            vehicles={(fieldMode() ? operatorFleet() : liveFleet()).map((v) => ({
+              id: v.id,
+              routeId: v.routeId,
+              status: v.status,
+            }))}
             onComplete={() => {
               void refetch();
+              void refetchRouteSnapshot();
               setIncidentsRefreshKey((value) => value + 1);
             }}
           />
-          <CriticalContainerRecalc
-            compact
-            containers={monitoringData()?.containers}
-            dailyPlanId={dailyPlan()?.id ?? dailyPlanIdParam()}
-            onComplete={() => void refetch()}
-          />
+          <Show when={fieldMode() && (routeSnapshot()?.stops.length ?? 0) > 0}>
+            <CriticalContainerRecalc
+              compact
+              containers={monitoringData()?.containers}
+              dailyPlanId={dailyPlan()?.id ?? dailyPlanIdParam()}
+              routePointCodes={routeSnapshot()?.stops.map((stop) => stop.code) ?? []}
+              onComplete={() => void refetch()}
+            />
+          </Show>
+          <Show when={!fieldMode()}>
+            <CriticalContainerRecalc
+              compact
+              containers={monitoringData()?.containers}
+              dailyPlanId={dailyPlan()?.id ?? dailyPlanIdParam()}
+              onComplete={() => void refetch()}
+            />
+          </Show>
           <Show
             when={canSimulateFleetAdvance(authUser()?.role)}
             fallback={
@@ -385,18 +515,36 @@ export default function MonitoringPage() {
           >
             <Button
               variant="primary"
-              size="sm"
-              class="gap-2"
-              icon={<FastForward size={16} />}
-              disabled={advancing() || !monitoringData()?.fleetCounts.inRoute}
+              size={fieldMode() ? 'lg' : 'sm'}
+              class={`gap-2 ${fieldMode() ? 'min-h-12' : ''}`}
+              icon={<FastForward size={fieldMode() ? 18 : 16} />}
+              disabled={
+                advancing() ||
+                (fieldMode()
+                  ? operatorVehicle()?.routeId == null && routeSnapshot()?.routeId == null
+                  : !monitoringData()?.fleetCounts.inRoute)
+              }
               onClick={() => void handleAdvance()}
             >
-              {advancing() ? 'Avanzando…' : 'Simular avance de flota'}
+              {advancing()
+                ? 'Avanzando…'
+                : fieldMode()
+                  ? 'Marcar avance de ruta (demo)'
+                  : 'Simular avance de flota'}
             </Button>
           </Show>
         </div>
       </div>
 
+      <Show when={fieldMode()}>
+        <OperatorNextStopCard
+          snapshot={routeSnapshot()}
+          vehicle={operatorVehicle()}
+          onNavigate={navigateToNextStop}
+        />
+      </Show>
+
+      <Show when={!fieldMode()}>
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <For each={monitoringKpis()}>
           {(kpi) => (
@@ -418,9 +566,16 @@ export default function MonitoringPage() {
           )}
         </For>
       </div>
+      </Show>
 
-      <div class="grid items-stretch gap-4 xl:grid-cols-5">
-        <Card padding={false} class="flex min-h-0 flex-col overflow-hidden xl:col-span-3 xl:h-full">
+      <div class={`grid items-stretch gap-4 ${fieldMode() ? '' : 'xl:grid-cols-5'}`}>
+        <Card
+          padding={false}
+          class={`flex min-h-0 flex-col overflow-hidden xl:h-full ${
+            fieldMode() ? 'min-h-[50vh]' : 'xl:col-span-3'
+          }`}
+        >
+          <Show when={!fieldMode()}>
           <div class="flex flex-wrap items-center gap-2 border-b border-border p-3 dark:border-dark-border sm:gap-3 sm:px-4">
             <div class="relative min-w-0 flex-1 basis-48">
               <Search size={14} class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
@@ -459,8 +614,13 @@ export default function MonitoringPage() {
               Leyenda
             </button>
           </div>
+          </Show>
 
-          <div class="relative min-h-80 flex-1 bg-slate-100 dark:bg-slate-900 lg:min-h-105">
+          <div
+            class={`relative min-h-80 flex-1 bg-slate-100 dark:bg-slate-900 ${
+              fieldMode() ? 'min-h-[50vh]' : 'lg:min-h-105'
+            }`}
+          >
             <div ref={mapContainer} class="absolute inset-0 h-full w-full" />
 
             <Show when={legendOpen()}>
@@ -484,7 +644,11 @@ export default function MonitoringPage() {
               <button type="button" class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover disabled:opacity-40" disabled={!mapReady()} onClick={() => mapRef.current?.zoomOut()} aria-label="Alejar">
                 <Minus size={14} />
               </button>
-              <button type="button" class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover disabled:opacity-40" disabled={!mapReady()} onClick={() => mapRef.current?.flyTo({ center: UNARE_CENTER, zoom: UNARE_ZOOM - 0.2 })} aria-label="Centrar">
+              <button type="button" class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover disabled:opacity-40" disabled={!mapReady()} onClick={() => {
+                const vehicle = operatorVehicle();
+                if (vehicle) centerOnVehicle(vehicle.id);
+                else mapRef.current?.flyTo({ center: UNARE_CENTER, zoom: UNARE_ZOOM - 0.2 });
+              }} aria-label="Centrar">
                 <Crosshair size={14} />
               </button>
               <button type="button" class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover" aria-label="Pantalla completa" onClick={() => document.documentElement.requestFullscreen?.()}>
@@ -494,6 +658,7 @@ export default function MonitoringPage() {
           </div>
         </Card>
 
+        <Show when={!fieldMode()}>
         <Card padding={false} class="flex max-h-125 flex-col overflow-hidden xl:col-span-2 xl:max-h-none xl:h-full">
           <div class="flex items-center justify-between border-b border-border px-4 py-3 dark:border-dark-border">
             <h3 class="font-heading font-semibold text-text-primary dark:text-white">Estado de la flota</h3>
@@ -506,12 +671,7 @@ export default function MonitoringPage() {
               when={filteredFleet().length > 0}
               fallback={
                 <li>
-                  <PlanningEmptyState
-                    {...(liveFleet().length === 0
-                      ? PLANNING_EMPTY_PRESETS.noVehicles
-                      : PLANNING_EMPTY_PRESETS.noFleetMatch)}
-                    compact
-                  />
+                  <PlanningEmptyState {...fleetEmptyPreset()} compact />
                 </li>
               }
             >
@@ -558,8 +718,31 @@ export default function MonitoringPage() {
             </A>
           </div>
         </Card>
+        </Show>
       </div>
 
+      <Show when={fieldMode()}>
+        <OperatorFieldBottomPanel
+          open={fieldPanelOpen()}
+          onToggle={() => setFieldPanelOpen((value) => !value)}
+          vehicle={operatorVehicle()}
+          snapshot={routeSnapshot()}
+          operationDate={operationDate()}
+          onCenterVehicle={() => {
+            const vehicle = operatorVehicle();
+            if (vehicle) centerOnVehicle(vehicle.id);
+          }}
+        />
+      </Show>
+
+      <Show when={fieldMode()}>
+        <OperatorMyIncidents
+          vehicleId={operatorVehicle()?.id}
+          refreshKey={incidentsRefreshKey()}
+        />
+      </Show>
+
+      <Show when={!fieldMode()}>
       <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardHeader title="Actividades en tiempo real" />
@@ -663,8 +846,11 @@ export default function MonitoringPage() {
           </A>
         </Card>
       </div>
+      </Show>
 
+      <Show when={!fieldMode()}>
       <RecentIncidentsPanel refreshKey={incidentsRefreshKey()} />
+      </Show>
     </div>
   );
 }

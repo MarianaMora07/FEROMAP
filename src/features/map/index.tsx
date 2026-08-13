@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createResource, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import { A, useSearchParams } from '@solidjs/router';
 import maplibregl, { type Map as MapLibreMap, type Marker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -35,6 +35,19 @@ import {
 } from '../../core/stores/appStore';
 import { dashboardSummary } from '../../core/stores/dashboardStore';
 import { fetchMapContext, MAP_CONTEXT_POLL_MS } from '../../core/api/map';
+import { fetchOperatorRouteSnapshot } from '../../core/api/operator';
+import { isConductor } from '../../core/auth/permissions';
+import { authUser } from '../../core/stores/authStore';
+import { fleetForOperatorField } from '../../core/operator/operatorMonitoringUx';
+import { parseVehicleIdParam } from '../../core/operator/operatorDeepLinks';
+import {
+  ensureOperatorRouteLayer,
+  fitMapToStops,
+  routeCollectionFromStops,
+  syncNextStopMarker,
+  OPERATOR_ROUTE_GLOW_LAYER_ID,
+  OPERATOR_ROUTE_LAYER_ID,
+} from '../../core/map/operatorRouteMapLayers';
 import {
   ensureOperationalRouteLayer,
   syncContainerMarkers,
@@ -82,12 +95,26 @@ export default function MapPage() {
   const containerMarkers: Marker[] = [];
   const [searchParams] = useSearchParams();
   const [mapContext, { refetch }] = createResource(fetchMapContext);
+  const operationDate = () => {
+    const date = Array.isArray(searchParams.date) ? searchParams.date[0] : searchParams.date;
+    return date || new Date().toISOString().slice(0, 10);
+  };
+  const [routeSnapshot] = createResource(operationDate, (date) => fetchOperatorRouteSnapshot(date));
+  const operatorMode = () => isConductor(authUser()?.role);
+  const nextStopHolder: { marker?: maplibregl.Marker } = {};
 
   const focusVehicleId = () => {
-    const value = searchParams.vehicle;
-    if (typeof value === 'string' && value.trim()) return value.trim().toUpperCase();
-    if (Array.isArray(value) && value[0]) return value[0].trim().toUpperCase();
+    const fromParam = parseVehicleIdParam(searchParams.vehicleId) ?? parseVehicleIdParam(searchParams.vehicle);
+    if (fromParam) return fromParam;
+    if (operatorMode()) {
+      return routeSnapshot()?.vehicleId ?? fleetForOperatorField(mapContext()?.vehicles ?? [], authUser())[0]?.id;
+    }
     return undefined;
+  };
+
+  const mapFocus = () => {
+    const raw = Array.isArray(searchParams.focus) ? searchParams.focus[0] : searchParams.focus;
+    return raw === 'next' ? 'next' : 'route';
   };
 
   const [layersOpen, setLayersOpen] = createSignal(true);
@@ -106,9 +133,41 @@ export default function MapPage() {
         ? dashboardSummary().mapMetrics!
         : [];
 
-  const operationalRoutes = () => mapContext()?.routes ?? { type: 'FeatureCollection', features: [] };
-  const operationalContainers = () => mapContext()?.containers ?? { type: 'FeatureCollection', features: [] };
-  const operationalFleet = () => mapContext()?.vehicles ?? [];
+  const operationalRoutes = () => {
+    if (operatorMode() && (routeSnapshot()?.stops.length ?? 0) > 0) {
+      return routeCollectionFromStops(routeSnapshot()!.stops, {
+        label: 'Mi ruta hoy',
+      });
+    }
+    return mapContext()?.routes ?? { type: 'FeatureCollection', features: [] };
+  };
+  const operationalContainers = () => {
+    const containers = mapContext()?.containers ?? { type: 'FeatureCollection', features: [] };
+    if (!operatorMode() || (routeSnapshot()?.stops.length ?? 0) === 0) {
+      return containers;
+    }
+    const codes = new Set(
+      routeSnapshot()!.stops.map((stop) => stop.code.replace(/^CNT-/i, '').toUpperCase()),
+    );
+    return {
+      ...containers,
+      features: containers.features.filter((feature) => {
+        const id = String(feature.properties?.id ?? '').replace(/^CNT-/i, '').toUpperCase();
+        return codes.has(id);
+      }),
+    };
+  };
+  const operationalFleet = () => {
+    const fleet = mapContext()?.vehicles ?? [];
+    if (!operatorMode()) return fleet;
+    const focused = focusVehicleId();
+    const scoped = fleetForOperatorField(fleet, authUser());
+    if (focused) {
+      const match = scoped.find((vehicle) => vehicle.id === focused) ?? fleet.find((v) => v.id === focused);
+      return match ? [match] : scoped;
+    }
+    return scoped;
+  };
 
   const getMap = () => mapRef.current;
 
@@ -190,13 +249,26 @@ export default function MapPage() {
       );
     }
 
-    const routesVisible = state.routes;
-    setVis('operational-routes-line', routesVisible);
+    const routesVisible = state.routes || (operatorMode() && (routeSnapshot()?.stops.length ?? 0) > 0);
+    setVis('operational-routes-line', routesVisible && !operatorMode());
+    setVis(OPERATOR_ROUTE_LAYER_ID, routesVisible && operatorMode());
+    setVis(OPERATOR_ROUTE_GLOW_LAYER_ID, routesVisible && operatorMode());
     if (map.getSource('operational-routes')) {
-      const routes = routesVisible
-        ? operationalRoutes()
+      const routes = routesVisible && !operatorMode()
+        ? mapContext()?.routes ?? { type: 'FeatureCollection' as const, features: [] }
         : { type: 'FeatureCollection' as const, features: [] };
       ensureOperationalRouteLayer(map, routes);
+    }
+    if (operatorMode() && routesVisible && (routeSnapshot()?.stops.length ?? 0) > 0) {
+      ensureOperatorRouteLayer(map, operationalRoutes());
+      syncNextStopMarker(
+        map,
+        mapFocus() === 'next' ? routeSnapshot()?.nextStop : routeSnapshot()?.nextStop,
+        nextStopHolder,
+      );
+    } else if (nextStopHolder.marker) {
+      nextStopHolder.marker.remove();
+      nextStopHolder.marker = undefined;
     }
 
     if (state.containers) {
@@ -327,6 +399,16 @@ export default function MapPage() {
   });
 
   createEffect(() => {
+    routeSnapshot();
+    if (!mapReady() || !operatorMode()) return;
+    const map = getMap();
+    if (!map?.isStyleLoaded()) return;
+    syncOverlayLayers();
+    const stops = routeSnapshot()?.stops ?? [];
+    if (stops.length > 0) fitMapToStops(map, stops);
+  });
+
+  createEffect(() => {
     if (appState.showOptimizedOnly) {
       setLayerState((state) => ({
         ...state,
@@ -451,6 +533,24 @@ export default function MapPage() {
           </A>
         </div>
       </header>
+
+      <Show when={operatorMode() && (routeSnapshot()?.stops.length ?? 0) > 0}>
+        <div class="absolute inset-x-0 top-14 z-20 mx-3 rounded-lg border border-fero-blue/30 bg-surface/95 px-3 py-2 text-sm shadow-sm backdrop-blur-sm dark:bg-dark-surface/95">
+          <p class="font-semibold text-fero-blue">Mi ruta hoy</p>
+          <p class="text-xs text-text-secondary">
+            {routeSnapshot()?.vehicleId} · {routeSnapshot()?.stopsDone}/{routeSnapshot()?.stopsTotal}{' '}
+            paradas
+            <Show when={routeSnapshot()?.nextStop}>
+              {(stop) => (
+                <span>
+                  {' '}
+                  · Próxima: <strong class="text-text-primary dark:text-white">{stop().code}</strong>
+                </span>
+              )}
+            </Show>
+          </p>
+        </div>
+      </Show>
 
       <Show when={layersOpen()}>
         <aside class="absolute top-16 left-3 z-20 w-64 rounded-lg border border-border bg-surface/95 p-3 shadow-lg backdrop-blur-md dark:bg-dark-surface/95 dark:border-dark-border">

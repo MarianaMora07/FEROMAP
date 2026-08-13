@@ -123,10 +123,14 @@ function mockWeeklyPlan(): WeeklyPlan {
 }
 
 function mockDailyPlan(operationDate: string): DailyPlan {
+  const demoClosed =
+    typeof localStorage !== 'undefined' && localStorage.getItem('feromap.demo.operatorClosedDay') === '1';
   return {
     id: 1,
     operationDate,
-    status: 'draft',
+    status: demoClosed ? 'partial' : 'dispatched',
+    dispatchedAt: `${operationDate}T06:00:00.000Z`,
+    closedAt: demoClosed ? `${operationDate}T18:30:00.000Z` : null,
     scenarioId: 'normal',
     weeklyPlanId: 1,
     scheduledPoints: [

@@ -11,6 +11,8 @@ interface CriticalContainerRecalcProps {
   dailyPlanId?: number;
   onComplete?: () => void;
   compact?: boolean;
+  /** Solo contenedores en la ruta del conductor (códigos CNT-xxx). */
+  routePointCodes?: string[];
 }
 
 export function CriticalContainerRecalc(props: CriticalContainerRecalcProps) {
@@ -19,12 +21,24 @@ export function CriticalContainerRecalc(props: CriticalContainerRecalcProps) {
   const [message, setMessage] = createSignal<string | null>(null);
   const [error, setError] = createSignal<string | null>(null);
 
-  const criticalContainers = createMemo(() =>
-    (props.containers?.features ?? [])
+  const criticalContainers = createMemo(() => {
+    const routeCodes = new Set(
+      (props.routePointCodes ?? []).map((code) => code.replace(/^CNT-/i, '').toUpperCase()),
+    );
+    const filterByRoute = routeCodes.size > 0;
+
+    return (props.containers?.features ?? [])
       .filter((feature) => (feature.properties?.fillLevel ?? 0) >= 80)
+      .filter((feature) => {
+        if (!filterByRoute) return true;
+        const pointId = String(feature.properties?.id ?? '').replace(/^CNT-/i, '').toUpperCase();
+        return routeCodes.has(pointId) || routeCodes.has(String(feature.properties?.id ?? '').toUpperCase());
+      })
       .sort((a, b) => (b.properties?.fillLevel ?? 0) - (a.properties?.fillLevel ?? 0))
-      .slice(0, 12),
-  );
+      .slice(0, 12);
+  });
+
+  const showRecalc = () => criticalContainers().length > 0;
 
   const handleRecalc = async () => {
     const code = selected() || criticalContainers()[0]?.properties?.id;
@@ -50,7 +64,7 @@ export function CriticalContainerRecalc(props: CriticalContainerRecalcProps) {
   };
 
   return (
-    <Show when={canReportBreakdown(authUser()?.role)}>
+    <Show when={canReportBreakdown(authUser()?.role) && showRecalc()}>
       <div
         class={
           props.compact

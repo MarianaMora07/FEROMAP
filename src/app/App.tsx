@@ -39,6 +39,8 @@ const AlertsPage = lazyPage(() => import('../features/alerts'));
 const AdminPage = lazyPage(() => import('../features/admin'));
 const ResidentPage = lazyPage(() => import('../features/resident'));
 const ProfilePage = lazyPage(() => import('../features/profile'));
+const OperatorPage = lazyPage(() => import('../features/operator'));
+const OperatorDailyPlanPage = lazyPage(() => import('../features/operator/OperatorDailyPlanPage'));
 const PlanningHubPage = lazyPage(() => import('../features/planning/hub'));
 const PlanningHistoryPage = lazyPage(() => import('../features/planning/history'));
 const LoginPage = lazyPage(() => import('../features/auth'));
@@ -67,6 +69,8 @@ export default function App() {
       <Route path="/" component={ProtectedShell}>
         <Route path="/" component={DashboardPage} />
         <Route path="/optimization" component={OptimizationPage} />
+        <Route path="/operator" component={OperatorPage} />
+        <Route path="/operator/plan" component={OperatorDailyPlanPage} />
         <Route path="/planning" component={PlanningHubPage} />
         <Route path="/planning/history" component={PlanningHistoryPage} />
         <Route path="/map" component={MapPage} />

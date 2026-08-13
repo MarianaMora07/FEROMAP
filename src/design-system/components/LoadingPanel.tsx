@@ -13,7 +13,13 @@ export function LoadingPanel(props: LoadingPanelProps) {
   const showDeterminate = () => props.progress !== undefined && !props.indeterminate;
 
   return (
-    <div class={`flex flex-col items-center gap-3 px-4 py-10 text-center ${props.class ?? ''}`}>
+    <div
+      class={`flex flex-col items-center gap-3 px-4 py-10 text-center ${props.class ?? ''}`}
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      aria-label={props.label}
+    >
       <p class="text-sm font-medium text-text-primary dark:text-white">{props.label}</p>
       <div class="w-full max-w-sm">
         <Show
