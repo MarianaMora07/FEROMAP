@@ -1,4 +1,4 @@
-import { For, Show, onMount, type JSX } from 'solid-js';
+import { For, Show, createMemo, onMount, type JSX } from 'solid-js';
 import { A } from '@solidjs/router';
 import {
   Chart,
@@ -40,6 +40,8 @@ import {
 } from '../../data/mock/dashboard';
 import { dashboardView, loadDashboardData } from '../../core/stores/dashboardStore';
 import { analyticsHref, reportsHref, simulationResultsHref } from '../../core/utils/simulationLinks';
+import { barChartOptions, doughnutChartOptions } from '../../design-system/chartTheme';
+import { appState } from '../../core/stores/appStore';
 import { DashboardMiniMap } from './DashboardMiniMap';
 import { PlanningWidgets } from './PlanningWidgets';
 import { OperatorHubSection } from '../operator/OperatorHubSection';
@@ -83,6 +85,11 @@ function FleetDonut() {
     ],
   });
 
+  const chartOptions = createMemo(() => {
+    appState.darkMode;
+    return doughnutChartOptions();
+  });
+
   return (
     <Card>
       <CardHeader title="Estado de la flota" />
@@ -90,14 +97,10 @@ function FleetDonut() {
         <div class="relative h-36 w-36 shrink-0">
           <Doughnut
             data={data()}
-            options={{
-              responsive: true,
-              maintainAspectRatio: false,
-              plugins: { legend: { display: false }, tooltip: { enabled: true } },
-            }}
+            options={chartOptions()}
           />
           <div class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-            <span class="font-heading text-2xl font-bold text-text-primary dark:text-white">
+            <span class="font-heading text-2xl font-bold text-text-primary">
               {fleetStatus().total}
             </span>
             <span class="text-xs text-text-muted">Total</span>
@@ -111,7 +114,7 @@ function FleetDonut() {
                   <span class="h-2.5 w-2.5 rounded-full" style={{ 'background-color': item.color }} />
                   {item.label}
                 </span>
-                <span class="font-medium text-text-primary dark:text-white">
+                <span class="font-medium text-text-primary">
                   {item.count} <span class="text-xs text-text-muted">({item.pct}%)</span>
                 </span>
               </li>
@@ -134,7 +137,7 @@ function FillLevels() {
             <li>
               <div class="mb-1 flex items-center justify-between text-sm">
                 <span class="text-text-secondary">{sector.name}</span>
-                <span class="font-semibold text-text-primary dark:text-white">{sector.pct}%</span>
+                <span class="font-semibold text-text-primary">{sector.pct}%</span>
               </div>
               <ProgressBar value={sector.pct} size="sm" />
             </li>
@@ -161,21 +164,18 @@ function WeeklyChart() {
     ],
   });
 
+  const chartOptions = createMemo(() => {
+    appState.darkMode;
+    return barChartOptions();
+  });
+
   return (
     <Card class="min-h-[280px]">
       <CardHeader title="Toneladas recolectadas (últimos 7 días)" />
       <div class="h-48">
         <Bar
           data={data()}
-          options={{
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: {
-              x: { grid: { display: false } },
-              y: { beginAtZero: true, grid: { color: 'rgba(148,163,184,0.25)' } },
-            },
-          }}
+          options={chartOptions()}
         />
       </div>
     </Card>
@@ -239,21 +239,21 @@ export default function DashboardPage() {
               <div class="flex shrink-0 flex-wrap gap-2">
                 <A
                   href={simulationResultsHref(opt().simulationId)}
-                  class="inline-flex items-center gap-1 rounded-md border border-fero-green/40 bg-white/60 px-3 py-1.5 text-sm font-medium text-fero-green-dark hover:bg-white dark:bg-dark-surface/60 dark:hover:bg-dark-surface"
+                  class="inline-flex items-center gap-1 rounded-md border border-fero-green/40 bg-elevated/60 px-3 py-1.5 text-sm font-medium text-fero-green-dark hover:bg-elevated"
                 >
                   Ver resultados
                   <ArrowRight size={14} />
                 </A>
                 <A
                   href={analyticsHref(opt().simulationId)}
-                  class="inline-flex items-center gap-1 rounded-md border border-fero-green/30 px-3 py-1.5 text-sm font-medium text-fero-green-dark hover:bg-white/40 dark:hover:bg-dark-surface/40"
+                  class="inline-flex items-center gap-1 rounded-md border border-fero-green/30 px-3 py-1.5 text-sm font-medium text-fero-green-dark hover:bg-elevated/40/40"
                 >
                   <BarChart3 size={14} />
                   Analítica
                 </A>
                 <A
                   href={reportsHref(opt().simulationId)}
-                  class="inline-flex items-center gap-1 rounded-md border border-fero-green/30 px-3 py-1.5 text-sm font-medium text-fero-green-dark hover:bg-white/40 dark:hover:bg-dark-surface/40"
+                  class="inline-flex items-center gap-1 rounded-md border border-fero-green/30 px-3 py-1.5 text-sm font-medium text-fero-green-dark hover:bg-elevated/40/40"
                 >
                   <FileText size={14} />
                   Reportes
@@ -328,7 +328,7 @@ export default function DashboardPage() {
                         {route.driver} · {route.vehicle}
                       </p>
                     </div>
-                    <span class="text-sm font-semibold text-text-primary dark:text-white">
+                    <span class="text-sm font-semibold text-text-primary">
                       {route.progress}%
                     </span>
                   </div>
@@ -353,7 +353,7 @@ export default function DashboardPage() {
                   </span>
                   <div class="min-w-0 flex-1">
                     <div class="flex items-start justify-between gap-2">
-                      <p class="text-sm font-semibold text-text-primary dark:text-white">{alert.title}</p>
+                      <p class="text-sm font-semibold text-text-primary">{alert.title}</p>
                       <span class="shrink-0 text-[11px] text-text-muted">{alert.time}</span>
                     </div>
                     <p class="text-xs text-text-muted">{alert.detail}</p>

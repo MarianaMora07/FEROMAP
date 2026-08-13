@@ -732,16 +732,16 @@ export default function MapPage() {
   };
 
   return (
-    <div class="relative h-full min-h-0 overflow-hidden bg-slate-100 dark:bg-slate-900">
+    <div class="relative h-full min-h-0 overflow-hidden bg-app">
       {/* Full-bleed map — UI floats above it */}
       <div ref={mapContainer} class="absolute inset-0 h-full w-full" />
 
       {/* Toolbar overlay */}
-      <header class="absolute inset-x-0 top-0 z-20 flex flex-wrap items-center gap-2 border-b border-border/60 bg-surface/90 px-3 py-2 shadow-sm backdrop-blur-md dark:bg-dark-surface/90 dark:border-dark-border">
+      <header class="absolute inset-x-0 top-0 z-20 flex flex-wrap items-center gap-2 border-b border-default/60 bg-elevated/90 px-3 py-2 shadow-sm backdrop-blur-md">
         <button
           type="button"
           onClick={toggleSidebar}
-          class="flex h-9 w-9 items-center justify-center rounded-md text-text-secondary hover:bg-surface-hover"
+          class="flex h-9 w-9 items-center justify-center rounded-md text-text-secondary hover:bg-app"
           aria-label="Menú"
         >
           <Menu size={20} />
@@ -763,7 +763,7 @@ export default function MapPage() {
             <input
               type="search"
               placeholder="Buscar dirección o lugar"
-              class="w-full rounded-md border border-border bg-surface py-2 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-fero-blue focus:outline-none focus:ring-2 focus:ring-fero-blue/20 dark:bg-dark-surface-hover dark:border-dark-border dark:text-white"
+              class="w-full rounded-md border border-default bg-elevated py-2 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-fero-blue focus:outline-none focus:ring-2 focus:ring-fero-blue/20"
             />
           </Show>
         </div>
@@ -793,15 +793,15 @@ export default function MapPage() {
         <div class="ml-auto flex items-center gap-1.5">
           <button
             type="button"
-            onClick={toggleDarkMode}
-            class="flex h-9 w-9 items-center justify-center rounded-md text-text-secondary hover:bg-surface-hover"
+            onClick={() => void toggleDarkMode()}
+            class="flex h-9 w-9 items-center justify-center rounded-md text-text-secondary hover:bg-app"
             aria-label="Tema"
           >
             {appState.darkMode ? <Sun size={18} /> : <Moon size={18} />}
           </button>
           <button
             type="button"
-            class="relative flex h-9 w-9 items-center justify-center rounded-md text-text-secondary hover:bg-surface-hover"
+            class="relative flex h-9 w-9 items-center justify-center rounded-md text-text-secondary hover:bg-app"
             aria-label="Notificaciones"
           >
             <Bell size={18} />
@@ -811,7 +811,7 @@ export default function MapPage() {
           </button>
           <button
             type="button"
-            class="flex h-9 w-9 items-center justify-center rounded-md text-text-secondary hover:bg-surface-hover"
+            class="flex h-9 w-9 items-center justify-center rounded-md text-text-secondary hover:bg-app"
             aria-label="Pantalla completa"
             onClick={() => document.documentElement.requestFullscreen?.()}
           >
@@ -826,7 +826,7 @@ export default function MapPage() {
       </header>
 
       <Show when={operatorMode() && (routeSnapshot()?.stops.length ?? 0) > 0}>
-        <div class="absolute inset-x-0 top-14 z-20 mx-3 rounded-lg border border-fero-blue/30 bg-surface/95 px-3 py-2 text-sm shadow-sm backdrop-blur-sm dark:bg-dark-surface/95">
+        <div class="absolute inset-x-0 top-14 z-20 mx-3 rounded-lg border border-fero-blue/30 bg-elevated/95 px-3 py-2 text-sm shadow-sm backdrop-blur-sm">
           <p class="font-semibold text-fero-blue">Mi ruta hoy</p>
           <p class="text-xs text-text-secondary">
             {routeSnapshot()?.vehicleId} · {routeSnapshot()?.stopsDone}/{routeSnapshot()?.stopsTotal}{' '}
@@ -835,7 +835,7 @@ export default function MapPage() {
               {(stop) => (
                 <span>
                   {' '}
-                  · Próxima: <strong class="text-text-primary dark:text-white">{stop().code}</strong>
+                  · Próxima: <strong class="text-text-primary">{stop().code}</strong>
                 </span>
               )}
             </Show>
@@ -858,7 +858,7 @@ export default function MapPage() {
         {(overview) => (
           <div
             role="status"
-            class="absolute inset-x-0 top-[4.25rem] z-20 mx-3 rounded-lg border border-fero-green/30 bg-surface/95 px-3 py-2 text-sm shadow-sm backdrop-blur-sm dark:bg-dark-surface/95"
+            class="absolute inset-x-0 top-[4.25rem] z-20 mx-3 rounded-lg border border-fero-green/30 bg-elevated/95 px-3 py-2 text-sm shadow-sm backdrop-blur-sm"
           >
             <p class="font-semibold text-fero-green-dark dark:text-fero-green">
               Mi sector — {overview().sectorName}
@@ -869,7 +869,7 @@ export default function MapPage() {
                 {(code) => (
                   <span>
                     {' '}
-                    · Camión <strong class="text-text-primary dark:text-white">{code()}</strong>
+                    · Camión <strong class="text-text-primary">{code()}</strong>
                   </span>
                 )}
               </Show>
@@ -877,7 +877,7 @@ export default function MapPage() {
                 {(stop) => (
                   <span>
                     {' '}
-                    · Próxima parada: <strong class="text-text-primary dark:text-white">{stop()}</strong>
+                    · Próxima parada: <strong class="text-text-primary">{stop()}</strong>
                   </span>
                 )}
               </Show>
@@ -894,11 +894,11 @@ export default function MapPage() {
 
       <Show when={layersOpen()}>
         <aside
-          class="absolute top-16 left-3 z-20 w-64 rounded-lg border border-border bg-surface/95 p-3 shadow-lg backdrop-blur-md dark:bg-dark-surface/95 dark:border-dark-border"
+          class="absolute top-16 left-3 z-20 w-64 rounded-lg border border-default bg-elevated/95 p-3 shadow-lg backdrop-blur-md"
           data-testid="map-layers-panel"
         >
           <div class="mb-2 flex items-center justify-between">
-            <h3 class="font-heading text-sm font-semibold text-text-primary dark:text-white">Capas</h3>
+            <h3 class="font-heading text-sm font-semibold text-text-primary">Capas</h3>
             <button type="button" class="text-text-muted hover:text-text-secondary" onClick={() => setLayersOpen(false)}>
               <X size={16} />
             </button>
@@ -910,7 +910,7 @@ export default function MapPage() {
                   <label class="flex cursor-pointer items-center gap-2 py-0.5 text-sm text-text-secondary">
                     <input
                       type="checkbox"
-                      class="size-4 rounded border-border accent-fero-green-dark"
+                      class="size-4 rounded border-default accent-fero-green-dark"
                       checked={layerState()[layer.id]}
                       data-testid={layer.id === 'routes' ? 'map-layer-routes' : undefined}
                       onChange={() => toggleLayerItem(layer.id)}
@@ -918,14 +918,14 @@ export default function MapPage() {
                     {layer.label}
                   </label>
                   <Show when={layer.children && layerState()[layer.id]}>
-                    <ul class="mt-1 mb-1.5 ml-6 space-y-1 border-l border-border pl-2.5">
+                    <ul class="mt-1 mb-1.5 ml-6 space-y-1 border-l border-default pl-2.5">
                       <For each={layer.children}>
                         {(child) => (
                           <li>
                             <label class="flex cursor-pointer items-center gap-2 text-xs text-text-secondary">
                               <input
                                 type="checkbox"
-                                class="size-3.5 rounded border-border accent-fero-green-dark"
+                                class="size-3.5 rounded border-default accent-fero-green-dark"
                                 checked={layerState()[child.id] ?? true}
                                 onChange={() => toggleLayerItem(child.id)}
                               />
@@ -967,9 +967,9 @@ export default function MapPage() {
       </Show>
 
       <Show when={legendOpen()}>
-        <aside class="absolute top-16 right-3 z-20 w-52 rounded-lg border border-border bg-surface/95 p-3 shadow-lg backdrop-blur-md dark:bg-dark-surface/95 dark:border-dark-border">
+        <aside class="absolute top-16 right-3 z-20 w-52 rounded-lg border border-default bg-elevated/95 p-3 shadow-lg backdrop-blur-md">
           <div class="mb-2 flex items-center justify-between">
-            <h3 class="font-heading text-sm font-semibold text-text-primary dark:text-white">Leyenda</h3>
+            <h3 class="font-heading text-sm font-semibold text-text-primary">Leyenda</h3>
             <button type="button" class="text-text-muted hover:text-text-secondary" onClick={() => setLegendOpen(false)}>
               <X size={16} />
             </button>
@@ -1024,35 +1024,35 @@ export default function MapPage() {
       </Show>
 
       <div class="absolute right-3 bottom-36 z-20 flex flex-col gap-2 sm:bottom-32">
-        <div class="flex flex-col overflow-hidden rounded-lg border border-border bg-surface/95 shadow-md backdrop-blur-md dark:bg-dark-surface/95">
-          <button type="button" class="flex h-9 w-9 items-center justify-center text-text-secondary transition-colors hover:bg-surface-hover disabled:opacity-40" onClick={zoomIn} disabled={!mapReady()} aria-label="Acercar">
+        <div class="flex flex-col overflow-hidden rounded-lg border border-default bg-elevated/95 shadow-md backdrop-blur-md">
+          <button type="button" class="flex h-9 w-9 items-center justify-center text-text-secondary transition-colors hover:bg-app disabled:opacity-40" onClick={zoomIn} disabled={!mapReady()} aria-label="Acercar">
             <Plus size={16} />
           </button>
-          <button type="button" class="flex h-9 w-9 items-center justify-center border-t border-border text-text-secondary transition-colors hover:bg-surface-hover disabled:opacity-40" onClick={zoomOut} disabled={!mapReady()} aria-label="Alejar">
+          <button type="button" class="flex h-9 w-9 items-center justify-center border-t border-default text-text-secondary transition-colors hover:bg-app disabled:opacity-40" onClick={zoomOut} disabled={!mapReady()} aria-label="Alejar">
             <Minus size={16} />
           </button>
         </div>
-        <button type="button" class="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface/95 text-text-secondary shadow-md backdrop-blur-md transition-colors hover:bg-surface-hover disabled:opacity-40 dark:bg-dark-surface/95" onClick={locateUser} disabled={!mapReady()} aria-label="Mi ubicación" title="Centrar en mi ubicación">
+        <button type="button" class="flex h-9 w-9 items-center justify-center rounded-lg border border-default bg-elevated/95 text-text-secondary shadow-md backdrop-blur-md transition-colors hover:bg-app disabled:opacity-40" onClick={locateUser} disabled={!mapReady()} aria-label="Mi ubicación" title="Centrar en mi ubicación">
           <Crosshair size={16} />
         </button>
       </div>
 
-      <div class="absolute bottom-44 left-3 z-20 rounded-md border border-border bg-surface/95 px-2.5 py-1 text-[11px] font-bold text-text-secondary shadow-sm backdrop-blur-md dark:bg-dark-surface/95 sm:bottom-40">
+      <div class="absolute bottom-44 left-3 z-20 rounded-md border border-default bg-elevated/95 px-2.5 py-1 text-[11px] font-bold text-text-secondary shadow-sm backdrop-blur-md sm:bottom-40">
         {coords().lat}, {coords().lng} · z{coords().zoom}
       </div>
 
       <div class="pointer-events-none absolute inset-x-0 bottom-0 z-20 p-3">
         <div class="pointer-events-auto flex flex-col gap-3 lg:flex-row lg:items-end">
-          <div class="w-full shrink-0 rounded-xl border border-border bg-surface/95 p-3 shadow-lg backdrop-blur-md dark:bg-dark-surface/95 dark:border-dark-border lg:w-auto">
+          <div class="w-full shrink-0 rounded-xl border border-default bg-elevated/95 p-3 shadow-lg backdrop-blur-md lg:w-auto">
             <div class="mb-2 flex items-center gap-1">
-              <p class="text-sm font-semibold text-text-primary dark:text-white">Mapa base</p>
+              <p class="text-sm font-semibold text-text-primary">Mapa base</p>
               <ChevronDown size={14} class="text-text-muted" />
             </div>
             <div class="flex gap-2">
               <For each={[...mapBaseStyles]}>
                 {(style) => (
                   <button type="button" class="group flex w-18 flex-col items-center gap-1" onClick={() => changeBaseStyle(style.id)}>
-                    <span class={`h-14 w-18 overflow-hidden rounded-md border-2 ${baseStyle() === style.id ? 'border-red-500' : 'border-border'}`}>
+                    <span class={`h-14 w-18 overflow-hidden rounded-md border-2 ${baseStyle() === style.id ? 'border-red-500' : 'border-default'}`}>
                       <img src={style.preview} alt={style.label} class="h-full w-full object-cover" loading="lazy" referrerpolicy="no-referrer" />
                     </span>
                     <span class="text-[10px] text-text-muted group-hover:text-text-secondary">{style.label}</span>
@@ -1062,7 +1062,7 @@ export default function MapPage() {
             </div>
           </div>
 
-          <div class="min-w-0 flex-1 rounded-xl border border-border bg-surface/95 px-3 py-2.5 shadow-lg backdrop-blur-md dark:bg-dark-surface/95 dark:border-dark-border">
+          <div class="min-w-0 flex-1 rounded-xl border border-default bg-elevated/95 px-3 py-2.5 shadow-lg backdrop-blur-md">
             <div class="grid grid-cols-2 content-center gap-3 sm:grid-cols-3 lg:grid-cols-5">
               <For each={mapMetrics()}>
                 {(metric) => (
@@ -1074,7 +1074,7 @@ export default function MapPage() {
                     </span>
                     <div class="min-w-0">
                       <p class="truncate text-[11px] text-text-muted">{metric.label}</p>
-                      <p class="font-heading text-lg font-bold leading-tight text-text-primary dark:text-white">{metric.value}</p>
+                      <p class="font-heading text-lg font-bold leading-tight text-text-primary">{metric.value}</p>
                     </div>
                   </div>
                 )}
@@ -1101,7 +1101,7 @@ function ToolBtn(props: {
       class={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
         props.active
           ? 'border-fero-green-dark/40 bg-fero-green/15 text-fero-green-dark'
-          : 'border-border text-text-secondary hover:bg-surface-hover'
+          : 'border-default text-text-secondary hover:bg-app'
       } ${props.class ?? ''}`}
     >
       {props.icon}

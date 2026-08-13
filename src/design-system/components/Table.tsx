@@ -18,7 +18,7 @@ interface TableProps<T> {
   class?: string;
 }
 
-export function Table<T extends Record<string, any>>(props: TableProps<T>) {
+export function Table<T extends Record<string, unknown>>(props: TableProps<T>) {
   const [sortKey, setSortKey] = createSignal('');
   const [sortDir, setSortDir] = createSignal<'asc' | 'desc'>('asc');
 
@@ -45,15 +45,15 @@ export function Table<T extends Record<string, any>>(props: TableProps<T>) {
   };
 
   return (
-    <div class={`w-full overflow-hidden rounded-[var(--radius-lg)] border border-border dark:border-dark-border ${props.class ?? ''}`}>
+    <div class={`w-full overflow-hidden rounded-[var(--radius-lg)] border border-default ${props.class ?? ''}`}>
       <div class="overflow-x-auto">
         <table class="w-full">
           <thead>
-            <tr class="bg-surface-hover dark:bg-dark-surface-hover">
+            <tr class="bg-app">
               <For each={props.columns}>
                 {(col) => (
                   <th
-                    class={`px-4 py-3 text-left text-xs font-semibold text-text-muted uppercase tracking-wider ${
+                    class={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted ${
                       col.sortable ? 'cursor-pointer hover:text-text-secondary' : ''
                     } ${col.class ?? ''}`}
                     onClick={() => col.sortable && handleSort(col.key)}
@@ -69,25 +69,28 @@ export function Table<T extends Record<string, any>>(props: TableProps<T>) {
               </For>
             </tr>
           </thead>
-          <tbody class="divide-y divide-border dark:divide-dark-border">
-            <For each={sortedData()} fallback={
-              <tr>
-                <td colSpan={props.columns.length} class="px-4 py-8 text-center text-text-muted">
-                  {props.emptyMessage ?? 'Sin datos'}
-                </td>
-              </tr>
-            }>
+          <tbody class="divide-y divide-default">
+            <For
+              each={sortedData()}
+              fallback={
+                <tr>
+                  <td colSpan={props.columns.length} class="px-4 py-8 text-center text-text-muted">
+                    {props.emptyMessage ?? 'Sin datos'}
+                  </td>
+                </tr>
+              }
+            >
               {(item) => (
                 <tr
-                  class={`bg-surface hover:bg-surface-hover dark:bg-dark-surface dark:hover:bg-dark-surface-hover transition-colors ${
+                  class={`bg-elevated transition-colors hover:bg-app ${
                     props.onRowClick ? 'cursor-pointer' : ''
                   }`}
                   onClick={() => props.onRowClick?.(item)}
                 >
                   <For each={props.columns}>
                     {(col) => (
-                      <td class={`px-4 py-3 text-sm text-text-primary dark:text-slate-200 ${col.class ?? ''}`}>
-                        {col.render ? col.render(item) : item[col.key]}
+                      <td class={`px-4 py-3 text-sm text-text-primary ${col.class ?? ''}`}>
+                        {col.render ? col.render(item) : String(item[col.key] ?? '')}
                       </td>
                     )}
                   </For>

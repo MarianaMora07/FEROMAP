@@ -126,21 +126,21 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
 
   return (
     <Card padding={false} class="overflow-hidden">
-      <div class="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-        <h3 class="font-heading font-semibold text-text-primary dark:text-white">
+      <div class="flex items-center justify-between gap-3 border-b border-default px-4 py-3">
+        <h3 class="font-heading font-semibold text-text-primary">
           Vista de la ruta óptima
         </h3>
         <div class="flex items-center gap-2">
           <button
             type="button"
-            class="hidden items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-text-secondary sm:inline-flex"
+            class="hidden items-center gap-1.5 rounded-md border border-default px-2.5 py-1.5 text-xs text-text-secondary sm:inline-flex"
           >
             <Layers size={14} />
             Rutas actual / optimizada
           </button>
           <button
             type="button"
-            class="flex h-8 w-8 items-center justify-center rounded-md border border-border text-text-secondary"
+            class="flex h-8 w-8 items-center justify-center rounded-md border border-default text-text-secondary"
             aria-label="Pantalla completa"
             onClick={() => document.documentElement.requestFullscreen?.()}
           >
@@ -149,19 +149,19 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
         </div>
       </div>
 
-      <div class="relative h-85 bg-slate-100 dark:bg-slate-900 lg:h-95">
+      <div class="relative h-85 bg-app lg:h-95">
         <div ref={mapContainer} class="absolute inset-0 h-full w-full" />
 
         <Show when={!props.hasResults}>
-          <div class="absolute inset-0 flex items-center justify-center bg-surface/50 text-sm text-text-muted backdrop-blur-sm">
+          <div class="absolute inset-0 flex items-center justify-center bg-elevated/50 text-sm text-text-muted backdrop-blur-sm">
             Ejecute la optimización para visualizar las rutas
           </div>
         </Show>
 
-        <div class="absolute right-3 top-3 flex flex-col overflow-hidden rounded-md border border-border bg-surface shadow-sm dark:bg-dark-surface">
+        <div class="absolute right-3 top-3 flex flex-col overflow-hidden rounded-md border border-default bg-elevated shadow-sm">
           <button
             type="button"
-            class="flex h-8 w-8 items-center justify-center text-text-secondary hover:bg-surface-hover"
+            class="flex h-8 w-8 items-center justify-center text-text-secondary hover:bg-app"
             aria-label="Acercar"
             onClick={() => mapRef.current?.zoomIn()}
           >
@@ -169,7 +169,7 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
           </button>
           <button
             type="button"
-            class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover"
+            class="flex h-8 w-8 items-center justify-center border-t border-default text-text-secondary hover:bg-app"
             aria-label="Alejar"
             onClick={() => mapRef.current?.zoomOut()}
           >
@@ -177,7 +177,7 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
           </button>
           <button
             type="button"
-            class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover"
+            class="flex h-8 w-8 items-center justify-center border-t border-default text-text-secondary hover:bg-app"
             aria-label="Centrar"
             onClick={() =>
               fitMapToOperationalData(mapRef.current!, {
@@ -190,7 +190,7 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
         </div>
       </div>
 
-      <div class="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border px-4 py-3 text-xs text-text-secondary">
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-default px-4 py-3 text-xs text-text-secondary">
         <For each={props.routeResults}>
           {(route) => (
             <span class={`inline-flex items-center gap-1.5 font-medium ${vehicleLegendClass[route.tone] ?? 'text-fero-blue'}`}>

@@ -128,7 +128,22 @@ En **Puntos de Recolección**, seleccione un punto y configure **Frecuencia sema
 
 ---
 
-## 8. Documentación relacionada
+## 8. Modo oscuro integrado
+
+FEROMAP incluye un **modo oscuro integrado** alineado con la interfaz operativa (sidebar navy, contenido slate, acentos verde FERO).
+
+| Acción | Dónde |
+|--------|--------|
+| Alternar claro / oscuro | Menú lateral → **Modo oscuro** / **Modo claro** |
+| Elegir Sistema, Claro u Oscuro | **Perfil** → Preferencias del sistema → **Tema** → Guardar |
+
+- **Sistema:** sigue la preferencia de su dispositivo.
+- La elección se **guarda en su perfil** y se mantiene tras recargar la página (F5).
+- En modo oscuro, el sidebar usa tono navy; el ítem activo se resalta en **verde FERO** con texto legible.
+
+---
+
+## 9. Documentación relacionada
 
 - [Guión demo defensa](./guion-demo-defensa.md)
 - [Diagrama navegación Opción A](./diagrama-navegacion-opcion-a.md)

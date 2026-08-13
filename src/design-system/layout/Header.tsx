@@ -55,7 +55,7 @@ export function Header(props: HeaderProps) {
   const dateLabel = () => meta()?.dateLabel ?? dashboardSummary().dateLabel;
 
   return (
-    <header class="sticky top-0 z-30 flex h-(--header-height) items-center gap-4 border-b border-border bg-surface/90 px-4 backdrop-blur-md md:px-6 dark:bg-dark-surface/90 dark:border-dark-border">
+    <header class="sticky top-0 z-30 flex h-(--header-height) shrink-0 items-center gap-4 border-b border-default bg-elevated/90 px-4 backdrop-blur-md md:px-6 dark:bg-app/95 dark:backdrop-blur-sm">
       <button
         type="button"
         onClick={toggleSidebar}
@@ -67,7 +67,7 @@ export function Header(props: HeaderProps) {
 
       <div class="min-w-0 flex-1">
         <Show when={title()}>
-          <h1 class="truncate font-heading text-lg font-bold text-text-primary dark:text-white">
+          <h1 class="truncate font-heading text-lg font-bold text-text-primary">
             {title()}
           </h1>
         </Show>
@@ -77,7 +77,7 @@ export function Header(props: HeaderProps) {
       </div>
 
       <div class="flex items-center gap-2 sm:gap-3">
-        <div class="hidden items-center gap-2 rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-text-secondary sm:flex dark:bg-dark-surface dark:border-dark-border">
+        <div class="hidden items-center gap-2 rounded-md border border-default bg-elevated px-3 py-1.5 text-sm text-text-secondary sm:flex dark:bg-sidebar-elevated">
           <CalendarDays size={16} class="text-fero-blue" />
           <span>{dateLabel()}</span>
         </div>

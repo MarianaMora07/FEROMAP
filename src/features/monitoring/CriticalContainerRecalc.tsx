@@ -78,7 +78,7 @@ export function CriticalContainerRecalc(props: CriticalContainerRecalcProps) {
               <Trash2 size={18} />
             </span>
             <div>
-              <p class="text-sm font-semibold text-text-primary dark:text-white">
+              <p class="text-sm font-semibold text-text-primary">
                 Recálculo operativo — contenedor crítico
               </p>
               <p class="text-xs text-text-secondary">
@@ -89,7 +89,7 @@ export function CriticalContainerRecalc(props: CriticalContainerRecalcProps) {
         </Show>
 
         <select
-          class="rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-text-secondary dark:border-dark-border dark:bg-dark-surface-hover"
+          class="rounded-md border border-default bg-elevated px-2.5 py-1.5 text-xs text-text-secondary"
           value={selected()}
           onChange={(e) => setSelected(e.currentTarget.value)}
         >

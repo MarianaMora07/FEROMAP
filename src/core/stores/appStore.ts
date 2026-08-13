@@ -16,6 +16,14 @@ import { fetchSectors } from '../api/sectors';
 import { fetchAllRoutes } from '../api/routes';
 import { loadDashboardData } from './dashboardStore';
 import { useRoutesAsComputed } from '../services/routeSnapping';
+import {
+  applyThemeToDocument,
+  getStoredThemePreference,
+  persistThemePreference,
+  resolveDarkMode,
+  type ThemePreference,
+} from '../theme/themePreference';
+import { updateProfilePreferences } from '../api/profile';
 
 interface AppState {
   layers: LayerVisibility;
@@ -23,6 +31,7 @@ interface AppState {
   selectedSector: SectorName | null;
   sidebarOpen: boolean;
   darkMode: boolean;
+  themePreference: ThemePreference;
   containers: ContainerCollection;
   sectors: SectorCollection;
   routes: RouteCollection;
@@ -41,6 +50,9 @@ function initialSidebarOpen(): boolean {
   return window.matchMedia(LG_MIN_WIDTH_MQ).matches;
 }
 
+const bootTheme: ThemePreference =
+  typeof window !== 'undefined' ? getStoredThemePreference() : 'system';
+
 const [state, setState] = createStore<AppState>({
   layers: {
     sectors: true,
@@ -51,7 +63,8 @@ const [state, setState] = createStore<AppState>({
   selectedContainer: null,
   selectedSector: null,
   sidebarOpen: initialSidebarOpen(),
-  darkMode: false,
+  darkMode: typeof window !== 'undefined' ? resolveDarkMode(bootTheme) : false,
+  themePreference: bootTheme,
   containers: containersData,
   sectors: sectorsData,
   routes: routesMock,
@@ -127,20 +140,46 @@ export function closeSidebarIfMobile() {
   }
 }
 
-export function toggleDarkMode() {
-  setState('darkMode', (v) => {
-    const next = !v;
-    document.documentElement.classList.toggle('dark', next);
-    return next;
-  });
+export function applyThemePreference(theme: ThemePreference) {
+  persistThemePreference(theme);
+  const prefersDark = applyThemeToDocument(theme);
+  setState({ darkMode: prefersDark, themePreference: theme });
 }
 
-export function applyThemePreference(theme: 'light' | 'dark' | 'system') {
-  const prefersDark =
-    theme === 'dark' ||
-    (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-  setState('darkMode', prefersDark);
-  document.documentElement.classList.toggle('dark', prefersDark);
+async function persistThemeToProfile(theme: ThemePreference): Promise<void> {
+  try {
+    const { isAuthenticated } = await import('./authStore');
+    if (!isAuthenticated()) return;
+    await updateProfilePreferences({ theme });
+  } catch {
+    // offline / guest — localStorage already updated
+  }
+}
+
+/** Sidebar toggle: alterna light ↔ dark y persiste en perfil si hay sesión. */
+export async function toggleDarkMode(): Promise<void> {
+  const nextTheme: ThemePreference = state.darkMode ? 'light' : 'dark';
+  applyThemePreference(nextTheme);
+  await persistThemeToProfile(nextTheme);
+}
+
+/** Perfil / API — aplica tema y opcionalmente sincroniza backend. */
+export async function setThemePreference(
+  theme: ThemePreference,
+  options: { persistProfile?: boolean } = {},
+): Promise<void> {
+  applyThemePreference(theme);
+  if (options.persistProfile !== false) {
+    await persistThemeToProfile(theme);
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (state.themePreference === 'system') {
+      applyThemePreference('system');
+    }
+  });
 }
 
 export async function refreshAppRoutes(): Promise<void> {

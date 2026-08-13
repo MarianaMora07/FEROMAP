@@ -84,9 +84,9 @@ export default function LoginPage() {
   };
 
   return (
-    <div class="flex min-h-screen flex-col bg-surface">
+    <div class="flex min-h-screen flex-col bg-app">
       <div class="flex flex-1 items-center justify-center p-4 sm:p-6 lg:p-8">
-        <div class="flex w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-xl lg:max-w-7xl lg:flex-row">
+        <div class="flex w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-default bg-elevated shadow-xl lg:max-w-7xl lg:flex-row">
           <BrandSide />
 
           <main class="flex flex-1 flex-col justify-center px-6 py-8 sm:px-10 lg:px-12 lg:py-12">
@@ -137,7 +137,7 @@ export default function LoginPage() {
                 </div>
 
                 <Show when={authError()}>
-                  <p class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  <p class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
                     {authError()}
                   </p>
                 </Show>
@@ -154,7 +154,7 @@ export default function LoginPage() {
                 </Button>
               </form>
 
-              <div class="mt-6 rounded-lg border border-border bg-slate-50/80 p-3 dark:bg-dark-surface-hover">
+              <div class="mt-6 rounded-lg border border-default bg-app p-3">
                 <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
                   Usuarios demo
                 </p>
@@ -162,7 +162,7 @@ export default function LoginPage() {
                   {DEMO_USERS.map((demo) => (
                     <button
                       type="button"
-                      class="rounded-md border border-border bg-surface px-2.5 py-1 text-xs font-medium text-text-secondary hover:border-fero-green-dark hover:text-fero-green-dark"
+                      class="rounded-md border border-default bg-elevated px-2.5 py-1 text-xs font-medium text-text-secondary hover:border-fero-green-dark hover:text-fero-green-dark"
                       onClick={() => fillDemo(demo.email)}
                     >
                       {demo.label}
@@ -172,9 +172,9 @@ export default function LoginPage() {
               </div>
 
               <div class="my-6 flex items-center gap-3">
-                <div class="h-px flex-1 bg-border" />
+                <div class="h-px flex-1 bg-default" />
                 <span class="text-xs text-text-muted">o inicia sesión con</span>
-                <div class="h-px flex-1 bg-border" />
+                <div class="h-px flex-1 bg-default" />
               </div>
 
               <div class="grid grid-cols-2 gap-3">

@@ -20,10 +20,10 @@ export function Card(props: CardProps) {
       class={`rounded-[var(--radius-lg)] border transition-all duration-200 ${
         glass()
           ? 'glass shadow-md'
-          : 'bg-surface border-border shadow-xs'
-      } ${hover() ? 'hover:shadow-md hover:border-fero-blue/20 cursor-pointer' : ''} ${
+          : 'border-default bg-elevated shadow-xs'
+      } ${hover() ? 'cursor-pointer hover:border-fero-blue/20 hover:shadow-md' : ''} ${
         padding() ? 'p-4' : ''
-      } dark:bg-dark-surface dark:border-dark-border ${local.class ?? ''}`}
+      } ${local.class ?? ''}`}
       {...others}
     >
       {local.children}
@@ -40,14 +40,10 @@ interface CardHeaderProps {
 
 export function CardHeader(props: CardHeaderProps) {
   return (
-    <div class={`flex items-center justify-between mb-4 ${props.class ?? ''}`}>
+    <div class={`mb-4 flex items-center justify-between ${props.class ?? ''}`}>
       <div>
-        <h3 class="font-heading font-semibold text-text-primary dark:text-white">
-          {props.title}
-        </h3>
-        {props.subtitle && (
-          <p class="text-sm text-text-muted mt-0.5">{props.subtitle}</p>
-        )}
+        <h3 class="font-heading font-semibold text-text-primary">{props.title}</h3>
+        {props.subtitle && <p class="mt-0.5 text-sm text-text-muted">{props.subtitle}</p>}
       </div>
       {props.action && <div>{props.action}</div>}
     </div>

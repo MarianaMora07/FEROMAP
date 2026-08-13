@@ -13,11 +13,11 @@ interface BadgeProps {
 
 const variantClasses: Record<BadgeVariant, string> = {
   success: 'bg-fero-green/15 text-fero-green-dark border-fero-green/30',
-  warning: 'bg-amber-50 text-amber-700 border-amber-200',
-  danger: 'bg-red-50 text-red-700 border-red-200',
+  warning: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30',
+  danger: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-300 dark:border-red-500/30',
   info: 'bg-fero-blue/10 text-fero-blue border-fero-blue/20',
-  default: 'bg-slate-50 text-slate-700 border-slate-200',
-  outline: 'bg-transparent text-text-secondary border-border',
+  default: 'bg-app text-text-secondary border-default',
+  outline: 'border-default bg-transparent text-text-secondary',
 };
 
 const dotColors: Record<BadgeVariant, string> = {
