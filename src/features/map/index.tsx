@@ -36,7 +36,8 @@ import {
 import { dashboardSummary } from '../../core/stores/dashboardStore';
 import { fetchMapContext, MAP_CONTEXT_POLL_MS } from '../../core/api/map';
 import { fetchOperatorRouteSnapshot } from '../../core/api/operator';
-import { isConductor } from '../../core/auth/permissions';
+import { fetchResidentOverview } from '../../core/api/resident';
+import { isConductor, isResident } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
 import { fleetForOperatorField } from '../../core/operator/operatorMonitoringUx';
 import { parseVehicleIdParam } from '../../core/operator/operatorDeepLinks';
@@ -49,12 +50,32 @@ import {
   OPERATOR_ROUTE_LAYER_ID,
 } from '../../core/map/operatorRouteMapLayers';
 import {
+  containersFromResidentPoints,
+  ensureResidentSectorHighlight,
+  ensureResidentSectorRouteLayer,
+  filterRoutesForSector,
+  findSectorFeature,
+  fitMapToSector,
+  parseResidentMapFocus,
+  parseResidentScope,
+  residentMapMetrics,
+  resolveResidentNextStop,
+  resolveResidentTruck,
+  syncResidentNextStopMarker,
+  RESIDENT_SECTOR_HIGHLIGHT_FILL_ID,
+  RESIDENT_SECTOR_HIGHLIGHT_LINE_ID,
+  RESIDENT_SECTOR_ROUTE_GLOW_LAYER_ID,
+  RESIDENT_SECTOR_ROUTE_LAYER_ID,
+} from '../../core/map/residentSectorMapLayers';
+import {
   ensureOperationalRouteLayer,
   syncContainerMarkers,
   syncFleetMarkers,
   vehicleStatusKey,
 } from '../../core/map/operationalMapLayers';
 import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
+import { residentHubHref, residentPointsHref } from '../../core/resident/residentDeepLinks';
+import { ResidentBreadcrumbs } from '../resident/ResidentBreadcrumbs';
 import { buildContainerPopupHtml } from '../../core/utils/popupHtml';
 import { mapStylesById, mapStyleForTheme, themeBaseStyleId } from '../../core/utils/mapStyle';
 import {
@@ -88,20 +109,54 @@ function createPinEl(bg: string, svg: string) {
   return el;
 }
 
+function buildResidentContainerPopupHtml(container: Parameters<typeof buildContainerPopupHtml>[0]) {
+  return `${buildContainerPopupHtml(container)}<p style="margin:8px 0 0;font-size:10px;color:#94a3b8;">Vista de consulta — solo lectura</p>`;
+}
+
 export default function MapPage() {
   let mapContainer!: HTMLDivElement;
   const mapRef: { current?: MapLibreMap } = {};
   const vehicleMarkersById = new Map<string, Marker>();
   const containerMarkers: Marker[] = [];
   const [searchParams] = useSearchParams();
-  const [mapContext, { refetch }] = createResource(fetchMapContext);
+  const residentScope = () => parseResidentScope(searchParams.scope);
+  const residentMode = () => isResident(authUser()?.role) && residentScope();
+  const [residentOverview, { refetch: refetchResidentOverview }] = createResource(
+    () => (residentMode() ? 'resident-map' : null),
+    () => fetchResidentOverview(),
+  );
+  const mapContextSource = createMemo(() => {
+    if (residentMode()) {
+      const sector = residentOverview()?.sectorName ?? authUser()?.sectorName ?? undefined;
+      return sector ? ({ mode: 'sector' as const, sector } as const) : null;
+    }
+    return { mode: 'global' as const } as const;
+  });
+  const [mapContext, { refetch }] = createResource(mapContextSource, (source) => {
+    if (!source) return Promise.resolve(undefined);
+    if (source.mode === 'sector') return fetchMapContext({ sector: source.sector });
+    return fetchMapContext();
+  });
   const operationDate = () => {
     const date = Array.isArray(searchParams.date) ? searchParams.date[0] : searchParams.date;
     return date || new Date().toISOString().slice(0, 10);
   };
   const [routeSnapshot] = createResource(operationDate, (date) => fetchOperatorRouteSnapshot(date));
-  const operatorMode = () => isConductor(authUser()?.role);
+  const operatorMode = () => isConductor(authUser()?.role) && !residentScope();
   const nextStopHolder: { marker?: maplibregl.Marker } = {};
+  const residentNextStopHolder: { marker?: maplibregl.Marker } = {};
+
+  const residentMapFocus = () => parseResidentMapFocus(searchParams.focus);
+  const residentSectorName = () =>
+    residentOverview()?.sectorName ?? authUser()?.sectorName ?? 'Mi sector';
+  const residentSectorFeature = createMemo(() =>
+    findSectorFeature(appState.sectors, residentSectorName()),
+  );
+  const residentFitKey = createMemo(() => {
+    const rawSectorId = searchParams.sectorId;
+    const sectorId = Array.isArray(rawSectorId) ? rawSectorId[0] : rawSectorId;
+    return `${residentMapFocus()}|${residentSectorName()}|${sectorId ?? ''}`;
+  });
 
   const focusVehicleId = () => {
     const fromParam = parseVehicleIdParam(searchParams.vehicleId) ?? parseVehicleIdParam(searchParams.vehicle);
@@ -126,14 +181,31 @@ export default function MapPage() {
   const [layerState, setLayerState] = createSignal<Record<string, boolean>>(initialLayerState());
   const [mapReady, setMapReady] = createSignal(false);
 
-  const mapMetrics = () =>
-    mapContext()?.mapMetrics?.length
+  const mapMetrics = () => {
+    if (residentMode() && residentOverview()) {
+      const overview = residentOverview()!;
+      return residentMapMetrics({
+        totalPoints: overview.stats.totalPoints,
+        criticalPoints: overview.stats.criticalPoints,
+        activeRoutes: overview.stats.routesServingSector,
+        truckCode: overview.proximity?.vehicleCode,
+      });
+    }
+    return mapContext()?.mapMetrics?.length
       ? mapContext()!.mapMetrics
       : dashboardSummary().mapMetrics?.length
         ? dashboardSummary().mapMetrics!
         : [];
+  };
 
   const operationalRoutes = () => {
+    if (residentMode()) {
+      const routeIds = residentOverview()?.activeRoutesInSector.map((route) => route.routeId) ?? [];
+      return filterRoutesForSector(
+        mapContext()?.routes ?? { type: 'FeatureCollection', features: [] },
+        routeIds,
+      );
+    }
     if (operatorMode() && (routeSnapshot()?.stops.length ?? 0) > 0) {
       return routeCollectionFromStops(routeSnapshot()!.stops, {
         label: 'Mi ruta hoy',
@@ -142,6 +214,12 @@ export default function MapPage() {
     return mapContext()?.routes ?? { type: 'FeatureCollection', features: [] };
   };
   const operationalContainers = () => {
+    if (residentMode() && residentOverview()) {
+      return containersFromResidentPoints(
+        residentOverview()!.collectionPoints,
+        residentSectorName(),
+      );
+    }
     const containers = mapContext()?.containers ?? { type: 'FeatureCollection', features: [] };
     if (!operatorMode() || (routeSnapshot()?.stops.length ?? 0) === 0) {
       return containers;
@@ -159,6 +237,10 @@ export default function MapPage() {
   };
   const operationalFleet = () => {
     const fleet = mapContext()?.vehicles ?? [];
+    if (residentMode()) {
+      const truck = resolveResidentTruck(fleet, residentOverview()?.proximity?.vehicleCode);
+      return truck ? [truck] : [];
+    }
     if (!operatorMode()) return fleet;
     const focused = focusVehicleId();
     const scoped = fleetForOperatorField(fleet, authUser());
@@ -239,8 +321,8 @@ export default function MapPage() {
     // Base raster (calles / satélite vía estilo)
     setVis('base-tiles-layer', state.streets || state.satellite);
 
-    setVis('sectors-fill', state.sectors || state.neighborhoods);
-    setVis('sectors-line', state.sectors || state.neighborhoods);
+    setVis('sectors-fill', !residentMode() && (state.sectors || state.neighborhoods));
+    setVis('sectors-line', !residentMode() && (state.sectors || state.neighborhoods));
     if (map.getLayer('sectors-fill')) {
       map.setPaintProperty(
         'sectors-fill',
@@ -249,15 +331,38 @@ export default function MapPage() {
       );
     }
 
-    const routesVisible = state.routes || (operatorMode() && (routeSnapshot()?.stops.length ?? 0) > 0);
-    setVis('operational-routes-line', routesVisible && !operatorMode());
+    setVis(RESIDENT_SECTOR_HIGHLIGHT_FILL_ID, residentMode());
+    setVis(RESIDENT_SECTOR_HIGHLIGHT_LINE_ID, residentMode());
+
+    const routesVisible =
+      state.routes ||
+      (operatorMode() && (routeSnapshot()?.stops.length ?? 0) > 0) ||
+      (residentMode() && operationalRoutes().features.length > 0);
+    setVis('operational-routes-line', routesVisible && !operatorMode() && !residentMode());
     setVis(OPERATOR_ROUTE_LAYER_ID, routesVisible && operatorMode());
     setVis(OPERATOR_ROUTE_GLOW_LAYER_ID, routesVisible && operatorMode());
+    setVis(RESIDENT_SECTOR_ROUTE_LAYER_ID, routesVisible && residentMode());
+    setVis(RESIDENT_SECTOR_ROUTE_GLOW_LAYER_ID, routesVisible && residentMode());
     if (map.getSource('operational-routes')) {
-      const routes = routesVisible && !operatorMode()
+      const routes = routesVisible && !operatorMode() && !residentMode()
         ? mapContext()?.routes ?? { type: 'FeatureCollection' as const, features: [] }
         : { type: 'FeatureCollection' as const, features: [] };
       ensureOperationalRouteLayer(map, routes);
+    }
+    if (residentMode()) {
+      ensureResidentSectorHighlight(map, residentSectorFeature());
+      if (routesVisible && operationalRoutes().features.length > 0) {
+        ensureResidentSectorRouteLayer(map, operationalRoutes());
+      }
+      const overview = residentOverview();
+      syncResidentNextStopMarker(
+        map,
+        overview ? resolveResidentNextStop(overview) : null,
+        residentNextStopHolder,
+      );
+    } else if (residentNextStopHolder.marker) {
+      residentNextStopHolder.marker.remove();
+      residentNextStopHolder.marker = undefined;
     }
     if (operatorMode() && routesVisible && (routeSnapshot()?.stops.length ?? 0) > 0) {
       ensureOperatorRouteLayer(map, operationalRoutes());
@@ -281,7 +386,7 @@ export default function MapPage() {
       syncContainerMarkers(map, operationalContainers(), containerMarkers, {
         visibleBuckets,
         createMarkerElement: (color) => createPinEl(color, trashSvg('#fff')),
-        buildPopupHtml: buildContainerPopupHtml,
+        buildPopupHtml: residentMode() ? buildResidentContainerPopupHtml : buildContainerPopupHtml,
       });
     } else {
       containerMarkers.forEach((marker) => marker.remove());
@@ -289,7 +394,9 @@ export default function MapPage() {
     }
 
     if (state.vehicles) {
-      const focusedId = focusVehicleId();
+      const focusedId = residentMode()
+        ? residentOverview()?.proximity?.vehicleCode ?? undefined
+        : focusVehicleId();
       const filteredFleet = operationalFleet().filter((vehicle) => {
         const statusKey = `veh-${vehicleStatusKey(vehicle.status)}`;
         return state[statusKey];
@@ -385,6 +492,7 @@ export default function MapPage() {
 
     const pollTimer = window.setInterval(() => {
       void refetch();
+      if (residentMode()) void refetchResidentOverview();
     }, MAP_CONTEXT_POLL_MS);
 
     onCleanup(() => {
@@ -399,6 +507,51 @@ export default function MapPage() {
   });
 
   createEffect(() => {
+    if (!mapReady() || !residentMode()) return;
+    const map = getMap();
+    if (!map?.isStyleLoaded()) return;
+    syncOverlayLayers();
+  });
+
+  createEffect(() => {
+    residentFitKey();
+    if (!mapReady() || !residentMode()) return;
+    const map = getMap();
+    if (!map?.isStyleLoaded()) return;
+    const overview = residentOverview();
+    if (!overview) return;
+
+    const focus = residentMapFocus();
+    const sectorFeature = residentSectorFeature();
+    const truck = resolveResidentTruck(
+      mapContext()?.vehicles ?? [],
+      overview.proximity?.vehicleCode,
+    );
+    const routePoints = operationalRoutes().features.flatMap((feature) => {
+      if (feature.geometry.type !== 'LineString') return [];
+      return feature.geometry.coordinates.map(([lng, lat]) => ({ lng, lat }));
+    });
+
+    if (focus === 'truck' && truck) {
+      map.flyTo({
+        center: [truck.lng, truck.lat],
+        zoom: Math.max(map.getZoom(), 14.5),
+        essential: true,
+      });
+      return;
+    }
+    if (focus === 'routes' && routePoints.length > 0) {
+      fitMapToSector(map, { points: routePoints, padding: 64 });
+      return;
+    }
+    fitMapToSector(map, {
+      sectorFeature,
+      points: overview.collectionPoints.map((point) => ({ lng: point.lng, lat: point.lat })),
+      padding: 56,
+    });
+  });
+
+  createEffect(() => {
     routeSnapshot();
     if (!mapReady() || !operatorMode()) return;
     const map = getMap();
@@ -406,6 +559,26 @@ export default function MapPage() {
     syncOverlayLayers();
     const stops = routeSnapshot()?.stops ?? [];
     if (stops.length > 0) fitMapToStops(map, stops);
+  });
+
+  createEffect(() => {
+    if (!residentMode()) return;
+    setLayerState((state) => ({
+      ...state,
+      routes: true,
+      containers: true,
+      vehicles: true,
+      sectors: false,
+      neighborhoods: false,
+      'bin-critical': true,
+      'bin-full': true,
+      'bin-normal': true,
+      'bin-partial': true,
+      'veh-active': true,
+      'veh-idle': false,
+      'veh-maintenance': false,
+      'veh-offline': false,
+    }));
   });
 
   createEffect(() => {
@@ -473,16 +646,30 @@ export default function MapPage() {
         </button>
 
         <div class="relative min-w-0 flex-1 md:max-w-sm">
-          <Search size={16} class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-          <input
-            type="search"
-            placeholder="Buscar dirección o lugar"
-            class="w-full rounded-md border border-border bg-surface py-2 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-fero-blue focus:outline-none focus:ring-2 focus:ring-fero-blue/20 dark:bg-dark-surface-hover dark:border-dark-border dark:text-white"
-          />
+          <Show
+            when={!residentMode()}
+            fallback={
+              <p
+                role="status"
+                class="truncate py-2 pl-1 text-sm font-semibold text-fero-green-dark dark:text-fero-green"
+              >
+                Mi sector — {residentSectorName()}
+              </p>
+            }
+          >
+            <Search size={16} class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+            <input
+              type="search"
+              placeholder="Buscar dirección o lugar"
+              class="w-full rounded-md border border-border bg-surface py-2 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-fero-blue focus:outline-none focus:ring-2 focus:ring-fero-blue/20 dark:bg-dark-surface-hover dark:border-dark-border dark:text-white"
+            />
+          </Show>
         </div>
 
         <div class="flex flex-wrap items-center gap-1.5">
-          <ToolBtn icon={<Filter size={16} />} label="Filtros" />
+          <Show when={!residentMode()}>
+            <ToolBtn icon={<Filter size={16} />} label="Filtros" />
+          </Show>
           <ToolBtn
             icon={<Layers size={16} />}
             label="Capas"
@@ -495,8 +682,10 @@ export default function MapPage() {
             active={legendOpen()}
             onClick={() => setLegendOpen((v) => !v)}
           />
-          <ToolBtn icon={<Ruler size={16} />} label="Medir" class="hidden sm:inline-flex" />
-          <ToolBtn icon={<Printer size={16} />} label="Imprimir" class="hidden md:inline-flex" />
+          <Show when={!residentMode()}>
+            <ToolBtn icon={<Ruler size={16} />} label="Medir" class="hidden sm:inline-flex" />
+            <ToolBtn icon={<Printer size={16} />} label="Imprimir" class="hidden md:inline-flex" />
+          </Show>
         </div>
 
         <div class="ml-auto flex items-center gap-1.5">
@@ -552,6 +741,55 @@ export default function MapPage() {
         </div>
       </Show>
 
+      <Show when={residentMode()}>
+        <div class="absolute inset-x-0 top-14 z-20 mx-3">
+          <ResidentBreadcrumbs
+            items={[
+              { label: 'Mi Recolección', href: residentHubHref() },
+              { label: 'Mapa mi sector' },
+            ]}
+          />
+        </div>
+      </Show>
+
+      <Show when={residentMode() && residentOverview()}>
+        {(overview) => (
+          <div
+            role="status"
+            class="absolute inset-x-0 top-[4.25rem] z-20 mx-3 rounded-lg border border-fero-green/30 bg-surface/95 px-3 py-2 text-sm shadow-sm backdrop-blur-sm dark:bg-dark-surface/95"
+          >
+            <p class="font-semibold text-fero-green-dark dark:text-fero-green">
+              Mi sector — {overview().sectorName}
+            </p>
+            <p class="text-xs text-text-secondary">
+              {overview().stats.totalPoints} contenedores
+              <Show when={overview().proximity.vehicleCode}>
+                {(code) => (
+                  <span>
+                    {' '}
+                    · Camión <strong class="text-text-primary dark:text-white">{code()}</strong>
+                  </span>
+                )}
+              </Show>
+              <Show when={overview().proximity.nextStopInSector}>
+                {(stop) => (
+                  <span>
+                    {' '}
+                    · Próxima parada: <strong class="text-text-primary dark:text-white">{stop()}</strong>
+                  </span>
+                )}
+              </Show>
+            </p>
+            <A
+              href={residentPointsHref()}
+              class="mt-1 inline-flex items-center gap-1 text-xs font-medium text-fero-blue hover:underline"
+            >
+              Ver puntos de recolección
+            </A>
+          </div>
+        )}
+      </Show>
+
       <Show when={layersOpen()}>
         <aside class="absolute top-16 left-3 z-20 w-64 rounded-lg border border-border bg-surface/95 p-3 shadow-lg backdrop-blur-md dark:bg-dark-surface/95 dark:border-dark-border">
           <div class="mb-2 flex items-center justify-between">
@@ -561,7 +799,7 @@ export default function MapPage() {
             </button>
           </div>
           <ul class="space-y-1">
-            <For each={mapLayers}>
+            <For each={residentMode() ? mapLayers.filter((layer) => ['routes', 'containers', 'vehicles'].includes(layer.id)) : mapLayers}>
               {(layer) => (
                 <li>
                   <label class="flex cursor-pointer items-center gap-2 py-0.5 text-sm text-text-secondary">
@@ -605,10 +843,12 @@ export default function MapPage() {
               )}
             </For>
           </ul>
-          <button type="button" class="mt-3 inline-flex items-center gap-1 text-sm font-medium text-fero-blue hover:underline">
-            <Plus size={14} />
-            Agregar capa
-          </button>
+          <Show when={!residentMode()}>
+            <button type="button" class="mt-3 inline-flex items-center gap-1 text-sm font-medium text-fero-blue hover:underline">
+              <Plus size={14} />
+              Agregar capa
+            </button>
+          </Show>
         </aside>
       </Show>
 

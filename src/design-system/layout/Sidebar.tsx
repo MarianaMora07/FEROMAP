@@ -66,6 +66,15 @@ function navDescriptionClass(active: boolean) {
   return active ? 'text-white/75' : 'text-white/40 group-hover:text-white/55';
 }
 
+/** Coincide por pathname; ignora query en href (p. ej. `/map?scope=sector`). */
+function navHrefPath(href: string) {
+  return href.split('?')[0] ?? href;
+}
+
+function isNavItemActive(href: string, pathname: string) {
+  return pathname === navHrefPath(href);
+}
+
 interface SidebarProps {
   open: boolean;
 }
@@ -73,8 +82,6 @@ interface SidebarProps {
 export function Sidebar(props: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const isActive = (href: string) => location.pathname === href;
-
   const nav = createMemo(() => navItemsForRole(authUser()?.role));
 
   const handleLogout = async () => {
@@ -104,8 +111,8 @@ export function Sidebar(props: SidebarProps) {
       <nav class="flex-1 space-y-1 overflow-y-auto px-3 py-3">
         <For each={nav().main}>
           {(item) => {
-            const Icon = NAV_ICONS[item.href] ?? LayoutDashboard;
-            const active = () => isActive(item.href);
+            const Icon = NAV_ICONS[navHrefPath(item.href)] ?? LayoutDashboard;
+            const active = () => isNavItemActive(item.href, location.pathname);
             return (
               <>
                 <Show when={item.sectionBefore}>
@@ -151,7 +158,7 @@ export function Sidebar(props: SidebarProps) {
           {(item) => {
             const Icon = NAV_ICONS[item.href] ?? User;
             return (
-              <A href={item.href} class={navClass(isActive(item.href))}>
+              <A href={item.href} class={navClass(isNavItemActive(item.href, location.pathname))}>
                 <Icon size={18} />
                 {item.label}
               </A>

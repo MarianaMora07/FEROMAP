@@ -905,18 +905,82 @@ Descarga binaria (CSV o PDF) respetando los filtros `from`, `to`, `granularity` 
 
 ## Residente — `/api/v1/resident`
 
+Requiere rol `residente` y usuario con `sector_id` asignado. Sin sector → `400`. Otros roles → `403`.
+
 ### `GET /resident/overview`
 
-Requiere rol `residente`.
+Vista agregada del sector del residente: horario, proximidad del camión, contenedores, rutas activas y avisos derivados.
 
 ```json
 {
   "sectorName": "Unare I",
-  "nextCollection": "26/06/2026 — 07:00 AM",
-  "nearbyPoints": [{ "id": "045", "fillLevel": 72, "status": "lleno" }],
-  "notifications": [{ "title": "Recolección programada", "date": "26/06/2026" }]
+  "schedule": {
+    "collectionDays": "Lunes, Miércoles, Viernes",
+    "window": "07:00 — 12:00",
+    "nextCollection": "Viernes 15/08",
+    "nextCollectionAt": "2026-08-15T11:00:00+00:00",
+    "frequency": "3x/semana",
+    "isCollectionDay": true,
+    "hasWeeklyPlan": true,
+    "hasSchedule": true,
+    "source": "weekly_plan",
+    "calendar": [
+      { "date": "2026-08-13", "weekday": 2, "label": "Miércoles" }
+    ]
+  },
+  "proximity": {
+    "status": "approaching",
+    "vehicleCode": "TR-08",
+    "routeId": 42,
+    "estimatedMinutes": 18,
+    "stopsBeforeSector": 2,
+    "nextStopInSector": "CNT-001",
+    "completedStopsInSector": 0,
+    "totalStopsInSector": 3,
+    "lastUpdatedAt": "2026-08-13T14:30:00+00:00"
+  },
+  "collectionPoints": [
+    {
+      "id": "CNT-001",
+      "address": "CNT-001",
+      "fillLevel": 72,
+      "status": "lleno",
+      "lastEmptiedAt": "2026-08-10T12:00:00+00:00",
+      "lng": -62.75,
+      "lat": 8.27
+    }
+  ],
+  "activeRoutesInSector": [
+    {
+      "routeId": 42,
+      "vehicle": "TR-08",
+      "status": "in_progress",
+      "stopsInSector": 3,
+      "pendingStops": 2,
+      "nextStop": "CNT-001"
+    }
+  ],
+  "alerts": [
+    {
+      "title": "Horario de recolección",
+      "detail": "Tu sector (Unare I) tiene recolección: Lunes, Miércoles, Viernes · 07:00 — 12:00."
+    }
+  ],
+  "stats": {
+    "totalPoints": 12,
+    "criticalPoints": 2,
+    "routesServingSector": 1
+  }
 }
 ```
+
+**`proximity.status`:** `approaching` | `in_sector` | `completed` | `not_scheduled` | `no_active_route`
+
+**`schedule.source`:** `weekly_plan` | `visit_schedules` | `default` | `none`
+
+### `GET /resident/proximity`
+
+Misma validación de rol/sector. Devuelve solo el objeto `proximity` del overview (útil para polling ligero).
 
 ---
 
@@ -941,7 +1005,7 @@ Requiere rol `residente`.
 | `analytics.ts` | `/analytics/summary`, `/analytics/heatmap` |
 | `reports.ts` | `/reports/*` |
 | `admin.ts` | `/admin/*` |
-| `resident.ts` | `/resident/overview` |
+| `resident.ts` | `/resident/overview`, `/resident/proximity` |
 | `contingencies.ts` | `/contingencies/*` |
 
 ## Vistas sin API dedicada

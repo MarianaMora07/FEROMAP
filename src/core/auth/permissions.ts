@@ -50,7 +50,7 @@ export interface NavItemDef {
 }
 
 export const MAIN_NAV_ITEMS: NavItemDef[] = [
-  { href: '/', label: 'Dashboard', roles: ['administrador', 'planificador', 'conductor', 'residente'] },
+  { href: '/', label: 'Dashboard', roles: ['administrador', 'planificador', 'conductor'] },
   {
     href: '/simulation',
     label: 'Simulación de escenarios',
@@ -58,15 +58,14 @@ export const MAIN_NAV_ITEMS: NavItemDef[] = [
     sectionBefore: 'Investigación',
     roles: ['administrador', 'planificador'],
   },
-  { href: '/map', label: 'Mapa GIS', roles: ['administrador', 'planificador', 'conductor', 'residente'] },
+  { href: '/map', label: 'Mapa GIS', roles: ['administrador', 'planificador', 'conductor'] },
   { href: '/vehicles', label: 'Vehículos', roles: ['administrador', 'planificador'] },
   { href: '/drivers', label: 'Conductores', roles: ['administrador', 'planificador'] },
   {
     href: '/collection-points',
     label: 'Puntos de Recolección',
-    roles: ['administrador', 'planificador', 'residente'],
+    roles: ['administrador', 'planificador'],
   },
-  { href: '/resident', label: 'Mi Recolección', roles: ['residente'] },
   {
     href: '/monitoring',
     label: 'Monitoreo en Tiempo Real',
@@ -99,7 +98,36 @@ export const MAIN_NAV_ITEMS: NavItemDef[] = [
     roles: ['administrador', 'planificador'],
   },
   { href: '/analytics', label: 'Analítica', roles: ['administrador', 'planificador'] },
-  { href: '/alerts', label: 'Alertas', roles: ['administrador', 'planificador', 'conductor', 'residente'] },
+  { href: '/alerts', label: 'Alertas', roles: ['administrador', 'planificador', 'conductor'] },
+];
+
+/** Nav lateral reducida para residentes (vista ciudadano). */
+export const RESIDENT_MAIN_NAV_ITEMS: NavItemDef[] = [
+  {
+    href: '/resident',
+    label: 'Mi Recolección',
+    description: 'Horario y estado en tu sector',
+    sectionBefore: 'Mi zona',
+    roles: ['residente'],
+  },
+  {
+    href: '/map?scope=sector',
+    label: 'Mapa mi sector',
+    description: 'Camión y contenedores',
+    roles: ['residente'],
+  },
+  {
+    href: '/collection-points',
+    label: 'Puntos de recolección',
+    description: 'Contenedores de tu barrio',
+    roles: ['residente'],
+  },
+  {
+    href: '/alerts?scope=sector',
+    label: 'Alertas',
+    description: 'Avisos de tu sector',
+    roles: ['residente'],
+  },
 ];
 
 /** Nav lateral reducida para conductores en campo. */
@@ -129,6 +157,12 @@ export function navItemsForRole(role: UserRole | undefined) {
       bottom: BOTTOM_NAV_ITEMS.filter((item) => item.roles.includes(role)),
     };
   }
+  if (isResident(role)) {
+    return {
+      main: RESIDENT_MAIN_NAV_ITEMS,
+      bottom: BOTTOM_NAV_ITEMS.filter((item) => item.roles.includes(role)),
+    };
+  }
   return {
     main: MAIN_NAV_ITEMS.filter((item) => item.roles.includes(role)),
     bottom: BOTTOM_NAV_ITEMS.filter((item) => item.roles.includes(role)),
@@ -137,6 +171,10 @@ export function navItemsForRole(role: UserRole | undefined) {
 
 export function isConductor(role: UserRole | undefined): boolean {
   return role === 'conductor';
+}
+
+export function isResident(role: UserRole | undefined): boolean {
+  return role === 'residente';
 }
 
 export function isOperatorHome(path: string): boolean {

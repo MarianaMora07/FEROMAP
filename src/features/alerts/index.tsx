@@ -53,14 +53,16 @@ import {
 import {
   computeAlertsByCategory,
   computeAlertsDistribution,
+  computeAlertsKpis,
   fetchAlertActivity,
   fetchAlerts,
   statsToKpis,
   updateAlertStatus,
 } from '../../core/api/alerts';
 import { fetchOperatorRouteSnapshot } from '../../core/api/operator';
+import { fetchResidentOverview } from '../../core/api/resident';
 import { fetchRecentIncidents } from '../../core/api/contingencies';
-import { isConductor } from '../../core/auth/permissions';
+import { isConductor, isResident } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
 import {
   buildOperatorAlertContext,
@@ -68,6 +70,13 @@ import {
 } from '../../core/operator/operatorAlertsUx';
 import { operatorMapHref, parseVehicleIdParam } from '../../core/operator/operatorDeepLinks';
 import { OPERATOR_EMPTY_PRESETS } from '../../core/operator/operatorEmptyStates';
+import {
+  buildResidentSectorAlerts,
+  parseResidentAlertScope,
+  residentAlertsAsSystemAlerts,
+} from '../../core/resident/residentAlertsUx';
+import { residentMapHref } from '../../core/resident/residentDeepLinks';
+import { RESIDENT_EMPTY_PRESETS } from '../../core/resident/residentEmptyStates';
 import { PlanningEmptyState } from '../planning/PlanningEmptyState';
 
 function KpiIcon(props: { name: (typeof alertsKpis)[number]['icon'] }) {
@@ -143,6 +152,10 @@ export default function AlertsPage() {
     const scope = Array.isArray(searchParams.scope) ? searchParams.scope[0] : searchParams.scope;
     return isConductor(authUser()?.role) || scope === 'mine';
   };
+  const residentScope = () => {
+    const scope = Array.isArray(searchParams.scope) ? searchParams.scope[0] : searchParams.scope;
+    return isResident(authUser()?.role) || parseResidentAlertScope(scope);
+  };
   const operationDate = () => new Date().toISOString().slice(0, 10);
 
   let mapContainer!: HTMLDivElement;
@@ -162,6 +175,10 @@ export default function AlertsPage() {
     () => (operatorScope() ? vehicleId() : null),
     (id) => (id ? fetchRecentIncidents({ vehicleId: id, hours: 48 }) : Promise.resolve([])),
   );
+  const [residentOverview] = createResource(
+    () => (residentScope() ? 'resident-alerts' : null),
+    () => fetchResidentOverview(),
+  );
   const operatorAlertContext = createMemo(() =>
     buildOperatorAlertContext({
       vehicleId: vehicleId(),
@@ -179,17 +196,42 @@ export default function AlertsPage() {
     if (!operatorScope()) return alertsListData();
     return filterOperatorAlerts(alertsListData(), operatorAlertContext());
   });
-  const activeAlertsList = () => (operatorScope() ? operatorAlertsList() : alertsListData());
+  const residentAlertsList = createMemo(() => {
+    const overview = residentOverview();
+    if (!residentScope() || !overview) return [];
+    return residentAlertsAsSystemAlerts(
+      buildResidentSectorAlerts({
+        overview,
+        systemAlerts: alertsListData(),
+      }),
+    );
+  });
+  const activeAlertsList = () => {
+    if (residentScope()) return residentAlertsList();
+    if (operatorScope()) return operatorAlertsList();
+    return alertsListData();
+  };
   const showOperatorRouteEmpty = () =>
-    operatorScope() && !alertsData.loading && operatorAlertsList().length === 0;
+    operatorScope() && !residentScope() && !alertsData.loading && operatorAlertsList().length === 0;
+  const showResidentSectorEmpty = () =>
+    residentScope() && !alertsData.loading && !residentOverview.loading && residentAlertsList().length === 0;
   const operatorMapLink = () =>
     operatorMapHref({
       date: operationDate(),
       vehicleId: vehicleId(),
       focus: 'route',
     });
-  const alertsKpisData = () =>
-    alertsData()?.stats ? statsToKpis(alertsData()!.stats) : alertsKpis;
+  const residentMapLink = () =>
+    residentMapHref({
+      focus: 'sector',
+      sectorId: authUser()?.sectorId ?? undefined,
+    });
+  const alertsKpisData = () => {
+    if ((operatorScope() || residentScope()) && activeAlertsList().length > 0) {
+      return computeAlertsKpis(activeAlertsList());
+    }
+    return alertsData()?.stats ? statsToKpis(alertsData()!.stats) : alertsKpis;
+  };
   const recentActivity = () => activityData() ?? [];
   const alertsDistribution = () =>
     activeAlertsList().length ? computeAlertsDistribution(activeAlertsList()) : { total: 0, items: [] };
@@ -359,7 +401,7 @@ export default function AlertsPage() {
 
   return (
     <div class="space-y-5">
-      <Show when={operatorScope()}>
+      <Show when={operatorScope() && !residentScope()}>
         <div class="rounded-xl border border-fero-blue/30 bg-fero-blue/5 px-4 py-3">
           <p class="text-sm font-semibold text-fero-blue">Alertas que te afectan hoy</p>
           <p class="mt-0.5 text-xs text-text-secondary">
@@ -369,6 +411,23 @@ export default function AlertsPage() {
               ({vehicleId()})
             </Show>
             , sector y averías reportadas por ti.
+          </p>
+        </div>
+      </Show>
+      <Show when={residentScope()}>
+        <div
+          role="status"
+          class="rounded-xl border border-fero-green/30 bg-fero-green/5 px-4 py-3"
+        >
+          <p class="text-sm font-semibold text-fero-green-dark dark:text-fero-green">
+            Avisos de tu sector
+            <Show when={residentOverview()?.sectorName}>
+              {(sector) => <> — {sector()}</>}
+            </Show>
+          </p>
+          <p class="mt-0.5 text-xs text-text-secondary">
+            Prioridad: retraso de ruta, contenedores críticos en tu barrio y cambios de horario. Solo
+            consulta — sin alertas de flota interna.
           </p>
         </div>
       </Show>
@@ -453,7 +512,9 @@ export default function AlertsPage() {
                   <th class="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted">Ubicación</th>
                   <th class="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted">Fecha/Hora</th>
                   <th class="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted">Estado</th>
-                  <th class="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted">Acciones</th>
+                  <Show when={!residentScope()}>
+                    <th class="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted">Acciones</th>
+                  </Show>
                 </tr>
               </thead>
               <tbody class="divide-y divide-border dark:divide-dark-border">
@@ -461,16 +522,27 @@ export default function AlertsPage() {
                   each={pageItems()}
                   fallback={
                     <tr>
-                      <td colSpan={7} class="px-3 py-2">
+                      <td colSpan={residentScope() ? 6 : 7} class="px-3 py-2">
                         <Show
-                          when={showOperatorRouteEmpty()}
+                          when={showResidentSectorEmpty()}
                           fallback={
-                            <p class="py-6 text-center text-sm text-text-muted">No se encontraron alertas</p>
+                            <Show
+                              when={showOperatorRouteEmpty()}
+                              fallback={
+                                <p class="py-6 text-center text-sm text-text-muted">No se encontraron alertas</p>
+                              }
+                            >
+                              <PlanningEmptyState
+                                {...OPERATOR_EMPTY_PRESETS.noAlertsOnRoute}
+                                actionHref={operatorMapLink()}
+                                compact
+                              />
+                            </Show>
                           }
                         >
                           <PlanningEmptyState
-                            {...OPERATOR_EMPTY_PRESETS.noAlertsOnRoute}
-                            actionHref={operatorMapLink()}
+                            {...RESIDENT_EMPTY_PRESETS.noSectorAlerts}
+                            actionHref={residentMapLink()}
                             compact
                           />
                         </Show>
@@ -500,8 +572,9 @@ export default function AlertsPage() {
                       <td class="px-3 py-2.5">
                         <StatusBadge status={a.status} />
                       </td>
-                      <td class="px-3 py-2.5">
-                        <div class="relative flex items-center gap-0.5" data-alert-menu>
+                      <Show when={!residentScope()}>
+                        <td class="px-3 py-2.5">
+                          <div class="relative flex items-center gap-0.5" data-alert-menu>
                           <button
                             type="button"
                             class="flex h-7 w-7 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover hover:text-fero-blue disabled:opacity-40"
@@ -547,6 +620,7 @@ export default function AlertsPage() {
                           </Show>
                         </div>
                       </td>
+                      </Show>
                     </tr>
                   )}
                 </For>
@@ -583,8 +657,11 @@ export default function AlertsPage() {
         <Card padding={false} class="flex min-h-0 flex-col overflow-hidden xl:col-span-2 xl:h-full">
           <div class="flex items-center justify-between border-b border-border px-4 py-3 dark:border-dark-border">
             <h3 class="font-heading font-semibold text-text-primary dark:text-white">Mapa de alertas</h3>
-            <A href="/map" class="text-xs font-medium text-fero-blue hover:underline">
-              Ver todas en el mapa
+            <A
+              href={residentScope() ? residentMapLink() : '/map'}
+              class="text-xs font-medium text-fero-blue hover:underline"
+            >
+              {residentScope() ? 'Ver mapa de mi sector' : 'Ver todas en el mapa'}
             </A>
           </div>
           <div class="relative min-h-72 flex-1 bg-slate-100 dark:bg-slate-900">
@@ -704,20 +781,22 @@ export default function AlertsPage() {
         </Card>
       </div>
 
-      <div class="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between dark:border-red-900/40 dark:bg-red-950/30">
-        <div class="flex items-start gap-3">
-          <span class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-900/50">
-            <AlertTriangle size={18} />
-          </span>
-          <p class="text-sm text-red-800 dark:text-red-200">
-            <span class="font-semibold"> {criticalCount()} alertas críticas</span> requieren tu atención inmediata. Revisa las
-            alertas para evitar interrupciones en el servicio.
-          </p>
+      <Show when={!residentScope()}>
+        <div class="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between dark:border-red-900/40 dark:bg-red-950/30">
+          <div class="flex items-start gap-3">
+            <span class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-900/50">
+              <AlertTriangle size={18} />
+            </span>
+            <p class="text-sm text-red-800 dark:text-red-200">
+              <span class="font-semibold"> {criticalCount()} alertas críticas</span> requieren tu atención inmediata. Revisa las
+              alertas para evitar interrupciones en el servicio.
+            </p>
+          </div>
+          <Button variant="danger" class="shrink-0" onClick={focusCritical}>
+            Ver alertas críticas
+          </Button>
         </div>
-        <Button variant="danger" class="shrink-0" onClick={focusCritical}>
-          Ver alertas críticas
-        </Button>
-      </div>
+      </Show>
     </div>
   );
 }

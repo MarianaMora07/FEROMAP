@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import CollectionPoint, OptimizedRoute, RouteWaypoint, User, UserRole
 from app.services.geo_service import fill_level_pct
+from app.services.resident_proximity_service import build_resident_proximity
+from app.services.resident_schedule_service import build_resident_schedule
 
 
 def resident_overview(db: Session, user: User) -> dict[str, Any]:
@@ -77,22 +79,34 @@ def resident_overview(db: Session, user: User) -> dict[str, Any]:
             }
         )
 
-    return {
-        "sectorName": sector_name,
-        "schedule": {
-            "collectionDays": "Lunes, miércoles y viernes",
-            "window": "07:00 — 12:00",
-            "nextCollection": "Próximo miércoles 07:00",
-            "frequency": "3 veces por semana",
-        },
-        "collectionPoints": collection_points,
-        "activeRoutesInSector": sector_routes,
-        "alerts": [
+    schedule = build_resident_schedule(db, sector_id=user.sector_id)
+
+    alerts = []
+    if schedule.get("hasSchedule"):
+        alerts.append(
             {
                 "title": "Horario de recolección",
-                "detail": f"Tu sector ({sector_name}) tiene recolección L-M-V por la mañana.",
+                "detail": (
+                    f"Tu sector ({sector_name}) tiene recolección: "
+                    f"{schedule['collectionDays']} · {schedule['window']}."
+                ),
             }
-        ],
+        )
+    else:
+        alerts.append(
+            {
+                "title": "Sin recolección programada",
+                "detail": f"Tu sector ({sector_name}) no tiene visitas en el plan semanal aprobado.",
+            }
+        )
+
+    return {
+        "sectorName": sector_name,
+        "schedule": schedule,
+        "proximity": build_resident_proximity(db, user),
+        "collectionPoints": collection_points,
+        "activeRoutesInSector": sector_routes,
+        "alerts": alerts,
         "stats": {
             "totalPoints": len(collection_points),
             "criticalPoints": sum(1 for p in collection_points if p["fillLevel"] >= 80),
