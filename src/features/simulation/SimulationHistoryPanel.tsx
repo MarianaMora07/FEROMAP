@@ -18,7 +18,7 @@ export function SimulationHistoryPanel(props: SimulationHistoryPanelProps) {
     <Card>
       <CardHeader
         title="Historial de simulaciones"
-        subtitle="Escenarios de tesis ejecutados — no incluye planes operativos del día"
+        subtitle="Escenarios de simulación ejecutados — no incluye planes operativos del día"
       />
       <Show when={props.error}>
         <p class="mb-3 text-sm text-red-600">{props.error}</p>

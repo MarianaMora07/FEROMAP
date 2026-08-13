@@ -97,9 +97,9 @@ import {
 type SimulationPageTab = 'flow' | 'history' | 'weekly';
 
 const simulationPageTabs: { id: SimulationPageTab; label: string; hint: string }[] = [
-  { id: 'flow', label: 'Evaluar escenarios', hint: 'Tesis — algoritmo ACO, sin despacho real' },
+  { id: 'flow', label: 'Evaluar escenarios', hint: 'Comparar condiciones con el motor ACO (sin despacho)' },
   { id: 'weekly', label: 'Plan semanal', hint: 'Directivo — aprobar la semana' },
-  { id: 'history', label: 'Historial de tesis', hint: 'Solo escenarios de investigación' },
+  { id: 'history', label: 'Historial de simulaciones', hint: 'Escenarios ejecutados para análisis' },
 ];
 
 function Toggle(props: {

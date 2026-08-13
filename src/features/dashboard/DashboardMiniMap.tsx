@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createResource, onCleanup, onMount } from 'solid-js';
+import { For, Show, createEffect, createMemo, createResource, onCleanup, onMount } from 'solid-js';
 import maplibregl, { type Map as MapLibreMap, type Marker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Plus, Minus, Crosshair } from 'lucide-solid';
@@ -7,10 +7,14 @@ import { fetchMapContext, MAP_CONTEXT_POLL_MS } from '../../core/api/map';
 import {
   ensureOperationalRouteLayer,
   syncFleetMarkers,
+  type OperationalRouteFeatureProps,
 } from '../../core/map/operationalMapLayers';
+import {
+  createOperationalMapOptions,
+  fitMapToOperationalData,
+} from '../../core/map/operationalMapConfig';
 import { bindMapTheme, mapStyleForTheme } from '../../core/utils/mapStyle';
 import { appState } from '../../core/stores/appStore';
-import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
 import type { LiveVehicle } from '../../core/api/monitoring';
 
 function truckSvg(color: string) {
@@ -25,6 +29,10 @@ function createFleetMarker(vehicle: LiveVehicle) {
   return el;
 }
 
+function routeStatusLabel(status?: string) {
+  return status === 'pending' ? 'Planificada' : 'En ejecución';
+}
+
 export function DashboardMiniMap() {
   let mapContainer!: HTMLDivElement;
   const mapRef: { current?: MapLibreMap } = {};
@@ -33,6 +41,17 @@ export function DashboardMiniMap() {
   const [mapContext, { refetch }] = createResource(fetchMapContext);
   const fleet = () => mapContext()?.vehicles ?? [];
   const routes = () => mapContext()?.routes ?? { type: 'FeatureCollection', features: [] };
+
+  const routeStats = createMemo(() => {
+    const features = routes().features;
+    const pending = features.filter(
+      (feature) => (feature.properties as OperationalRouteFeatureProps).status === 'pending',
+    ).length;
+    const active = features.length - pending;
+    return { total: features.length, pending, active };
+  });
+
+  const legendRoutes = createMemo(() => routes().features.slice(0, 6));
 
   const syncMapLayers = () => {
     const map = mapRef.current;
@@ -44,6 +63,7 @@ export function DashboardMiniMap() {
       buildPopupHtml: (vehicle) =>
         `<strong>${vehicle.id}</strong><br/><span style="font-size:12px;color:#64748b">${vehicle.route}</span>`,
     });
+    fitMapToOperationalData(map, { vehicles: fleet(), routes: routes() });
   };
 
   bindMapTheme(
@@ -53,20 +73,23 @@ export function DashboardMiniMap() {
   );
 
   onMount(() => {
-    const map = new maplibregl.Map({
-      container: mapContainer,
-      style: mapStyleForTheme(appState.darkMode),
-      center: UNARE_CENTER,
-      zoom: UNARE_ZOOM - 0.5,
-      attributionControl: false,
-      interactive: true,
-    });
+    const map = new maplibregl.Map(
+      createOperationalMapOptions({
+        container: mapContainer,
+        style: mapStyleForTheme(appState.darkMode),
+      }),
+    );
     mapRef.current = map;
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
 
     map.on('load', () => {
       map.resize();
       syncMapLayers();
+      mapContainer.dataset.zoom = String(Math.round(map.getZoom() * 10) / 10);
+    });
+
+    map.on('moveend', () => {
+      mapContainer.dataset.zoom = String(Math.round(map.getZoom() * 10) / 10);
     });
 
     const pollTimer = window.setInterval(() => {
@@ -99,20 +122,60 @@ export function DashboardMiniMap() {
             Mapa de operaciones en tiempo real
           </h3>
           <p class="text-xs text-text-muted">
-            {fleet().length} vehículo{fleet().length === 1 ? '' : 's'} · {routes().features.length} ruta
-            {routes().features.length === 1 ? '' : 's'} activa{routes().features.length === 1 ? '' : 's'}
+            {fleet().length} vehículo{fleet().length === 1 ? '' : 's'} · {routeStats().total} ruta
+            {routeStats().total === 1 ? '' : 's'} ({routeStats().pending} planificada
+            {routeStats().pending === 1 ? '' : 's'}, {routeStats().active} en ejecución)
           </p>
         </div>
       </div>
 
       <div class="relative h-[340px] bg-slate-100 dark:bg-slate-900 lg:h-[380px]">
-        <div ref={mapContainer} class="absolute inset-0 h-full w-full" />
+        <div
+          ref={mapContainer}
+          class="absolute inset-0 h-full w-full"
+          data-testid="dashboard-operational-map"
+        />
 
         <Show when={mapContext.loading}>
           <div class="absolute inset-0 flex items-center justify-center bg-surface/60 text-sm text-text-muted backdrop-blur-sm">
             Cargando mapa operativo…
           </div>
         </Show>
+
+        <div class="absolute left-3 top-3 z-10 max-w-[min(100%-5rem,14rem)] rounded-md border border-border bg-surface/95 px-2.5 py-2 text-[10px] shadow-sm backdrop-blur-sm dark:bg-dark-surface/95">
+          <p class="mb-1.5 font-semibold uppercase tracking-wide text-text-muted">Rutas</p>
+          <ul class="mb-2 space-y-1 text-text-secondary">
+            <li class="flex items-center gap-2">
+              <span class="h-0.5 w-5 border-t-2 border-dashed border-slate-400" />
+              Planificada
+            </li>
+            <li class="flex items-center gap-2">
+              <span class="h-0.5 w-5 rounded-full bg-fero-green-dark" />
+              En ejecución
+            </li>
+          </ul>
+          <Show when={legendRoutes().length > 0}>
+            <ul class="space-y-1 border-t border-border pt-1.5" data-testid="dashboard-route-legend">
+              <For each={legendRoutes()}>
+                {(feature) => {
+                  const props = () => feature.properties as OperationalRouteFeatureProps;
+                  return (
+                    <li class="flex items-center gap-2 truncate text-text-secondary">
+                      <span
+                        class="h-1.5 w-3 shrink-0 rounded-full"
+                        style={{ background: props().color ?? '#34D634' }}
+                      />
+                      <span class="truncate">{props().label ?? props().vehicleId}</span>
+                      <span class="ml-auto shrink-0 text-text-muted">
+                        {routeStatusLabel(props().status)}
+                      </span>
+                    </li>
+                  );
+                }}
+              </For>
+            </ul>
+          </Show>
+        </div>
 
         <div class="absolute right-3 top-3 z-10 flex flex-col overflow-hidden rounded-md border border-border bg-surface shadow-sm dark:bg-dark-surface">
           <button
@@ -135,22 +198,18 @@ export function DashboardMiniMap() {
             type="button"
             class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover"
             aria-label="Centrar"
-            onClick={() => mapRef.current?.flyTo({ center: UNARE_CENTER, zoom: UNARE_ZOOM - 0.5 })}
+            onClick={() => {
+              const map = mapRef.current;
+              if (!map) return;
+              fitMapToOperationalData(map, {
+                vehicles: fleet(),
+                routes: routes(),
+              });
+            }}
           >
             <Crosshair size={14} />
           </button>
         </div>
-      </div>
-
-      <div class="grid grid-cols-2 gap-2 border-t border-border px-3 py-2.5 sm:grid-cols-4 dark:border-dark-border">
-        <For each={mapContext()?.mapMetrics?.slice(0, 4) ?? []}>
-          {(metric) => (
-            <div class="rounded-md bg-slate-50 px-2 py-1.5 text-center dark:bg-dark-surface-hover">
-              <p class="text-[10px] text-text-muted">{metric.label}</p>
-              <p class="font-heading text-sm font-bold text-text-primary dark:text-white">{metric.value}</p>
-            </div>
-          )}
-        </For>
       </div>
     </Card>
   );

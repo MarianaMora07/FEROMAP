@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   Send,
   Loader2,
+  Map,
 } from 'lucide-solid';
 import {
   Badge,
@@ -49,7 +50,7 @@ import type { OptimizationConstraints } from '../../core/api/optimization';
 import type { ScenarioId } from '../../data/types/simulation';
 import { downloadDailyPlanPdf } from '../../core/api/planning';
 import { optimizationDateHref, tomorrowIso } from '../../core/planning/planningUx';
-import { monitoringHref, optimizationHref } from '../../core/planning/operationalLinks';
+import { monitoringHref, optimizationHref, operationalMapHref } from '../../core/planning/operationalLinks';
 import { PendingManagementPanel } from './PendingManagementPanel';
 import { ModuleGuidanceBanner } from '../shared/ModuleGuidanceBanner';
 import { PlanningContextualCta } from '../planning/PlanningContextualCta';
@@ -163,7 +164,7 @@ function ParametersForm(props: {
           </For>
         </SelectField>
         <p class="-mt-2 text-xs text-text-muted">
-          Para evaluar escenarios de tesis (lluvia, saturación, impacto KPI), usa{' '}
+          Para comparar condiciones (lluvia, saturación, impacto en KPIs), usa{' '}
           <A href="/simulation" class="font-medium text-fero-blue hover:underline">
             Simulación de escenarios
           </A>
@@ -621,6 +622,11 @@ export default function OptimizationPage() {
                     </Badge>
                   )}
                 </Show>
+                <A href={operationalMapHref({ focus: 'routes' })}>
+                  <Button variant="outline" size="sm" icon={<Map size={16} />}>
+                    Ver en mapa operativo
+                  </Button>
+                </A>
                 <Button
                   variant="primary"
                   size="sm"

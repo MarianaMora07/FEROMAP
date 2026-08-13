@@ -58,7 +58,7 @@ export function PlannerHubSection(props: PlannerHubSectionProps) {
           <p class="text-xs font-semibold uppercase tracking-wide text-fero-green-dark">Operación diaria</p>
           <h2 class="font-heading text-xl font-bold text-text-primary dark:text-white">Mi planificación</h2>
           <p class="mt-1 text-sm text-text-secondary">
-            Punto de entrada operativo — no incluye simulación de tesis.
+            Punto de entrada operativo — optimización y despacho del día.
           </p>
         </div>
         <Show when={variant() === 'dashboard'}>

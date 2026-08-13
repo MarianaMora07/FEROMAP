@@ -16,6 +16,7 @@ dist-ssr
 .env
 postgres_data/
 data/cache/
+*.mbtiles
 
 # Python (backend)
 backend/__pycache__/

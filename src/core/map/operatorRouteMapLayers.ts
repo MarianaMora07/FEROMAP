@@ -41,7 +41,10 @@ export function routeCollectionFromStops(
 }
 
 export function ensureOperatorRouteLayer(map: MapLibreMap, routes: RouteCollection) {
-  ensureOperationalRouteLayer(map, routes, OPERATOR_ROUTE_SOURCE_ID, OPERATOR_ROUTE_LAYER_ID);
+  ensureOperationalRouteLayer(map, routes, OPERATOR_ROUTE_SOURCE_ID, {
+    splitByStatus: false,
+    singleLayerId: OPERATOR_ROUTE_LAYER_ID,
+  });
 
   if (!map.getLayer(OPERATOR_ROUTE_GLOW_LAYER_ID)) {
     map.addLayer(

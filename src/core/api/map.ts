@@ -1,4 +1,5 @@
 import type { MapOperationalContext, MapContextFilters } from '../types/mapContext';
+import { UNARE_BBOX_QUERY } from '../types/geo';
 import {
   liveActivities,
   liveFleet,
@@ -50,9 +51,10 @@ function buildQuery(filters?: MapContextFilters): string {
 }
 
 export function fetchMapContext(filters?: MapContextFilters): Promise<MapOperationalContext> {
+  const merged: MapContextFilters = { bbox: UNARE_BBOX_QUERY, ...filters };
   return withMockFallback(
     'map-context',
-    () => apiGet<MapOperationalContext>(`/api/v1/map/context${buildQuery(filters)}`),
+    () => apiGet<MapOperationalContext>(`/api/v1/map/context${buildQuery(merged)}`),
     buildMockMapContext(),
   );
 }

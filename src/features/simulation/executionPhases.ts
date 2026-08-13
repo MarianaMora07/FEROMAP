@@ -119,7 +119,7 @@ export const EXECUTION_PHASES: readonly ExecutionPhaseDefinition[] = [
     whatItDoes:
       'Prueba muchas combinaciones de rutas con el algoritmo de colonia de hormigas (ACO) hasta acercarse a la mejor solución.',
     whyItMatters:
-      'Es el núcleo de la tesis: reduce distancia, tiempo y combustible frente a la ruta actual del municipio.',
+      'Reduce distancia, tiempo y combustible frente a la ruta actual del municipio.',
     progressWeight: 30,
     simulatedDurationMs: 3200,
     mapAnimation: 'aco_explore',
@@ -146,7 +146,7 @@ export const EXECUTION_PHASES: readonly ExecutionPhaseDefinition[] = [
     whatItDoes:
       'Guarda la simulación, las rutas optimizadas y los puntos intermedios en la base de datos para el mapa.',
     whyItMatters:
-      'Permite historial, comparar corridas y enlazar con analítica y reportes de la tesis.',
+      'Permite historial, comparar corridas y enlazar con analítica y reportes.',
     progressWeight: 8,
     simulatedDurationMs: 700,
     mapAnimation: 'persist_spinner',

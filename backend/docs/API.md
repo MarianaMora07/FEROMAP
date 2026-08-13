@@ -207,6 +207,30 @@ Query params: `sector`, `minFill`.
 }
 ```
 
+### `GET /map/tiles/meta`
+
+Metadatos del archivo MBTiles local de Unare (fondo cartográfico offline).
+
+```json
+{
+  "available": true,
+  "path": "/app/data/tiles/unare.mbtiles",
+  "minZoom": 12,
+  "maxZoom": 16,
+  "bounds": { "minLng": -62.81, "minLat": 8.24, "maxLng": -62.69, "maxLat": 8.31 },
+  "tileCount": 420,
+  "attribution": "© OpenStreetMap contributors"
+}
+```
+
+Generación: `backend/scripts/generate_unare_mbtiles.sh` (ver `backend/docs/INTEGRATION.md`).
+
+### `GET /map/tiles/{z}/{x}/{y}.png`
+
+Tile raster PNG del bbox Unare (zoom 12–16). Sin autenticación (MapLibre lo consume directamente).
+
+Respuestas: `200` PNG, `404` tile inexistente, `503` MBTiles no generado.
+
 ---
 
 ## Puntos de recolección — `/api/v1/collection-points`
@@ -695,7 +719,49 @@ Incluye KPIs, flota en vivo, progreso de rutas, alertas y **contexto geoespacial
 
 Fuente única de verdad geoespacial para Mapa GIS, Monitoreo y Dashboard.
 
-**Query params opcionales:** `sector` (filtra contenedores), `bbox` (`minLng,minLat,maxLng,maxLat`).
+**Query params opcionales:**
+
+| Param | Descripción |
+|-------|-------------|
+| `sector` | Filtra contenedores por sector |
+| `bbox` | `minLng,minLat,maxLng,maxLat` — filtra flota, rutas y contenedores dentro del rectángulo |
+
+**Bbox operativo Unare (alineado frontend/backend):**
+
+| Origen | Constante | Valor |
+|--------|-----------|-------|
+| Backend | `graph_service.UNARE_BBOX` | `-62.81, 8.24, -62.69, 8.31` |
+| Frontend | `UNARE_BBOX` / `UNARE_BBOX_QUERY` en `src/core/types/geo.ts` | mismo rectángulo |
+
+Formato query recomendado: `bbox=-62.81,8.24,-62.69,8.31`.
+
+**Estados de ruta en capa `routes.features[]`:**
+
+| `status` | Significado | Estilo en mapa (frontend) |
+|----------|-------------|---------------------------|
+| `pending` | Ruta planificada, aún no despachada | Línea punteada, opacidad ~0.75 |
+| `in_progress` | Ruta en ejecución | Línea sólida, opacidad ~0.95 |
+| `completed` | Ruta finalizada (opcional en mapa) | Gris tenue / oculta según capa |
+
+Por defecto el mapa operativo muestra `pending` e `in_progress` del **plan diario activo de hoy** (`get_active_daily_plan`: estados `draft`, `optimized`, `dispatched`). Solo rutas `route_kind=optimized` vinculadas al plan. Si no hay plan activo, la capa `routes` queda vacía. Conductores autenticados reciben únicamente su ruta (`driver_id` del perfil).
+
+La geometría de cada ruta sigue el grafo vial OSMnx (`route_geometry_service`); si falla, usa segmentos directos entre paradas.
+
+**Propiedades de `routes.features[].properties`:**
+
+| Propiedad | Tipo | Descripción |
+|-----------|------|-------------|
+| `id` | string | Identificador estable para UI (`route-{pk}`) |
+| `routeId` | number | PK de `optimized_routes` |
+| `label` | string | Etiqueta legible (`Ruta TR-08`) |
+| `color` | string | Color hex asignado por índice (`ROUTE_COLORS`) |
+| `vehicleId` | string | Código del vehículo asignado |
+| `status` | string | `pending` \| `in_progress` |
+| `routeKind` | string | `optimized` (solo estas se sirven en mapa operativo) |
+| `waypointsTotal` | number | Paradas de recolección en la ruta |
+| `waypointsDone` | number | Paradas con `waypoint.status=completed` |
+
+Documentación ampliada: `docs/mapa-operativo-unare.md`.
 
 ```json
 {
@@ -704,7 +770,17 @@ Fuente única de verdad geoespacial para Mapa GIS, Monitoreo y Dashboard.
     "type": "FeatureCollection",
     "features": [{
       "type": "Feature",
-      "properties": { "id": "route-1", "label": "Ruta TR-08", "color": "#34D634" },
+      "properties": {
+        "id": "route-1",
+        "routeId": 1,
+        "label": "Ruta TR-08",
+        "color": "#34D634",
+        "vehicleId": "TR-08",
+        "status": "in_progress",
+        "routeKind": "optimized",
+        "waypointsTotal": 18,
+        "waypointsDone": 6
+      },
       "geometry": { "type": "LineString", "coordinates": [[-62.72, 8.29], [-62.71, 8.28]] }
     }]
   },

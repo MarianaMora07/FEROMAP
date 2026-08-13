@@ -42,7 +42,10 @@ import {
   createToastStore,
 } from '../../design-system/components';
 import { bindMapTheme, mapStyleForTheme } from '../../core/utils/mapStyle';
-import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
+import {
+  createOperationalMapOptions,
+  fitMapToOperationalData,
+} from '../../core/map/operationalMapConfig';
 import {
   collectionPointStatusOptions,
   fillStatusBarColor,
@@ -316,6 +319,9 @@ export default function CollectionPointsPage() {
         .addTo(map);
       markersById.set(point.id, marker);
     }
+    fitMapToOperationalData(map, {
+      points: points.map((point) => ({ lng: point.lng, lat: point.lat })),
+    });
     openSelectedPopup();
   };
 
@@ -328,13 +334,12 @@ export default function CollectionPointsPage() {
   onMount(() => {
     Chart.register(ArcElement, CategoryScale, LinearScale, LineElement, PointElement, Filler, Tooltip, Legend);
 
-    const map = new maplibregl.Map({
-      container: mapContainer,
-      style: mapStyleForTheme(appState.darkMode),
-      center: UNARE_CENTER,
-      zoom: UNARE_ZOOM,
-      attributionControl: false,
-    });
+    const map = new maplibregl.Map(
+      createOperationalMapOptions({
+        container: mapContainer,
+        style: mapStyleForTheme(appState.darkMode),
+      }),
+    );
     mapRef.current = map;
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
 
@@ -629,12 +634,16 @@ export default function CollectionPointsPage() {
   const zoomIn = () => mapRef.current?.zoomIn();
   const zoomOut = () => mapRef.current?.zoomOut();
   const recenter = () => {
-    const point = displayPoint();
-    if (point) {
-      mapRef.current?.flyTo({ center: [point.lng, point.lat], zoom: 14 });
-    } else {
-      mapRef.current?.flyTo({ center: UNARE_CENTER, zoom: UNARE_ZOOM });
+    const map = mapRef.current;
+    if (!map) return;
+    const selectedPoint = displayPoint();
+    if (selectedPoint) {
+      map.flyTo({ center: [selectedPoint.lng, selectedPoint.lat], zoom: 14 });
+      return;
     }
+    fitMapToOperationalData(map, {
+      points: filtered().map((point) => ({ lng: point.lng, lat: point.lat })),
+    });
   };
 
   const donutData = createMemo(() => {

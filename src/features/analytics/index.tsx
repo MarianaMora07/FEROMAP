@@ -35,7 +35,10 @@ import {
 } from '../../design-system/components';
 import { bindMapTheme, mapStyleForTheme } from '../../core/utils/mapStyle';
 import { appState } from '../../core/stores/appStore';
-import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
+import {
+  createOperationalMapOptions,
+  fitMapToOperationalData,
+} from '../../core/map/operationalMapConfig';
 import { fetchAnalyticsHeatmap, fetchAnalyticsSummary } from '../../core/api/analytics';
 import type { AnalyticsGranularity, AnalyticsHeatmapGeoJson } from '../../core/types/analytics';
 import { defaultDateRange } from '../../core/utils/analyticsFilters';
@@ -144,6 +147,7 @@ export default function AnalyticsPage() {
   const [hourlyDistribution, setHourlyDistribution] = createSignal(mockHourly);
   const [analyticsEfficiencyIndicators, setAnalyticsEfficiencyIndicators] = createSignal(mockEfficiency);
   const [analyticsInsights, setAnalyticsInsights] = createSignal(mockInsights);
+  const [heatmapPoints, setHeatmapPoints] = createSignal<Array<{ lng: number; lat: number }>>([]);
 
   const filters = createMemo(() => ({
     from: dateFrom(),
@@ -155,6 +159,18 @@ export default function AnalyticsPage() {
   const applyHeatmapData = (data: AnalyticsHeatmapGeoJson) => {
     const source = mapRef.current?.getSource('heat') as GeoJSONSource | undefined;
     source?.setData(data);
+    const points = data.features
+      .map((feature) => {
+        const coords = feature.geometry?.coordinates;
+        if (!coords || coords.length < 2) return null;
+        return { lng: Number(coords[0]), lat: Number(coords[1]) };
+      })
+      .filter((point): point is { lng: number; lat: number } => point !== null);
+    setHeatmapPoints(points);
+    const map = mapRef.current;
+    if (map?.isStyleLoaded()) {
+      fitMapToOperationalData(map, { points });
+    }
   };
 
   const setupAnalyticsHeatmap = (map: MapLibreMap) => {
@@ -229,13 +245,12 @@ export default function AnalyticsPage() {
       Legend,
     );
 
-    const map = new maplibregl.Map({
-      container: mapContainer,
-      style: mapStyleForTheme(appState.darkMode),
-      center: UNARE_CENTER,
-      zoom: UNARE_ZOOM - 0.4,
-      attributionControl: false,
-    });
+    const map = new maplibregl.Map(
+      createOperationalMapOptions({
+        container: mapContainer,
+        style: mapStyleForTheme(appState.darkMode),
+      }),
+    );
     mapRef.current = map;
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
 
@@ -596,7 +611,7 @@ export default function AnalyticsPage() {
               <button type="button" class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover disabled:opacity-40" disabled={!mapReady()} onClick={() => mapRef.current?.zoomOut()} aria-label="Alejar">
                 <Minus size={14} />
               </button>
-              <button type="button" class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover disabled:opacity-40" disabled={!mapReady()} onClick={() => mapRef.current?.flyTo({ center: UNARE_CENTER, zoom: UNARE_ZOOM - 0.4 })} aria-label="Centrar">
+              <button type="button" class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover disabled:opacity-40" disabled={!mapReady()} onClick={() => fitMapToOperationalData(mapRef.current!, { points: heatmapPoints() })} aria-label="Centrar">
                 <Crosshair size={14} />
               </button>
             </div>

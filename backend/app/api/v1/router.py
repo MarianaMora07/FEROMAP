@@ -19,6 +19,7 @@ from app.api.v1 import (
     sectors,
     simulations,
     benchmarks,
+    map_tiles,
 )
 
 api_router = APIRouter(prefix="/api/v1")
@@ -40,3 +41,4 @@ api_router.include_router(catalog.router)
 api_router.include_router(reports.router)
 api_router.include_router(analytics.router)
 api_router.include_router(resident.router)
+api_router.include_router(map_tiles.router)

@@ -122,7 +122,7 @@ export default function PlanningHistoryPage() {
     <div class="space-y-5">
       <PlanningLevelBanner level="administrativo" title="Historial unificado de planificación">
         <p class="text-sm text-text-secondary">
-          Busca por semana, día o incidencia en un solo lugar — tesis y operación siguen separados en sus módulos.
+          Busca por semana, día o incidencia en un solo lugar — simulación y operación siguen separados en sus módulos.
         </p>
       </PlanningLevelBanner>
 

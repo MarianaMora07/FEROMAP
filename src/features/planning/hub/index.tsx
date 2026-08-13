@@ -11,12 +11,12 @@ export default function PlanningHubPage() {
         <div>
           <h1 class="font-heading text-2xl font-bold text-text-primary dark:text-white">Hub de planificación</h1>
           <p class="mt-1 text-sm text-text-secondary">
-            Operación día a día — la simulación de tesis vive en otro módulo.
+            Operación día a día — la simulación de escenarios vive en otro módulo.
           </p>
         </div>
         <A href="/simulation">
           <Button variant="outline" size="sm" class="gap-2" icon={<Brain size={14} />}>
-            Simulación de tesis
+            Simulación de escenarios
           </Button>
         </A>
       </div>

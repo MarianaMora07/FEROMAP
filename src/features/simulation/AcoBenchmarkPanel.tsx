@@ -113,7 +113,7 @@ export function AcoBenchmarkPanel() {
   return (
     <Card>
       <CardHeader
-        title="Benchmark ACO (tesis)"
+        title="Benchmark ACO"
         subtitle="5 escenarios × 3 perfiles — tiempo de CPU vs. calidad de solución (% ahorro en km)."
       />
       <div class="mb-3 flex flex-wrap items-center gap-2">

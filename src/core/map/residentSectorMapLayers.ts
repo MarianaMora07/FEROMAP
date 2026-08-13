@@ -87,12 +87,10 @@ export function filterRoutesForSector(
 }
 
 export function ensureResidentSectorRouteLayer(map: MapLibreMap, routes: RouteCollection) {
-  ensureOperationalRouteLayer(
-    map,
-    routes,
-    RESIDENT_SECTOR_ROUTE_SOURCE_ID,
-    RESIDENT_SECTOR_ROUTE_LAYER_ID,
-  );
+  ensureOperationalRouteLayer(map, routes, RESIDENT_SECTOR_ROUTE_SOURCE_ID, {
+    splitByStatus: false,
+    singleLayerId: RESIDENT_SECTOR_ROUTE_LAYER_ID,
+  });
 
   if (!map.getLayer(RESIDENT_SECTOR_ROUTE_GLOW_LAYER_ID)) {
     map.addLayer(
