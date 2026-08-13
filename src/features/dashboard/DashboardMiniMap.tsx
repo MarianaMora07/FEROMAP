@@ -116,9 +116,9 @@ export function DashboardMiniMap() {
 
   return (
     <Card padding={false} class="overflow-hidden">
-      <div class="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+      <div class="flex items-center justify-between gap-3 border-b border-default px-4 py-3">
         <div>
-          <h3 class="font-heading font-semibold text-text-primary dark:text-white">
+          <h3 class="font-heading font-semibold text-text-primary">
             Mapa de operaciones en tiempo real
           </h3>
           <p class="text-xs text-text-muted">
@@ -129,7 +129,7 @@ export function DashboardMiniMap() {
         </div>
       </div>
 
-      <div class="relative h-[340px] bg-slate-100 dark:bg-slate-900 lg:h-[380px]">
+      <div class="relative h-[340px] bg-app lg:h-[380px]">
         <div
           ref={mapContainer}
           class="absolute inset-0 h-full w-full"
@@ -137,16 +137,16 @@ export function DashboardMiniMap() {
         />
 
         <Show when={mapContext.loading}>
-          <div class="absolute inset-0 flex items-center justify-center bg-surface/60 text-sm text-text-muted backdrop-blur-sm">
+          <div class="absolute inset-0 flex items-center justify-center bg-elevated/60 text-sm text-text-muted backdrop-blur-sm">
             Cargando mapa operativo…
           </div>
         </Show>
 
-        <div class="absolute left-3 top-3 z-10 max-w-[min(100%-5rem,14rem)] rounded-md border border-border bg-surface/95 px-2.5 py-2 text-[10px] shadow-sm backdrop-blur-sm dark:bg-dark-surface/95">
+        <div class="absolute left-3 top-3 z-10 max-w-[min(100%-5rem,14rem)] rounded-md border border-default bg-elevated/95 px-2.5 py-2 text-[10px] shadow-sm backdrop-blur-sm">
           <p class="mb-1.5 font-semibold uppercase tracking-wide text-text-muted">Rutas</p>
           <ul class="mb-2 space-y-1 text-text-secondary">
             <li class="flex items-center gap-2">
-              <span class="h-0.5 w-5 border-t-2 border-dashed border-slate-400" />
+              <span class="h-0.5 w-5 border-t-2 border-dashed border-text-muted" />
               Planificada
             </li>
             <li class="flex items-center gap-2">
@@ -155,7 +155,7 @@ export function DashboardMiniMap() {
             </li>
           </ul>
           <Show when={legendRoutes().length > 0}>
-            <ul class="space-y-1 border-t border-border pt-1.5" data-testid="dashboard-route-legend">
+            <ul class="space-y-1 border-t border-default pt-1.5" data-testid="dashboard-route-legend">
               <For each={legendRoutes()}>
                 {(feature) => {
                   const props = () => feature.properties as OperationalRouteFeatureProps;
@@ -177,10 +177,10 @@ export function DashboardMiniMap() {
           </Show>
         </div>
 
-        <div class="absolute right-3 top-3 z-10 flex flex-col overflow-hidden rounded-md border border-border bg-surface shadow-sm dark:bg-dark-surface">
+        <div class="absolute right-3 top-3 z-10 flex flex-col overflow-hidden rounded-md border border-default bg-elevated shadow-sm">
           <button
             type="button"
-            class="flex h-8 w-8 items-center justify-center text-text-secondary hover:bg-surface-hover"
+            class="flex h-8 w-8 items-center justify-center text-text-secondary hover:bg-app"
             aria-label="Acercar"
             onClick={() => mapRef.current?.zoomIn()}
           >
@@ -188,7 +188,7 @@ export function DashboardMiniMap() {
           </button>
           <button
             type="button"
-            class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover"
+            class="flex h-8 w-8 items-center justify-center border-t border-default text-text-secondary hover:bg-app"
             aria-label="Alejar"
             onClick={() => mapRef.current?.zoomOut()}
           >
@@ -196,7 +196,7 @@ export function DashboardMiniMap() {
           </button>
           <button
             type="button"
-            class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover"
+            class="flex h-8 w-8 items-center justify-center border-t border-default text-text-secondary hover:bg-app"
             aria-label="Centrar"
             onClick={() => {
               const map = mapRef.current;

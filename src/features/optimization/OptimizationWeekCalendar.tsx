@@ -30,9 +30,9 @@ export function OptimizationWeekCalendar(props: OptimizationWeekCalendarProps) {
   };
 
   return (
-    <div class="rounded-xl border border-border bg-surface/50 p-3 dark:border-dark-border dark:bg-dark-surface/30">
+    <div class="rounded-xl border border-default bg-elevated/50 p-3">
       <div class="mb-3 flex items-center justify-between gap-2">
-        <p class="text-sm font-semibold text-text-primary dark:text-white">Semana operativa</p>
+        <p class="text-sm font-semibold text-text-primary">Semana operativa</p>
         <div class="flex items-center gap-1">
           <Button size="sm" variant="outline" class="px-2" onClick={handlePrevWeek}>
             <ChevronLeft size={14} />

@@ -81,7 +81,7 @@ export function OptimizationHistoryPanel(props: OptimizationHistoryPanelProps) {
         <div class="overflow-x-auto">
           <table class="w-full min-w-[36rem] text-sm">
             <thead>
-              <tr class="border-b border-border text-left text-[10px] uppercase tracking-wide text-text-muted dark:border-dark-border">
+              <tr class="border-b border-default text-left text-[10px] uppercase tracking-wide text-text-muted">
                 <th class="pb-2 pr-3 font-semibold">Fecha</th>
                 <th class="pb-2 pr-3 font-semibold">Puntos</th>
                 <th class="pb-2 pr-3 font-semibold">Km</th>
@@ -89,11 +89,11 @@ export function OptimizationHistoryPanel(props: OptimizationHistoryPanelProps) {
                 <th class="pb-2 font-semibold">Acciones</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-border dark:divide-dark-border">
+            <tbody class="divide-y divide-default">
               <For each={rows()}>
                 {(row) => (
                   <tr>
-                    <td class="py-2.5 pr-3 font-medium text-text-primary dark:text-white">
+                    <td class="py-2.5 pr-3 font-medium text-text-primary">
                       {row.operationDate ?? row.datetime?.slice(0, 10) ?? '—'}
                     </td>
                     <td class="py-2.5 pr-3 text-text-secondary">{row.pointCount ?? '—'}</td>

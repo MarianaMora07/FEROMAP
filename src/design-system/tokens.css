@@ -2,65 +2,165 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-@theme {
-  /* FEROMAP Brand Colors */
-  --color-fero-green: #93F555;
-  --color-fero-green-mid: #56E93D;
-  --color-fero-green-dark: #34D634;
-  --color-fero-blue: #1143F3;
-  --color-fero-blue-dark: #232AB6;
+/*
+ * =============================================================================
+ * FEROMAP — Paleta semántica (modo claro + oscuro integrado)
+ * Fase 0–3 — Tokens semánticos + shell integrado (sidebar #0b1220 · app #0f172a).
+ * Referencia: docs/design-system/dark-mode-palette.md
+ * =============================================================================
+ *
+ * | Token (--fero-*)              | Light              | Dark (integrado)   |
+ * |-------------------------------|--------------------|--------------------|
+ * | bg-app                        | #f8fafc            | #0f172a            |
+ * | bg-elevated                   | #ffffff            | #1e293b            |
+ * | bg-sidebar                    | #232AB6 (marca)    | #0b1220            |
+ * | bg-sidebar-elevated           | rgba(255,255,255,.1)| #111827           |
+ * | border-default                | #e2e8f0            | #334155            |
+ * | text-primary                  | #0f172a            | #f1f5f9            |
+ * | text-muted                    | #94a3b8            | #94a3b8            |
+ * | nav-active-bg                 | #34D634            | #34D634            |
+ * | nav-active-text               | #0b1220            | #0b1220            |
+ * | nav-hover-bg                  | rgba(255,255,255,.1)| #1e293b           |
+ * | nav-text (sidebar)            | rgba(255,255,255,.65)| #cbd5e1          |
+ * | nav-text-muted                | rgba(255,255,255,.4)| #64748b           |
+ * | nav-section                   | rgba(255,255,255,.35)| #475569          |
+ * | sidebar-border                | transparent        | #334155            |
+ * | sidebar-divider               | rgba(255,255,255,.1)| #334155           |
+ *
+ * Logo sidebar dark: FERO #fff · MAP #93F555 (--color-fero-green)
+ * =============================================================================
+ */
 
-  /* Semantic Colors */
-  --color-success: #93F555;
-  --color-primary: #56E93D;
-  --color-important: #34D634;
-  --color-info: #1143F3;
-  --color-sidebar: #232AB6;
+:root {
+  --fero-bg-app: #f8fafc;
+  --fero-bg-elevated: #ffffff;
+  --fero-bg-sidebar: #232ab6;
+  --fero-bg-sidebar-elevated: rgba(255, 255, 255, 0.1);
+  --fero-border-default: #e2e8f0;
+  --fero-text-primary: #0f172a;
+  --fero-text-secondary: #475569;
+  --fero-text-muted: #94a3b8;
+  --fero-nav-active-bg: #34d634;
+  --fero-nav-active-text: #0b1220;
+  --fero-nav-hover-bg: rgba(255, 255, 255, 0.1);
+  --fero-nav-text: rgba(255, 255, 255, 0.65);
+  --fero-nav-text-muted: rgba(255, 255, 255, 0.4);
+  --fero-nav-section: rgba(255, 255, 255, 0.35);
+  --fero-sidebar-border: transparent;
+  --fero-sidebar-divider: rgba(255, 255, 255, 0.1);
+  --fero-glass-bg: rgba(255, 255, 255, 0.8);
+  --fero-glass-border: rgba(255, 255, 255, 0.2);
+}
 
-  /* Neutral Palette */
-  --color-surface: #ffffff;
+html.dark {
+  --fero-bg-app: #0f172a;
+  --fero-bg-elevated: #1e293b;
+  --fero-bg-sidebar: #0b1220;
+  --fero-bg-sidebar-elevated: #111827;
+  --fero-border-default: #334155;
+  --fero-text-primary: #f1f5f9;
+  --fero-text-secondary: #cbd5e1;
+  --fero-text-muted: #94a3b8;
+  --fero-nav-active-bg: #34d634;
+  --fero-nav-active-text: #0b1220;
+  --fero-nav-hover-bg: #1e293b;
+  --fero-nav-text: #cbd5e1;
+  --fero-nav-text-muted: #64748b;
+  --fero-nav-section: #475569;
+  --fero-sidebar-border: #334155;
+  --fero-sidebar-divider: #334155;
+  --fero-glass-bg: rgba(15, 23, 42, 0.8);
+  --fero-glass-border: rgba(51, 65, 85, 0.5);
+}
+
+@theme inline {
+  /* Brand */
+  --color-fero-green: #93f555;
+  --color-fero-green-mid: #56e93d;
+  --color-fero-green-dark: #34d634;
+  --color-fero-blue: #1143f3;
+  --color-fero-blue-dark: #232ab6;
+
+  /*
+   * Semantic utilities (Fase 1): bg-app, bg-elevated, bg-sidebar,
+   * bg-sidebar-elevated, border-default, border-sidebar, text-nav, text-nav-muted
+   */
+  --color-app: var(--fero-bg-app);
+  --color-elevated: var(--fero-bg-elevated);
+  --color-bg-app: var(--fero-bg-app);
+  --color-bg-elevated: var(--fero-bg-elevated);
+  --color-bg-sidebar: var(--fero-bg-sidebar);
+  --color-bg-sidebar-elevated: var(--fero-bg-sidebar-elevated);
+  --color-default: var(--fero-border-default);
+  --color-border-default: var(--fero-border-default);
+  --color-border-sidebar: var(--fero-sidebar-border);
+  --color-sidebar-divider: var(--fero-sidebar-divider);
+
+  /* Sidebar — bg-sidebar lee --color-bg-sidebar (criterio Fase 1) */
+  --color-sidebar: var(--color-bg-sidebar);
+  --color-sidebar-elevated: var(--fero-bg-sidebar-elevated);
+
+  /* Navigation (sidebar) */
+  --color-nav: var(--fero-nav-text);
+  --color-nav-muted: var(--fero-nav-text-muted);
+  --color-nav-active-bg: var(--fero-nav-active-bg);
+  --color-nav-active-text: var(--fero-nav-active-text);
+  --color-nav-hover: var(--fero-nav-hover-bg);
+  --color-nav-text: var(--fero-nav-text);
+  --color-nav-text-muted: var(--fero-nav-text-muted);
+  --color-nav-section: var(--fero-nav-section);
+
+  /* Legacy aliases — migrar gradualmente a tokens semánticos */
+  --color-success: #93f555;
+  --color-primary: #56e93d;
+  --color-important: #34d634;
+  --color-info: #1143f3;
+  --color-surface: var(--fero-bg-elevated);
   --color-surface-hover: #f8fafc;
   --color-surface-active: #f1f5f9;
-  --color-border: #e2e8f0;
+  --color-border: var(--fero-border-default);
   --color-border-light: #f1f5f9;
-  --color-text-primary: #0f172a;
-  --color-text-secondary: #475569;
-  --color-text-muted: #94a3b8;
+  --color-text-primary: var(--fero-text-primary);
+  --color-text-secondary: var(--fero-text-secondary);
+  --color-text-muted: var(--fero-text-muted);
 
-  /* Dark Mode Surfaces */
-  --color-dark-surface: #0f172a;
-  --color-dark-surface-hover: #1e293b;
-  --color-dark-border: #1e293b;
+  /* @deprecated — alias a tokens semánticos; evitar en código nuevo */
+  --color-dark-surface: var(--fero-bg-app);
+  --color-dark-surface-hover: var(--fero-bg-elevated);
+  --color-dark-border: var(--fero-border-default);
 
-  /* Glassmorphism */
-  --color-glass-bg: rgba(255, 255, 255, 0.8);
-  --color-glass-border: rgba(255, 255, 255, 0.2);
+  --color-glass-bg: var(--fero-glass-bg);
+  --color-glass-border: var(--fero-glass-border);
 
-  /* Typography */
   --font-heading: "Poppins", sans-serif;
   --font-body: "Inter", sans-serif;
 
-  /* Spacing */
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
   --radius-xl: 20px;
   --radius-full: 9999px;
 
-  /* Shadows */
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
   --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
 
-  /* Sidebar */
   --sidebar-width: 260px;
   --header-height: 64px;
 }
 
+html.dark {
+  --color-surface-hover: #1e293b;
+  --color-surface-active: #334155;
+  --color-border-light: #334155;
+}
+
 /* Base Styles */
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
   margin: 0;
 }
@@ -69,16 +169,10 @@ body {
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: var(--color-surface);
-  color: var(--color-text-primary);
+  background-color: var(--fero-bg-app);
+  color: var(--fero-text-primary);
 }
 
-html.dark body {
-  background-color: var(--color-dark-surface);
-  color: #f1f5f9;
-}
-
-/* Typography Utility Classes */
 .font-heading {
   font-family: var(--font-heading);
 }
@@ -87,26 +181,22 @@ html.dark body {
   font-family: var(--font-body);
 }
 
-/* Glassmorphism */
 .glass {
-  background: var(--color-glass-bg);
+  background: var(--fero-glass-bg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--color-glass-border);
-}
-
-.dark .glass {
-  background: rgba(15, 23, 42, 0.8);
-  border-color: rgba(30, 41, 59, 0.5);
+  border: 1px solid var(--fero-glass-border);
 }
 
 /* MapLibre Popup Overrides */
 .maplibregl-popup-content {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--fero-border-default);
   padding: 12px;
   font-size: 14px;
+  background-color: var(--fero-bg-elevated);
+  color: var(--fero-text-primary);
 }
 
 .maplibregl-popup-close-button {
@@ -115,7 +205,7 @@ html.dark body {
   padding: 4px 8px;
 }
 
-/* Scrollbar Styling */
+/* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -139,6 +229,32 @@ html.dark body {
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Sidebar nav — scrollbar acoplado al panel */
+.sidebar-nav-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-nav-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-nav-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.sidebar-nav-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.dark .sidebar-nav-scroll::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+
+.dark .sidebar-nav-scroll::-webkit-scrollbar-thumb:hover {
   background: #475569;
 }
 

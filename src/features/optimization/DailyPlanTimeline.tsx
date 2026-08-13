@@ -32,7 +32,7 @@ export function DailyPlanTimeline() {
       aria-label="Ciclo administrativo del día"
       aria-busy={loading() ? 'true' : 'false'}
       data-testid="daily-timeline-stepper"
-      class="rounded-xl border border-border bg-surface/50 px-4 py-3 dark:border-dark-border dark:bg-dark-surface/30"
+      class="rounded-xl border border-default bg-elevated/50 px-4 py-3"
     >
       <p id="daily-timeline-label" class="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
         Ciclo del día
@@ -53,17 +53,17 @@ export function DailyPlanTimeline() {
                   aria-disabled={blocked() ? 'true' : undefined}
                   class={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
                     blocked()
-                      ? 'cursor-not-allowed bg-slate-100 text-slate-400 opacity-60 dark:bg-dark-surface-hover'
+                      ? 'cursor-not-allowed bg-app text-slate-400 opacity-60'
                       : active()
                         ? 'bg-fero-green-dark text-white'
                         : complete()
                           ? 'bg-fero-green/15 text-fero-green-dark'
-                          : 'bg-slate-100 text-text-muted dark:bg-dark-surface-hover'
+                          : 'bg-app text-text-muted'
                   }`}
                 >
                   <span
                     class={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${
-                      active() ? 'bg-white/20' : 'bg-white dark:bg-dark-surface'
+                      active() ? 'bg-elevated/20' : 'bg-elevated'
                     }`}
                     aria-hidden="true"
                   >
@@ -84,7 +84,7 @@ export function DailyPlanTimeline() {
                   </Show>
                 </div>
                 <Show when={index() < DAILY_TIMELINE_STEPS.length - 1}>
-                  <span class="hidden h-px w-4 bg-border sm:block dark:bg-dark-border" aria-hidden="true" />
+                  <span class="hidden h-px w-4 bg-default sm:block" aria-hidden="true" />
                 </Show>
               </li>
             );

@@ -3,6 +3,7 @@ import { fetchCurrentUser, loginRequest, logoutRequest } from '../api/auth';
 import { fetchProfile } from '../api/profile';
 import { homePathForRole } from '../auth/permissions';
 import { applyThemePreference } from './appStore';
+import { getStoredThemePreference } from '../theme/themePreference';
 import { setAuthToken } from '../api/client';
 import type { AuthUser, UserRole } from '../types/auth';
 import { ROLE_LABELS } from '../types/auth';
@@ -46,6 +47,7 @@ export async function loadUserPreferences(): Promise<void> {
 export async function initAuth(): Promise<void> {
   const stored = localStorage.getItem(TOKEN_KEY);
   if (!stored) {
+    applyThemePreference(getStoredThemePreference());
     setState({ initialized: true, token: null, user: null });
     return;
   }
@@ -58,6 +60,7 @@ export async function initAuth(): Promise<void> {
     await loadUserPreferences();
   } catch {
     persistToken(null);
+    applyThemePreference(getStoredThemePreference());
     setState({ token: null, user: null, initialized: true, error: null });
   } finally {
     setState('loading', false);

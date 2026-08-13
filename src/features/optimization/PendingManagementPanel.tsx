@@ -82,7 +82,7 @@ export function PendingManagementPanel(props: PendingManagementPanelProps) {
       <ul class="mt-4 space-y-2">
         <For each={items()}>
           {(visit) => (
-            <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm dark:border-dark-border">
+            <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-default px-3 py-2 text-sm">
               <div>
                 <span class="font-semibold">{visit.code ?? visit.collectionPointId}</span>
                 <span class="ml-2 text-text-muted">

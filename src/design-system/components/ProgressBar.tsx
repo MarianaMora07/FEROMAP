@@ -45,7 +45,7 @@ export function ProgressBar(props: ProgressBarProps) {
       <Show
         when={props.indeterminate}
         fallback={
-          <div class={`w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800 ${sizeClasses[props.size ?? 'md']}`}>
+          <div class={`w-full overflow-hidden rounded-full bg-app ${sizeClasses[props.size ?? 'md']}`}>
             <div
               class={`${colorClasses[color()]} ${sizeClasses[props.size ?? 'md']} rounded-full transition-all duration-500 ease-out`}
               style={{ width: `${percentage()}%` }}
@@ -54,7 +54,7 @@ export function ProgressBar(props: ProgressBarProps) {
         }
       >
         <div
-          class={`relative w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800 ${sizeClasses[props.size ?? 'md']}`}
+          class={`relative w-full overflow-hidden rounded-full bg-app ${sizeClasses[props.size ?? 'md']}`}
           role="progressbar"
           aria-valuetext="En progreso"
         >

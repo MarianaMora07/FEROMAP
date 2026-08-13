@@ -24,7 +24,7 @@ export function OperatorNextStopCard(props: OperatorNextStopCardProps) {
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div class="min-w-0">
           <p class="text-xs font-semibold uppercase tracking-wide text-fero-blue">Siguiente parada</p>
-          <p class="mt-0.5 font-heading text-xl font-bold text-text-primary dark:text-white">
+          <p class="mt-0.5 font-heading text-xl font-bold text-text-primary">
             Próxima: {nextCode()}
           </p>
           <Show when={nextAddress()}>
@@ -71,7 +71,7 @@ export function OperatorFieldBottomPanel(props: OperatorFieldBottomPanelProps) {
 
   return (
     <div
-      class="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface shadow-[0_-8px_30px_rgba(0,0,0,0.12)] dark:border-dark-border dark:bg-dark-surface md:static md:rounded-xl md:border md:shadow-sm"
+      class="fixed inset-x-0 bottom-0 z-40 border-t border-default bg-elevated shadow-[0_-8px_30px_rgba(0,0,0,0.12)] md:static md:rounded-xl md:border md:shadow-sm"
       data-testid="operator-field-bottom-panel"
     >
       <button
@@ -82,7 +82,7 @@ export function OperatorFieldBottomPanel(props: OperatorFieldBottomPanelProps) {
       >
         <div class="min-w-0">
           <p class="text-xs font-semibold uppercase tracking-wide text-text-muted">Mi ruta</p>
-          <p class="truncate font-semibold text-text-primary dark:text-white">
+          <p class="truncate font-semibold text-text-primary">
             {props.vehicle?.id ?? 'Sin vehículo'} · {progressLabel()}
           </p>
         </div>
@@ -101,13 +101,13 @@ export function OperatorFieldBottomPanel(props: OperatorFieldBottomPanelProps) {
                 <img
                   src={vehicle().image}
                   alt={vehicle().id}
-                  class="h-14 w-[4.5rem] shrink-0 rounded-md object-cover bg-slate-100"
+                  class="h-14 w-[4.5rem] shrink-0 rounded-md object-cover bg-app"
                   loading="lazy"
                   referrerpolicy="no-referrer"
                 />
                 <div class="min-w-0 flex-1">
                   <div class="flex flex-wrap items-center gap-2">
-                    <span class="font-heading text-lg font-bold text-text-primary dark:text-white">
+                    <span class="font-heading text-lg font-bold text-text-primary">
                       {vehicle().id}
                     </span>
                     <StatusBadge status={vehicle().status} />

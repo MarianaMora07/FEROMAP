@@ -27,20 +27,20 @@ export function AppShell(props: AppShellProps) {
   });
 
   return (
-    <div class="flex h-full overflow-hidden bg-surface dark:bg-dark-surface">
+    <div class="flex h-full overflow-hidden bg-app">
       <Sidebar open={appState.sidebarOpen} />
 
       <Show when={appState.sidebarOpen}>
         <button
           type="button"
-          class="fixed inset-0 z-30 bg-slate-950/40 lg:hidden"
+          class="fixed inset-0 z-30 bg-black/60 lg:hidden"
           aria-label="Cerrar menú"
           onClick={() => setSidebarOpen(false)}
         />
       </Show>
 
       <div
-        class={`flex min-w-0 flex-1 flex-col transition-[margin] duration-300 ${
+        class={`flex min-w-0 flex-1 flex-col bg-app transition-[margin] duration-300 ${
           appState.sidebarOpen ? 'ml-0 lg:ml-[var(--sidebar-width)]' : 'ml-0'
         }`}
       >
@@ -52,7 +52,7 @@ export function AppShell(props: AppShellProps) {
           class={`min-h-0 flex-1 ${
             isMapView()
               ? 'overflow-hidden p-0'
-              : 'overflow-auto bg-slate-50 p-4 md:p-6 dark:bg-dark-surface'
+              : 'overflow-auto bg-app p-4 md:p-6'
           }`}
         >
           {props.children}
@@ -74,7 +74,7 @@ export function PageHeader(props: PageHeaderProps) {
   return (
     <div class="mb-6 flex items-center justify-between">
       <div>
-        <h1 class="font-heading text-[28px] font-bold text-text-primary dark:text-white">
+        <h1 class="font-heading text-[28px] font-bold text-text-primary">
           {props.title}
         </h1>
         {props.subtitle && <p class="mt-1 text-sm text-text-muted">{props.subtitle}</p>}

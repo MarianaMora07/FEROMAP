@@ -20,10 +20,10 @@ interface KpiCardProps {
 const iconToneClasses: Record<IconTone, string> = {
   green: 'bg-fero-green/15 text-fero-green-dark',
   blue: 'bg-fero-blue/10 text-fero-blue',
-  purple: 'bg-violet-100 text-violet-600',
-  amber: 'bg-amber-100 text-amber-600',
-  red: 'bg-red-50 text-red-500',
-  slate: 'bg-slate-100 text-slate-500',
+  purple: 'bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300',
+  amber: 'bg-amber-100 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300',
+  red: 'bg-red-50 text-red-500 dark:bg-red-500/15 dark:text-red-300',
+  slate: 'bg-app text-text-muted',
 };
 
 export function KpiCard(props: KpiCardProps) {
@@ -41,11 +41,11 @@ export function KpiCard(props: KpiCardProps) {
 
   return (
     <div
-      class={`rounded-lg border border-border bg-surface p-3 shadow-xs transition-all duration-200 hover:shadow-sm sm:p-4 dark:bg-dark-surface dark:border-dark-border ${local.class ?? ''}`}
+      class={`rounded-lg border border-default bg-elevated p-3 shadow-xs transition-all duration-200 hover:shadow-sm sm:p-4 ${local.class ?? ''}`}
       {...others}
     >
       <div class="flex items-start justify-between gap-2">
-        <p class="min-w-0 flex-1 text-sm font-medium leading-snug text-text-muted break-words">
+        <p class="min-w-0 flex-1 break-words text-sm font-medium leading-snug text-text-muted">
           {local.title}
         </p>
         <Show when={local.icon}>
@@ -58,7 +58,7 @@ export function KpiCard(props: KpiCardProps) {
       </div>
 
       <div class="mt-2 flex min-w-0 flex-wrap items-baseline gap-1.5">
-        <span class="font-heading text-2xl font-bold leading-none text-text-primary sm:text-3xl dark:text-white">
+        <span class="font-heading text-2xl font-bold leading-none text-text-primary sm:text-3xl">
           {local.value}
         </span>
         <Show when={local.unit}>

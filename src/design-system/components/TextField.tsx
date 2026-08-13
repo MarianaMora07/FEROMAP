@@ -38,7 +38,7 @@ export function TextField(props: TextFieldProps) {
         </Show>
         <input
           id={inputId()}
-          class={`w-full rounded-md border border-border bg-surface py-3 text-sm text-text-primary placeholder:text-text-muted transition-colors focus:border-fero-blue focus:outline-none focus:ring-2 focus:ring-fero-blue/20 dark:bg-dark-surface-hover dark:border-dark-border dark:text-white ${
+          class={`w-full rounded-md border border-default bg-elevated py-3 text-sm text-text-primary placeholder:text-text-muted transition-colors focus:border-fero-blue focus:outline-none focus:ring-2 focus:ring-fero-blue/20 ${
             local.leadingIcon ? 'pl-11' : 'pl-4'
           } ${local.trailing ? 'pr-11' : 'pr-4'} ${local.inputClass ?? ''}`}
           {...others}

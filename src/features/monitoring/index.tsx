@@ -79,7 +79,7 @@ const activityTone = {
   info: 'bg-fero-blue/10 text-fero-blue',
   warning: 'bg-amber-100 text-amber-600',
   danger: 'bg-red-50 text-red-500',
-  default: 'bg-slate-100 text-slate-500',
+  default: 'bg-app text-slate-500',
 };
 
 const routeBarColor = {
@@ -470,7 +470,7 @@ export default function MonitoringPage() {
           >
             Tu vehículo en campo
             <Show when={operatorVehicle()}>
-              {(vehicle) => <span class="font-semibold text-text-primary dark:text-white"> · {vehicle().id}</span>}
+              {(vehicle) => <span class="font-semibold text-text-primary"> · {vehicle().id}</span>}
             </Show>
           </Show>
           <Show when={operationDate() !== new Date().toISOString().slice(0, 10)}>
@@ -582,7 +582,7 @@ export default function MonitoringPage() {
           }`}
         >
           <Show when={!fieldMode()}>
-          <div class="flex flex-wrap items-center gap-2 border-b border-border p-3 dark:border-dark-border sm:gap-3 sm:px-4">
+          <div class="flex flex-wrap items-center gap-2 border-b border-default p-3 sm:gap-3 sm:px-4">
             <div class="relative min-w-0 flex-1 basis-48">
               <Search size={14} class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
               <input
@@ -590,19 +590,19 @@ export default function MonitoringPage() {
                 placeholder="Buscar vehículo o conductor..."
                 value={search()}
                 onInput={(e) => setSearch(e.currentTarget.value)}
-                class="w-full rounded-md border border-border bg-surface py-1.5 pl-8 pr-2 text-xs text-text-primary placeholder:text-text-muted focus:border-fero-blue focus:outline-none dark:bg-dark-surface-hover dark:border-dark-border dark:text-white"
+                class="w-full rounded-md border border-default bg-elevated py-1.5 pl-8 pr-2 text-xs text-text-primary placeholder:text-text-muted focus:border-fero-blue focus:outline-none"
               />
             </div>
             <select
               value={statusFilter()}
               onChange={(e) => setStatusFilter(e.currentTarget.value)}
-              class="rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-text-secondary dark:bg-dark-surface-hover dark:border-dark-border"
+              class="rounded-md border border-default bg-elevated px-2.5 py-1.5 text-xs text-text-secondary"
             >
               <For each={vehicleFilterOptions}>{(o) => <option value={o.value}>{o.label}</option>}</For>
             </select>
             <button
               type="button"
-              class="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-text-secondary hover:bg-surface-hover"
+              class="inline-flex items-center gap-1.5 rounded-md border border-default px-2.5 py-1.5 text-xs text-text-secondary hover:bg-app"
             >
               <SlidersHorizontal size={14} />
               Filtros
@@ -612,7 +612,7 @@ export default function MonitoringPage() {
               class={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs ${
                 legendOpen()
                   ? 'border-fero-green-dark/40 bg-fero-green/15 text-fero-green-dark'
-                  : 'border-border text-text-secondary hover:bg-surface-hover'
+                  : 'border-default text-text-secondary hover:bg-app'
               }`}
               onClick={() => setLegendOpen((v) => !v)}
             >
@@ -623,15 +623,15 @@ export default function MonitoringPage() {
           </Show>
 
           <div
-            class={`relative min-h-80 flex-1 bg-slate-100 dark:bg-slate-900 ${
+            class={`relative min-h-80 flex-1 bg-app ${
               fieldMode() ? 'min-h-[50vh]' : 'lg:min-h-105'
             }`}
           >
             <div ref={mapContainer} class="absolute inset-0 h-full w-full" />
 
             <Show when={legendOpen()}>
-              <div class="absolute top-3 left-3 z-10 rounded-md border border-border bg-surface/95 p-2.5 text-xs shadow-md backdrop-blur-sm dark:bg-dark-surface/95">
-                <p class="mb-1.5 font-semibold text-text-primary dark:text-white">Leyenda</p>
+              <div class="absolute top-3 left-3 z-10 rounded-md border border-default bg-elevated/95 p-2.5 text-xs shadow-md backdrop-blur-sm">
+                <p class="mb-1.5 font-semibold text-text-primary">Leyenda</p>
                 <ul class="space-y-1 text-text-secondary">
                   <li class="flex items-center gap-2"><Truck size={12} class="text-fero-green-dark" /> En ruta</li>
                   <li class="flex items-center gap-2"><Truck size={12} class="text-amber-500" /> Mantenimiento</li>
@@ -643,14 +643,14 @@ export default function MonitoringPage() {
               </div>
             </Show>
 
-            <div class="absolute right-3 bottom-3 z-10 flex flex-col overflow-hidden rounded-md border border-border bg-surface/95 shadow-sm backdrop-blur-sm dark:bg-dark-surface/95">
-              <button type="button" class="flex h-8 w-8 items-center justify-center text-text-secondary hover:bg-surface-hover disabled:opacity-40" disabled={!mapReady()} onClick={() => mapRef.current?.zoomIn()} aria-label="Acercar">
+            <div class="absolute right-3 bottom-3 z-10 flex flex-col overflow-hidden rounded-md border border-default bg-elevated/95 shadow-sm backdrop-blur-sm">
+              <button type="button" class="flex h-8 w-8 items-center justify-center text-text-secondary hover:bg-app disabled:opacity-40" disabled={!mapReady()} onClick={() => mapRef.current?.zoomIn()} aria-label="Acercar">
                 <Plus size={14} />
               </button>
-              <button type="button" class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover disabled:opacity-40" disabled={!mapReady()} onClick={() => mapRef.current?.zoomOut()} aria-label="Alejar">
+              <button type="button" class="flex h-8 w-8 items-center justify-center border-t border-default text-text-secondary hover:bg-app disabled:opacity-40" disabled={!mapReady()} onClick={() => mapRef.current?.zoomOut()} aria-label="Alejar">
                 <Minus size={14} />
               </button>
-              <button type="button" class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover disabled:opacity-40" disabled={!mapReady()} onClick={() => {
+              <button type="button" class="flex h-8 w-8 items-center justify-center border-t border-default text-text-secondary hover:bg-app disabled:opacity-40" disabled={!mapReady()} onClick={() => {
                 const vehicle = operatorVehicle();
                 if (vehicle) centerOnVehicle(vehicle.id);
                 else fitMapToOperationalData(mapRef.current!, {
@@ -660,7 +660,7 @@ export default function MonitoringPage() {
               }} aria-label="Centrar">
                 <Crosshair size={14} />
               </button>
-              <button type="button" class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover" aria-label="Pantalla completa" onClick={() => document.documentElement.requestFullscreen?.()}>
+              <button type="button" class="flex h-8 w-8 items-center justify-center border-t border-default text-text-secondary hover:bg-app" aria-label="Pantalla completa" onClick={() => document.documentElement.requestFullscreen?.()}>
                 <Maximize2 size={14} />
               </button>
             </div>
@@ -669,13 +669,13 @@ export default function MonitoringPage() {
 
         <Show when={!fieldMode()}>
         <Card padding={false} class="flex max-h-125 flex-col overflow-hidden xl:col-span-2 xl:max-h-none xl:h-full">
-          <div class="flex items-center justify-between border-b border-border px-4 py-3 dark:border-dark-border">
-            <h3 class="font-heading font-semibold text-text-primary dark:text-white">Estado de la flota</h3>
+          <div class="flex items-center justify-between border-b border-default px-4 py-3">
+            <h3 class="font-heading font-semibold text-text-primary">Estado de la flota</h3>
             <A href="/vehicles" class="text-xs font-medium text-fero-blue hover:underline">
               Ver todas
             </A>
           </div>
-          <ul class="min-h-0 flex-1 divide-y divide-border overflow-y-auto dark:divide-dark-border">
+          <ul class="min-h-0 flex-1 divide-y divide-default overflow-y-auto">
             <Show
               when={filteredFleet().length > 0}
               fallback={
@@ -689,7 +689,7 @@ export default function MonitoringPage() {
                 <li>
                   <button
                     type="button"
-                    class={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-surface-hover ${
+                    class={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-app ${
                       selectedId() === v.id ? 'bg-fero-green/5' : ''
                     }`}
                     onClick={() => selectVehicle(v)}
@@ -697,13 +697,13 @@ export default function MonitoringPage() {
                     <img
                       src={v.image}
                       alt={v.id}
-                      class="h-11 w-14 shrink-0 rounded-md object-cover bg-slate-100"
+                      class="h-11 w-14 shrink-0 rounded-md object-cover bg-app"
                       loading="lazy"
                       referrerpolicy="no-referrer"
                     />
                     <div class="min-w-0 flex-1">
                       <div class="mb-0.5 flex flex-wrap items-center gap-2">
-                        <span class="text-sm font-semibold text-text-primary dark:text-white">{v.id}</span>
+                        <span class="text-sm font-semibold text-text-primary">{v.id}</span>
                         <StatusBadge status={statusForBadge(v.status)} />
                       </div>
                       <p class="truncate text-xs text-text-muted">{v.route}</p>
@@ -721,7 +721,7 @@ export default function MonitoringPage() {
             </For>
             </Show>
           </ul>
-          <div class="border-t border-border px-4 py-2.5 dark:border-dark-border">
+          <div class="border-t border-default px-4 py-2.5">
             <A href="/vehicles" class="text-sm font-medium text-fero-blue hover:underline">
               Ver todos los vehículos
             </A>
@@ -779,7 +779,7 @@ export default function MonitoringPage() {
               {(r) => (
                 <li>
                   <div class="mb-1 flex items-center justify-between gap-2 text-sm">
-                    <span class="font-medium text-text-primary dark:text-white">{r.label}</span>
+                    <span class="font-medium text-text-primary">{r.label}</span>
                     <span class="text-xs text-text-muted">
                       {r.done} / {r.total} puntos · <span class="font-semibold text-text-secondary">{r.pct}%</span>
                     </span>
@@ -805,7 +805,7 @@ export default function MonitoringPage() {
                     <AlertTriangle size={14} />
                   </span>
                   <div class="min-w-0">
-                    <p class="text-sm font-semibold text-text-primary dark:text-white">{al.title}</p>
+                    <p class="text-sm font-semibold text-text-primary">{al.title}</p>
                     <p class="text-xs text-text-secondary">{al.detail}</p>
                     <p class="mt-0.5 text-[11px] text-text-muted">{al.time}</p>
                   </div>
@@ -824,7 +824,7 @@ export default function MonitoringPage() {
               </span>
               <div>
                 <p class="text-xs text-text-muted">Clima</p>
-                <p class="text-sm font-semibold text-text-primary dark:text-white">
+                <p class="text-sm font-semibold text-text-primary">
                   {currentConditions.weather.label} · {currentConditions.weather.tempC}°C
                 </p>
               </div>
@@ -835,7 +835,7 @@ export default function MonitoringPage() {
               </span>
               <div>
                 <p class="text-xs text-text-muted">Tráfico</p>
-                <p class="text-sm font-semibold text-text-primary dark:text-white">{currentConditions.traffic}</p>
+                <p class="text-sm font-semibold text-text-primary">{currentConditions.traffic}</p>
               </div>
             </li>
             <li class="flex items-center gap-3">
@@ -844,7 +844,7 @@ export default function MonitoringPage() {
               </span>
               <div>
                 <p class="text-xs text-text-muted">Vías afectadas</p>
-                <p class="text-sm font-semibold text-text-primary dark:text-white">
+                <p class="text-sm font-semibold text-text-primary">
                   {currentConditions.affectedRoads}
                 </p>
               </div>

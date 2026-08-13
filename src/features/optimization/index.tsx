@@ -84,7 +84,7 @@ const scenarioIconMap = {
 
 function FieldLabel(props: { children: string }) {
   return (
-    <p class="mb-1.5 text-sm font-semibold text-text-primary dark:text-white">{props.children}</p>
+    <p class="mb-1.5 text-sm font-semibold text-text-primary">{props.children}</p>
   );
 }
 
@@ -127,7 +127,7 @@ function ParametersForm(props: {
 
         <div>
           <FieldLabel>Vehículos disponibles ({assignableVehicles().length})</FieldLabel>
-          <div class="flex flex-wrap gap-2 rounded-md border border-border bg-surface px-3 py-2.5 dark:bg-dark-surface-hover dark:border-dark-border">
+          <div class="flex flex-wrap gap-2 rounded-md border border-default bg-elevated px-3 py-2.5">
             <Show
               when={assignableVehicles().length > 0}
               fallback={<span class="text-xs text-text-muted">Sin vehículos asignables</span>}
@@ -171,15 +171,15 @@ function ParametersForm(props: {
           .
         </p>
 
-        <div class="rounded-lg border border-border bg-surface px-3 py-2.5 dark:border-dark-border dark:bg-dark-surface-hover">
-          <p class="text-sm font-semibold text-text-primary dark:text-white">Algoritmo del motor</p>
+        <div class="rounded-lg border border-default bg-elevated px-3 py-2.5">
+          <p class="text-sm font-semibold text-text-primary">Algoritmo del motor</p>
           <p class="mt-1 text-sm text-text-secondary">Colonia de Hormigas (ACO) — 12 hormigas × 20 iteraciones</p>
           <p class="mt-2 text-xs text-text-muted">
             Único algoritmo soportado por el backend en esta versión.
           </p>
         </div>
 
-        <div class="rounded-lg border border-dashed border-border px-3 py-2.5 dark:border-dark-border">
+        <div class="rounded-lg border border-dashed border-default px-3 py-2.5">
           <p class="text-sm font-semibold text-text-muted">Objetivo de optimización</p>
           <p class="mt-1 text-xs text-text-muted">
             Próximamente — el motor minimiza distancia/tiempo con ACO.
@@ -201,7 +201,7 @@ function ParametersForm(props: {
                     >
                       <input
                         type="checkbox"
-                        class="mt-0.5 size-4 rounded border-border accent-fero-green-mid"
+                        class="mt-0.5 size-4 rounded border-default accent-fero-green-mid"
                         checked={preset().constraints[item.id as keyof OptimizationConstraints]}
                         disabled={!connected}
                         onChange={() =>
@@ -273,7 +273,7 @@ function ScenarioInfoCard() {
                   </span>
                   {row.label}
                 </span>
-                <span class="font-semibold text-text-primary dark:text-white">{row.value}</span>
+                <span class="font-semibold text-text-primary">{row.value}</span>
               </li>
             );
           }}
@@ -291,7 +291,7 @@ function ResultsCard(props: {
   return (
     <Card>
       <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h3 class="font-heading font-semibold text-text-primary dark:text-white">
+        <h3 class="font-heading font-semibold text-text-primary">
           Resultados de la optimización
         </h3>
         <Badge variant="success" class="gap-1">
@@ -303,7 +303,7 @@ function ResultsCard(props: {
       <div class="grid gap-3 sm:grid-cols-3">
         <For each={props.routeResults}>
           {(route) => (
-            <div class="rounded-lg border border-border p-3 dark:border-dark-border">
+            <div class="rounded-lg border border-default p-3">
               <div class="mb-3 flex items-start justify-between gap-2">
                 <div class="min-w-0">
                   <span class={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold ${vehicleToneClass[route.tone]}`}>
@@ -320,19 +320,19 @@ function ResultsCard(props: {
               <dl class="space-y-1.5 text-sm">
                 <div class="flex justify-between gap-2">
                   <dt class="text-text-muted">Distancia</dt>
-                  <dd class="font-semibold text-text-primary dark:text-white">{route.distanceKm} km</dd>
+                  <dd class="font-semibold text-text-primary">{route.distanceKm} km</dd>
                 </div>
                 <div class="flex justify-between gap-2">
                   <dt class="text-text-muted">Tiempo</dt>
-                  <dd class="font-semibold text-text-primary dark:text-white">{route.duration}</dd>
+                  <dd class="font-semibold text-text-primary">{route.duration}</dd>
                 </div>
                 <div class="flex justify-between gap-2">
                   <dt class="text-text-muted">Puntos</dt>
-                  <dd class="font-semibold text-text-primary dark:text-white">{route.points}</dd>
+                  <dd class="font-semibold text-text-primary">{route.points}</dd>
                 </div>
                 <div class="flex justify-between gap-2">
                   <dt class="text-text-muted">Toneladas</dt>
-                  <dd class="font-semibold text-text-primary dark:text-white">{route.tons} ton</dd>
+                  <dd class="font-semibold text-text-primary">{route.tons} ton</dd>
                 </div>
               </dl>
               <div class="mt-3">
@@ -347,33 +347,33 @@ function ResultsCard(props: {
         </For>
       </div>
 
-      <div class="mt-4 grid grid-cols-2 gap-3 rounded-lg bg-slate-50 px-3 py-3 text-sm dark:bg-dark-surface-hover sm:grid-cols-4">
+      <div class="mt-4 grid grid-cols-2 gap-3 rounded-lg bg-app px-3 py-3 text-sm sm:grid-cols-4">
         <div class="flex items-center gap-2">
           <Route size={16} class="text-fero-blue" />
           <div>
             <p class="text-xs text-text-muted">Distancia</p>
-            <p class="font-semibold text-text-primary dark:text-white">{props.totals.distanceKm} km</p>
+            <p class="font-semibold text-text-primary">{props.totals.distanceKm} km</p>
           </div>
         </div>
         <div class="flex items-center gap-2">
           <Clock size={16} class="text-fero-blue" />
           <div>
             <p class="text-xs text-text-muted">Tiempo</p>
-            <p class="font-semibold text-text-primary dark:text-white">{props.totals.duration}</p>
+            <p class="font-semibold text-text-primary">{props.totals.duration}</p>
           </div>
         </div>
         <div class="flex items-center gap-2">
           <Weight size={16} class="text-fero-blue" />
           <div>
             <p class="text-xs text-text-muted">Toneladas</p>
-            <p class="font-semibold text-text-primary dark:text-white">{props.totals.tons} ton</p>
+            <p class="font-semibold text-text-primary">{props.totals.tons} ton</p>
           </div>
         </div>
         <div class="flex items-center gap-2">
           <Fuel size={16} class="text-fero-blue" />
           <div>
             <p class="text-xs text-text-muted">Combustible</p>
-            <p class="font-semibold text-text-primary dark:text-white">{props.totals.fuelL} L</p>
+            <p class="font-semibold text-text-primary">{props.totals.fuelL} L</p>
           </div>
         </div>
       </div>
@@ -508,7 +508,7 @@ export default function OptimizationPage() {
           <div class="space-y-3">
             <div class="flex flex-wrap items-center gap-3">
               <PlanningStatusBadge status={dailyPlan()?.status ?? 'draft'} />
-              <span class="text-sm font-semibold text-text-primary dark:text-white">{selectedDate()}</span>
+              <span class="text-sm font-semibold text-text-primary">{selectedDate()}</span>
               <span class="text-sm text-text-secondary">
                 {dailyPlan()?.scheduledPoints.length ?? 0} programados ·{' '}
                 {dailyPlan()?.pendingPoints.length ?? 0} pendientes ·{' '}
@@ -561,7 +561,7 @@ export default function OptimizationPage() {
 
       <PendingManagementPanel operationDate={selectedDate()} />
 
-      <div class="flex gap-1 overflow-x-auto border-b border-border">
+      <div class="flex gap-1 overflow-x-auto border-b border-default">
         <For each={[...optimizationTabs]}>
           {(item) => (
             <button

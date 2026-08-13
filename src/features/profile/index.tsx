@@ -35,7 +35,7 @@ import {
   type ProfilePreferences,
   type ProfileSession,
 } from '../../core/api/profile';
-import { applyThemePreference } from '../../core/stores/appStore';
+import { applyThemePreference, appState, setThemePreference } from '../../core/stores/appStore';
 import { logout, userInitials } from '../../core/stores/authStore';
 import {
   profileDefaultViewOptions,
@@ -635,8 +635,12 @@ export default function ProfilePage() {
             <div class="grid gap-4 sm:grid-cols-2">
               <SelectField
                 label="Tema"
-                value={prefs().theme}
-                onChange={(e) => patchPrefs({ theme: e.currentTarget.value as ProfilePreferences['theme'] })}
+                value={appState.themePreference}
+                onChange={(e) => {
+                  const theme = e.currentTarget.value as ProfilePreferences['theme'];
+                  patchPrefs({ theme });
+                  void setThemePreference(theme);
+                }}
               >
                 <For each={profileThemeOptions}>{(o) => <option value={o.value}>{o.label}</option>}</For>
               </SelectField>
@@ -714,12 +718,16 @@ export default function ProfilePage() {
           </div>
 
           <div class="mt-auto flex items-center justify-between gap-3 pt-5">
-            <Show when={prefs().theme === 'light'}>
-              <span class="inline-flex items-center gap-1.5 text-xs text-text-muted">
-                <Sun size={14} />
-                Tema claro activo
-              </span>
-            </Show>
+            <span class="inline-flex items-center gap-1.5 text-xs text-text-muted">
+              <Show when={appState.themePreference === 'system'} fallback={<Sun size={14} />}>
+                <Monitor size={14} />
+              </Show>
+              {appState.themePreference === 'system'
+                ? 'Tema del sistema'
+                : appState.darkMode
+                  ? 'Tema oscuro activo'
+                  : 'Tema claro activo'}
+            </span>
             <div class="ml-auto">
               <Button
                 type="button"
