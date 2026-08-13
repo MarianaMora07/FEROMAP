@@ -40,7 +40,10 @@ import {
 } from '../../design-system/components';
 import { bindMapTheme, mapStyleForTheme } from '../../core/utils/mapStyle';
 import { appState } from '../../core/stores/appStore';
-import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
+import {
+  createOperationalMapOptions,
+  fitMapToOperationalData,
+} from '../../core/map/operationalMapConfig';
 import {
   alertCategoryOptions,
   alertStatusOptions,
@@ -275,6 +278,9 @@ export default function AlertsPage() {
         .addTo(map);
       markers.push(marker);
     }
+    fitMapToOperationalData(map, {
+      points: activeAlertsList().map((alert) => ({ lng: alert.lng, lat: alert.lat })),
+    });
   };
 
   bindMapTheme(
@@ -299,13 +305,12 @@ export default function AlertsPage() {
     };
     document.addEventListener('click', closeMenu);
 
-    const map = new maplibregl.Map({
-      container: mapContainer,
-      style: mapStyleForTheme(appState.darkMode),
-      center: UNARE_CENTER,
-      zoom: UNARE_ZOOM - 0.3,
-      attributionControl: false,
-    });
+    const map = new maplibregl.Map(
+      createOperationalMapOptions({
+        container: mapContainer,
+        style: mapStyleForTheme(appState.darkMode),
+      }),
+    );
     mapRef.current = map;
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
 
@@ -673,7 +678,9 @@ export default function AlertsPage() {
               <button type="button" class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover disabled:opacity-40" disabled={!mapReady()} onClick={() => mapRef.current?.zoomOut()} aria-label="Alejar">
                 <Minus size={14} />
               </button>
-              <button type="button" class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover disabled:opacity-40" disabled={!mapReady()} onClick={() => mapRef.current?.flyTo({ center: UNARE_CENTER, zoom: UNARE_ZOOM - 0.3 })} aria-label="Centrar">
+              <button type="button" class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover disabled:opacity-40" disabled={!mapReady()} onClick={() => fitMapToOperationalData(mapRef.current!, {
+                points: activeAlertsList().map((alert) => ({ lng: alert.lng, lat: alert.lat })),
+              })} aria-label="Centrar">
                 <Crosshair size={14} />
               </button>
             </div>

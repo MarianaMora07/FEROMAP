@@ -108,6 +108,61 @@ VITE_MOCK_FALLBACK_TOAST=true  # avisar en dev si cae a mock
 Con `VITE_USE_MOCKS=false` y backend arriba, las vistas conectadas usan datos reales.  
 Si el API falla, `withMockFallback` registra en consola y muestra toast (solo dev).
 
+## Mapa — tiles locales Unare (MBTiles)
+
+El fondo cartográfico operativo usa tiles raster servidos por el backend, sin depender de `tile.openstreetmap.org` en runtime.
+
+### Generación (una vez, con internet)
+
+```bash
+chmod +x backend/scripts/generate_unare_mbtiles.sh
+./backend/scripts/generate_unare_mbtiles.sh
+```
+
+Orden de preferencia del script:
+
+1. **Planetiler** (si está instalado)
+2. **Tilemaker** (requiere extracto OSM recortado a Unare)
+3. **Bootstrap Python** — descarga tiles OSM del bbox de Unare y empaqueta SQLite
+
+Variables opcionales:
+
+```bash
+MIN_ZOOM=12 MAX_ZOOM=16 DATA_DIR=./data ./backend/scripts/generate_unare_mbtiles.sh
+```
+
+Salida por defecto: `data/tiles/unare.mbtiles` (montada en Docker como `/app/data/tiles/unare.mbtiles`).
+
+### Tamaño esperado
+
+| Zoom | Tiles aprox. | Tamaño |
+|------|--------------|--------|
+| 12–14 | ~50–120 | ~2–8 MB |
+| 12–16 | ~200–600 | ~5–30 MB |
+
+El archivo `*.mbtiles` está en `.gitignore` por tamaño; cada entorno debe generarlo una vez.
+
+### Servicio en runtime
+
+| Endpoint | Descripción |
+|----------|-------------|
+| `GET /api/v1/map/tiles/meta` | Disponibilidad, bounds, zooms |
+| `GET /api/v1/map/tiles/{z}/{x}/{y}.png` | Tile PNG (z 12–16, bbox Unare) |
+
+Override de ruta:
+
+```env
+UNARE_MBTILES_PATH=/ruta/custom/unare.mbtiles
+```
+
+### Frontend
+
+El estilo por defecto es **Unare local** (`unare-local` en el selector de capas). OSM/Carto quedan como fallback manual para desarrollo.
+
+Con backend levantado y MBTiles generado, los mapas operativos cargan sin peticiones externas a OSM.
+
+Guía completa del mapa operativo: `docs/mapa-operativo-unare.md`.
+
 ## CI sugerido
 
 ```yaml

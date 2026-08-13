@@ -23,7 +23,8 @@ DEPOT_LAT = 8.295
 # Bbox que cubre los 20 contenedores del demo (seeds)
 COLLECTION_POINTS_BBOX = (-62.738, 8.272, -62.695, 8.302)
 
-# Bbox aproximado del área de estudio (lon_min, lat_min, lon_max, lat_max)
+# Bbox aproximado del área de estudio (lon_min, lat_min, lon_max, lat_max).
+# Debe coincidir con UNARE_BBOX en src/core/types/geo.ts (frontend).
 UNARE_BBOX = (-62.81, 8.24, -62.69, 8.31)
 
 

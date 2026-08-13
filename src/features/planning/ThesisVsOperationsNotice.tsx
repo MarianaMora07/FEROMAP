@@ -9,16 +9,16 @@ interface ThesisVsOperationsNoticeProps {
 
 const copy: Record<NoticeVariant, { title: string; body: string; linkHref: string; linkLabel: string }> = {
   thesis: {
-    title: 'Historial de tesis — no confundir con operación diaria',
+    title: 'Historial de simulaciones — no confundir con operación diaria',
     body: 'Aquí solo aparecen escenarios de evaluación del algoritmo. Las rutas despachadas del día están en Planificación operativa.',
     linkHref: '/optimization',
     linkLabel: 'Ir a planificación operativa',
   },
   operations: {
-    title: 'Historial operativo — no confundir con simulación de tesis',
-    body: 'Solo corridas iniciadas desde esta pantalla (plan del día). Los escenarios de investigación están en Simulación.',
+    title: 'Historial operativo — no confundir con simulación de escenarios',
+    body: 'Solo corridas iniciadas desde esta pantalla (plan del día). Los escenarios de análisis están en Simulación.',
     linkHref: '/simulation?view=history',
-    linkLabel: 'Ver historial de tesis',
+    linkLabel: 'Ver historial de simulaciones',
   },
 };
 

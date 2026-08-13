@@ -5,8 +5,11 @@ import { Crosshair, Layers, Maximize2, Minus, Plus, Trash2, Truck } from 'lucide
 import { Card } from '../../design-system/components';
 import { appState } from '../../core/stores/appStore';
 import { bindMapTheme, mapStyleForTheme } from '../../core/utils/mapStyle';
+import {
+  createOperationalMapOptions,
+  fitMapToOperationalData,
+} from '../../core/map/operationalMapConfig';
 import { mapLegendContainers } from '../../data/mock/optimization';
-import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
 import type { OptimizationRouteResult } from '../../core/utils/optimizationResults';
 
 const vehicleLegendClass: Record<string, string> = {
@@ -63,6 +66,11 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
         filter: ['==', ['get', 'kind'], 'optimized'],
         paint: { 'line-color': '#34D634', 'line-width': 4, 'line-opacity': 0.95 },
       });
+      if (features.length > 0) {
+        fitMapToOperationalData(map, {
+          routes: { type: 'FeatureCollection', features },
+        });
+      }
       return;
     }
 
@@ -70,6 +78,11 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
       type: 'FeatureCollection',
       features,
     });
+    if (features.length > 0) {
+      fitMapToOperationalData(map, {
+        routes: { type: 'FeatureCollection', features },
+      });
+    }
   };
 
   bindMapTheme(
@@ -79,13 +92,12 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
   );
 
   onMount(() => {
-    const map = new maplibregl.Map({
-      container: mapContainer,
-      style: mapStyleForTheme(appState.darkMode),
-      center: UNARE_CENTER,
-      zoom: UNARE_ZOOM - 0.3,
-      attributionControl: false,
-    });
+    const map = new maplibregl.Map(
+      createOperationalMapOptions({
+        container: mapContainer,
+        style: mapStyleForTheme(appState.darkMode),
+      }),
+    );
     mapRef.current = map;
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
 
@@ -167,7 +179,11 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
             type="button"
             class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover"
             aria-label="Centrar"
-            onClick={() => mapRef.current?.flyTo({ center: UNARE_CENTER, zoom: UNARE_ZOOM - 0.3 })}
+            onClick={() =>
+              fitMapToOperationalData(mapRef.current!, {
+                routes: props.hasResults ? appState.routes : { type: 'FeatureCollection', features: [] },
+              })
+            }
           >
             <Crosshair size={14} />
           </button>

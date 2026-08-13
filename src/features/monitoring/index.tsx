@@ -63,7 +63,10 @@ import {
   OperatorNextStopCard,
 } from './OperatorFieldPanel';
 import { bindMapTheme, mapStyleForTheme } from '../../core/utils/mapStyle';
-import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
+import {
+  createOperationalMapOptions,
+  fitMapToOperationalData,
+} from '../../core/map/operationalMapConfig';
 import {
   currentConditions,
   vehicleFilterOptions,
@@ -224,7 +227,7 @@ export default function MonitoringPage() {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
 
-    ensureOperationalRouteLayer(map, operationalRoutes(), 'live-routes', 'live-routes-line');
+    ensureOperationalRouteLayer(map, operationalRoutes(), 'live-routes', { splitByStatus: true });
 
     syncContainerMarkers(map, operationalContainers(), binMarkers, {
       createMarkerElement: (color) => createPin(color, trashSvg('#fff'), 24),
@@ -244,6 +247,10 @@ export default function MonitoringPage() {
 
     const first = mapFleet()[0];
     if (first && (!selectedId() || fieldMode())) setSelectedId(first.id);
+    fitMapToOperationalData(map, {
+      vehicles: mapFleet(),
+      routes: operationalRoutes(),
+    });
   };
 
   const centerOnVehicle = (id: string) => {
@@ -305,13 +312,12 @@ export default function MonitoringPage() {
   );
 
   onMount(() => {
-    const map = new maplibregl.Map({
-      container: mapContainer,
-      style: mapStyleForTheme(appState.darkMode),
-      center: UNARE_CENTER,
-      zoom: UNARE_ZOOM - 0.2,
-      attributionControl: false,
-    });
+    const map = new maplibregl.Map(
+      createOperationalMapOptions({
+        container: mapContainer,
+        style: mapStyleForTheme(appState.darkMode),
+      }),
+    );
     mapRef.current = map;
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
 
@@ -647,7 +653,10 @@ export default function MonitoringPage() {
               <button type="button" class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover disabled:opacity-40" disabled={!mapReady()} onClick={() => {
                 const vehicle = operatorVehicle();
                 if (vehicle) centerOnVehicle(vehicle.id);
-                else mapRef.current?.flyTo({ center: UNARE_CENTER, zoom: UNARE_ZOOM - 0.2 });
+                else fitMapToOperationalData(mapRef.current!, {
+                  vehicles: mapFleet(),
+                  routes: operationalRoutes(),
+                });
               }} aria-label="Centrar">
                 <Crosshair size={14} />
               </button>

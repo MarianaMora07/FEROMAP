@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import CollectionPoint, OptimizedRoute, RouteWaypoint, Vehicle
+from app.db.models import CollectionPoint, DailyPlan, OptimizedRoute, RouteWaypoint, Vehicle
 from app.services.contingency_service import list_recent_incidents
 from app.services.geo_service import collection_points_geojson, fill_level_pct
 from app.services.operations_service import live_fleet_view
+from app.services.planning_service import get_active_daily_plan
+from app.services.route_geometry_service import build_route_linestring_cached
 
 ROUTE_COLORS = ("#34D634", "#1143F3", "#7c3aed", "#f59e0b", "#ef4444", "#06b6d4")
+PLANNED_ROUTE_STATUSES = ("pending", "in_progress")
 
 
 def _parse_bbox(bbox: str | None) -> tuple[float, float, float, float] | None:
@@ -44,10 +47,27 @@ def _container_bucket(fill_level: int) -> str:
     return "partial"
 
 
-def active_routes_geojson(db: Session, *, driver_id: int | None = None) -> dict[str, Any]:
+def _resolve_today_daily_plan_id(db: Session) -> int | None:
+    plan = get_active_daily_plan(db)
+    return plan.id if plan else None
+
+
+def planned_routes_geojson(
+    db: Session,
+    *,
+    driver_id: int | None = None,
+    daily_plan_id: int | None = None,
+    scoped_to_daily_plan: bool = False,
+) -> dict[str, Any]:
+    if scoped_to_daily_plan and daily_plan_id is None:
+        return {"type": "FeatureCollection", "features": []}
+
     stmt = (
         select(OptimizedRoute)
-        .where(OptimizedRoute.status == "in_progress")
+        .where(
+            OptimizedRoute.route_kind == "optimized",
+            OptimizedRoute.status.in_(PLANNED_ROUTE_STATUSES),
+        )
         .options(
             joinedload(OptimizedRoute.vehicle),
             joinedload(OptimizedRoute.waypoints).joinedload(RouteWaypoint.collection_point),
@@ -58,20 +78,20 @@ def active_routes_geojson(db: Session, *, driver_id: int | None = None) -> dict[
         if driver_id < 0:
             return {"type": "FeatureCollection", "features": []}
         stmt = stmt.where(OptimizedRoute.driver_id == driver_id)
+    if daily_plan_id is not None:
+        stmt = stmt.where(OptimizedRoute.daily_plan_id == daily_plan_id)
 
     routes = db.scalars(stmt).unique().all()
     features: list[dict[str, Any]] = []
     for index, route in enumerate(routes):
         waypoints = sorted(route.waypoints, key=lambda wp: wp.sequence_order)
-        coordinates = [
-            [float(wp.collection_point.longitude), float(wp.collection_point.latitude)]
-            for wp in waypoints
-            if wp.collection_point is not None
-        ]
+        coordinates = build_route_linestring_cached(route, waypoints, include_depot=True)
         if len(coordinates) < 2:
             continue
         vehicle = route.vehicle
         code = vehicle.code if vehicle else f"R-{route.id}"
+        waypoints_total = sum(1 for wp in waypoints if wp.collection_point is not None)
+        waypoints_done = sum(1 for wp in waypoints if wp.status == "completed")
         features.append(
             {
                 "type": "Feature",
@@ -81,12 +101,20 @@ def active_routes_geojson(db: Session, *, driver_id: int | None = None) -> dict[
                     "label": f"Ruta {code}",
                     "color": ROUTE_COLORS[index % len(ROUTE_COLORS)],
                     "vehicleId": code,
-                    "type": "active",
+                    "status": route.status,
+                    "routeKind": route.route_kind,
+                    "waypointsTotal": waypoints_total,
+                    "waypointsDone": waypoints_done,
                 },
                 "geometry": {"type": "LineString", "coordinates": coordinates},
             }
         )
     return {"type": "FeatureCollection", "features": features}
+
+
+def active_routes_geojson(db: Session, *, driver_id: int | None = None) -> dict[str, Any]:
+    """Alias retrocompatible: rutas planificadas visibles en mapa."""
+    return planned_routes_geojson(db, driver_id=driver_id)
 
 
 def _filter_geojson_points(
@@ -236,7 +264,13 @@ def map_operational_context(
 ) -> dict[str, Any]:
     bbox_tuple = _parse_bbox(bbox)
     fleet = _filter_fleet(live_fleet_view(db, driver_id=driver_id), bbox=bbox_tuple)
-    routes = active_routes_geojson(db, driver_id=driver_id)
+    active_plan = get_active_daily_plan(db)
+    routes = planned_routes_geojson(
+        db,
+        driver_id=driver_id,
+        daily_plan_id=active_plan.id if active_plan else None,
+        scoped_to_daily_plan=True,
+    )
 
     if bbox_tuple is not None:
         filtered_route_features = []

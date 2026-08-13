@@ -72,7 +72,16 @@ import {
   syncContainerMarkers,
   syncFleetMarkers,
   vehicleStatusKey,
+  enabledOperationalRouteIds,
+  routeLayerStateKey,
+  syncOperationalRouteLayerFilters,
+  type OperationalRouteFeatureProps,
 } from '../../core/map/operationalMapLayers';
+import {
+  createOperationalMapOptions,
+  fitMapToOperationalData,
+  operationalMapContextFilters,
+} from '../../core/map/operationalMapConfig';
 import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
 import { residentHubHref, residentPointsHref } from '../../core/resident/residentDeepLinks';
 import { ResidentBreadcrumbs } from '../resident/ResidentBreadcrumbs';
@@ -134,7 +143,9 @@ export default function MapPage() {
   });
   const [mapContext, { refetch }] = createResource(mapContextSource, (source) => {
     if (!source) return Promise.resolve(undefined);
-    if (source.mode === 'sector') return fetchMapContext({ sector: source.sector });
+    if (source.mode === 'sector') {
+      return fetchMapContext(operationalMapContextFilters({ sector: source.sector }));
+    }
     return fetchMapContext();
   });
   const operationDate = () => {
@@ -169,6 +180,7 @@ export default function MapPage() {
 
   const mapFocus = () => {
     const raw = Array.isArray(searchParams.focus) ? searchParams.focus[0] : searchParams.focus;
+    if (raw === 'routes') return 'routes';
     return raw === 'next' ? 'next' : 'route';
   };
 
@@ -178,8 +190,63 @@ export default function MapPage() {
     themeBaseStyleId(appState.darkMode),
   );
   const [coords, setCoords] = createSignal({ lng: UNARE_CENTER[0], lat: UNARE_CENTER[1], zoom: UNARE_ZOOM });
-  const [layerState, setLayerState] = createSignal<Record<string, boolean>>(initialLayerState());
+  const [layerState, setLayerState] = createSignal<Record<string, boolean>>({
+    ...initialLayerState(),
+    sectors: false,
+    neighborhoods: false,
+  });
   const [mapReady, setMapReady] = createSignal(false);
+
+  const operationalRoutesForMap = () =>
+    mapContext()?.routes ?? { type: 'FeatureCollection' as const, features: [] };
+
+  const routeLayerChildren = createMemo(() => {
+    const features = operationalRoutesForMap().features;
+    if (features.length === 0) return mapLayers.find((layer) => layer.id === 'routes')?.children ?? [];
+    return features.map((feature) => {
+      const props = feature.properties as OperationalRouteFeatureProps;
+      const routeId = props.routeId ?? props.id ?? feature.properties.id;
+      return {
+        id: routeLayerStateKey(routeId),
+        label: props.label ?? String(routeId),
+        checked: true,
+        kind: 'line' as const,
+        class: '',
+        color: props.color ?? '#34D634',
+        filter: String(routeId),
+      };
+    });
+  });
+
+  const displayMapLayers = createMemo(() => {
+    if (residentMode()) {
+      return mapLayers.filter((layer) => ['routes', 'containers', 'vehicles'].includes(layer.id));
+    }
+    return mapLayers.map((layer) =>
+      layer.id === 'routes' ? { ...layer, children: routeLayerChildren() } : layer,
+    );
+  });
+
+  createEffect(() => {
+    if (residentMode()) return;
+    const features = operationalRoutesForMap().features;
+    if (features.length === 0) return;
+    setLayerState((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const feature of features) {
+        const props = feature.properties as OperationalRouteFeatureProps;
+        const routeId = props.routeId ?? props.id;
+        if (routeId == null) continue;
+        const key = routeLayerStateKey(routeId);
+        if (next[key] === undefined) {
+          next[key] = true;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  });
 
   const mapMetrics = () => {
     if (residentMode() && residentOverview()) {
@@ -255,11 +322,20 @@ export default function MapPage() {
 
   const zoomIn = () => getMap()?.zoomIn({ duration: 300 });
   const zoomOut = () => getMap()?.zoomOut({ duration: 300 });
+  const recenterOperationalView = () => {
+    const map = getMap();
+    if (!map) return;
+    fitMapToOperationalData(map, {
+      vehicles: operationalFleet(),
+      routes: operationalRoutes(),
+    });
+  };
+
   const locateUser = () => {
     const map = getMap();
     if (!map) return;
     if (!navigator.geolocation) {
-      map.flyTo({ center: UNARE_CENTER, zoom: UNARE_ZOOM });
+      recenterOperationalView();
       return;
     }
     navigator.geolocation.getCurrentPosition(
@@ -270,7 +346,7 @@ export default function MapPage() {
           essential: true,
         });
       },
-      () => map.flyTo({ center: UNARE_CENTER, zoom: UNARE_ZOOM }),
+      () => recenterOperationalView(),
       { enableHighAccuracy: true, timeout: 8000 },
     );
   };
@@ -285,6 +361,11 @@ export default function MapPage() {
       const parent = mapLayers.find((l) => l.id === id);
       if (parent?.children) {
         for (const child of parent.children) {
+          next[child.id] = enabled;
+        }
+      }
+      if (id === 'routes') {
+        for (const child of routeLayerChildren()) {
           next[child.id] = enabled;
         }
       }
@@ -338,17 +419,25 @@ export default function MapPage() {
       state.routes ||
       (operatorMode() && (routeSnapshot()?.stops.length ?? 0) > 0) ||
       (residentMode() && operationalRoutes().features.length > 0);
-    setVis('operational-routes-line', routesVisible && !operatorMode() && !residentMode());
+
+    const operationalRouteData =
+      routesVisible && !operatorMode() && !residentMode()
+        ? operationalRoutesForMap()
+        : { type: 'FeatureCollection' as const, features: [] };
+
+    if (!operatorMode() && !residentMode()) {
+      ensureOperationalRouteLayer(map, operationalRouteData);
+      syncOperationalRouteLayerFilters(map, 'operational-routes', {
+        routesVisible,
+        enabledRouteIds: enabledOperationalRouteIds(operationalRouteData, state),
+        splitByStatus: true,
+      });
+    }
+
     setVis(OPERATOR_ROUTE_LAYER_ID, routesVisible && operatorMode());
     setVis(OPERATOR_ROUTE_GLOW_LAYER_ID, routesVisible && operatorMode());
     setVis(RESIDENT_SECTOR_ROUTE_LAYER_ID, routesVisible && residentMode());
     setVis(RESIDENT_SECTOR_ROUTE_GLOW_LAYER_ID, routesVisible && residentMode());
-    if (map.getSource('operational-routes')) {
-      const routes = routesVisible && !operatorMode() && !residentMode()
-        ? mapContext()?.routes ?? { type: 'FeatureCollection' as const, features: [] }
-        : { type: 'FeatureCollection' as const, features: [] };
-      ensureOperationalRouteLayer(map, routes);
-    }
     if (residentMode()) {
       ensureResidentSectorHighlight(map, residentSectorFeature());
       if (routesVisible && operationalRoutes().features.length > 0) {
@@ -462,13 +551,12 @@ export default function MapPage() {
 
   onMount(() => {
     void initAppData();
-    const map = new maplibregl.Map({
-      container: mapContainer,
-      style: mapStyleForTheme(appState.darkMode),
-      center: UNARE_CENTER,
-      zoom: UNARE_ZOOM,
-      attributionControl: false,
-    });
+    const map = new maplibregl.Map(
+      createOperationalMapOptions({
+        container: mapContainer,
+        style: mapStyleForTheme(appState.darkMode),
+      }),
+    );
     mapRef.current = map;
 
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
@@ -498,6 +586,20 @@ export default function MapPage() {
     onCleanup(() => {
       window.clearInterval(pollTimer);
       ro.disconnect();
+    });
+  });
+
+  createEffect(() => {
+    if (!mapReady() || residentMode() || operatorMode()) return;
+    mapContext();
+    const map = getMap();
+    if (!map?.isStyleLoaded()) return;
+    if (mapFocus() === 'routes') {
+      setLayerState((state) => ({ ...state, routes: true }));
+    }
+    fitMapToOperationalData(map, {
+      vehicles: operationalFleet(),
+      routes: operationalRoutes(),
     });
   });
 
@@ -605,7 +707,7 @@ export default function MapPage() {
     const dark = appState.darkMode;
     if (!mapReady()) return;
     const style = baseStyle();
-    if (style === 'satelital' || style === 'terreno') return;
+    if (style === 'satelital' || style === 'terreno' || style === 'unare-local') return;
     const next = themeBaseStyleId(dark);
     if (style !== next) changeBaseStyle(next);
   });
@@ -791,7 +893,10 @@ export default function MapPage() {
       </Show>
 
       <Show when={layersOpen()}>
-        <aside class="absolute top-16 left-3 z-20 w-64 rounded-lg border border-border bg-surface/95 p-3 shadow-lg backdrop-blur-md dark:bg-dark-surface/95 dark:border-dark-border">
+        <aside
+          class="absolute top-16 left-3 z-20 w-64 rounded-lg border border-border bg-surface/95 p-3 shadow-lg backdrop-blur-md dark:bg-dark-surface/95 dark:border-dark-border"
+          data-testid="map-layers-panel"
+        >
           <div class="mb-2 flex items-center justify-between">
             <h3 class="font-heading text-sm font-semibold text-text-primary dark:text-white">Capas</h3>
             <button type="button" class="text-text-muted hover:text-text-secondary" onClick={() => setLayersOpen(false)}>
@@ -799,7 +904,7 @@ export default function MapPage() {
             </button>
           </div>
           <ul class="space-y-1">
-            <For each={residentMode() ? mapLayers.filter((layer) => ['routes', 'containers', 'vehicles'].includes(layer.id)) : mapLayers}>
+            <For each={displayMapLayers()}>
               {(layer) => (
                 <li>
                   <label class="flex cursor-pointer items-center gap-2 py-0.5 text-sm text-text-secondary">
@@ -807,6 +912,7 @@ export default function MapPage() {
                       type="checkbox"
                       class="size-4 rounded border-border accent-fero-green-dark"
                       checked={layerState()[layer.id]}
+                      data-testid={layer.id === 'routes' ? 'map-layer-routes' : undefined}
                       onChange={() => toggleLayerItem(layer.id)}
                     />
                     {layer.label}
@@ -820,11 +926,19 @@ export default function MapPage() {
                               <input
                                 type="checkbox"
                                 class="size-3.5 rounded border-border accent-fero-green-dark"
-                                checked={layerState()[child.id]}
+                                checked={layerState()[child.id] ?? true}
                                 onChange={() => toggleLayerItem(child.id)}
                               />
                               <Show when={child.kind === 'line'}>
-                                <span class={`h-1 w-4 shrink-0 rounded-full ${child.class}`} />
+                                <span
+                                  class={`h-1 w-4 shrink-0 rounded-full ${child.class ?? ''}`}
+                                  style={{
+                                    background:
+                                      'color' in child && child.color
+                                        ? String(child.color)
+                                        : undefined,
+                                  }}
+                                />
                               </Show>
                               <Show when={child.kind === 'trash'}>
                                 <Trash2 size={12} class={child.class} />

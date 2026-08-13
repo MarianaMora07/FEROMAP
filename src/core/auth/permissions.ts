@@ -54,8 +54,8 @@ export const MAIN_NAV_ITEMS: NavItemDef[] = [
   {
     href: '/simulation',
     label: 'Simulación de escenarios',
-    description: 'Tesis — evaluar algoritmo ACO',
-    sectionBefore: 'Investigación',
+    description: 'Evaluar condiciones e impacto del algoritmo',
+    sectionBefore: 'Análisis',
     roles: ['administrador', 'planificador'],
   },
   { href: '/map', label: 'Mapa GIS', roles: ['administrador', 'planificador', 'conductor'] },

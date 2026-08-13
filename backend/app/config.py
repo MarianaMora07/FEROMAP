@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     optimization_max_workers: int = 2
     matrix_incremental_max_additions: int = 3
     driver_webhook_url: str | None = None
+    unare_mbtiles_path: str | None = None
 
 
 settings = Settings(
@@ -53,4 +54,5 @@ settings = Settings(
     optimization_max_workers=int(os.getenv("OPTIMIZATION_MAX_WORKERS", "2")),
     matrix_incremental_max_additions=int(os.getenv("MATRIX_INCREMENTAL_MAX_ADDITIONS", "3")),
     driver_webhook_url=os.getenv("DRIVER_WEBHOOK_URL") or None,
+    unare_mbtiles_path=os.getenv("UNARE_MBTILES_PATH") or None,
 )

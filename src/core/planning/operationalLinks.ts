@@ -4,6 +4,14 @@ export interface OperationalLinkParams {
   vehicleId?: string;
 }
 
+export function operationalMapHref(params: { focus?: 'routes' | 'route' | 'next'; date?: string } = {}): string {
+  const search = new URLSearchParams();
+  if (params.focus) search.set('focus', params.focus);
+  if (params.date) search.set('date', params.date);
+  const query = search.toString();
+  return query ? `/map?${query}` : '/map';
+}
+
 export function monitoringHref(params: OperationalLinkParams = {}): string {
   const search = new URLSearchParams();
   if (params.date) search.set('date', params.date);

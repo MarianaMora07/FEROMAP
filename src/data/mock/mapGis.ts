@@ -8,13 +8,18 @@ export const mapGisMetrics = [
 
 export const mapBaseStyles = [
   {
+    id: 'unare-local',
+    label: 'Unare local',
+    preview: '/api/v1/map/tiles/13/2668/3907.png',
+  },
+  {
     id: 'claro',
-    label: 'Claro',
+    label: 'Claro (dev)',
     preview: 'https://basemaps.cartocdn.com/rastertiles/voyager/12/1334/1953.png',
   },
   {
     id: 'oscuro',
-    label: 'Oscuro',
+    label: 'Oscuro (dev)',
     preview: 'https://basemaps.cartocdn.com/dark_all/12/1334/1953.png',
   },
   {
@@ -52,11 +57,11 @@ export type MapLayerItem = {
 /** Capas del panel (estructura del mockup). */
 export const mapLayers: MapLayerItem[] = [
   { id: 'streets', label: 'Calles', checked: true },
-  { id: 'neighborhoods', label: 'Barrios', checked: true },
-  { id: 'sectors', label: 'Sectores', checked: true },
+  { id: 'neighborhoods', label: 'Barrios', checked: false },
+  { id: 'sectors', label: 'Sectores', checked: false },
   {
     id: 'routes',
-    label: 'Rutas en ejecución',
+    label: 'Rutas planificadas',
     checked: true,
     children: [
       { id: 'route-01', label: 'Ruta 01', checked: true, kind: 'line', class: 'bg-fero-green-dark', filter: 'current' },

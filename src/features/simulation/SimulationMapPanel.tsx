@@ -8,7 +8,10 @@ import { bindMapTheme, mapStyleForTheme } from '../../core/utils/mapStyle';
 import { fillLevelColor } from '../../core/utils/geoUtils';
 import { buildContainerPopupHtml } from '../../core/utils/popupHtml';
 import { mapMarkerLegend, mapRouteLegend } from './simulationConfig';
-import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
+import {
+  createOperationalMapOptions,
+  fitMapToOperationalData,
+} from '../../core/map/operationalMapConfig';
 import type { ExecutionPhaseId } from './executionPhases';
 import {
   EXECUTION_MAP_LEGEND,
@@ -275,6 +278,7 @@ export function SimulationMapPanel(props: SimulationMapPanelProps) {
     map.setLayoutProperty('sim-optimized', 'visibility', 'visible');
     map.setPaintProperty('sectors-fill', 'fill-opacity', 0.07);
     map.setPaintProperty('sectors-line', 'line-opacity', 0.45);
+    fitMapToOperationalData(map, { routes: appState.routes });
   };
 
   const setupBaseLayers = (map: MapLibreMap) => {
@@ -303,13 +307,12 @@ export function SimulationMapPanel(props: SimulationMapPanelProps) {
   );
 
   onMount(() => {
-    const map = new maplibregl.Map({
-      container: mapContainer,
-      style: mapStyleForTheme(appState.darkMode),
-      center: UNARE_CENTER,
-      zoom: UNARE_ZOOM - 0.3,
-      attributionControl: false,
-    });
+    const map = new maplibregl.Map(
+      createOperationalMapOptions({
+        container: mapContainer,
+        style: mapStyleForTheme(appState.darkMode),
+      }),
+    );
     mapRef.current = map;
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
 
@@ -479,7 +482,7 @@ export function SimulationMapPanel(props: SimulationMapPanelProps) {
             type="button"
             class="flex h-8 w-8 items-center justify-center border-t border-border text-text-secondary hover:bg-surface-hover disabled:opacity-40"
             disabled={!mapReady}
-            onClick={() => mapRef.current?.flyTo({ center: UNARE_CENTER, zoom: UNARE_ZOOM - 0.3 })}
+            onClick={() => fitMapToOperationalData(mapRef.current!, { routes: appState.routes })}
             aria-label="Centrar"
           >
             <Crosshair size={14} />

@@ -498,6 +498,34 @@ def get_daily_plan_by_date(db: Session, operation_date: date) -> dict[str, Any]:
     return _daily_plan_payload(db, plan)
 
 
+ACTIVE_DAILY_PLAN_STATUSES = ("draft", "optimized", "dispatched")
+
+
+def get_active_daily_plan(
+    db: Session,
+    *,
+    operation_date: date | None = None,
+) -> DailyPlan | None:
+    """Plan operativo del día: draft/optimized/dispatched o con rutas aún activas."""
+    target = operation_date or date.today()
+    plan = db.scalar(select(DailyPlan).where(DailyPlan.operation_date == target))
+    if plan is None:
+        return None
+    if plan.status in ACTIVE_DAILY_PLAN_STATUSES:
+        return plan
+
+    has_active_routes = db.scalar(
+        select(OptimizedRoute.id)
+        .where(
+            OptimizedRoute.daily_plan_id == plan.id,
+            OptimizedRoute.route_kind == "optimized",
+            OptimizedRoute.status.in_(("pending", "in_progress")),
+        )
+        .limit(1)
+    )
+    return plan if has_active_routes is not None else None
+
+
 def get_or_create_daily_plan(db: Session, operation_date: date) -> dict[str, Any]:
     plan = db.scalar(select(DailyPlan).where(DailyPlan.operation_date == operation_date))
     if plan is None:

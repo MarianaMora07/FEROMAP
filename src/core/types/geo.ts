@@ -50,5 +50,26 @@ export interface FleetSummary {
   driversOnShift: number;
 }
 
+/** Centro operativo (depósito) — Parroquia Unare. */
 export const UNARE_CENTER: [number, number] = [-62.715, 8.295];
 export const UNARE_ZOOM = 13.5;
+
+/**
+ * Área de estudio operativa (lon/lat).
+ * Debe coincidir con `UNARE_BBOX` en `backend/app/services/graph_service.py`.
+ */
+export const UNARE_BBOX = {
+  minLng: -62.81,
+  minLat: 8.24,
+  maxLng: -62.69,
+  maxLat: 8.31,
+} as const;
+
+/** Límites MapLibre `maxBounds`: [[swLng, swLat], [neLng, neLat]]. */
+export const UNARE_BOUNDS: [[number, number], [number, number]] = [
+  [UNARE_BBOX.minLng, UNARE_BBOX.minLat],
+  [UNARE_BBOX.maxLng, UNARE_BBOX.maxLat],
+];
+
+/** Query `bbox` para `/api/v1/map/context` (`minLng,minLat,maxLng,maxLat`). */
+export const UNARE_BBOX_QUERY = `${UNARE_BBOX.minLng},${UNARE_BBOX.minLat},${UNARE_BBOX.maxLng},${UNARE_BBOX.maxLat}`;

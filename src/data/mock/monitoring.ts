@@ -143,11 +143,24 @@ export const monitoringMapRoutes = {
   features: [
     {
       type: 'Feature' as const,
-      properties: { color: '#34D634' },
+      properties: {
+        id: 'route-1',
+        routeId: 1,
+        label: 'Ruta TR-08',
+        color: '#34D634',
+        vehicleId: 'TR-08',
+        status: 'in_progress',
+        routeKind: 'optimized',
+        waypointsTotal: 18,
+        waypointsDone: 12,
+      },
       geometry: {
         type: 'LineString' as const,
         coordinates: [
-          [-62.728, 8.3],
+          [-62.715, 8.295],
+          [-62.718, 8.296],
+          [-62.721, 8.297],
+          [-62.724, 8.298],
           [-62.72, 8.297],
           [-62.714, 8.294],
           [-62.708, 8.29],
@@ -156,10 +169,22 @@ export const monitoringMapRoutes = {
     },
     {
       type: 'Feature' as const,
-      properties: { color: '#1143F3' },
+      properties: {
+        id: 'route-2',
+        routeId: 2,
+        label: 'Ruta TR-04',
+        color: '#1143F3',
+        vehicleId: 'TR-04',
+        status: 'in_progress',
+        routeKind: 'optimized',
+        waypointsTotal: 16,
+        waypointsDone: 9,
+      },
       geometry: {
         type: 'LineString' as const,
         coordinates: [
+          [-62.715, 8.295],
+          [-62.717, 8.297],
           [-62.718, 8.298],
           [-62.712, 8.293],
           [-62.706, 8.289],
@@ -168,11 +193,24 @@ export const monitoringMapRoutes = {
     },
     {
       type: 'Feature' as const,
-      properties: { color: '#7c3aed' },
+      properties: {
+        id: 'route-3',
+        routeId: 3,
+        label: 'Ruta TR-02',
+        color: '#7c3aed',
+        vehicleId: 'TR-02',
+        status: 'pending',
+        routeKind: 'optimized',
+        waypointsTotal: 15,
+        waypointsDone: 0,
+      },
       geometry: {
         type: 'LineString' as const,
         coordinates: [
+          [-62.715, 8.295],
+          [-62.719, 8.291],
           [-62.722, 8.288],
+          [-62.718, 8.286],
           [-62.716, 8.286],
           [-62.71, 8.282],
         ],
