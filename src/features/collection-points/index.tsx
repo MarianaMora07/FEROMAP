@@ -21,6 +21,7 @@ import {
   Crosshair,
   Download,
   Eye,
+  MapPin,
   Minus,
   Pencil,
   Plus,
@@ -73,8 +74,11 @@ import {
 import { toggleLocalPriorityBoost } from '../../core/utils/collectionPointsOptimization';
 import { ApiError, useMocks } from '../../core/api/client';
 import { fetchSectors } from '../../core/api/sectors';
-import { canManageCollectionPoints } from '../../core/auth/permissions';
+import { canManageCollectionPoints, isResident } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
+import { fetchResidentOverview } from '../../core/api/resident';
+import { residentHubHref, residentMapHref } from '../../core/resident/residentDeepLinks';
+import { ResidentBreadcrumbs } from '../resident/ResidentBreadcrumbs';
 import { appState } from '../../core/stores/appStore';
 import { CollectionPointActionsMenu } from './CollectionPointActionsMenu';
 import { CollectionPointOptimizationBadges } from './CollectionPointOptimizationBadges';
@@ -209,6 +213,12 @@ export default function CollectionPointsPage() {
     return enrichCollectionPointsWithOptimization(points, context);
   });
   const canManage = () => canManageCollectionPoints(authUser()?.role);
+  const isResidentView = () => isResident(authUser()?.role);
+  const residentSectorName = () => authUser()?.sectorName ?? 'tu sector';
+  const [residentOverview] = createResource(
+    () => (isResidentView() ? 'resident-points' : null),
+    () => fetchResidentOverview(),
+  );
   const pointsLoading = () => apiPoints.loading;
   const pointsError = () => apiPoints.error;
   const summaryLoading = () => pointsSummary.loading;
@@ -243,6 +253,14 @@ export default function CollectionPointsPage() {
     const fromPoints = allPoints().map((p) => p.sector);
     const names = fromApi.length > 0 ? fromApi : fromPoints;
     return buildSectorFilterOptions(names);
+  });
+
+  createEffect(() => {
+    if (!isResidentView()) return;
+    const sector = authUser()?.sectorName;
+    if (sector && sectorFilter() !== sector) {
+      setSectorFilter(sector);
+    }
   });
 
   const filtered = createMemo(() => {
@@ -674,12 +692,49 @@ export default function CollectionPointsPage() {
 
   return (
     <div class="space-y-5">
-      <Show when={authUser()?.role === 'residente' && authUser()?.sectorName}>
-        <div class="rounded-xl border border-fero-blue/30 bg-fero-blue/10 px-4 py-3">
-          <p class="text-sm font-semibold text-fero-blue">Horario de recolección — {authUser()!.sectorName}</p>
-          <p class="mt-1 text-sm text-text-secondary">
-            Lunes, miércoles y viernes · Ventana estimada 07:00–12:00 · Solo ves contenedores de tu sector.
-          </p>
+      <Show when={isResidentView()}>
+        <div class="space-y-3">
+          <ResidentBreadcrumbs
+            items={[
+              { label: 'Mi Recolección', href: residentHubHref() },
+              { label: 'Puntos de recolección' },
+            ]}
+          />
+          <div
+            role="status"
+            class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-fero-green/30 bg-fero-green/5 px-4 py-3 dark:border-fero-green/40 dark:bg-fero-green/10"
+          >
+            <div>
+              <p class="text-sm font-semibold text-fero-green-dark dark:text-fero-green">
+                Viendo puntos de {residentSectorName()}
+              </p>
+              <Show when={residentOverview()?.schedule.hasSchedule}>
+                <p class="mt-0.5 text-xs text-text-secondary">
+                  Recolección {residentOverview()!.schedule.collectionDays} ·{' '}
+                  {residentOverview()!.schedule.window} · Solo lectura
+                </p>
+              </Show>
+              <Show when={!residentOverview()?.schedule.hasSchedule}>
+                <p class="mt-0.5 text-xs text-text-secondary">
+                  Contenedores de tu barrio — vista de consulta
+                </p>
+              </Show>
+            </div>
+            <div class="flex flex-wrap gap-2 shrink-0">
+              <A href={residentMapHref({ focus: 'sector', sectorId: authUser()?.sectorId ?? undefined })}>
+                <Button variant="outline" size="sm" class="gap-2">
+                  <MapPin size={14} />
+                  Mapa mi sector
+                </Button>
+              </A>
+              <A href={residentHubHref()}>
+                <Button variant="outline" size="sm" class="gap-2 shrink-0">
+                  <ArrowRight size={14} class="rotate-180" />
+                  Volver a Mi Recolección
+                </Button>
+              </A>
+            </div>
+          </div>
         </div>
       </Show>
       <Show when={pointsError()}>
@@ -794,13 +849,15 @@ export default function CollectionPointsPage() {
                   {(o) => <option value={o.value}>{o.label}</option>}
                 </For>
               </select>
-              <select
-                value={sectorFilter()}
-                onChange={(e) => applyFilters({ sector: e.currentTarget.value })}
-                class="rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-text-secondary dark:bg-dark-surface-hover dark:border-dark-border"
-              >
-                <For each={sectorOptions()}>{(o) => <option value={o.value}>{o.label}</option>}</For>
-              </select>
+              <Show when={!isResidentView()}>
+                <select
+                  value={sectorFilter()}
+                  onChange={(e) => applyFilters({ sector: e.currentTarget.value })}
+                  class="rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-text-secondary dark:bg-dark-surface-hover dark:border-dark-border"
+                >
+                  <For each={sectorOptions()}>{(o) => <option value={o.value}>{o.label}</option>}</For>
+                </select>
+              </Show>
               <p class="text-xs text-text-muted">{filtered().length} puntos visibles en el mapa</p>
             </div>
           </Show>
@@ -864,13 +921,16 @@ export default function CollectionPointsPage() {
             >
               <For each={collectionPointStatusOptions}>{(o) => <option value={o.value}>{o.label}</option>}</For>
             </select>
-            <select
-              value={sectorFilter()}
-              onChange={(e) => applyFilters({ sector: e.currentTarget.value })}
-              class="rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-text-secondary dark:bg-dark-surface-hover dark:border-dark-border"
-            >
-              <For each={sectorOptions()}>{(o) => <option value={o.value}>{o.label}</option>}</For>
-            </select>
+            <Show when={!isResidentView()}>
+              <select
+                value={sectorFilter()}
+                onChange={(e) => applyFilters({ sector: e.currentTarget.value })}
+                class="rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-text-secondary dark:bg-dark-surface-hover dark:border-dark-border"
+              >
+                <For each={sectorOptions()}>{(o) => <option value={o.value}>{o.label}</option>}</For>
+              </select>
+            </Show>
+            <Show when={!isResidentView()}>
             <button
               type="button"
               class="flex h-8 w-8 items-center justify-center rounded-md border border-border text-text-secondary hover:bg-surface-hover disabled:opacity-40"
@@ -881,6 +941,7 @@ export default function CollectionPointsPage() {
             >
               <Download size={14} />
             </button>
+            </Show>
           </div>
 
           <div class="min-h-0 flex-1 overflow-auto">
@@ -892,7 +953,9 @@ export default function CollectionPointsPage() {
                   <th class="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted">Sector</th>
                   <th class="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted">Nivel</th>
                   <th class="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted">Estado</th>
-                  <th class="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted">Acciones</th>
+                  <th class="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+                    {isResidentView() ? 'Consulta' : 'Acciones'}
+                  </th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-border dark:divide-dark-border">
@@ -934,11 +997,13 @@ export default function CollectionPointsPage() {
                       <td class="px-3 py-2.5">
                         <div class="space-y-1">
                           <StatusBadge status={p.status} />
-                          <CollectionPointOptimizationBadges
-                            usedInLastOptimization={p.usedInLastOptimization}
-                            priorityBoost={p.priorityBoost}
-                            compact
-                          />
+                          <Show when={canManage()}>
+                            <CollectionPointOptimizationBadges
+                              usedInLastOptimization={p.usedInLastOptimization}
+                              priorityBoost={p.priorityBoost}
+                              compact
+                            />
+                          </Show>
                         </div>
                       </td>
                       <td class="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
@@ -946,6 +1011,19 @@ export default function CollectionPointsPage() {
                           <button type="button" class="flex h-7 w-7 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover hover:text-fero-blue" aria-label="Ver" onClick={() => selectPoint(p)}>
                             <Eye size={14} />
                           </button>
+                          <Show when={isResidentView()}>
+                            <A
+                              href={residentMapHref({
+                                focus: 'sector',
+                                sectorId: authUser()?.sectorId ?? undefined,
+                              })}
+                              class="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-medium text-fero-blue hover:bg-surface-hover"
+                              title="Ver en mapa mi sector"
+                            >
+                              <MapPin size={13} />
+                              Mapa
+                            </A>
+                          </Show>
                           <Show when={canManage()}>
                             <button
                               type="button"
@@ -1020,10 +1098,12 @@ export default function CollectionPointsPage() {
                     <h4 class="font-heading text-lg font-bold text-text-primary dark:text-white">{p().label}</h4>
                     <StatusBadge status={p().status} />
                   </div>
-                  <CollectionPointOptimizationBadges
-                    usedInLastOptimization={p().usedInLastOptimization}
-                    priorityBoost={p().priorityBoost}
-                  />
+                  <Show when={canManage()}>
+                    <CollectionPointOptimizationBadges
+                      usedInLastOptimization={p().usedInLastOptimization}
+                      priorityBoost={p().priorityBoost}
+                    />
+                  </Show>
                   <p class="text-sm text-text-secondary">{p().address}</p>
                   <p class="text-xs text-text-muted">Sector {p().sector}</p>
                 </div>
@@ -1072,6 +1152,18 @@ export default function CollectionPointsPage() {
                 <Button variant="primary" size="sm" onClick={() => setHistoryDrawerOpen(true)}>
                   Ver historial
                 </Button>
+                <Show when={isResidentView()}>
+                  <A
+                    href={residentMapHref({
+                      focus: 'sector',
+                      sectorId: authUser()?.sectorId ?? undefined,
+                    })}
+                  >
+                    <Button variant="outline" size="sm" class="gap-2" icon={<MapPin size={14} />}>
+                      Ver en mapa
+                    </Button>
+                  </A>
+                </Show>
                 <Show when={canManage()}>
                   <Button variant="outline" size="sm" icon={<Pencil size={14} />} onClick={() => openEditForm()}>
                     Editar

@@ -28,7 +28,7 @@ import {
   KpiCard,
   ProgressBar,
 } from '../../design-system/components';
-import { canOptimize, isConductor } from '../../core/auth/permissions';
+import { canOptimize, isConductor, isResident } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
 import {
   activeRoutes as mockActiveRoutes,
@@ -43,6 +43,7 @@ import { analyticsHref, reportsHref, simulationResultsHref } from '../../core/ut
 import { DashboardMiniMap } from './DashboardMiniMap';
 import { PlanningWidgets } from './PlanningWidgets';
 import { OperatorHubSection } from '../operator/OperatorHubSection';
+import { ResidentHubSection } from '../resident/ResidentHubSection';
 
 const alertIcon: Record<'danger' | 'warning' | 'info', () => JSX.Element> = {
   danger: () => <AlertTriangle size={16} />,
@@ -195,9 +196,14 @@ export default function DashboardPage() {
 
   const showPlannerActions = () => canOptimize(authUser()?.role);
   const showOperatorView = () => isConductor(authUser()?.role);
+  const showResidentView = () => isResident(authUser()?.role);
 
   return (
     <div class="space-y-4 md:space-y-5">
+      <Show when={showResidentView()}>
+        <ResidentHubSection variant="dashboard" />
+      </Show>
+
       <Show when={showOperatorView()}>
         <OperatorHubSection variant="dashboard" />
       </Show>
@@ -205,7 +211,7 @@ export default function DashboardPage() {
       <Show when={showPlannerActions()}>
         <PlanningWidgets />
       </Show>
-      <Show when={residentSchedule()}>
+      <Show when={!showResidentView() && residentSchedule()}>
         {(schedule) => (
           <div class="rounded-xl border border-fero-blue/30 bg-fero-blue/10 px-4 py-3">
             <p class="text-sm font-semibold text-fero-blue">{schedule().message}</p>
@@ -216,7 +222,7 @@ export default function DashboardPage() {
           </div>
         )}
       </Show>
-      <Show when={lastOptimization() && !showOperatorView()}>
+      <Show when={!showOperatorView() && !showResidentView() && lastOptimization()}>
         {(opt) => (
           <div class="rounded-xl border border-fero-green/30 bg-fero-green/10 px-4 py-3">
             <div class="flex flex-wrap items-start justify-between gap-2">
@@ -225,9 +231,9 @@ export default function DashboardPage() {
                   Última simulación — {opt().scenarioName}
                 </p>
                 <p class="mt-1 text-sm text-text-secondary">
-                  Ahorro de {opt().savingPercentage.toFixed(1)}% en distancia ·{' '}
-                  {opt().kpis.distanceKm.current} km → {opt().kpis.distanceKm.optimized} km ·{' '}
-                  {opt().kpis.containersServed} contenedores atendidos
+                  Ahorro de {(opt().savingPercentage ?? 0).toFixed(1)}% en distancia ·{' '}
+                  {opt().kpis?.distanceKm?.current ?? '—'} km → {opt().kpis?.distanceKm?.optimized ?? '—'} km ·{' '}
+                  {opt().kpis?.containersServed ?? '—'} contenedores atendidos
                 </p>
               </div>
               <div class="flex shrink-0 flex-wrap gap-2">
@@ -258,7 +264,7 @@ export default function DashboardPage() {
         )}
       </Show>
 
-      <Show when={!showOperatorView()}>
+      <Show when={!showOperatorView() && !showResidentView()}>
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           title="Residuos recolectados hoy"

@@ -123,6 +123,7 @@ def seed_into_session(session: Session) -> dict[str, Any]:
     session.flush()
 
     first_sector = next(iter(sector_by_name.values()))
+    resident_sector = sector_by_name.get("Unare I", first_sector)
 
     session.add(
         User(
@@ -154,7 +155,7 @@ def seed_into_session(session: Session) -> dict[str, Any]:
             last_name="Residente",
             phone="+58 424-555-0200",
             role=UserRole.residente,
-            sector_id=first_sector.id,
+            sector_id=resident_sector.id,
             active=True,
         )
     )

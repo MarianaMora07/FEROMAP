@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.db.models import CollectionPoint, Driver, OptimizedRoute, RouteWaypoint, Simulation, User, UserRole, Vehicle, Vehicle
 from app.services.auth_service import role_label
 from app.services.geo_service import fill_level_pct, fleet_summary, route_geojson, seed_meta_by_code
+from app.services.resident_schedule_service import build_resident_schedule
 from app.services.alert_service import list_alerts as list_persisted_alerts
 from app.services.operations_service import active_routes_view
 from app.services.planning_analytics_service import planning_dashboard_snapshot
@@ -143,12 +144,18 @@ def dashboard_summary(db: Session, *, current_user: User | None = None) -> dict[
         user_block = {"name": "Mariana Mora", "role": "Administrador", "initials": "MM"}
 
     resident_schedule = None
-    if current_user is not None and current_user.role == UserRole.residente and current_user.sector:
+    if current_user is not None and current_user.role == UserRole.residente and current_user.sector_id:
+        schedule = build_resident_schedule(db, sector_id=current_user.sector_id)
         resident_schedule = {
-            "sectorName": current_user.sector.name,
-            "collectionDays": "Lunes, miércoles y viernes",
-            "nextCollection": "Próximo miércoles 07:00",
-            "message": f"Horario de recolección en {current_user.sector.name}",
+            "sectorName": current_user.sector.name if current_user.sector else "—",
+            "collectionDays": schedule["collectionDays"],
+            "nextCollection": schedule["nextCollection"],
+            "isCollectionDay": schedule["isCollectionDay"],
+            "message": (
+                f"Horario de recolección en {current_user.sector.name}"
+                if schedule.get("hasSchedule")
+                else f"Sin recolección programada en {current_user.sector.name}"
+            ),
         }
 
     return {
