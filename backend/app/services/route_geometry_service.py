@@ -13,6 +13,8 @@ from app.services.graph_service import (
     build_tour_coordinates,
     load_road_graph,
     nearest_node,
+    nearest_node_in_component,
+    weakly_connected_component_nodes,
 )
 
 logger = logging.getLogger(__name__)
@@ -66,14 +68,27 @@ def _road_line_coords(
         return None
 
     graph = load_road_graph()
-    depot_node = nearest_node(graph, DEPOT_LON, DEPOT_LAT)
-    node_seq: list[int] = [depot_node] if include_depot else []
+    if graph is None:
+        return None
+
+    # Anclar al componente del primer contenedor: el depósito puede caer en otra
+    # "isla" del GraphML y eso genera diagonales que cruzan el mapa.
+    seed_node = nearest_node(graph, waypoint_coords[0][0], waypoint_coords[0][1])
+    component = weakly_connected_component_nodes(graph, seed_node)
+
+    node_seq: list[int] = []
+    if include_depot:
+        node_seq.append(
+            nearest_node_in_component(graph, DEPOT_LON, DEPOT_LAT, component)
+        )
 
     for lng, lat in waypoint_coords:
-        node_seq.append(nearest_node(graph, lng, lat))
+        node_seq.append(nearest_node_in_component(graph, lng, lat, component))
 
     if include_depot:
-        node_seq.append(depot_node)
+        node_seq.append(
+            nearest_node_in_component(graph, DEPOT_LON, DEPOT_LAT, component)
+        )
 
     if len(node_seq) < 2:
         return None
@@ -84,6 +99,30 @@ def _road_line_coords(
     if len(road_coords) >= 2:
         return road_coords
     return None
+
+
+def snap_lonlat_sequence(
+    coordinates: Sequence[Sequence[float]],
+    *,
+    include_depot: bool = False,
+) -> list[list[float]]:
+    """Ajusta una secuencia [lng, lat] al grafo vial OSMnx; fallback a la secuencia original."""
+    waypoint_coords = [
+        (float(pair[0]), float(pair[1]))
+        for pair in coordinates
+        if len(pair) >= 2
+    ]
+    if len(waypoint_coords) < 1:
+        return []
+
+    try:
+        road_coords = _road_line_coords(waypoint_coords, include_depot=include_depot)
+        if road_coords:
+            return road_coords
+    except Exception as exc:
+        logger.debug("Snap de coordenadas no disponible, usando secuencia original: %s", exc)
+
+    return _straight_line_coords(waypoint_coords, include_depot=include_depot)
 
 
 def build_route_linestring(

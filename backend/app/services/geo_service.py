@@ -7,6 +7,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import CollectionPoint, OptimizedRoute, RouteWaypoint, Sector, Vehicle
+from app.services.route_geometry_service import (
+    build_route_linestring_cached,
+    snap_lonlat_sequence,
+)
 from app.services.seed_loader import load_seed
 from app.services.simulation_routes import latest_computed_routes
 
@@ -123,6 +127,7 @@ def route_geojson(db: Session, kind: str) -> dict[str, Any]:
 
     route_row = route_geo_by_kind(kind)
     if route_row:
+        coordinates = snap_lonlat_sequence(route_row["coordinates"], include_depot=False)
         return {
             "type": "FeatureCollection",
             "features": [
@@ -137,7 +142,7 @@ def route_geojson(db: Session, kind: str) -> dict[str, Any]:
                     },
                     "geometry": {
                         "type": "LineString",
-                        "coordinates": route_row["coordinates"],
+                        "coordinates": coordinates,
                     },
                 }
             ],
@@ -158,11 +163,7 @@ def route_geojson(db: Session, kind: str) -> dict[str, Any]:
         .options(joinedload(RouteWaypoint.collection_point))
         .order_by(RouteWaypoint.sequence_order)
     ).all()
-    coordinates = [
-        [float(wp.collection_point.longitude), float(wp.collection_point.latitude)]
-        for wp in waypoints
-        if wp.collection_point is not None
-    ]
+    coordinates = build_route_linestring_cached(db_route, waypoints, include_depot=True)
     distance_km = float(db_route.total_distance_meters or 0) / 1000
     duration_min = int((db_route.estimated_duration_seconds or 0) / 60)
     return {

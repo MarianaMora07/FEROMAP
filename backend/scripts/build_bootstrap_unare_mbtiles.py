@@ -138,7 +138,7 @@ def main() -> None:
         bbox=UNARE_BBOX,
     )
     size_mb = output.stat().st_size / (1024 * 1024)
-    print(f"Listo: {count} tiles, {size_mb:.1f} MB → {output}")
+    print(f"Listo: {count} tiles, {size_mb:.1f} MB -> {output}")
 
 
 if __name__ == "__main__":

@@ -27,6 +27,11 @@ async function expectSidebarDark(page: Page, dark: boolean) {
     .toBe(dark);
 }
 
+async function toggleThemeFromUserMenu(page: Page) {
+  await page.getByTestId('user-menu-trigger').click();
+  await page.getByTestId('user-menu-theme-toggle').click();
+}
+
 async function captureSidebar(page: Page, filename: string) {
   const sidebar = page.getByTestId('app-sidebar');
   await expect(sidebar).toBeVisible();
@@ -42,7 +47,7 @@ test.describe('Modo oscuro integrado — sidebar', () => {
     await expectSidebarDark(page, false);
     await captureSidebar(page, 'sidebar-planner-light.png');
 
-    await page.getByTestId('sidebar-theme-toggle').click();
+    await toggleThemeFromUserMenu(page);
     await expectSidebarDark(page, true);
     await captureSidebar(page, 'sidebar-planner-dark.png');
   });
@@ -52,7 +57,7 @@ test.describe('Modo oscuro integrado — sidebar', () => {
     await stubProfileTheme(page, 'light');
     await ensurePlannerSession(page, '/');
 
-    await page.getByTestId('sidebar-theme-toggle').click();
+    await toggleThemeFromUserMenu(page);
     await expectSidebarDark(page, true);
 
     await stubProfileTheme(page, 'dark');
@@ -63,7 +68,7 @@ test.describe('Modo oscuro integrado — sidebar', () => {
   test('operador: nav reducida visible en dark', async ({ page }) => {
     expectNoPageErrors(page);
     await ensureOperatorSession(page, '/operator');
-    await page.getByTestId('sidebar-theme-toggle').click();
+    await toggleThemeFromUserMenu(page);
     await expectSidebarDark(page, true);
 
     await expect(page.getByTestId('sidebar-nav-operator')).toBeVisible();
@@ -76,7 +81,7 @@ test.describe('Modo oscuro integrado — sidebar', () => {
   test('residente: nav reducida visible en dark', async ({ page }) => {
     expectNoPageErrors(page);
     await loginResidentFromScratch(page);
-    await page.getByTestId('sidebar-theme-toggle').click();
+    await toggleThemeFromUserMenu(page);
     await expectSidebarDark(page, true);
 
     await expect(page.getByTestId('sidebar-nav-resident')).toBeVisible();
