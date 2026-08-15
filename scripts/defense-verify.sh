@@ -35,14 +35,14 @@ echo "▶ 2/7 Autenticación (${DEMO_EMAIL})…"
 login_json="$(curl -sf -X POST "${API_BASE}/api/v1/auth/login" \
   -H 'Content-Type: application/json' \
   -d "{\"email\":\"${DEMO_EMAIL}\",\"password\":\"${DEMO_PASSWORD}\"}")"
-TOKEN="$(echo "${login_json}" | python3 -c "import sys,json; print(json.load(sys.stdin)['accessToken'])")"
-ROLE="$(echo "${login_json}" | python3 -c "import sys,json; print(json.load(sys.stdin)['user']['role'])")"
+TOKEN="$(echo "${login_json}" | python -c "import sys,json; print(json.load(sys.stdin)['accessToken'])")"
+ROLE="$(echo "${login_json}" | python -c "import sys,json; print(json.load(sys.stdin)['user']['role'])")"
 echo "   ✅ Login OK (rol: ${ROLE})"
 
 echo ""
 echo "▶ 3/7 Datos GIS (sectores y contenedores)…"
-sectors_count="$(curl -sf "${API_BASE}/api/v1/sectors" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('features',[])))")"
-points_count="$(curl -sf "${API_BASE}/api/v1/collection-points" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('features',[])))")"
+sectors_count="$(curl -sf "${API_BASE}/api/v1/sectors" | python -c "import sys,json; print(len(json.load(sys.stdin).get('features',[])))")"
+points_count="$(curl -sf "${API_BASE}/api/v1/collection-points" | python -c "import sys,json; print(len(json.load(sys.stdin).get('features',[])))")"
 if [[ "${sectors_count}" -lt 1 || "${points_count}" -lt 1 ]]; then
   echo "❌ Datos insuficientes (sectores=${sectors_count}, puntos=${points_count}). Ejecuta: just seed" >&2
   exit 1
@@ -55,7 +55,7 @@ job_json="$(curl -sf -X POST "${API_BASE}/api/v1/simulations/optimize" \
   -H "Authorization: Bearer ${TOKEN}" \
   -H 'Content-Type: application/json' \
   -d '{"scenarioId":"normal"}')"
-job_id="$(echo "${job_json}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('jobId',''))")"
+job_id="$(echo "${job_json}" | python -c "import sys,json; print(json.load(sys.stdin).get('jobId',''))")"
 if [[ -z "${job_id}" ]]; then
   echo "❌ Optimización no devolvió jobId" >&2
   exit 1
@@ -64,7 +64,7 @@ optimize_json=""
 deadline=$((SECONDS + 120))
 while [[ "${SECONDS}" -lt "${deadline}" ]]; do
   optimize_json="$(curl -sf -H "Authorization: Bearer ${TOKEN}" "${API_BASE}/api/v1/simulations/jobs/${job_id}")"
-  status="$(echo "${optimize_json}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))")"
+  status="$(echo "${optimize_json}" | python -c "import sys,json; print(json.load(sys.stdin).get('status',''))")"
   if [[ "${status}" == "completed" ]]; then
     break
   fi
@@ -74,13 +74,13 @@ while [[ "${SECONDS}" -lt "${deadline}" ]]; do
   fi
   sleep 1
 done
-sim_id="$(echo "${optimize_json}" | python3 -c "
+sim_id="$(echo "${optimize_json}" | python -c "
 import sys, json
 d = json.load(sys.stdin)
 result = d.get('result') or {}
 print(result.get('simulationId',''))
 ")"
-saving="$(echo "${optimize_json}" | python3 -c "
+saving="$(echo "${optimize_json}" | python -c "
 import sys, json
 d = json.load(sys.stdin)
 result = d.get('result') or {}
@@ -113,7 +113,7 @@ if [[ "${COMPOSE_ENV}" == "prod" ]]; then
   curl -sf "${FRONT_BASE}/health" >/dev/null
   nginx_opt="$(curl -sf -X POST "${FRONT_BASE}/api/v1/auth/login" \
     -H 'Content-Type: application/json' \
-    -d "{\"email\":\"${DEMO_EMAIL}\",\"password\":\"${DEMO_PASSWORD}\"}" | python3 -c "import sys,json; print('ok' if json.load(sys.stdin).get('accessToken') else 'fail')")"
+    -d "{\"email\":\"${DEMO_EMAIL}\",\"password\":\"${DEMO_PASSWORD}\"}" | python -c "import sys,json; print('ok' if json.load(sys.stdin).get('accessToken') else 'fail')")"
   if [[ "${nginx_opt}" != "ok" ]]; then
     echo "❌ Login vía Nginx /api falló" >&2
     exit 1
