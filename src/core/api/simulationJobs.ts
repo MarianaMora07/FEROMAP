@@ -24,6 +24,7 @@ export interface OptimizeJobResult {
   simulationId: number;
   scenarioId: ScenarioId;
   kpis: KpiMetrics;
+  dailyPlanId?: number | null;
   routes: {
     current: RouteCollection;
     optimized: RouteCollection;

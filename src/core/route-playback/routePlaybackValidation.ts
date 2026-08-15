@@ -3,8 +3,14 @@ import type {
   RoutePlaybackCoordinate,
   RoutePlaybackModel,
   RoutePlaybackStop,
+  RoutePlaybackStopType,
+  SimulationRoutePlaybackResponse,
 } from './routePlaybackTypes';
-import { ROUTE_PLAYBACK_MAX_ROUTES } from './routePlaybackTypes';
+import {
+  ROUTE_PLAYBACK_LANDFILL_CODE,
+  ROUTE_PLAYBACK_MAX_ROUTES,
+  ROUTE_PLAYBACK_STOP_TYPES,
+} from './routePlaybackTypes';
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
@@ -19,18 +25,61 @@ function isCoordinatePair(value: unknown): value is RoutePlaybackCoordinate {
   );
 }
 
+export function isRoutePlaybackStopType(value: unknown): value is RoutePlaybackStopType {
+  return (
+    typeof value === 'string' &&
+    (ROUTE_PLAYBACK_STOP_TYPES as readonly string[]).includes(value)
+  );
+}
+
+/** Infiere el tipo de parada cuando el payload legacy no trae `stopType`. */
+export function inferRoutePlaybackStopType(
+  code: string,
+  stopType?: unknown,
+): RoutePlaybackStopType {
+  if (stopType === 'landfill') return 'landfill';
+  if (stopType === 'collection') return 'collection';
+  return code.toUpperCase() === ROUTE_PLAYBACK_LANDFILL_CODE ? 'landfill' : 'collection';
+}
+
+export function isLandfillPlaybackStop(stop: Pick<RoutePlaybackStop, 'code' | 'stopType'>): boolean {
+  return stop.stopType === 'landfill';
+}
+
+/** Normaliza paradas crudas de API/map-context al contrato Fase 10. */
+export function normalizeRoutePlaybackStop(value: unknown): RoutePlaybackStop | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Partial<RoutePlaybackStop> & { stopType?: unknown };
+  if (
+    !isFiniteNumber(raw.sequence) ||
+    !isFiniteNumber(raw.lng) ||
+    !isFiniteNumber(raw.lat) ||
+    typeof raw.code !== 'string' ||
+    raw.code.length === 0 ||
+    !isFiniteNumber(raw.serviceMinutes) ||
+    raw.serviceMinutes <= 0
+  ) {
+    return null;
+  }
+  return {
+    sequence: raw.sequence,
+    lng: raw.lng,
+    lat: raw.lat,
+    code: raw.code,
+    serviceMinutes: raw.serviceMinutes,
+    stopType: inferRoutePlaybackStopType(raw.code, raw.stopType),
+  };
+}
+
 export function isRoutePlaybackStop(value: unknown): value is RoutePlaybackStop {
+  const normalized = normalizeRoutePlaybackStop(value);
+  if (!normalized) return false;
   if (!value || typeof value !== 'object') return false;
   const stop = value as RoutePlaybackStop;
-  return (
-    isFiniteNumber(stop.sequence) &&
-    isFiniteNumber(stop.lng) &&
-    isFiniteNumber(stop.lat) &&
-    typeof stop.code === 'string' &&
-    stop.code.length > 0 &&
-    isFiniteNumber(stop.serviceMinutes) &&
-    stop.serviceMinutes > 0
-  );
+  if (stop.stopType !== undefined && !isRoutePlaybackStopType(stop.stopType)) {
+    return false;
+  }
+  return true;
 }
 
 export function isRoutePlaybackModel(value: unknown): value is RoutePlaybackModel {
@@ -61,8 +110,24 @@ export function isDailyRoutePlaybackResponse(
 ): value is DailyRoutePlaybackResponse {
   if (!value || typeof value !== 'object') return false;
   const payload = value as DailyRoutePlaybackResponse;
+  const hasPlanId = typeof payload.dailyPlanId === 'number' && payload.dailyPlanId > 0;
+  const hasSimulationId = typeof payload.simulationId === 'number' && payload.simulationId > 0;
   return (
-    isFiniteNumber(payload.dailyPlanId) &&
+    (hasPlanId || hasSimulationId) &&
+    typeof payload.operationDate === 'string' &&
+    typeof payload.previewMode === 'boolean' &&
+    Array.isArray(payload.routes) &&
+    payload.routes.length <= ROUTE_PLAYBACK_MAX_ROUTES &&
+    payload.routes.every(isRoutePlaybackModel)
+  );
+}
+
+export function isSimulationRoutePlaybackResponse(
+  value: unknown,
+): value is SimulationRoutePlaybackResponse {
+  return (
+    typeof payload.simulationId === 'number' &&
+    payload.simulationId > 0 &&
     typeof payload.operationDate === 'string' &&
     typeof payload.previewMode === 'boolean' &&
     Array.isArray(payload.routes) &&

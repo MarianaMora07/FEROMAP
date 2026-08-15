@@ -2,6 +2,7 @@ import { Show } from 'solid-js';
 import { ProgressBar } from '../../design-system/components';
 import { PlanningStatusBadge } from '../planning/PlanningStatusBadge';
 import { formatNextStopLabel } from '../../core/utils/landfillUx';
+import type { OperatorPlaybackSync } from '../../core/operator/operatorPlaybackUx';
 
 interface OperatorJourneyStripProps {
   operationDate: string;
@@ -13,10 +14,15 @@ interface OperatorJourneyStripProps {
   nextPoint?: string | null;
   nextStopType?: string | null;
   shiftUtilizationPct?: number | null;
+  /** Cuando hay playback activo, sincroniza avance y próxima parada. */
+  playbackSync?: OperatorPlaybackSync | null;
 }
 
 export function OperatorJourneyStrip(props: OperatorJourneyStripProps) {
-  const nextLabel = () => formatNextStopLabel(props.nextPoint, props.nextStopType);
+  const progress = () => props.playbackSync?.progress ?? props.progress;
+  const nextPoint = () => props.playbackSync?.nextPoint ?? props.nextPoint;
+  const nextStopType = () => props.playbackSync?.nextStopType ?? props.nextStopType;
+  const nextLabel = () => formatNextStopLabel(nextPoint(), nextStopType());
 
   return (
     <div
@@ -48,9 +54,9 @@ export function OperatorJourneyStrip(props: OperatorJourneyStripProps) {
         <div class="min-w-40 flex-1">
           <div class="mb-1 flex items-center justify-between text-xs text-text-muted">
             <span>Avance de ruta</span>
-            <span class="font-semibold text-text-primary dark:text-white">{props.progress}%</span>
+            <span class="font-semibold text-text-primary dark:text-white">{progress()}%</span>
           </div>
-          <ProgressBar value={props.progress} color="green" size="sm" />
+          <ProgressBar value={progress()} color="green" size="sm" />
         </div>
         <Show when={props.shiftUtilizationPct != null}>
           <div class="min-w-36 flex-1">
@@ -63,7 +69,7 @@ export function OperatorJourneyStrip(props: OperatorJourneyStripProps) {
             <ProgressBar value={props.shiftUtilizationPct!} color="blue" size="sm" />
           </div>
         </Show>
-        <Show when={props.nextPoint}>
+        <Show when={nextPoint()}>
           <p class="text-xs text-text-secondary">
             Próxima parada:{' '}
             <span class="font-semibold text-text-primary dark:text-white">{nextLabel()}</span>

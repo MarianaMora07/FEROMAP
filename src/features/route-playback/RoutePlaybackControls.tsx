@@ -1,6 +1,6 @@
 import { For, Show } from 'solid-js';
 import { Pause, Play, RotateCcw } from 'lucide-solid';
-import { Button, ProgressBar } from '../../design-system/components';
+import { Button } from '../../design-system/components';
 import type { RoutePlaybackController } from '../../core/route-playback/useRoutePlayback';
 import type { RoutePlaybackModel } from '../../core/route-playback/routePlaybackTypes';
 import {
@@ -89,10 +89,23 @@ export function RoutePlaybackControls(props: RoutePlaybackControlsProps) {
       </div>
 
       <div class="space-y-1">
-        <div class="flex items-center justify-end text-xs text-text-secondary">
+        <div class="flex items-center justify-between text-xs text-text-secondary">
+          <span>Línea de tiempo</span>
           <span>{progressPercent()}%</span>
         </div>
-        <ProgressBar value={progressPercent()} max={100} size="sm" color="blue" />
+        <input
+          type="range"
+          class="route-playback-scrubber"
+          min={0}
+          max={100}
+          step={0.5}
+          value={progressPercent()}
+          aria-label="Posición del recorrido"
+          data-testid="route-playback-scrubber"
+          onInput={(event) =>
+            props.playback.setProgress(Number(event.currentTarget.value) / 100)
+          }
+        />
       </div>
 
       <Show when={!props.compact && props.routes.length > 1}>

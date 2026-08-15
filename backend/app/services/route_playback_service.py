@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, time, timezone
+from datetime import date, datetime, time, timezone
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -149,11 +149,55 @@ def _serialize_route(
 
 def build_daily_route_playback(db: Session, daily_plan_id: int) -> dict[str, Any]:
     """Arma el contrato de playback para un plan diario (solo lectura)."""
-    plan = db.get(DailyPlan, daily_plan_id)
-    if plan is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan del día no encontrado")
+    return _build_route_playback_payload(
+        db,
+        daily_plan_id=daily_plan_id,
+        simulation_id=None,
+    )
 
-    simulation = db.get(Simulation, plan.simulation_id) if plan.simulation_id else None
+
+def build_simulation_route_playback(db: Session, simulation_id: int) -> dict[str, Any]:
+    """Arma el contrato de playback para rutas de una simulación (solo lectura)."""
+    return _build_route_playback_payload(
+        db,
+        daily_plan_id=None,
+        simulation_id=simulation_id,
+    )
+
+
+def _build_route_playback_payload(
+    db: Session,
+    *,
+    daily_plan_id: int | None,
+    simulation_id: int | None,
+) -> dict[str, Any]:
+    if daily_plan_id is not None:
+        plan = db.get(DailyPlan, daily_plan_id)
+        if plan is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan del día no encontrado")
+        simulation = db.get(Simulation, plan.simulation_id) if plan.simulation_id else None
+        operation_date = plan.operation_date.isoformat()
+        preview_mode = plan.status in {"draft", "open", "optimized"}
+        route_filter = (
+            OptimizedRoute.daily_plan_id == daily_plan_id,
+        )
+        response_id: dict[str, Any] = {"dailyPlanId": daily_plan_id}
+    elif simulation_id is not None:
+        simulation = db.get(Simulation, simulation_id)
+        if simulation is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Simulación no encontrada")
+        plan = None
+        operation_date = (
+            simulation.executed_at.date().isoformat()
+            if simulation.executed_at is not None
+            else date.today().isoformat()
+        )
+        preview_mode = True
+        route_filter = (OptimizedRoute.simulation_id == simulation_id,)
+        response_id = {"simulationId": simulation_id}
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Se requiere plan o simulación")
+
     operators_shortage = _operators_shortage_from_simulation(simulation)
     service_minutes = _service_minutes_per_stop(operators_shortage=operators_shortage)
     facilities = resolve_operational_facilities(db)
@@ -163,7 +207,7 @@ def build_daily_route_playback(db: Session, daily_plan_id: int) -> dict[str, Any
     routes = db.scalars(
         select(OptimizedRoute)
         .where(
-            OptimizedRoute.daily_plan_id == daily_plan_id,
+            *route_filter,
             OptimizedRoute.route_kind == "optimized",
             OptimizedRoute.status.in_(PLAYBACK_ROUTE_STATUSES),
         )
@@ -181,7 +225,7 @@ def build_daily_route_playback(db: Session, daily_plan_id: int) -> dict[str, Any
             route,
             color=PLAYBACK_ROUTE_COLORS[index % len(PLAYBACK_ROUTE_COLORS)],
             service_minutes=service_minutes,
-            plan=plan,
+            plan=plan or DailyPlan(operation_date=date.fromisoformat(operation_date)),
             landfill_service_minutes=landfill_service_minutes,
             landfill_lon=landfill_lon,
             landfill_lat=landfill_lat,
@@ -189,11 +233,9 @@ def build_daily_route_playback(db: Session, daily_plan_id: int) -> dict[str, Any
         if item is not None:
             serialized.append(item)
 
-    preview_mode = plan.status in {"draft", "open", "optimized"}
-
     return {
-        "dailyPlanId": daily_plan_id,
-        "operationDate": plan.operation_date.isoformat(),
+        **response_id,
+        "operationDate": operation_date,
         "previewMode": preview_mode,
         "routes": serialized,
     }

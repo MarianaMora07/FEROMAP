@@ -13,6 +13,15 @@ export function operationalMapHref(params: { focus?: 'routes' | 'route' | 'next'
   return query ? `/map?${query}` : '/map';
 }
 
+export function mapPlaybackHref(params: OperationalLinkParams = {}): string {
+  const search = new URLSearchParams();
+  if (params.date) search.set('date', params.date);
+  if (params.dailyPlanId != null) search.set('dailyPlanId', String(params.dailyPlanId));
+  if (params.vehicleId) search.set('vehicleId', params.vehicleId);
+  search.set('playback', '1');
+  return `/map?${search.toString()}`;
+}
+
 export function monitoringHref(params: OperationalLinkParams = {}): string {
   const search = new URLSearchParams();
   if (params.date) search.set('date', params.date);

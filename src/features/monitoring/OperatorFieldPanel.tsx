@@ -5,15 +5,24 @@ import { ChevronDown, ChevronUp, Crosshair, MapPin, Navigation } from 'lucide-so
 import { Button, Card, ProgressBar, StatusBadge } from '../../design-system/components';
 import type { OperatorRouteSnapshot } from '../../core/api/operator';
 import type { LiveVehicle } from '../../core/api/monitoring';
+import type { OperatorPlaybackSync } from '../../core/operator/operatorPlaybackUx';
+import { formatNextStopLabel } from '../../core/utils/landfillUx';
 
 interface OperatorNextStopCardProps {
   snapshot: OperatorRouteSnapshot | undefined;
   vehicle: LiveVehicle | null;
   onNavigate: () => void;
+  playbackSync?: OperatorPlaybackSync | null;
 }
 
 export function OperatorNextStopCard(props: OperatorNextStopCardProps) {
-  const nextCode = () => props.snapshot?.nextStop?.code ?? props.vehicle?.nextPoint ?? '—';
+  const nextCode = () =>
+    props.playbackSync?.nextPoint ??
+    props.snapshot?.nextStop?.code ??
+    props.vehicle?.nextPoint ??
+    '—';
+  const nextStopLabel = () =>
+    formatNextStopLabel(nextCode(), props.playbackSync?.nextStopType ?? props.snapshot?.nextStop?.stopType);
   const nextAddress = () => props.snapshot?.nextStop?.address ?? props.vehicle?.route ?? '';
 
   return (
@@ -25,7 +34,7 @@ export function OperatorNextStopCard(props: OperatorNextStopCardProps) {
         <div class="min-w-0">
           <p class="text-xs font-semibold uppercase tracking-wide text-fero-blue">Siguiente parada</p>
           <p class="mt-0.5 font-heading text-xl font-bold text-text-primary">
-            Próxima: {nextCode()}
+            Próxima: {nextStopLabel()}
           </p>
           <Show when={nextAddress()}>
             <p class="mt-1 truncate text-sm text-text-secondary">{nextAddress()}</p>

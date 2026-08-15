@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
@@ -259,6 +260,44 @@ def find_incremental_parent_cache(
     return best
 
 
+def sanitize_distance_matrix(
+    dist_matrix: list[list[float]],
+    time_matrix: list[list[float]],
+    pair_fn: MatrixPairFn,
+) -> int:
+    """Reemplaza distancias no finitas (p. ej. Infinity del grafo o caché legacy)."""
+    patched = 0
+    n = len(dist_matrix)
+    for i in range(n):
+        for j in range(n):
+            if i == j:
+                continue
+            d_m = dist_matrix[i][j]
+            if math.isfinite(d_m) and d_m > 0:
+                continue
+            d_m, t_s = pair_fn(i, j)
+            if not math.isfinite(d_m) or d_m <= 0:
+                d_m = 1.0
+            if not math.isfinite(t_s) or t_s <= 0:
+                t_s = 1.0
+            dist_matrix[i][j] = d_m
+            time_matrix[i][j] = t_s
+            patched += 1
+    return patched
+
+
+def _finalize_matrix(
+    dist: list[list[float]],
+    time: list[list[float]],
+    pair_fn: MatrixPairFn,
+    meta: dict[str, Any],
+) -> tuple[list[list[float]], list[list[float]], dict[str, Any]]:
+    sanitized = sanitize_distance_matrix(dist, time, pair_fn)
+    if sanitized > 0:
+        meta = {**meta, "matrixSanitizedCells": sanitized}
+    return dist, time, meta
+
+
 def resolve_distance_matrix(
     *,
     depot_node: int,
@@ -282,9 +321,10 @@ def resolve_distance_matrix(
 
     exact = load_distance_matrix_cache_entry(cache_key)
     if exact is not None:
-        return (
+        return _finalize_matrix(
             exact["distance"],
             exact["time"],
+            pair_fn,
             {
                 "matrixCacheHit": True,
                 "matrixCacheIncremental": False,
@@ -316,9 +356,10 @@ def resolve_distance_matrix(
         )
         parent_count = len(parent["pointIds"])
         incremental = parent_count != len(point_ids) or recomputed > 0
-        return (
+        return _finalize_matrix(
             dist,
             time,
+            pair_fn,
             {
                 "matrixCacheHit": False,
                 "matrixCacheIncremental": incremental,
@@ -339,9 +380,10 @@ def resolve_distance_matrix(
         landfill_lon=landfill_lon,
         landfill_lat=landfill_lat,
     )
-    return (
+    return _finalize_matrix(
         dist,
         time,
+        pair_fn,
         {
             "matrixCacheHit": False,
             "matrixCacheIncremental": False,

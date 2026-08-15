@@ -1,4 +1,20 @@
-import type { RoutePlaybackCoordinate, RoutePlaybackModel, RoutePlaybackStop } from './routePlaybackTypes';
+import type { RoutePlaybackCoordinate, RoutePlaybackModel } from './routePlaybackTypes';
+import {
+  interpolateAlongLine,
+  sliceLineCoordinates,
+  stopLineProgress,
+  bearingAlongLine,
+} from './routePlaybackGeometry';
+
+export type { RouteLineMetrics } from './routePlaybackGeometry';
+export {
+  densifyLineByDistance,
+  getRouteLineMetrics,
+  interpolateAlongLine,
+  sliceLineCoordinates,
+  stopLineProgress,
+  bearingAlongLine,
+} from './routePlaybackGeometry';
 
 export type RoutePlaybackSpeed = 1 | 2 | 4;
 
@@ -27,101 +43,12 @@ export interface RoutePlaybackRouteState {
   routeId: number;
   progress: number;
   lineProgress: number;
+  /** Rumbo en grados (norte = 0°, sentido horario) para rotar el marcador del camión. */
+  bearing: number;
   currentStopIndex: number;
   completedStops: number;
   position: RoutePlaybackCoordinate;
   isAtStop: boolean;
-}
-
-export function sliceLineCoordinates(
-  coordinates: RoutePlaybackCoordinate[],
-  progress: number,
-): RoutePlaybackCoordinate[] {
-  if (coordinates.length < 2) return [...coordinates];
-  if (progress >= 1) return [...coordinates];
-  if (progress <= 0) return [coordinates[0]!];
-
-  const target = progress * (coordinates.length - 1);
-  const index = Math.floor(target);
-  const fraction = target - index;
-  const start = coordinates[index]!;
-  const end = coordinates[Math.min(index + 1, coordinates.length - 1)]!;
-
-  return [
-    ...coordinates.slice(0, index + 1),
-    [start[0] + (end[0] - start[0]) * fraction, start[1] + (end[1] - start[1]) * fraction],
-  ];
-}
-
-export function interpolateAlongLine(
-  coordinates: RoutePlaybackCoordinate[],
-  progress: number,
-): RoutePlaybackCoordinate {
-  const sliced = sliceLineCoordinates(coordinates, progress);
-  return sliced[sliced.length - 1] ?? coordinates[0] ?? [0, 0];
-}
-
-function segmentLength(a: RoutePlaybackCoordinate, b: RoutePlaybackCoordinate): number {
-  const dx = b[0] - a[0];
-  const dy = b[1] - a[1];
-  return Math.hypot(dx, dy);
-}
-
-export function polylineLength(coordinates: RoutePlaybackCoordinate[]): number {
-  if (coordinates.length < 2) return 0;
-  let total = 0;
-  for (let index = 1; index < coordinates.length; index += 1) {
-    total += segmentLength(coordinates[index - 1]!, coordinates[index]!);
-  }
-  return total;
-}
-
-/** Proyecta una parada sobre la polilínea y devuelve progreso normalizado [0, 1]. */
-export function stopLineProgress(
-  coordinates: RoutePlaybackCoordinate[],
-  stop: RoutePlaybackStop,
-): number {
-  if (coordinates.length < 2) return 0;
-
-  const target: RoutePlaybackCoordinate = [stop.lng, stop.lat];
-  let bestProgress = 0;
-  let bestDistance = Number.POSITIVE_INFINITY;
-  const totalLength = polylineLength(coordinates);
-  if (totalLength <= 0) return 0;
-
-  let traversed = 0;
-  for (let index = 1; index < coordinates.length; index += 1) {
-    const start = coordinates[index - 1]!;
-    const end = coordinates[index]!;
-    const legLength = segmentLength(start, end);
-    if (legLength <= 0) continue;
-
-    const projection = projectPointOnSegment(target, start, end);
-    const distanceToProjection = segmentLength(target, projection.point);
-    if (distanceToProjection < bestDistance) {
-      bestDistance = distanceToProjection;
-      bestProgress = (traversed + legLength * projection.t) / totalLength;
-    }
-    traversed += legLength;
-  }
-
-  return clamp01(bestProgress);
-}
-
-function projectPointOnSegment(
-  point: RoutePlaybackCoordinate,
-  start: RoutePlaybackCoordinate,
-  end: RoutePlaybackCoordinate,
-): { point: RoutePlaybackCoordinate; t: number } {
-  const dx = end[0] - start[0];
-  const dy = end[1] - start[1];
-  const lenSq = dx * dx + dy * dy;
-  if (lenSq <= 0) return { point: start, t: 0 };
-  const t = clamp01(((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / lenSq);
-  return {
-    t,
-    point: [start[0] + dx * t, start[1] + dy * t],
-  };
 }
 
 function clamp01(value: number): number {
@@ -227,10 +154,12 @@ export function routeStateAtElapsed(
   if (clampedElapsed >= timeline.totalDurationMs) {
     const lastStop = route.stops.length - 1;
     const position = interpolateAlongLine(route.lineCoordinates, 1);
+    const heading = bearingAlongLine(route.lineCoordinates, 1);
     return {
       routeId: route.routeId,
       progress: 1,
       lineProgress: 1,
+      bearing: heading,
       currentStopIndex: lastStop,
       completedStops: route.stops.length,
       position,
@@ -245,6 +174,7 @@ export function routeStateAtElapsed(
 
   const lineProgress = interpolateSegmentProgress(activeSegment, clampedElapsed);
   const position = interpolateAlongLine(route.lineCoordinates, lineProgress);
+  const heading = bearingAlongLine(route.lineCoordinates, lineProgress);
   const completedStops =
     activeSegment.kind === 'service'
       ? activeSegment.stopIndex + 1
@@ -254,6 +184,7 @@ export function routeStateAtElapsed(
     routeId: route.routeId,
     progress,
     lineProgress,
+    bearing: heading,
     currentStopIndex: activeSegment.stopIndex,
     completedStops: Math.min(completedStops, route.stops.length),
     position,
@@ -337,4 +268,24 @@ export function playbackCompletionSummary(
   const totalStops = routes.reduce((sum, route) => sum + route.stops.length, 0);
   const minutes = Math.max(1, Math.round(maxDurationMs / 60_000));
   return `Ruta completada en ${formatDurationMinutes(minutes)} · ${totalStops} paradas`;
+}
+
+/** Hora simulada de una ruta según su progreso y `startTime` opcional. */
+export function routeSimulatedTimeLabel(
+  route: RoutePlaybackModel,
+  state: RoutePlaybackRouteState,
+): string | null {
+  if (!route.startTime) return null;
+  const offsetMs = state.progress * route.totalDurationMinutes * 60_000;
+  return formatClockTime(new Date(new Date(route.startTime).getTime() + offsetMs));
+}
+
+/** Etiqueta del camión: placa + % o hora estimada si hay `startTime`. */
+export function truckMarkerLabel(
+  route: RoutePlaybackModel,
+  state: RoutePlaybackRouteState,
+): string {
+  const time = routeSimulatedTimeLabel(route, state);
+  const pct = Math.round(state.progress * 100);
+  return time ? `${route.vehicleLabel} · ${time}` : `${route.vehicleLabel} · ${pct}%`;
 }

@@ -13,10 +13,13 @@ from app.services.optimization_service import (
     _baseline_route,
     _build_distance_matrix,
     _build_engine_metrics,
+    _coalesce_optimized_solution,
     _critical_coverage_pct,
     _evaluate_solution,
     _format_computation_log_message,
     _haversine_m,
+    _kpi_distance_km,
+    _kpi_saving_percentage,
     _landfill_idx,
     _route_cost,
     _two_opt,
@@ -277,3 +280,25 @@ def test_aco_early_stops_when_no_improvement(monkeypatch):
     assert solution.aco_iterations_run < 30
     assert solution.aco_stopped_early is True
     assert solution.distance_m > 0
+
+
+def test_kpi_distance_km_rejects_infinity():
+    assert _kpi_distance_km(float("inf")) is None
+    value = _kpi_distance_km(12_500.0)
+    assert value is not None
+    assert float(value) == 12.5
+
+
+def test_kpi_saving_percentage_rejects_infinity():
+    assert _kpi_saving_percentage(10_000.0, float("inf")) is None
+    value = _kpi_saving_percentage(10_000.0, 8_000.0)
+    assert value is not None
+    assert float(value) == 20.0
+
+
+def test_coalesce_optimized_solution_uses_fallback_when_aco_fails():
+    fallback = RouteSolution(vehicle_routes=[[0, 1, 0]], distance_m=500.0, duration_s=120.0)
+    failed = RouteSolution(vehicle_routes=[], distance_m=float("inf"), duration_s=float("inf"))
+    coalesced = _coalesce_optimized_solution(failed, fallback)
+    assert coalesced.distance_m == 500.0
+    assert coalesced.vehicle_routes == [[0, 1, 0]]

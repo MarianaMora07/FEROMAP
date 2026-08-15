@@ -686,7 +686,7 @@ Si `canFitStop` es falso → cerrar ruta (vertedero si `load > 0`, luego depósi
 
 **GeoJSON rutas (Fase 3):** cada `Feature` LineString incluye `properties.stops[]` con `stopType: "collection"` o `"landfill"` (código `VERTEDERO`).
 
-**Playback (Fase 3):** paradas landfill en `stops[]` con `code: "VERTEDERO"` y `serviceMinutes` según `landfillUnloadMinutes` (default 15).
+**Playback (Fase 3 / Fase 10):** cada parada en `stops[]` incluye `stopType: "collection"` o `"landfill"`. Vertedero: `code: "VERTEDERO"` y `serviceMinutes` según `landfillUnloadMinutes` (default 15). Contrato: [docs/fase-10/README.md](../../docs/fase-10/README.md).
 
 Código: `backend/app/domain/landfill_service_time.py`, `src/core/types/landfillServiceTime.ts`. ADR: [docs/fase-9/adr-vertedero-multi-viaje.md](../../docs/fase-9/adr-vertedero-multi-viaje.md).
 

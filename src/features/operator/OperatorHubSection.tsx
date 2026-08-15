@@ -31,7 +31,10 @@ import { OperatorContingencyBanner } from '../contingency/OperatorContingencyBan
 import { OperatorMyIncidents } from '../contingency/OperatorMyIncidents';
 import { OperatorGlossaryStrip } from './OperatorGlossaryStrip';
 import { OperatorHubDashboardMinimal } from './OperatorHubDashboardMinimal';
+import type { OperatorPlaybackSync } from '../../core/operator/operatorPlaybackUx';
+import { operatorPlaybackCanStart } from '../../core/operator/operatorPlaybackUx';
 import { OperatorJourneyStrip } from './OperatorJourneyStrip';
+import { OperatorMobilePlayback } from './OperatorMobilePlayback';
 import { OperatorRoutePanel } from './OperatorRoutePanel';
 import { OperatorDaySummaryCard } from './OperatorDaySummaryCard';
 import { OperatorLevelBanner } from './OperatorLevelBanner';
@@ -122,6 +125,7 @@ export function OperatorHubSection(props: OperatorHubSectionProps) {
     }),
   );
   const [incidentsRefreshKey, setIncidentsRefreshKey] = createSignal(0);
+  const [playbackSync, setPlaybackSync] = createSignal<OperatorPlaybackSync | null>(null);
   const loading = () => dailyPlan.loading || monitoring.loading;
 
   const fleetForReporter = () =>
@@ -143,6 +147,14 @@ export function OperatorHubSection(props: OperatorHubSectionProps) {
     const ctx = context();
     return ctx.hasDispatchedPlan && ctx.hasAssignedVehicle && ctx.hasPendingStops;
   };
+
+  const showOperatorPlayback = () =>
+    showActiveJourney() &&
+    operatorVehicleId() != null &&
+    operatorPlaybackCanStart({
+      dailyPlanId: dailyPlan()?.id,
+      snapshot: routeSnapshot(),
+    });
 
   const handleRefresh = () => {
     void refetchPlan();
@@ -253,7 +265,17 @@ export function OperatorHubSection(props: OperatorHubSectionProps) {
                 nextPoint={routeSnapshot()?.nextStop?.code ?? context().vehicle?.nextPoint}
                 nextStopType={routeSnapshot()?.nextStop?.stopType}
                 shiftUtilizationPct={routeSnapshot()?.shiftUtilizationPct}
+                playbackSync={playbackSync()}
               />
+              <Show when={showOperatorPlayback()}>
+                <OperatorMobilePlayback
+                  class="mt-3 h-52 sm:h-60"
+                  dailyPlanId={dailyPlan()?.id}
+                  vehicleId={operatorVehicleId()!}
+                  routeSnapshot={routeSnapshot()}
+                  onSync={setPlaybackSync}
+                />
+              </Show>
             </div>
           </Show>
         </Card>

@@ -1,7 +1,6 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
-import { A, useSearchParams } from '@solidjs/router';
-import maplibregl, { type Map as MapLibreMap, type Marker } from 'maplibre-gl';
-import 'maplibre-gl/dist/maplibre-gl.css';
+import { A, useNavigate, useSearchParams } from '@solidjs/router';
+import { type Map as MapLibreMap, type Marker } from 'maplibre-gl';
 import {
   Menu,
   Search,
@@ -25,6 +24,7 @@ import {
   Fuel,
   Landmark,
   ChevronDown,
+  Play,
 } from 'lucide-solid';
 import { Button } from '../../design-system/components';
 import {
@@ -35,6 +35,8 @@ import {
 } from '../../core/stores/appStore';
 import { dashboardSummary } from '../../core/stores/dashboardStore';
 import { fetchMapContext, MAP_CONTEXT_POLL_MS } from '../../core/api/map';
+import { fetchDailyPlan } from '../../core/api/planning';
+import { fetchDailyRoutePlayback } from '../../core/api/routePlayback';
 import { fetchOperatorRouteSnapshot } from '../../core/api/operator';
 import { fetchResidentOverview } from '../../core/api/resident';
 import { isConductor, isResident } from '../../core/auth/permissions';
@@ -43,8 +45,8 @@ import { fleetForOperatorField } from '../../core/operator/operatorMonitoringUx'
 import { parseVehicleIdParam } from '../../core/operator/operatorDeepLinks';
 import {
   ensureOperatorRouteLayer,
-  fitMapToStops,
-  routeCollectionFromStops,
+  fitMapToOperatorRoute,
+  routeCollectionFromOperatorSnapshot,
   syncNextStopMarker,
   OPERATOR_ROUTE_GLOW_LAYER_ID,
   OPERATOR_ROUTE_LAYER_ID,
@@ -67,14 +69,14 @@ import {
   RESIDENT_SECTOR_ROUTE_GLOW_LAYER_ID,
   RESIDENT_SECTOR_ROUTE_LAYER_ID,
 } from '../../core/map/residentSectorMapLayers';
+import { OperationalMap } from '../../core/map/OperationalMap';
+import { useOperationalRoutesLayer } from '../../core/map/useOperationalRoutesLayer';
 import {
-  ensureOperationalRouteLayer,
   syncContainerMarkers,
   syncFleetMarkers,
   vehicleStatusKey,
   enabledOperationalRouteIds,
   routeLayerStateKey,
-  syncOperationalRouteLayerFilters,
   type OperationalRouteFeatureProps,
 } from '../../core/map/operationalMapLayers';
 import {
@@ -85,10 +87,22 @@ import {
 } from '../../core/map/landfillMapLayers';
 import { DEFAULT_MAP_FACILITIES } from '../../core/utils/landfillUx';
 import {
-  createOperationalMapOptions,
   fitMapToOperationalData,
   operationalMapContextFilters,
 } from '../../core/map/operationalMapConfig';
+import {
+  canOpenMapGisPlayback,
+  filterPlaybackRoutesForMapGis,
+} from '../../core/map/mapPlaybackUx';
+import {
+  applyPlaybackCamera,
+  type PlaybackCameraMode,
+} from '../../core/route-playback/playbackCameraUx';
+import { parsePlaybackQueryParam } from '../../core/planning/operationalFlowUx';
+import { useRoutePlayback } from '../../core/route-playback/useRoutePlayback';
+import { RoutePlaybackLayer } from '../route-playback/RoutePlaybackLayer';
+import { RoutePlaybackLegend } from '../route-playback/RoutePlaybackLegend';
+import { MapPlaybackPanel } from './MapPlaybackPanel';
 import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
 import { residentHubHref, residentPointsHref } from '../../core/resident/residentDeepLinks';
 import { ResidentBreadcrumbs } from '../resident/ResidentBreadcrumbs';
@@ -130,7 +144,7 @@ function buildResidentContainerPopupHtml(container: Parameters<typeof buildConta
 }
 
 export default function MapPage() {
-  let mapContainer!: HTMLDivElement;
+  const navigate = useNavigate();
   const mapRef: { current?: MapLibreMap } = {};
   const vehicleMarkersById = new Map<string, Marker>();
   const containerMarkers: Marker[] = [];
@@ -159,6 +173,27 @@ export default function MapPage() {
     const date = Array.isArray(searchParams.date) ? searchParams.date[0] : searchParams.date;
     return date || new Date().toISOString().slice(0, 10);
   };
+  const dailyPlanIdParam = () => {
+    const raw = Array.isArray(searchParams.dailyPlanId)
+      ? searchParams.dailyPlanId[0]
+      : searchParams.dailyPlanId;
+    if (!raw) return undefined;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+  const dailyPlanSource = createMemo(() => (residentMode() ? null : operationDate()));
+  const [dailyPlan] = createResource(dailyPlanSource, (date) => fetchDailyPlan(date).catch(() => null));
+  const [playbackOpen, setPlaybackOpen] = createSignal(false);
+  const [cameraMode, setCameraMode] = createSignal<PlaybackCameraMode>('free');
+  const [mapInstance, setMapInstance] = createSignal<MapLibreMap | undefined>();
+  const playbackPlanId = () => dailyPlan()?.id ?? dailyPlanIdParam() ?? 0;
+  const [playbackPayload] = createResource(
+    () => (playbackOpen() && !residentMode() ? playbackPlanId() : null),
+    async (dailyPlanId) => {
+      if (!dailyPlanId) return null;
+      return fetchDailyRoutePlayback(dailyPlanId);
+    },
+  );
   const [routeSnapshot] = createResource(operationDate, (date) => fetchOperatorRouteSnapshot(date));
   const operatorMode = () => isConductor(authUser()?.role) && !residentScope();
   const nextStopHolder: { marker?: maplibregl.Marker } = {};
@@ -208,6 +243,26 @@ export default function MapPage() {
 
   const operationalRoutesForMap = () =>
     mapContext()?.routes ?? { type: 'FeatureCollection' as const, features: [] };
+
+  const enabledRouteIdsForPlayback = createMemo(() =>
+    enabledOperationalRouteIds(operationalRoutesForMap(), layerState()),
+  );
+  const playbackRoutes = createMemo(() =>
+    filterPlaybackRoutesForMapGis(playbackPayload()?.routes ?? [], {
+      enabledRouteIds: enabledRouteIdsForPlayback(),
+      focusVehicleId: focusVehicleId(),
+      fieldMode: operatorMode(),
+    }),
+  );
+  const playback = useRoutePlayback(() => playbackRoutes(), { pauseAtStops: true });
+  const canOpenPlayback = createMemo(() =>
+    canOpenMapGisPlayback({
+      residentMode: residentMode(),
+      dailyPlan: dailyPlan(),
+      playbackRouteCount: operationalRoutesForMap().features.length,
+    }),
+  );
+  const playbackActive = () => playbackOpen() && playbackRoutes().length > 0;
 
   const routeLayerChildren = createMemo(() => {
     const features = operationalRoutesForMap().features;
@@ -283,8 +338,9 @@ export default function MapPage() {
       );
     }
     if (operatorMode() && (routeSnapshot()?.stops.length ?? 0) > 0) {
-      return routeCollectionFromStops(routeSnapshot()!.stops, {
-        label: 'Mi ruta hoy',
+      return routeCollectionFromOperatorSnapshot(routeSnapshot()!, {
+        label: routeSnapshot()?.routeLabel ?? 'Mi ruta hoy',
+        routeId: routeSnapshot()?.routeId,
       });
     }
     return mapContext()?.routes ?? { type: 'FeatureCollection', features: [] };
@@ -328,6 +384,81 @@ export default function MapPage() {
   };
 
   const getMap = () => mapRef.current;
+
+  const supervisorRoutesVisible = createMemo(() => {
+    if (residentMode() || operatorMode()) return false;
+    return layerState().routes;
+  });
+
+  const supervisorOperationalRoutes = createMemo(() => {
+    if (residentMode() || operatorMode()) {
+      return { type: 'FeatureCollection' as const, features: [] };
+    }
+    return operationalRoutesForMap();
+  });
+
+  useOperationalRoutesLayer({
+    map: getMap,
+    mapReady,
+    routes: supervisorOperationalRoutes,
+    sourceId: 'operational-routes',
+    routesVisible: supervisorRoutesVisible,
+    enabledRouteIds: () => {
+      if (residentMode() || operatorMode()) return [];
+      return enabledOperationalRouteIds(supervisorOperationalRoutes(), layerState());
+    },
+    playbackActive,
+  });
+
+  const handleOpenPlayback = () => setPlaybackOpen(true);
+  const handleClosePlayback = () => {
+    playback.pause();
+    playback.reset();
+    setCameraMode('free');
+    setPlaybackOpen(false);
+    if (getMap()?.isStyleLoaded()) syncOverlayLayers();
+  };
+
+  const setMapOperationDate = (date: string) => {
+    if (playbackOpen()) handleClosePlayback();
+    const params = new URLSearchParams(window.location.search);
+    params.set('date', date);
+    const query = params.toString();
+    navigate(query ? `/map?${query}` : '/map', { replace: true });
+  };
+
+  let playbackDeepLinkHandled = false;
+
+  createEffect(() => {
+    if (!parsePlaybackQueryParam(searchParams.playback)) return;
+    if (playbackDeepLinkHandled || playbackOpen() || residentMode()) return;
+    if (!canOpenPlayback()) return;
+    playbackDeepLinkHandled = true;
+    setPlaybackOpen(true);
+  });
+
+  createEffect(() => {
+    if (!playbackOpen()) {
+      playback.pause();
+      playback.reset();
+    }
+  });
+
+  createEffect(() => {
+    if (!playbackActive()) return;
+    const map = getMap();
+    if (!map?.isStyleLoaded()) return;
+    const mode = cameraMode();
+    playback.routeStates();
+    applyPlaybackCamera(map, mode, playbackRoutes(), playback.routeStates(), focusVehicleId());
+  });
+
+  createEffect(() => {
+    playbackOpen();
+    cameraMode();
+    playbackRoutes();
+    if (getMap()?.isStyleLoaded()) syncOverlayLayers();
+  });
 
   const zoomIn = () => getMap()?.zoomIn({ duration: 300 });
   const zoomOut = () => getMap()?.zoomOut({ duration: 300 });
@@ -429,20 +560,6 @@ export default function MapPage() {
       (operatorMode() && (routeSnapshot()?.stops.length ?? 0) > 0) ||
       (residentMode() && operationalRoutes().features.length > 0);
 
-    const operationalRouteData =
-      routesVisible && !operatorMode() && !residentMode()
-        ? operationalRoutesForMap()
-        : { type: 'FeatureCollection' as const, features: [] };
-
-    if (!operatorMode() && !residentMode()) {
-      ensureOperationalRouteLayer(map, operationalRouteData);
-      syncOperationalRouteLayerFilters(map, 'operational-routes', {
-        routesVisible,
-        enabledRouteIds: enabledOperationalRouteIds(operationalRouteData, state),
-        splitByStatus: true,
-      });
-    }
-
     setVis(OPERATOR_ROUTE_LAYER_ID, routesVisible && operatorMode());
     setVis(OPERATOR_ROUTE_GLOW_LAYER_ID, routesVisible && operatorMode());
     setVis(RESIDENT_SECTOR_ROUTE_LAYER_ID, routesVisible && residentMode());
@@ -491,7 +608,7 @@ export default function MapPage() {
       containerMarkers.length = 0;
     }
 
-    if (state.vehicles) {
+    if (state.vehicles && !playbackActive()) {
       const focusedId = residentMode()
         ? residentOverview()?.proximity?.vehicleCode ?? undefined
         : focusVehicleId();
@@ -528,6 +645,9 @@ export default function MapPage() {
           if (popup && !popup.isOpen()) marker.togglePopup();
         }
       }
+    } else if (playbackActive()) {
+      vehicleMarkersById.forEach((marker) => marker.remove());
+      vehicleMarkersById.clear();
     } else {
       vehicleMarkersById.forEach((marker) => marker.remove());
       vehicleMarkersById.clear();
@@ -575,38 +695,23 @@ export default function MapPage() {
       });
     }
 
-    ensureOperationalRouteLayer(map, operationalRoutes());
     syncOverlayLayers();
+  };
+
+  const handleGisMapReady = (map: MapLibreMap) => {
+    mapRef.current = map;
+    setMapInstance(map);
+    addDataLayers();
+    setMapReady(true);
+    map.on('move', () => {
+      const c = map.getCenter();
+      setCoords({ lng: +c.lng.toFixed(5), lat: +c.lat.toFixed(5), zoom: +map.getZoom().toFixed(1) });
+    });
+    requestAnimationFrame(() => map.resize());
   };
 
   onMount(() => {
     void initAppData();
-    const map = new maplibregl.Map(
-      createOperationalMapOptions({
-        container: mapContainer,
-        style: mapStyleForTheme(appState.darkMode),
-      }),
-    );
-    mapRef.current = map;
-
-    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
-
-    const resizeMap = () => mapRef.current?.resize();
-    map.on('load', () => {
-      resizeMap();
-      addDataLayers();
-      setMapReady(true);
-      requestAnimationFrame(resizeMap);
-    });
-    map.on('move', () => {
-      const m = mapRef.current;
-      if (!m) return;
-      const c = m.getCenter();
-      setCoords({ lng: +c.lng.toFixed(5), lat: +c.lat.toFixed(5), zoom: +m.getZoom().toFixed(1) });
-    });
-
-    const ro = new ResizeObserver(() => resizeMap());
-    ro.observe(mapContainer);
 
     const pollTimer = window.setInterval(() => {
       void refetch();
@@ -615,7 +720,6 @@ export default function MapPage() {
 
     onCleanup(() => {
       window.clearInterval(pollTimer);
-      ro.disconnect();
     });
   });
 
@@ -689,8 +793,10 @@ export default function MapPage() {
     const map = getMap();
     if (!map?.isStyleLoaded()) return;
     syncOverlayLayers();
-    const stops = routeSnapshot()?.stops ?? [];
-    if (stops.length > 0) fitMapToStops(map, stops);
+    const snapshot = routeSnapshot();
+    if (snapshot && snapshot.stops.length > 0) {
+      fitMapToOperatorRoute(map, snapshot);
+    }
   });
 
   createEffect(() => {
@@ -744,8 +850,8 @@ export default function MapPage() {
 
   onCleanup(() => {
     clearOperationalMarkers();
-    mapRef.current?.remove();
     mapRef.current = undefined;
+    setMapInstance(undefined);
     setMapReady(false);
   });
 
@@ -764,7 +870,21 @@ export default function MapPage() {
   return (
     <div class="relative h-full min-h-0 overflow-hidden bg-app">
       {/* Full-bleed map — UI floats above it */}
-      <div ref={mapContainer} class="absolute inset-0 h-full w-full" />
+      <OperationalMap
+        class="absolute inset-0 h-full w-full"
+        themeSync={false}
+        onMapReady={handleGisMapReady}
+        onStyleRestored={() => addDataLayers()}
+      >
+        <Show when={playbackActive()}>
+          <RoutePlaybackLayer
+            map={mapInstance}
+            routes={() => playbackRoutes()}
+            playback={playback}
+            showControls={false}
+          />
+        </Show>
+      </OperationalMap>
 
       {/* Toolbar overlay */}
       <header class="absolute inset-x-0 top-0 z-20 flex flex-wrap items-center gap-2 border-b border-default/60 bg-elevated/90 px-3 py-2 shadow-sm backdrop-blur-md">
@@ -801,6 +921,13 @@ export default function MapPage() {
         <div class="flex flex-wrap items-center gap-1.5">
           <Show when={!residentMode()}>
             <ToolBtn icon={<Filter size={16} />} label="Filtros" />
+            <Show when={canOpenPlayback() && !playbackOpen()}>
+              <ToolBtn
+                icon={<Play size={16} />}
+                label="Ver recorrido"
+                onClick={handleOpenPlayback}
+              />
+            </Show>
           </Show>
           <ToolBtn
             icon={<Layers size={16} />}
@@ -933,6 +1060,41 @@ export default function MapPage() {
               <X size={16} />
             </button>
           </div>
+          <Show when={!residentMode()}>
+            <div class="mb-3 space-y-2 border-b border-default pb-3">
+              <label class="block text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+                Plan del día
+              </label>
+              <input
+                type="date"
+                class="w-full rounded-md border border-default bg-app px-2 py-1.5 text-sm text-text-primary"
+                value={operationDate()}
+                data-testid="map-operation-date"
+                onChange={(event) => setMapOperationDate(event.currentTarget.value)}
+              />
+              <Show when={dailyPlan()}>
+                {(plan) => (
+                  <p class="text-xs text-text-muted">
+                    Plan #{plan().id} · {plan().status}
+                  </p>
+                )}
+              </Show>
+              <Show when={canOpenPlayback() && !playbackOpen()}>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  class="w-full gap-1.5"
+                  icon={<Play size={14} />}
+                  loading={playbackPayload.loading}
+                  onClick={handleOpenPlayback}
+                  data-testid="map-open-playback-btn"
+                >
+                  Ver recorrido
+                </Button>
+              </Show>
+            </div>
+          </Show>
           <ul class="space-y-1">
             <For each={displayMapLayers()}>
               {(layer) => (
@@ -1051,6 +1213,35 @@ export default function MapPage() {
             </For>
           </ul>
         </aside>
+      </Show>
+
+      <Show when={playbackOpen() && !residentMode()}>
+        <MapPlaybackPanel
+          routes={playbackRoutes()}
+          playback={playback}
+          operationDate={operationDate()}
+          dailyPlan={dailyPlan()}
+          previewMode={playbackPayload()?.previewMode ?? true}
+          cameraMode={cameraMode()}
+          onCameraModeChange={setCameraMode}
+          onClose={handleClosePlayback}
+          loading={playbackPayload.loading}
+          error={
+            playbackPayload.error
+              ? playbackPayload.error instanceof Error
+                ? playbackPayload.error.message
+                : 'No se pudo cargar el recorrido'
+              : playbackRoutes().length === 0 && !playbackPayload.loading
+                ? 'No hay rutas visibles con los filtros actuales.'
+                : null
+          }
+        />
+      </Show>
+
+      <Show when={playbackActive()}>
+        <div class="absolute bottom-44 left-3 z-20 max-w-xs sm:bottom-40">
+          <RoutePlaybackLegend />
+        </div>
       </Show>
 
       <div class="absolute right-3 bottom-36 z-20 flex flex-col gap-2 sm:bottom-32">

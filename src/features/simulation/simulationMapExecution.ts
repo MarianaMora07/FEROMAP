@@ -5,6 +5,12 @@ import {
   getPhaseProgressPercent,
   getPhaseStartProgressPercent,
 } from './executionPhases';
+import {
+  interpolateAlongLine,
+  sliceLineCoordinates,
+} from '../../core/route-playback/routePlaybackGeometry';
+
+export { interpolateAlongLine, sliceLineCoordinates };
 
 export type ExecutionMapLegendId = 'explorando' | 'mejorando' | 'ruta_final';
 
@@ -46,34 +52,6 @@ export function executionPhaseLocalProgress(
   const end = getPhaseProgressPercent(phaseId);
   if (end <= start) return 1;
   return Math.min(1, Math.max(0, (globalPercent - start) / (end - start)));
-}
-
-export function sliceLineCoordinates(
-  coordinates: [number, number][],
-  progress: number,
-): [number, number][] {
-  if (coordinates.length < 2) return coordinates;
-  if (progress >= 1) return coordinates;
-  if (progress <= 0) return [coordinates[0]!];
-
-  const target = progress * (coordinates.length - 1);
-  const index = Math.floor(target);
-  const fraction = target - index;
-  const start = coordinates[index]!;
-  const end = coordinates[Math.min(index + 1, coordinates.length - 1)]!;
-
-  return [...coordinates.slice(0, index + 1), [
-    start[0] + (end[0] - start[0]) * fraction,
-    start[1] + (end[1] - start[1]) * fraction,
-  ]];
-}
-
-export function interpolateAlongLine(
-  coordinates: [number, number][],
-  progress: number,
-): [number, number] {
-  const sliced = sliceLineCoordinates(coordinates, progress);
-  return sliced[sliced.length - 1] ?? coordinates[0]!;
 }
 
 /** Líneas muestra entre contenedores (matriz de costos). */

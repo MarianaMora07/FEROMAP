@@ -1,14 +1,10 @@
-import { For, Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
+import { For, Show, createEffect, createSignal, onMount } from 'solid-js';
 import maplibregl, { type Map as MapLibreMap } from 'maplibre-gl';
-import 'maplibre-gl/dist/maplibre-gl.css';
 import { Crosshair, Layers, Maximize2, Minus, Plus, Trash2, Truck } from 'lucide-solid';
 import { Card } from '../../design-system/components';
 import { appState } from '../../core/stores/appStore';
-import { bindMapTheme, mapStyleForTheme } from '../../core/utils/mapStyle';
-import {
-  createOperationalMapOptions,
-  fitMapToOperationalData,
-} from '../../core/map/operationalMapConfig';
+import { OperationalMap } from '../../core/map/OperationalMap';
+import { fitMapToOperationalData } from '../../core/map/operationalMapConfig';
 import { mapLegendContainers } from '../../data/mock/optimization';
 import type { OptimizationRouteResult } from '../../core/utils/optimizationResults';
 import type { RoutePlaybackModel } from '../../core/route-playback/routePlaybackTypes';
@@ -39,13 +35,11 @@ interface OptimizationRouteMapProps {
 }
 
 export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
-  let mapContainer!: HTMLDivElement;
   const mapRef: { current?: MapLibreMap } = {};
   const [mapInstance, setMapInstance] = createSignal<MapLibreMap | undefined>();
   const landfillMarkerHolder: { marker?: maplibregl.Marker } = {};
   const routeLandfillMarkers: maplibregl.Marker[] = [];
   const [facilities, setFacilities] = createSignal(DEFAULT_MAP_FACILITIES);
-  let mapReady = false;
 
   const syncRoutes = () => {
     const map = mapRef.current;
@@ -126,11 +120,11 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
     }
   };
 
-  bindMapTheme(
-    () => mapRef.current,
-    () => mapReady,
-    () => syncRoutes(),
-  );
+  const handleMapReady = (map: MapLibreMap) => {
+    mapRef.current = map;
+    setMapInstance(map);
+    syncRoutes();
+  };
 
   onMount(() => {
     if (!useMocks()) {
@@ -146,36 +140,6 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
         });
       });
     }
-
-    const map = new maplibregl.Map(
-      createOperationalMapOptions({
-        container: mapContainer,
-        style: mapStyleForTheme(appState.darkMode),
-      }),
-    );
-    mapRef.current = map;
-    setMapInstance(map);
-    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
-
-    map.on('load', () => {
-      map.resize();
-      mapReady = true;
-      syncRoutes();
-    });
-
-    const ro = new ResizeObserver(() => mapRef.current?.resize());
-    ro.observe(mapContainer);
-
-    onCleanup(() => {
-      ro.disconnect();
-      removeLandfillFacilityMarker(landfillMarkerHolder);
-      routeLandfillMarkers.forEach((marker) => marker.remove());
-      routeLandfillMarkers.length = 0;
-      mapRef.current?.remove();
-      mapRef.current = undefined;
-      setMapInstance(undefined);
-      mapReady = false;
-    });
   });
 
   createEffect(() => {
@@ -217,54 +181,57 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
       </div>
 
       <div class="relative h-85 bg-app lg:h-95">
-        <div ref={mapContainer} class="absolute inset-0 h-full w-full" />
+        <OperationalMap
+          onMapReady={handleMapReady}
+          onStyleRestored={() => syncRoutes()}
+        >
+          <Show when={!props.hasResults}>
+            <div class="absolute inset-0 z-10 flex items-center justify-center bg-elevated/50 text-sm text-text-muted backdrop-blur-sm">
+              Ejecute la optimización para visualizar las rutas
+            </div>
+          </Show>
 
-        <Show when={!props.hasResults}>
-          <div class="absolute inset-0 flex items-center justify-center bg-elevated/50 text-sm text-text-muted backdrop-blur-sm">
-            Ejecute la optimización para visualizar las rutas
+          <Show when={props.playbackActive && props.playback && props.playbackRoutes}>
+            <RoutePlaybackLegend class="absolute bottom-3 left-3 z-10 max-w-[220px]" />
+            <RoutePlaybackLayer
+              map={mapInstance}
+              routes={() => props.playbackRoutes ?? []}
+              playback={props.playback!}
+              showControls={false}
+            />
+          </Show>
+
+          <div class="absolute right-3 top-3 z-10 flex flex-col overflow-hidden rounded-md border border-default bg-elevated shadow-sm">
+            <button
+              type="button"
+              class="flex h-8 w-8 items-center justify-center text-text-secondary hover:bg-app"
+              aria-label="Acercar"
+              onClick={() => mapRef.current?.zoomIn()}
+            >
+              <Plus size={14} />
+            </button>
+            <button
+              type="button"
+              class="flex h-8 w-8 items-center justify-center border-t border-default text-text-secondary hover:bg-app"
+              aria-label="Alejar"
+              onClick={() => mapRef.current?.zoomOut()}
+            >
+              <Minus size={14} />
+            </button>
+            <button
+              type="button"
+              class="flex h-8 w-8 items-center justify-center border-t border-default text-text-secondary hover:bg-app"
+              aria-label="Centrar"
+              onClick={() =>
+                fitMapToOperationalData(mapRef.current!, {
+                  routes: props.hasResults ? appState.routes : { type: 'FeatureCollection', features: [] },
+                })
+              }
+            >
+              <Crosshair size={14} />
+            </button>
           </div>
-        </Show>
-
-        <Show when={props.playbackActive && props.playback && props.playbackRoutes}>
-          <RoutePlaybackLegend class="absolute bottom-3 left-3 z-10 max-w-[220px]" />
-          <RoutePlaybackLayer
-            map={mapInstance}
-            routes={() => props.playbackRoutes ?? []}
-            playback={props.playback!}
-            showControls={false}
-          />
-        </Show>
-
-        <div class="absolute right-3 top-3 flex flex-col overflow-hidden rounded-md border border-default bg-elevated shadow-sm">
-          <button
-            type="button"
-            class="flex h-8 w-8 items-center justify-center text-text-secondary hover:bg-app"
-            aria-label="Acercar"
-            onClick={() => mapRef.current?.zoomIn()}
-          >
-            <Plus size={14} />
-          </button>
-          <button
-            type="button"
-            class="flex h-8 w-8 items-center justify-center border-t border-default text-text-secondary hover:bg-app"
-            aria-label="Alejar"
-            onClick={() => mapRef.current?.zoomOut()}
-          >
-            <Minus size={14} />
-          </button>
-          <button
-            type="button"
-            class="flex h-8 w-8 items-center justify-center border-t border-default text-text-secondary hover:bg-app"
-            aria-label="Centrar"
-            onClick={() =>
-              fitMapToOperationalData(mapRef.current!, {
-                routes: props.hasResults ? appState.routes : { type: 'FeatureCollection', features: [] },
-              })
-            }
-          >
-            <Crosshair size={14} />
-          </button>
-        </div>
+        </OperationalMap>
       </div>
 
       <div class="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-default px-4 py-3 text-xs text-text-secondary">
