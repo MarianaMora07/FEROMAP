@@ -58,7 +58,6 @@ import {
 } from '../../core/utils/simulationWizard';
 import { parseSimulationIdParam } from '../../core/utils/simulationLinks';
 import { BreakdownReporter, ContingencyResultBanner } from '../contingency/BreakdownReporter';
-import { ModuleGuidanceBanner } from '../shared/ModuleGuidanceBanner';
 import { RecentIncidentsPanel } from '../contingency/RecentIncidentsPanel';
 import type { ScenarioId } from '../../data/types/simulation';
 import { ConfigurationSummaryPanel } from './ConfigurationSummaryPanel';
@@ -334,6 +333,8 @@ export default function SimulationPage() {
     acoPreset: acoPreset(),
     acoAnts: acoAnts(),
     acoIterations: acoIterations(),
+    fleetAssignableCount: vehiclesFromFleet(),
+    criticalPointCount: criticalFromPoints(),
   });
 
   const applyAcoPreset = (preset: AcoPresetId) => {
@@ -513,40 +514,7 @@ export default function SimulationPage() {
           />
         </Card>
       </Show>
-      <Show when={vehiclesFromFleet() > 0}>
-        <div class="rounded-xl border border-fero-green/40 bg-fero-green/10 px-4 py-3">
-          <p class="text-sm font-semibold text-fero-green-dark">
-            {vehiclesFromFleet()} vehículo{vehiclesFromFleet() === 1 ? '' : 's'} asignable
-            {vehiclesFromFleet() === 1 ? '' : 's'} desde la flota
-          </p>
-          <p class="mt-1 text-sm text-text-secondary">
-            La simulación usará camiones disponibles o en ruta, excluyendo mantenimiento.
-          </p>
-        </div>
-      </Show>
-      <Show when={criticalFromPoints() > 0}>
-        <div class="rounded-xl border border-amber-300/60 bg-amber-50 px-4 py-3 dark:border-amber-700/50 dark:bg-amber-950/20">
-          <p class="text-sm font-semibold text-amber-800 dark:text-amber-300">
-            {criticalFromPoints()} punto{criticalFromPoints() === 1 ? '' : 's'} crítico
-            {criticalFromPoints() === 1 ? '' : 's'} desde Puntos de Recolección
-          </p>
-          <p class="mt-1 text-sm text-text-secondary">
-            Ejecuta la simulación para incorporar los contenedores más urgentes en la ruta.
-          </p>
-        </div>
-      </Show>
       <ContingencyResultBanner />
-
-      <ModuleGuidanceBanner
-        tone="simulation"
-        title="¿Quieres despachar rutas de hoy?"
-        linkHref="/optimization"
-        linkLabel="Ir a Planificación operativa"
-      >
-        Esta pantalla evalúa escenarios y mide el impacto del algoritmo. Para generar y despachar rutas del día,
-      </ModuleGuidanceBanner>
-
-      <PlanningGlossaryStrip />
 
       <div class="flex gap-1 overflow-x-auto border-b border-border dark:border-dark-border">
         <For each={simulationPageTabs}>
@@ -565,9 +533,36 @@ export default function SimulationPage() {
           )}
         </For>
       </div>
-      <p class="text-xs text-text-muted">{simulationPageTabs.find((item) => item.id === pageTab())?.hint}</p>
+      <Show when={pageTab() === 'weekly'}>
+        <PlanningGlossaryStrip />
+        <p class="text-xs text-text-muted">
+          {simulationPageTabs.find((item) => item.id === 'weekly')?.hint}
+        </p>
+      </Show>
+      <Show when={pageTab() === 'history'}>
+        <p class="text-xs text-text-muted">
+          {simulationPageTabs.find((item) => item.id === 'history')?.hint}
+        </p>
+      </Show>
 
       <Show when={pageTab() === 'flow'}>
+      <div class="space-y-4">
+      <div
+        class="flex flex-col gap-2 rounded-lg border border-default bg-surface/60 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+        data-testid="simulation-flow-intro"
+      >
+        <p class="text-sm text-text-secondary">
+          Compara condiciones con el motor ACO — evaluación de escenarios, sin despacho a campo.
+        </p>
+        <A
+          href="/optimization"
+          class="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-fero-blue hover:underline"
+        >
+          ¿Despachar hoy?
+          <ArrowRight size={14} aria-hidden="true" />
+          Planificación operativa
+        </A>
+      </div>
       <CancelExecutionConfirmDialog
         open={cancelConfirmOpen()}
         onConfirm={confirmCancelExecution}
@@ -603,17 +598,10 @@ export default function SimulationPage() {
           </div>
           <div class="space-y-4 xl:col-span-9">
             <Card>
-              <CardHeader title="Configuración del escenario" />
-              <div class="mb-4 rounded-lg border border-fero-green/30 bg-fero-green/5 px-3 py-2.5 dark:border-fero-green/20">
-                <p class="text-[10px] font-semibold uppercase tracking-wide text-fero-green-dark">
-                  Escenario base
-                </p>
-                <p class="mt-1 text-sm font-semibold text-text-primary dark:text-white">
-                  {derivedScenario().label}
-                </p>
-                <p class="mt-1 text-xs text-text-secondary">{derivedScenario().description}</p>
-                <p class="mt-2 text-[11px] text-text-muted">{derivedScenario().source}</p>
-              </div>
+              <CardHeader
+                title="Condiciones del escenario"
+                subtitle="Activa condiciones; el escenario derivado se muestra en el resumen lateral."
+              />
               <p class="mb-1 text-sm font-semibold text-text-primary dark:text-white">Condiciones a simular</p>
               <div class="mb-4 divide-y divide-border dark:divide-dark-border">
                 <For each={simulationConditions}>
@@ -628,7 +616,7 @@ export default function SimulationPage() {
                   )}
                 </For>
               </div>
-              <p class="mb-1 text-sm font-semibold text-text-primary dark:text-white">Parámetros adicionales</p>
+              <p class="mb-1 mt-4 text-sm font-semibold text-text-primary dark:text-white">Personal del turno</p>
               <div class="mb-4 rounded-lg border border-border px-3 py-2.5 dark:border-dark-border">
                 <Toggle
                   label="Ausentismo del turno"
@@ -639,9 +627,7 @@ export default function SimulationPage() {
                 />
                 <Show when={crewShortageEnabled()}>
                   <div class="mt-3 border-t border-border pt-3 dark:border-dark-border">
-                    <label class="mb-1 block text-xs text-text-muted">
-                      Operarios de campo ausentes <span class="text-fero-green-dark">(conectado)</span>
-                    </label>
+                    <label class="mb-1 block text-xs text-text-muted">Operarios de campo ausentes</label>
                     <select
                       value={operatorsShortage()}
                       onChange={(e) => setOperatorsShortage(e.currentTarget.value)}
@@ -662,9 +648,7 @@ export default function SimulationPage() {
                 <p class="mb-3 text-xs text-text-muted">
                   Más hormigas e iteraciones exploran más soluciones (mejor calidad posible, más tiempo de cálculo).
                 </p>
-                <label class="mb-1 block text-xs text-text-muted">
-                  Perfil <span class="text-fero-green-dark">(conectado)</span>
-                </label>
+                <label class="mb-1 block text-xs text-text-muted">Perfil</label>
                 <select
                   value={acoPreset()}
                   onChange={(e) => applyAcoPreset(e.currentTarget.value as AcoPresetId)}
@@ -676,9 +660,7 @@ export default function SimulationPage() {
                 </select>
                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label class="mb-1 block text-xs text-text-muted">
-                      Hormigas por iteración <span class="text-fero-green-dark">(conectado)</span>
-                    </label>
+                    <label class="mb-1 block text-xs text-text-muted">Hormigas por iteración</label>
                     <select
                       value={acoAnts()}
                       onChange={(e) => handleAcoAntsChange(e.currentTarget.value)}
@@ -690,9 +672,7 @@ export default function SimulationPage() {
                     </select>
                   </div>
                   <div>
-                    <label class="mb-1 block text-xs text-text-muted">
-                      Iteraciones <span class="text-fero-green-dark">(conectado)</span>
-                    </label>
+                    <label class="mb-1 block text-xs text-text-muted">Iteraciones</label>
                     <select
                       value={acoIterations()}
                       onChange={(e) => handleAcoIterationsChange(e.currentTarget.value)}
@@ -707,9 +687,7 @@ export default function SimulationPage() {
               </div>
               <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div class="min-w-0">
-                  <label class="mb-1 block text-xs text-text-muted">
-                    Intensidad de lluvia <span class="text-fero-green-dark">(conectado)</span>
-                  </label>
+                  <label class="mb-1 block text-xs text-text-muted">Intensidad de lluvia</label>
                   <select
                     value={rainIntensity()}
                     onChange={(e) => setRainIntensity(e.currentTarget.value)}
@@ -720,9 +698,7 @@ export default function SimulationPage() {
                   </select>
                 </div>
                 <div class="min-w-0">
-                  <label class="mb-1 block text-xs text-text-muted">
-                    Nivel de desechos <span class="text-fero-green-dark">(conectado)</span>
-                  </label>
+                  <label class="mb-1 block text-xs text-text-muted">Nivel de desechos</label>
                   <select
                     value={wasteLevel()}
                     onChange={(e) => setWasteLevel(e.currentTarget.value)}
@@ -971,6 +947,7 @@ export default function SimulationPage() {
           </Button>
         </div>
       </Show>
+      </div>
       </div>
       </Show>
 

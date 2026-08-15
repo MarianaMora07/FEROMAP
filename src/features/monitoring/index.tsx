@@ -1,30 +1,22 @@
-import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from 'solid-js';
 import { A, useSearchParams } from '@solidjs/router';
 import maplibregl, { type Map as MapLibreMap, type Marker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import {
   AlertTriangle,
   BookOpen,
-  Car,
-  CloudRain,
   Crosshair,
   FastForward,
   Maximize2,
   Minus,
   Plus,
-  Scale,
   Search,
-  ShieldAlert,
-  SlidersHorizontal,
   Trash2,
   Truck,
-  User,
 } from 'lucide-solid';
 import {
   Button,
   Card,
-  CardHeader,
-  KpiCard,
   ProgressBar,
   StatusBadge,
 } from '../../design-system/components';
@@ -32,7 +24,6 @@ import {
   advanceActiveRoutes,
   advanceRouteById,
   fetchMonitoringStatus,
-  type MonitoringKpi,
 } from '../../core/api/monitoring';
 import { fetchDailyPlan } from '../../core/api/planning';
 import { fetchOperatorRouteSnapshot } from '../../core/api/operator';
@@ -45,7 +36,6 @@ import {
 import { appState } from '../../core/stores/appStore';
 import { canSimulateFleetAdvance, isConductor, isOperationalSupervisor } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
-import { optimizationHref } from '../../core/planning/operationalLinks';
 import { parsePlaybackQueryParam } from '../../core/planning/operationalFlowUx';
 import { BreakdownReporter, ContingencyResultBanner } from '../contingency/BreakdownReporter';
 import { OperatorContingencyBanner } from '../contingency/OperatorContingencyBanner';
@@ -53,7 +43,6 @@ import { OperatorMyIncidents } from '../contingency/OperatorMyIncidents';
 import { CriticalContainerRecalc } from './CriticalContainerRecalc';
 import { RecentIncidentsPanel } from '../contingency/RecentIncidentsPanel';
 import { PlanningLevelBanner } from '../planning/PlanningLevelBanner';
-import { PlanningStatusBadge } from '../planning/PlanningStatusBadge';
 import { PlanningEmptyState } from '../planning/PlanningEmptyState';
 import { PLANNING_EMPTY_PRESETS } from '../../core/planning/planningEmptyStates';
 import { OPERATOR_EMPTY_PRESETS } from '../../core/operator/operatorEmptyStates';
@@ -67,6 +56,8 @@ import {
   MonitoringPlaybackPanel,
   MonitoringPlaybackToggle,
 } from './MonitoringPlaybackPanel';
+import { MonitoringContextPanel } from './MonitoringContextPanel';
+import { MonitoringDeskIntro, MonitoringStatsStrip } from './MonitoringDeskIntro';
 import { fetchDailyRoutePlayback } from '../../core/api/routePlayback';
 import { useRoutePlayback } from '../../core/route-playback/useRoutePlayback';
 import { RoutePlaybackLayer } from '../route-playback/RoutePlaybackLayer';
@@ -86,26 +77,10 @@ import {
   fitMapToOperationalData,
 } from '../../core/map/operationalMapConfig';
 import {
-  currentConditions,
   vehicleFilterOptions,
   type FleetLiveStatus,
   type LiveVehicle,
 } from '../../data/mock/monitoring';
-
-const activityTone = {
-  success: 'bg-fero-green/15 text-fero-green-dark',
-  info: 'bg-fero-blue/10 text-fero-blue',
-  warning: 'bg-amber-100 text-amber-600',
-  danger: 'bg-red-50 text-red-500',
-  default: 'bg-app text-slate-500',
-};
-
-const routeBarColor = {
-  green: 'green' as const,
-  blue: 'blue' as const,
-  purple: 'green' as const,
-  amber: 'amber' as const,
-};
 
 function truckSvg(color: string) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>`;
@@ -147,21 +122,6 @@ function buildVehiclePopup(v: LiveVehicle) {
       <button type="button" data-vehicle-id="${v.id}" class="popup-ver-vehiculo" style="background:none;border:none;padding:0;color:#1143F3;font-size:12px;font-weight:600;cursor:pointer;">Ver detalles</button>
     </div>
   `;
-}
-
-function KpiIcon(props: { name: MonitoringKpi['icon'] }) {
-  switch (props.name) {
-    case 'truck':
-      return <Truck size={22} />;
-    case 'trash':
-      return <Trash2 size={22} />;
-    case 'scale':
-      return <Scale size={22} />;
-    case 'shield':
-      return <ShieldAlert size={22} />;
-    case 'user':
-      return <User size={22} />;
-  }
 }
 
 function statusForBadge(status: FleetLiveStatus) {
@@ -535,83 +495,42 @@ export default function MonitoringPage() {
 
   return (
     <div class={`space-y-5 ${fieldMode() ? 'pb-36 md:pb-5' : ''}`}>
-      <PlanningLevelBanner level="operativo" title={monitoringBannerTitle()}>
-        <Show when={isConductor(authUser()?.role)}>
+      <Show when={fieldMode()}>
+        <PlanningLevelBanner level="operativo" title={monitoringBannerTitle()}>
           <p class="text-sm text-text-secondary">
             Ejecuta tu ruta, reporta incidencias y consulta el avance.{' '}
             <A href="/operator" class="font-semibold text-fero-blue hover:underline">
               Volver a Mi operación
             </A>
           </p>
-        </Show>
-        <Show when={isOperationalSupervisor(authUser()?.role)}>
-          <p class="text-sm text-text-secondary">
-            Modo supervisión — revisa flota e incidencias sin operar como conductor.{' '}
-            <A
-              href={optimizationHref({
-                date: operationDate(),
-                dailyPlanId: dailyPlan()?.id ?? dailyPlanIdParam(),
-              })}
-              class="font-semibold text-fero-blue hover:underline"
-            >
-              Volver al plan del día
-            </A>
-          </p>
-        </Show>
-      </PlanningLevelBanner>
-      <Show when={fieldMode()}>
+        </PlanningLevelBanner>
         <OperatorContingencyBanner />
       </Show>
+
       <Show when={!fieldMode()}>
         <ContingencyResultBanner />
+        <MonitoringDeskIntro
+          variant={isOperationalSupervisor(authUser()?.role) ? 'supervisor' : 'planner'}
+          fleetInRoute={monitoringData()?.fleetCounts.inRoute ?? 0}
+          operationDate={operationDate()}
+          dailyPlanId={dailyPlanIdParam()}
+          dailyPlan={dailyPlan()}
+        />
+        <MonitoringStatsStrip kpis={monitoringKpis()} loading={monitoringData.loading} />
       </Show>
 
-      <Show when={dailyPlan()}>
-        {(plan) => (
-          <div class="rounded-xl border border-fero-blue/30 bg-fero-blue/5 px-4 py-3">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <div class="flex flex-wrap items-center gap-2">
-                <p class="text-sm font-semibold text-fero-blue">Plan del día {plan().operationDate}</p>
-                <PlanningStatusBadge status={plan().status} />
-              </div>
-              <Show when={!isConductor(authUser()?.role)}>
-                <A
-                  href={optimizationHref({
-                    date: plan().operationDate,
-                    dailyPlanId: plan().id ?? dailyPlanIdParam(),
-                  })}
-                  class="text-xs font-semibold text-fero-blue hover:underline"
-                >
-                  Abrir en optimización
-                </A>
-              </Show>
-            </div>
-            <p class="mt-1 text-sm text-text-secondary">
-              {plan().finalPointIds.length} puntos en plan · {plan().pendingPoints.length} pendientes incorporados
-            </p>
-          </div>
-        )}
-      </Show>
-
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <p class="text-sm text-text-secondary">
-          <Show
-            when={fieldMode()}
-            fallback={
-              <>
-                Datos en vivo desde la API · {monitoringData()?.fleetCounts.inRoute ?? 0} vehículos en ruta
-              </>
-            }
-          >
+      <div class="flex flex-wrap items-center justify-end gap-2">
+        <Show when={fieldMode()}>
+          <p class="mr-auto text-sm text-text-secondary">
             Tu vehículo en campo
             <Show when={operatorVehicle()}>
               {(vehicle) => <span class="font-semibold text-text-primary"> · {vehicle().id}</span>}
             </Show>
-          </Show>
-          <Show when={operationDate() !== new Date().toISOString().slice(0, 10)}>
-            <span class="ml-1 text-text-muted">· Contexto: {operationDate()}</span>
-          </Show>
-        </p>
+            <Show when={operationDate() !== new Date().toISOString().slice(0, 10)}>
+              <span class="ml-1 text-text-muted">· Contexto: {operationDate()}</span>
+            </Show>
+          </p>
+        </Show>
         <div id="reportar-averia" class="flex flex-wrap items-center gap-2">
           <BreakdownReporter
             variant={fieldMode() ? 'operator' : 'planner'}
@@ -711,30 +630,6 @@ export default function MonitoringPage() {
         />
       </Show>
 
-      <Show when={!fieldMode()}>
-      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        <For each={monitoringKpis()}>
-          {(kpi) => (
-            <KpiCard
-              title={kpi.title}
-              value={kpi.value}
-              iconTone={kpi.iconTone}
-              icon={<KpiIcon name={kpi.icon} />}
-              footer={
-                'progress' in kpi && kpi.progress != null ? (
-                  <ProgressBar value={kpi.progress} color={kpi.iconTone === 'blue' ? 'blue' : 'green'} size="sm" />
-                ) : 'linkLabel' in kpi && kpi.linkLabel ? (
-                  <A href="/alerts" class="text-xs font-medium text-fero-blue hover:underline">
-                    {kpi.linkLabel}
-                  </A>
-                ) : undefined
-              }
-            />
-          )}
-        </For>
-      </div>
-      </Show>
-
       <div class={`grid items-stretch gap-4 ${fieldMode() ? '' : 'xl:grid-cols-5'}`}>
         <Card
           padding={false}
@@ -761,13 +656,6 @@ export default function MonitoringPage() {
             >
               <For each={vehicleFilterOptions}>{(o) => <option value={o.value}>{o.label}</option>}</For>
             </select>
-            <button
-              type="button"
-              class="inline-flex items-center gap-1.5 rounded-md border border-default px-2.5 py-1.5 text-xs text-text-secondary hover:bg-app"
-            >
-              <SlidersHorizontal size={14} />
-              Filtros
-            </button>
             <button
               type="button"
               class={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs ${
@@ -898,11 +786,6 @@ export default function MonitoringPage() {
             </For>
             </Show>
           </ul>
-          <div class="border-t border-default px-4 py-2.5">
-            <A href="/vehicles" class="text-sm font-medium text-fero-blue hover:underline">
-              Ver todos los vehículos
-            </A>
-          </div>
         </Card>
         </Show>
       </div>
@@ -929,125 +812,13 @@ export default function MonitoringPage() {
       </Show>
 
       <Show when={!fieldMode()}>
-      <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card>
-          <CardHeader title="Actividades en tiempo real" />
-          <ul class="space-y-3">
-            <For each={liveActivities()}>
-              {(a) => (
-                <li class="flex gap-2.5">
-                  <span class={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${activityTone[a.tone]}`}>
-                    <ActivityDot tone={a.tone} />
-                  </span>
-                  <div class="min-w-0">
-                    <p class="text-[11px] text-text-muted">{a.time}</p>
-                    <p class="text-sm text-text-secondary">{a.text}</p>
-                  </div>
-                </li>
-              )}
-            </For>
-          </ul>
-        </Card>
-
-        <Card>
-          <CardHeader title="Progreso de recolección por ruta" />
-          <ul class="space-y-3.5">
-            <For each={displayRouteProgress()}>
-              {(r) => (
-                <li>
-                  <div class="mb-1 flex items-center justify-between gap-2 text-sm">
-                    <span class="font-medium text-text-primary">{r.label}</span>
-                    <span class="text-xs text-text-muted">
-                      {r.done} / {r.total} puntos · <span class="font-semibold text-text-secondary">{r.pct}%</span>
-                    </span>
-                  </div>
-                  <ProgressBar value={r.pct} color={routeBarColor[r.color]} size="sm" />
-                </li>
-              )}
-            </For>
-          </ul>
-        </Card>
-
-        <Card>
-          <CardHeader title="Alertas e incidencias" />
-          <ul class="space-y-3">
-            <For each={monitoringAlerts()}>
-              {(al) => (
-                <li class="flex gap-2.5">
-                  <span
-                    class={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
-                      al.tone === 'danger' ? 'bg-red-50 text-red-500' : 'bg-amber-100 text-amber-600'
-                    }`}
-                  >
-                    <AlertTriangle size={14} />
-                  </span>
-                  <div class="min-w-0">
-                    <p class="text-sm font-semibold text-text-primary">{al.title}</p>
-                    <p class="text-xs text-text-secondary">{al.detail}</p>
-                    <p class="mt-0.5 text-[11px] text-text-muted">{al.time}</p>
-                  </div>
-                </li>
-              )}
-            </For>
-          </ul>
-        </Card>
-
-        <Card>
-          <CardHeader title="Condiciones actuales" />
-          <ul class="space-y-3">
-            <li class="flex items-center gap-3">
-              <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-fero-blue/10 text-fero-blue">
-                <CloudRain size={18} />
-              </span>
-              <div>
-                <p class="text-xs text-text-muted">Clima</p>
-                <p class="text-sm font-semibold text-text-primary">
-                  {currentConditions.weather.label} · {currentConditions.weather.tempC}°C
-                </p>
-              </div>
-            </li>
-            <li class="flex items-center gap-3">
-              <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 text-amber-600">
-                <Car size={18} />
-              </span>
-              <div>
-                <p class="text-xs text-text-muted">Tráfico</p>
-                <p class="text-sm font-semibold text-text-primary">{currentConditions.traffic}</p>
-              </div>
-            </li>
-            <li class="flex items-center gap-3">
-              <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-red-50 text-red-500">
-                <AlertTriangle size={18} />
-              </span>
-              <div>
-                <p class="text-xs text-text-muted">Vías afectadas</p>
-                <p class="text-sm font-semibold text-text-primary">
-                  {currentConditions.affectedRoads}
-                </p>
-              </div>
-            </li>
-          </ul>
-          <A href="/map" class="mt-4 inline-flex text-sm font-medium text-fero-blue hover:underline">
-            Ver en mapa
-          </A>
-        </Card>
-      </div>
-      </Show>
-
-      <Show when={!fieldMode()}>
-      <RecentIncidentsPanel refreshKey={incidentsRefreshKey()} />
+        <MonitoringContextPanel
+          activities={liveActivities()}
+          routeProgress={displayRouteProgress()}
+          alerts={monitoringAlerts()}
+        />
+        <RecentIncidentsPanel refreshKey={incidentsRefreshKey()} />
       </Show>
     </div>
   );
-}
-
-function ActivityDot(props: { tone: keyof typeof activityTone }) {
-  const icon: Record<keyof typeof activityTone, () => JSX.Element> = {
-    success: () => <Trash2 size={12} />,
-    info: () => <Truck size={12} />,
-    warning: () => <Car size={12} />,
-    danger: () => <AlertTriangle size={12} />,
-    default: () => <Truck size={12} />,
-  };
-  return icon[props.tone]();
 }
