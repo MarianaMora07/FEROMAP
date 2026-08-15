@@ -14,6 +14,7 @@ from app.services.route_geometry_service import (
     build_route_linestring,
     build_route_linestring_cached,
     clear_route_geometry_cache,
+    snap_lonlat_sequence,
 )
 from tests.resident_fixtures import collection_point, waypoint
 
@@ -74,6 +75,16 @@ def test_build_route_linestring_follows_road_graph_with_dense_geometry(monkeypat
     monkeypatch.setattr(route_geometry_service, "load_road_graph", lambda: _chain_graph())
     monkeypatch.setattr(route_geometry_service, "build_tour_coordinates", lambda _graph, _seq: dense)
     monkeypatch.setattr(route_geometry_service, "nearest_node", lambda _graph, _lon, _lat: 1)
+    monkeypatch.setattr(
+        route_geometry_service,
+        "nearest_node_in_component",
+        lambda _graph, _lon, _lat, _component: 1,
+    )
+    monkeypatch.setattr(
+        route_geometry_service,
+        "weakly_connected_component_nodes",
+        lambda _graph, _node: {1, 2, 3, 4, 5},
+    )
     clear_route_geometry_cache()
 
     waypoints = _make_waypoints(3)
@@ -103,11 +114,77 @@ def test_build_route_linestring_cached_reuses_geometry():
 
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(route_geometry_service, "load_road_graph", lambda: _chain_graph())
+        patch.setattr(
+            route_geometry_service,
+            "nearest_node",
+            lambda _graph, _lon, _lat: 1,
+        )
+        patch.setattr(
+            route_geometry_service,
+            "nearest_node_in_component",
+            lambda _graph, _lon, _lat, _component: 1,
+        )
+        patch.setattr(
+            route_geometry_service,
+            "weakly_connected_component_nodes",
+            lambda _graph, _node: {1, 2, 3, 4, 5},
+        )
+        patch.setattr(
+            route_geometry_service,
+            "build_tour_coordinates",
+            lambda _graph, _seq: [
+                [-62.715, 8.295],
+                [-62.714, 8.2955],
+                [-62.713, 8.296],
+                [-62.712, 8.297],
+                [-62.715, 8.295],
+            ],
+        )
         first = build_route_linestring_cached(route, waypoints)
         second = build_route_linestring_cached(route, waypoints)
 
     assert first == second
     assert len(first) > 3
+
+
+def test_snap_lonlat_sequence_follows_road_graph(monkeypatch):
+    dense = [
+        [-62.715, 8.295],
+        [-62.714, 8.2955],
+        [-62.713, 8.296],
+        [-62.712, 8.297],
+    ]
+    monkeypatch.setattr(route_geometry_service, "load_road_graph", lambda: _chain_graph())
+    monkeypatch.setattr(route_geometry_service, "build_tour_coordinates", lambda _graph, _seq: dense)
+    monkeypatch.setattr(route_geometry_service, "nearest_node", lambda _graph, _lon, _lat: 1)
+    monkeypatch.setattr(
+        route_geometry_service,
+        "nearest_node_in_component",
+        lambda _graph, _lon, _lat, _component: 1,
+    )
+    monkeypatch.setattr(
+        route_geometry_service,
+        "weakly_connected_component_nodes",
+        lambda _graph, _node: {1, 2, 3, 4, 5},
+    )
+
+    snapped = snap_lonlat_sequence(
+        [[-62.715, 8.295], [-62.712, 8.297]],
+        include_depot=False,
+    )
+
+    assert snapped == dense
+    assert len(snapped) > 2
+
+
+def test_shortest_path_nodes_does_not_invent_straight_jump():
+    from app.services.graph_service import shortest_path_nodes
+
+    graph = nx.MultiDiGraph()
+    graph.add_node(1, x=-62.71, y=8.29)
+    graph.add_node(2, x=-62.80, y=8.25)
+    # Dos nodos sin arista: no debe devolver [1, 2] (diagonal fantasma).
+    assert shortest_path_nodes(graph, 1, 2) == [1]
 
 
 def test_build_route_linestring_falls_back_when_graph_unavailable(monkeypatch):

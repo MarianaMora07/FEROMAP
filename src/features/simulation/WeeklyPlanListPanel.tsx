@@ -73,14 +73,21 @@ export function WeeklyPlanListPanel() {
               const current = () => isCurrentWeek(row.weekStartDate);
               return (
                 <li>
-                  <button
-                    type="button"
-                    class={`w-full rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    class={`w-full cursor-pointer rounded-lg border px-3 py-2.5 text-left transition-colors ${
                       selected()
                         ? 'border-fero-green/50 bg-fero-green/10'
                         : 'border-border hover:bg-surface-hover dark:border-dark-border dark:hover:bg-dark-surface-hover'
                     } ${current() ? 'ring-1 ring-fero-blue/40' : ''}`}
                     onClick={() => handleSelect(row.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        handleSelect(row.id);
+                      }
+                    }}
                   >
                     <div class="flex items-start justify-between gap-2">
                       <div class="min-w-0">
@@ -115,7 +122,7 @@ export function WeeklyPlanListPanel() {
                         </button>
                       </Show>
                     </div>
-                  </button>
+                  </div>
                 </li>
               );
             }}

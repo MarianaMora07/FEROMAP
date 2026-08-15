@@ -13,6 +13,7 @@ import { analyticsPageMeta } from '../../data/mock/analytics';
 import { alertsPageMeta } from '../../data/mock/alerts';
 import { adminPageMeta } from '../../data/mock/admin';
 import { profilePageMeta } from '../../data/mock/profile';
+import { UserMenu } from './UserMenu';
 
 interface HeaderProps {
   title?: string;
@@ -103,6 +104,8 @@ export function Header(props: HeaderProps) {
         >
           <RefreshCw size={18} />
         </button>
+
+        <UserMenu />
       </div>
     </header>
   );
