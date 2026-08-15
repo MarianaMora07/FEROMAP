@@ -67,6 +67,7 @@ interface OptimizationState {
   logs: OptimizeResponse['logs'];
   history: Awaited<ReturnType<typeof fetchOptimizationHistory>>;
   lastDispatch: { count: number; routeIds: number[] } | null;
+  playbackOpen: boolean;
   error: string | null;
 }
 
@@ -89,6 +90,7 @@ const [state, setState] = createStore<OptimizationState>({
   logs: [],
   history: [],
   lastDispatch: null,
+  playbackOpen: false,
   error: null,
 });
 
@@ -177,8 +179,17 @@ export function selectOperationDate(operationDate: string): void {
     lastDispatch: null,
     kpis: null,
     logs: [],
+    playbackOpen: false,
   });
   updateOptimizationPreset({ operationDate });
+}
+
+export function openOptimizationPlayback(): void {
+  setState({ playbackOpen: true });
+}
+
+export function closeOptimizationPlayback(): void {
+  setState({ playbackOpen: false });
 }
 
 export async function refreshDailyPlan(): Promise<void> {
@@ -223,6 +234,7 @@ export async function executeOptimization(): Promise<void> {
     logs: [],
     error: null,
     lastDispatch: null,
+    playbackOpen: false,
   });
 
   try {
@@ -247,6 +259,9 @@ export async function executeOptimization(): Promise<void> {
       setState({
         kpis,
         lastSimulationId: 1,
+        dailyPlan: state.dailyPlan
+          ? { ...state.dailyPlan, status: 'optimized', simulationId: 1 }
+          : null,
         lastResult: {
           simulationId: 1,
           scenarioId: state.preset.scenarioId,

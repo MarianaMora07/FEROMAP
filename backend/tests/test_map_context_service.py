@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -17,6 +18,7 @@ from app.services.map_context_service import (
     planned_routes_geojson,
 )
 from tests.resident_fixtures import collection_point, optimized_route, waypoint
+from tests.db_fixtures import mock_db_with_settings
 
 
 def _make_waypoints(count: int = 3):
@@ -40,7 +42,6 @@ def test_in_bbox_accepts_points_inside_unare():
 
 
 def test_planned_routes_geojson_includes_pending_route_with_color():
-    db = MagicMock()
     pending = optimized_route(
         12,
         status="pending",
@@ -50,7 +51,7 @@ def test_planned_routes_geojson_includes_pending_route_with_color():
     pending.route_kind = "optimized"
     pending.updated_at = datetime(2026, 8, 13, 12, 0, tzinfo=timezone.utc)
 
-    db.scalars.return_value.unique.return_value.all.return_value = [pending]
+    db = mock_db_with_settings(scalars_result=[pending])
 
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(
@@ -76,7 +77,6 @@ def test_planned_routes_geojson_includes_pending_route_with_color():
 
 
 def test_planned_routes_geojson_assigns_rotating_colors():
-    db = MagicMock()
     routes = []
     for idx, route_id in enumerate((12, 13), start=0):
         route = optimized_route(
@@ -89,7 +89,7 @@ def test_planned_routes_geojson_assigns_rotating_colors():
         route.updated_at = datetime(2026, 8, 13, 12, 0, tzinfo=timezone.utc)
         routes.append(route)
 
-    db.scalars.return_value.unique.return_value.all.return_value = routes
+    db = mock_db_with_settings(scalars_result=routes)
 
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(
@@ -106,7 +106,7 @@ def test_planned_routes_geojson_assigns_rotating_colors():
 def test_map_operational_context_filters_routes_outside_bbox(monkeypatch):
     db = MagicMock()
 
-    def fake_planned_routes(_db, *, driver_id=None, daily_plan_id=None, scoped_to_daily_plan=False):
+    def fake_planned_routes(_db, **kwargs):
         return {
             "type": "FeatureCollection",
             "features": [
@@ -143,6 +143,17 @@ def test_map_operational_context_filters_routes_outside_bbox(monkeypatch):
     monkeypatch.setattr(
         "app.services.map_context_service._build_map_metrics",
         lambda _db, active_routes=0: [],
+    )
+    monkeypatch.setattr(
+        "app.services.map_context_service.resolve_operational_facilities",
+        lambda _db: SimpleNamespace(
+            depot=(8.295, -62.715),
+            landfill=(8.28, -62.69),
+            landfill_unload_minutes=15,
+            shift_budget_seconds=43200,
+            work_start="06:00",
+            work_end="18:00",
+        ),
     )
 
     context = map_operational_context(db, bbox="-62.81,8.24,-62.69,8.31")

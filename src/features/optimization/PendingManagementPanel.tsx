@@ -9,6 +9,8 @@ import {
 
 interface PendingManagementPanelProps {
   operationDate: string;
+  /** Sin card exterior cuando va dentro de un panel colapsable */
+  embedded?: boolean;
 }
 
 export function PendingManagementPanel(props: PendingManagementPanelProps) {
@@ -47,12 +49,8 @@ export function PendingManagementPanel(props: PendingManagementPanelProps) {
     await load();
   };
 
-  return (
-    <Card id="pendientes">
-      <CardHeader
-        title="Gestión de pendientes"
-        subtitle={`Carry-over y visitas para el ${props.operationDate}`}
-      />
+  const body = (
+    <>
       <div class="grid gap-3 md:grid-cols-4">
         <TextField label="Estado" value={status()} onInput={(e) => setStatus(e.currentTarget.value)} />
         <TextField
@@ -99,6 +97,20 @@ export function PendingManagementPanel(props: PendingManagementPanelProps) {
           )}
         </For>
       </ul>
+    </>
+  );
+
+  if (props.embedded) {
+    return <div data-testid="pending-management-panel">{body}</div>;
+  }
+
+  return (
+    <Card id="pendientes">
+      <CardHeader
+        title="Gestión de pendientes"
+        subtitle={`Carry-over y visitas para el ${props.operationDate}`}
+      />
+      {body}
     </Card>
   );
 }

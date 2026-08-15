@@ -1,6 +1,6 @@
 import { For, Show, createSignal } from 'solid-js';
 import { A } from '@solidjs/router';
-import { ChevronRight, FileText, MapPin } from 'lucide-solid';
+import { ChevronRight, FileText, MapPin, Recycle } from 'lucide-solid';
 import {
   Badge,
   Button,
@@ -13,6 +13,7 @@ import type { OperatorRouteSnapshot, OperatorRouteStop } from '../../core/api/op
 import {
   operatorStopStatusLabel,
   operatorStopStatusVariant,
+  isOperatorLandfillStop,
 } from '../../core/api/operator';
 import { PlanningEmptyState } from '../planning/PlanningEmptyState';
 import { OPERATOR_EMPTY_PRESETS } from '../../core/operator/operatorEmptyStates';
@@ -103,30 +104,37 @@ export function OperatorRoutePanel(props: OperatorRoutePanelProps) {
                 const isNext = () =>
                   stop.status === 'pending' &&
                   stop.waypointId === props.snapshot?.nextStop?.waypointId;
+                const isLandfill = () => isOperatorLandfillStop(stop);
                 return (
                   <li>
                     <button
                       type="button"
                       data-testid={`operator-stop-item-${stop.sequenceOrder}`}
                       aria-current={isNext() ? 'step' : undefined}
-                      aria-label={`Parada ${stop.sequenceOrder}: ${stop.code}, ${operatorStopStatusLabel(stop.status)}${isNext() ? ', siguiente parada' : ''}`}
+                      aria-label={`Parada ${stop.sequenceOrder}: ${isLandfill() ? 'Vertedero' : stop.code}, ${operatorStopStatusLabel(stop.status)}${isNext() ? ', siguiente parada' : ''}`}
                       class={`flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-surface-hover dark:hover:bg-dark-surface/60 ${
                         isNext() ? 'bg-fero-blue/5 dark:bg-fero-blue/10' : ''
-                      }`}
+                      } ${isLandfill() ? 'border-l-4 border-stone-500' : ''}`}
                       onClick={() => setSelectedStop(stop)}
                     >
                       <span
                         class={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                          isNext()
-                            ? 'bg-fero-blue text-white'
-                            : 'bg-surface-muted text-text-secondary dark:bg-dark-surface'
+                          isLandfill()
+                            ? 'bg-stone-200 text-stone-800 dark:bg-stone-700 dark:text-stone-100'
+                            : isNext()
+                              ? 'bg-fero-blue text-white'
+                              : 'bg-surface-muted text-text-secondary dark:bg-dark-surface'
                         }`}
                       >
-                        {stop.sequenceOrder}
+                        <Show when={isLandfill()} fallback={stop.sequenceOrder}>
+                          <Recycle size={16} />
+                        </Show>
                       </span>
                       <div class="min-w-0 flex-1">
                         <div class="flex flex-wrap items-center gap-2">
-                          <p class="font-semibold text-text-primary dark:text-white">{stop.code}</p>
+                          <p class="font-semibold text-text-primary dark:text-white">
+                            {isLandfill() ? 'Vertedero — descarga' : stop.code}
+                          </p>
                           <Badge variant={operatorStopStatusVariant(stop.status)} size="sm">
                             {operatorStopStatusLabel(stop.status)}
                           </Badge>

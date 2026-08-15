@@ -1,21 +1,16 @@
 import { For, Show, createMemo, createResource, createSignal, type JSX } from 'solid-js';
 import { A } from '@solidjs/router';
 import {
-  ArrowRight,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Download,
   Eye,
-  Flag,
   Fuel,
   Gauge,
   MapPin,
   Pencil,
   Phone,
-  Plus,
   Search,
-  SlidersHorizontal,
   Truck,
   Wrench,
   X,
@@ -27,7 +22,6 @@ import {
 } from 'lucide-solid';
 import {
   Button,
-  KpiCard,
   ProgressBar,
   StatusBadge,
   ToastContainer,
@@ -64,26 +58,16 @@ import { VehicleActionsMenu } from './VehicleActionsMenu';
 import { VehicleEditModal } from './VehicleEditModal';
 import { VehicleMaintenancePanel } from './VehicleMaintenancePanel';
 import { VehicleOptimizationBadges } from './VehicleOptimizationBadges';
+import { FleetStatsStrip, VehiclesFleetIntro } from './VehiclesFleetIntro';
 
-const kpiIcon = {
-  truck: () => <Truck size={18} />,
-  wrench: () => <Wrench size={18} />,
-  flag: () => <Flag size={18} />,
-} as const;
+const implementedDetailTabs = vehicleDetailTabs.filter(
+  (tab) => tab.id === 'info' || tab.id === 'maintenance',
+);
 
 function fuelBarColor(pct: number): 'green' | 'amber' | 'red' {
   if (pct >= 50) return 'green';
   if (pct >= 25) return 'amber';
   return 'red';
-}
-
-function KpiSkeleton() {
-  return (
-    <div class="animate-pulse rounded-lg border border-border bg-surface p-4 dark:border-dark-border dark:bg-dark-surface">
-      <div class="mb-3 h-3 w-28 rounded bg-slate-200 dark:bg-slate-700" />
-      <div class="h-8 w-16 rounded bg-slate-200 dark:bg-slate-700" />
-    </div>
-  );
 }
 
 function TableRowSkeleton() {
@@ -134,7 +118,7 @@ export default function VehiclesPage() {
   const [assignableOnly, setAssignableOnly] = createSignal(false);
   const [page, setPage] = createSignal(1);
   const [pageSize, setPageSize] = createSignal(8);
-  const [selectedId, setSelectedId] = createSignal<string | null>('TR-08');
+  const [selectedId, setSelectedId] = createSignal<string | null>(null);
   const [detailTab, setDetailTab] = createSignal<VehicleDetailTabId>('info');
   const [statusUpdating, setStatusUpdating] = createSignal(false);
   const [exporting, setExporting] = createSignal(false);
@@ -325,60 +309,14 @@ export default function VehiclesPage() {
         </div>
       </Show>
 
-      {/* KPI row: max 2 cols until 2xl so cards stay readable with sidebar */}
-      <div class="flex flex-col gap-3">
-        <div class="grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 2xl:grid-cols-4">
-          <Show
-            when={!vehiclesLoading()}
-            fallback={
-              <For each={Array.from({ length: 4 })}>{() => <KpiSkeleton />}</For>
-            }
-          >
-            <For each={vehiclesKpisData()}>
-              {(kpi) => (
-                <KpiCard
-                  title={kpi.title}
-                  value={kpi.value}
-                  unit={kpi.unit}
-                  iconTone={kpi.iconTone}
-                  icon={kpiIcon[kpi.icon]()}
-                  class={
-                    kpi.highlight
-                      ? 'border-fero-green/40 bg-fero-green/5 ring-1 ring-fero-green/20'
-                      : undefined
-                  }
-                />
-              )}
-            </For>
-          </Show>
-        </div>
-        <div class="flex flex-wrap gap-2">
-          <Show when={canManage()}>
-            <A href="/drivers">
-              <Button variant="outline" class="gap-2 px-5 py-2.5">
-                Conductores
-              </Button>
-            </A>
-          </Show>
-          <Show when={canGoToSimulation()}>
-            <A href={simulationHref()}>
-              <Button
-                variant="outline"
-                class="gap-2 px-5 py-2.5"
-                icon={<ArrowRight size={17} />}
-              >
-                {assignableCount() > 0
-                  ? `Nueva simulación (${assignableCount()} asignables)`
-                  : 'Nueva simulación'}
-              </Button>
-            </A>
-          </Show>
-          <Button variant="primary" class="gap-2 px-5 py-2.5" icon={<Plus size={17} />}>
-            Nuevo vehículo
-            <ChevronDown size={15} class="opacity-80" />
-          </Button>
-        </div>
-      </div>
+      <VehiclesFleetIntro
+        assignableCount={assignableCount()}
+        simulationHref={simulationHref()}
+        showSimulationLink={canGoToSimulation()}
+        showDriversLink={canManage()}
+      />
+
+      <FleetStatsStrip kpis={vehiclesKpisData()} loading={vehiclesLoading()} />
 
       <div class="flex flex-col gap-4 lg:flex-row lg:items-start">
         <section class="min-w-0 flex-1 rounded-xl border border-border bg-surface shadow-xs dark:bg-dark-surface dark:border-dark-border">
@@ -434,14 +372,6 @@ export default function VehiclesPage() {
             >
               <Truck size={16} />
               Asignables
-            </button>
-
-            <button
-              type="button"
-              class="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm text-text-secondary hover:bg-surface-hover"
-            >
-              <SlidersHorizontal size={16} />
-              Filtros
             </button>
 
             <button
@@ -648,8 +578,8 @@ export default function VehiclesPage() {
                     </div>
                   </div>
 
-                  <div class="mb-4 grid grid-cols-4 border-b border-border dark:border-dark-border">
-                    <For each={[...vehicleDetailTabs]}>
+                  <div class="mb-4 grid grid-cols-2 border-b border-border dark:border-dark-border">
+                    <For each={[...implementedDetailTabs]}>
                       {(tab) => (
                         <button
                           type="button"
@@ -744,12 +674,6 @@ export default function VehiclesPage() {
                       loading={vehicleIncidents.loading}
                       error={vehicleIncidents.error}
                     />
-                  </Show>
-
-                  <Show when={detailTab() !== 'info' && detailTab() !== 'maintenance'}>
-                    <p class="py-8 text-center text-sm text-text-muted">
-                      Contenido de {vehicleDetailTabs.find((t) => t.id === detailTab())?.label.toLowerCase()} próximamente.
-                    </p>
                   </Show>
                 </div>
 

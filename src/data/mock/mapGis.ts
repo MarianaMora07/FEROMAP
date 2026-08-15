@@ -94,6 +94,7 @@ export const mapLayers: MapLayerItem[] = [
   },
   { id: 'traffic', label: 'Tráfico en tiempo real', checked: false },
   { id: 'incidents', label: 'Incidencias viales', checked: false },
+  { id: 'landfill', label: 'Vertedero', checked: true },
   { id: 'satellite', label: 'Imágenes satelitales', checked: false },
 ];
 

@@ -95,11 +95,24 @@ fi
 echo "   ✅ simulationId=${sim_id}  ahorro≈${saving}%"
 
 echo ""
-echo "▶ 5/7 Rutas y dashboard…"
+echo "▶ 5/7 Rutas, dashboard y playback del plan del día…"
 curl -sf -H "Authorization: Bearer ${TOKEN}" "${API_BASE}/api/v1/routes/optimized" >/dev/null
 curl -sf "${API_BASE}/api/v1/dashboard/summary" >/dev/null
 curl -sf -H "Authorization: Bearer ${TOKEN}" "${API_BASE}/api/v1/reports/summary" >/dev/null
-echo "   ✅ Rutas optimizadas, dashboard y reportes"
+today_iso="$(date +%Y-%m-%d)"
+daily_json="$(curl -sf -H "Authorization: Bearer ${TOKEN}" "${API_BASE}/api/v1/planning/daily/${today_iso}")"
+daily_id="$(echo "${daily_json}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))")"
+if [[ -z "${daily_id}" ]]; then
+  echo "❌ No se encontró plan del día para ${today_iso}" >&2
+  exit 1
+fi
+playback_json="$(curl -sf -H "Authorization: Bearer ${TOKEN}" "${API_BASE}/api/v1/planning/daily/${daily_id}/routes/playback")"
+routes_count="$(echo "${playback_json}" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('routes',[])))")"
+if [[ "${routes_count}" -lt 1 ]]; then
+  echo "❌ Playback sin rutas (dailyPlanId=${daily_id}). Ejecuta: just seed" >&2
+  exit 1
+fi
+echo "   ✅ Rutas optimizadas, dashboard, reportes y playback (${routes_count} ruta(s))"
 
 echo ""
 echo "▶ 6/7 Detalle de simulación #${sim_id}…"

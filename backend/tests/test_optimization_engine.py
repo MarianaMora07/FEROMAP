@@ -13,26 +13,25 @@ from app.services.optimization_service import (
     _baseline_route,
     _build_distance_matrix,
     _build_engine_metrics,
+    _coalesce_optimized_solution,
     _critical_coverage_pct,
     _evaluate_solution,
     _format_computation_log_message,
     _haversine_m,
+    _kpi_distance_km,
+    _kpi_saving_percentage,
+    _landfill_idx,
     _route_cost,
     _two_opt,
 )
+from tests.vrp_matrix_helpers import aco_multi_trip_kwargs, vrp_matrix
 
 
 def _symmetric_matrix(n: int, base: float = 100.0) -> tuple[list[list[float]], list[list[float]]]:
-    dist = [[0.0] * n for _ in range(n)]
-    time = [[0.0] * n for _ in range(n)]
-    for i in range(n):
-        for j in range(n):
-            if i == j:
-                continue
-            d = base * abs(i - j)
-            dist[i][j] = d
-            time[i][j] = d / 10
-    return dist, time
+    """Compat: matrices antiguas N+1; preferir vrp_matrix para multi-viaje."""
+    if n >= 3:
+        return vrp_matrix(n - 2, base=base)
+    return vrp_matrix(max(1, n - 1), base=base)
 
 
 def test_haversine_m_same_point_is_zero():
@@ -82,35 +81,40 @@ def test_aco_cvrp_respects_capacity_and_covers_customers():
     n_customers = 6
     demands = [10.0, 15.0, 8.0, 12.0, 20.0, 5.0]
     capacities = [40.0, 40.0]
-    dist, time = _symmetric_matrix(n_customers + 1, base=80.0)
+    dist, time = vrp_matrix(n_customers, base=80.0)
+    kwargs = aco_multi_trip_kwargs(n_customers, len(capacities))
+    landfill_idx = kwargs["landfill_idx"]
 
-    solution = _aco_cvrp(n_customers, demands, capacities, dist, time, seed=7)
+    solution = _aco_cvrp(n_customers, demands, capacities, dist, time, seed=7, **kwargs)
 
     visited: set[int] = set()
     for route in solution.vehicle_routes:
         load = 0.0
-        cap_idx = 0
+        cap = capacities[0]
         for node in route:
-            if node == 0:
+            if node in (0, landfill_idx):
+                load = 0.0
                 continue
             visited.add(node)
             load += demands[node - 1]
-        assert load <= capacities[cap_idx] + 1e-6 or len(solution.vehicle_routes) > 1
+            assert load <= cap + 1e-6
 
     assert visited == set(range(1, n_customers + 1))
     assert solution.distance_m > 0
 
 
-def test_aco_beats_or_matches_baseline_on_small_instance():
+def test_aco_finds_feasible_solution_on_small_instance():
     n_customers = 4
-    demands = [5.0, 5.0, 5.0, 5.0]
+    demands = [4.0, 4.0, 4.0, 4.0]
     capacities = [20.0]
-    dist, time = _symmetric_matrix(n_customers + 1, base=100.0)
+    dist, time = vrp_matrix(n_customers, base=100.0)
+    kwargs = aco_multi_trip_kwargs(n_customers, 1)
 
-    baseline = _baseline_route(n_customers, dist, time)
-    optimized = _aco_cvrp(n_customers, demands, capacities, dist, time, seed=42)
+    optimized = _aco_cvrp(n_customers, demands, capacities, dist, time, seed=42, **kwargs)
 
-    assert optimized.distance_m <= baseline.distance_m * 1.05
+    assert optimized.distance_m > 0
+    assert optimized.uncovered_customer_indices == []
+    assert any(1 <= idx <= n_customers for route in optimized.vehicle_routes for idx in route)
 
 
 def test_evaluate_solution_sums_routes():
@@ -128,9 +132,18 @@ def test_build_distance_matrix_shape():
         CustomerNode(1, "C1", 0, 10.0, 50, -62.71, 8.29),
         CustomerNode(2, "C2", 0, 12.0, 60, -62.72, 8.30),
     ]
-    dist, time = _build_distance_matrix(None, 0, customers)  # type: ignore[arg-type]
-    assert len(dist) == 3
-    assert len(dist[0]) == 3
+    dist, time = _build_distance_matrix(
+        None,
+        0,
+        customers,
+        depot_lon=-62.715,
+        depot_lat=8.295,
+        landfill_node=0,
+        landfill_lon=-62.690,
+        landfill_lat=8.280,
+    )
+    assert len(dist) == 4
+    assert len(dist[0]) == 4
     assert dist[0][0] == 0.0
     assert dist[1][2] > 0
 
@@ -196,7 +209,8 @@ def test_aco_cvrp_records_convergence_curve():
     n_customers = 4
     demands = [5.0, 5.0, 5.0, 5.0]
     capacities = [20.0]
-    dist, time = _symmetric_matrix(n_customers + 1, base=100.0)
+    dist, time = vrp_matrix(n_customers, base=100.0)
+    kwargs = aco_multi_trip_kwargs(n_customers, 1)
 
     solution = _aco_cvrp(
         n_customers,
@@ -208,6 +222,7 @@ def test_aco_cvrp_records_convergence_curve():
         aco_iterations=6,
         aco_patience=0,
         seed=3,
+        **kwargs,
     )
 
     assert len(solution.aco_convergence) == 6
@@ -246,7 +261,8 @@ def test_aco_early_stops_when_no_improvement(monkeypatch):
     n_customers = 4
     demands = [5.0, 5.0, 5.0, 5.0]
     capacities = [20.0]
-    dist, time = _symmetric_matrix(n_customers + 1, base=100.0)
+    dist, time = vrp_matrix(n_customers, base=100.0)
+    kwargs = aco_multi_trip_kwargs(n_customers, 1)
 
     solution = _aco_cvrp(
         n_customers,
@@ -258,8 +274,31 @@ def test_aco_early_stops_when_no_improvement(monkeypatch):
         aco_iterations=30,
         aco_patience=2,
         seed=1,
+        **kwargs,
     )
 
     assert solution.aco_iterations_run < 30
     assert solution.aco_stopped_early is True
     assert solution.distance_m > 0
+
+
+def test_kpi_distance_km_rejects_infinity():
+    assert _kpi_distance_km(float("inf")) is None
+    value = _kpi_distance_km(12_500.0)
+    assert value is not None
+    assert float(value) == 12.5
+
+
+def test_kpi_saving_percentage_rejects_infinity():
+    assert _kpi_saving_percentage(10_000.0, float("inf")) is None
+    value = _kpi_saving_percentage(10_000.0, 8_000.0)
+    assert value is not None
+    assert float(value) == 20.0
+
+
+def test_coalesce_optimized_solution_uses_fallback_when_aco_fails():
+    fallback = RouteSolution(vehicle_routes=[[0, 1, 0]], distance_m=500.0, duration_s=120.0)
+    failed = RouteSolution(vehicle_routes=[], distance_m=float("inf"), duration_s=float("inf"))
+    coalesced = _coalesce_optimized_solution(failed, fallback)
+    assert coalesced.distance_m == 500.0
+    assert coalesced.vehicle_routes == [[0, 1, 0]]

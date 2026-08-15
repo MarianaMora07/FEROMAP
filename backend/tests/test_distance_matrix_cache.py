@@ -7,6 +7,7 @@ from app.services.distance_matrix_cache import (
     build_matrix_from_parent,
     find_incremental_parent_cache,
     load_distance_matrix_cache,
+    sanitize_distance_matrix,
     save_distance_matrix_cache,
 )
 
@@ -121,3 +122,21 @@ def test_build_matrix_from_parent_patches_added_point(tmp_path, monkeypatch):
     assert recomputed > 0
     assert dist[1][2] == 30.0
     assert any(call[0] == 3 or call[1] == 3 for call in calls)
+
+
+def test_sanitize_distance_matrix_replaces_infinity():
+    dist = [
+        [0.0, float("inf"), 20.0],
+        [10.0, 0.0, float("nan")],
+        [20.0, 30.0, 0.0],
+    ]
+    time = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+
+    def pair_fn(i: int, j: int) -> tuple[float, float]:
+        return float(i + j + 1), float(i + j + 1) / 2
+
+    patched = sanitize_distance_matrix(dist, time, pair_fn)
+    assert patched == 2
+    assert dist[0][1] == 2.0
+    assert dist[1][2] == 4.0
+    assert time[0][1] == 1.0

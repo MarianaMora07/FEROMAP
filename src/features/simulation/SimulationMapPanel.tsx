@@ -1,17 +1,17 @@
-import { For, Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
+import { For, Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import maplibregl, { type Map as MapLibreMap, type Marker } from 'maplibre-gl';
-import 'maplibre-gl/dist/maplibre-gl.css';
-import { Crosshair, Minus, Plus, Trash2, Truck } from 'lucide-solid';
-import { Card } from '../../design-system/components';
+import { Crosshair, Minus, Play, Plus, Trash2, Truck } from 'lucide-solid';
+import { Button, Card } from '../../design-system/components';
 import { appState } from '../../core/stores/appStore';
-import { bindMapTheme, mapStyleForTheme } from '../../core/utils/mapStyle';
+import { OperationalMap } from '../../core/map/OperationalMap';
+import { fitMapToOperationalData } from '../../core/map/operationalMapConfig';
 import { fillLevelColor } from '../../core/utils/geoUtils';
 import { buildContainerPopupHtml } from '../../core/utils/popupHtml';
+import type { RoutePlaybackModel } from '../../core/route-playback/routePlaybackTypes';
+import type { RoutePlaybackController } from '../../core/route-playback/useRoutePlayback';
+import { RoutePlaybackLayer } from '../route-playback/RoutePlaybackLayer';
+import { RoutePlaybackLegend } from '../route-playback/RoutePlaybackLegend';
 import { mapMarkerLegend, mapRouteLegend } from './simulationConfig';
-import {
-  createOperationalMapOptions,
-  fitMapToOperationalData,
-} from '../../core/map/operationalMapConfig';
 import type { ExecutionPhaseId } from './executionPhases';
 import {
   EXECUTION_MAP_LEGEND,
@@ -53,11 +53,16 @@ interface SimulationMapPanelProps {
   executionPhase?: ExecutionPhaseId | null;
   isRunning?: boolean;
   executionProgress?: number;
+  playbackActive?: boolean;
+  playbackRoutes?: RoutePlaybackModel[];
+  playback?: RoutePlaybackController;
+  playbackLoading?: boolean;
+  onOpenPlayback?: () => void;
 }
 
 export function SimulationMapPanel(props: SimulationMapPanelProps) {
-  let mapContainer!: HTMLDivElement;
   const mapRef: { current?: MapLibreMap } = {};
+  const [mapInstance, setMapInstance] = createSignal<MapLibreMap | undefined>();
   const containerMarkers: Marker[] = [];
   const truckMarkers: Marker[] = [];
   let mapReady = false;
@@ -66,12 +71,19 @@ export function SimulationMapPanel(props: SimulationMapPanelProps) {
   let truckFrame: number | undefined;
   const [truckTick, setTruckTick] = createSignal(0);
 
-  const inExecution = () =>
-    Boolean(props.executionMode && (props.isRunning || props.executionPhase === 'listo'));
+  const showExecutionOverlay = () =>
+    Boolean(
+      props.executionMode &&
+        props.isRunning &&
+        props.executionPhase &&
+        props.executionPhase !== 'listo',
+    );
+
+  const playbackActive = () => Boolean(props.playbackActive && props.playback && props.playbackRoutes?.length);
 
   const syncStaticRoutes = () => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded() || inExecution()) return;
+    if (!map || !map.isStyleLoaded() || showExecutionOverlay()) return;
 
     const routeFeatures = props.hasResults
       ? appState.routes.features.map((feature) => ({
@@ -80,11 +92,19 @@ export function SimulationMapPanel(props: SimulationMapPanelProps) {
         }))
       : [];
 
+    const dimmed = playbackActive();
+
     if (map.getSource('sim-routes')) {
       (map.getSource('sim-routes') as maplibregl.GeoJSONSource).setData({
         type: 'FeatureCollection',
         features: routeFeatures,
       });
+      if (map.getLayer('sim-current')) {
+        map.setPaintProperty('sim-current', 'line-opacity', dimmed ? 0.15 : 0.9);
+      }
+      if (map.getLayer('sim-optimized')) {
+        map.setPaintProperty('sim-optimized', 'line-opacity', dimmed ? 0.2 : 0.95);
+      }
     }
   };
 
@@ -173,7 +193,7 @@ export function SimulationMapPanel(props: SimulationMapPanelProps) {
 
   const syncExecutionVisuals = () => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded() || !inExecution()) return;
+    if (!map || !map.isStyleLoaded() || !showExecutionOverlay()) return;
 
     ensureExecutionLayers(map);
 
@@ -256,13 +276,16 @@ export function SimulationMapPanel(props: SimulationMapPanelProps) {
 
     ensureExecutionLayers(map);
 
-    if (inExecution()) {
+    if (showExecutionOverlay()) {
       syncExecutionVisuals();
       return;
     }
 
     syncStaticRoutes();
     syncContainerMarkers(false);
+
+    truckMarkers.forEach((marker) => marker.remove());
+    truckMarkers.length = 0;
 
     (map.getSource('sim-cost-matrix') as maplibregl.GeoJSONSource | undefined)?.setData({
       type: 'FeatureCollection',
@@ -300,42 +323,12 @@ export function SimulationMapPanel(props: SimulationMapPanelProps) {
     syncMapData();
   };
 
-  bindMapTheme(
-    () => mapRef.current,
-    () => mapReady,
-    () => setupBaseLayers(mapRef.current!),
-  );
-
-  onMount(() => {
-    const map = new maplibregl.Map(
-      createOperationalMapOptions({
-        container: mapContainer,
-        style: mapStyleForTheme(appState.darkMode),
-      }),
-    );
+  const handleMapReady = (map: MapLibreMap) => {
     mapRef.current = map;
-    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
-
-    map.on('load', () => {
-      map.resize();
-      setupBaseLayers(map);
-      mapReady = true;
-    });
-
-    const ro = new ResizeObserver(() => mapRef.current?.resize());
-    ro.observe(mapContainer);
-
-    onCleanup(() => {
-      ro.disconnect();
-      if (exploreTimer) clearInterval(exploreTimer);
-      if (truckFrame) cancelAnimationFrame(truckFrame);
-      containerMarkers.forEach((marker) => marker.remove());
-      truckMarkers.forEach((marker) => marker.remove());
-      mapRef.current?.remove();
-      mapRef.current = undefined;
-      mapReady = false;
-    });
-  });
+    mapReady = true;
+    setMapInstance(map);
+    setupBaseLayers(map);
+  };
 
   createEffect(() => {
     props.hasResults;
@@ -343,6 +336,8 @@ export function SimulationMapPanel(props: SimulationMapPanelProps) {
     props.executionPhase;
     props.isRunning;
     props.executionProgress;
+    props.playbackActive;
+    props.playbackRoutes;
     truckTick();
     appState.routes;
     appState.containers;
@@ -377,26 +372,52 @@ export function SimulationMapPanel(props: SimulationMapPanelProps) {
     onCleanup(() => {
       if (exploreTimer) clearInterval(exploreTimer);
       if (truckFrame) cancelAnimationFrame(truckFrame);
+      containerMarkers.forEach((marker) => marker.remove());
+      truckMarkers.forEach((marker) => marker.remove());
     });
   });
 
   const activeLegend = () => activeExecutionLegend(props.executionPhase ?? null);
+  const mapTitle = () =>
+    showExecutionOverlay()
+      ? 'Mapa de ejecución del motor'
+      : playbackActive()
+        ? 'Recorrido simulado (datos reales)'
+        : 'Visualización del escenario';
 
   return (
     <Card padding={false} class="overflow-hidden">
       <div class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 dark:border-dark-border">
         <div>
-          <h3 class="font-heading font-semibold text-text-primary dark:text-white">
-            {inExecution() ? 'Mapa de ejecución del motor' : 'Visualización del escenario'}
-          </h3>
-          <Show when={inExecution() && props.executionPhase}>
+          <h3 class="font-heading font-semibold text-text-primary dark:text-white">{mapTitle()}</h3>
+          <Show when={showExecutionOverlay() && props.executionPhase}>
             <p class="mt-0.5 text-[11px] text-text-muted">
               Animación sincronizada con la fase actual del algoritmo
             </p>
           </Show>
+          <Show when={playbackActive()}>
+            <p class="mt-0.5 text-[11px] text-text-muted">
+              Playback con geometría vial y paradas del resultado optimizado
+            </p>
+          </Show>
         </div>
-        <Show
-          when={inExecution()}
+        <div class="flex flex-wrap items-center gap-2">
+          <Show when={props.hasResults && !playbackActive() && props.onOpenPlayback}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              class="gap-1.5"
+              loading={props.playbackLoading}
+              onClick={() => props.onOpenPlayback?.()}
+              data-testid="simulation-open-playback-btn"
+            >
+              <Play size={14} />
+              Ver recorrido
+            </Button>
+          </Show>
+          <Show
+            when={showExecutionOverlay()}
           fallback={
             <div class="flex flex-wrap items-center gap-3 text-[11px] text-text-secondary">
               <For each={mapRouteLegend}>
@@ -441,16 +462,30 @@ export function SimulationMapPanel(props: SimulationMapPanelProps) {
             </For>
           </div>
         </Show>
+        </div>
       </div>
 
       <div class="relative isolate h-72 bg-slate-100 dark:bg-slate-900 lg:h-85">
-        <div ref={mapContainer} class="absolute inset-0 h-full w-full touch-none" />
+        <OperationalMap
+          containerClass="touch-none"
+          onMapReady={handleMapReady}
+          onStyleRestored={() => setupBaseLayers(mapRef.current!)}
+        >
+        <Show when={playbackActive() && props.playback && props.playbackRoutes}>
+          <RoutePlaybackLegend class="absolute bottom-3 left-3 z-10 max-w-[220px]" />
+          <RoutePlaybackLayer
+            map={mapInstance}
+            routes={() => props.playbackRoutes ?? []}
+            playback={props.playback!}
+            showControls={false}
+          />
+        </Show>
         <Show when={!appState.dataReady}>
-          <div class="pointer-events-none absolute inset-0 flex items-center justify-center bg-surface/50 text-sm text-text-muted backdrop-blur-sm">
+          <div class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-surface/50 text-sm text-text-muted backdrop-blur-sm">
             Cargando sectores y contenedores…
           </div>
         </Show>
-        <Show when={inExecution() && executionOverlayMessage(props.executionPhase ?? null)}>
+        <Show when={showExecutionOverlay() && executionOverlayMessage(props.executionPhase ?? null)}>
           {(message) => (
             <div class="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center px-3">
               <span class="rounded-full border border-border bg-surface/95 px-3 py-1 text-xs font-medium text-text-secondary shadow-sm backdrop-blur-sm dark:bg-dark-surface/95">
@@ -488,6 +523,7 @@ export function SimulationMapPanel(props: SimulationMapPanelProps) {
             <Crosshair size={14} />
           </button>
         </div>
+        </OperationalMap>
       </div>
 
       <div class="flex shrink-0 flex-wrap gap-x-4 gap-y-2 border-t border-border px-4 py-2.5 text-xs text-text-secondary dark:border-dark-border">
@@ -499,7 +535,7 @@ export function SimulationMapPanel(props: SimulationMapPanelProps) {
             </span>
           )}
         </For>
-        <Show when={inExecution() && shouldPulseCriticalContainers(props.executionPhase ?? null)}>
+        <Show when={showExecutionOverlay() && shouldPulseCriticalContainers(props.executionPhase ?? null)}>
           <span class="inline-flex items-center gap-1.5 text-amber-600">
             <Truck size={12} />
             <span>Contenedores críticos / exploración activa</span>

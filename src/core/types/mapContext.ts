@@ -16,6 +16,8 @@ export interface LiveActivity {
   tone: 'success' | 'info' | 'warning' | 'danger' | 'default';
 }
 
+import type { MapFacilities } from '../utils/landfillUx';
+
 export interface MapOperationalContext {
   vehicles: LiveVehicle[];
   routes: RouteCollection;
@@ -23,9 +25,13 @@ export interface MapOperationalContext {
   mapMetrics: MapMetric[];
   liveActivities: LiveActivity[];
   updatedAt: string;
+  facilities?: MapFacilities;
 }
 
 export interface MapContextFilters {
   sector?: string;
   bbox?: string;
+  dailyPlanId?: number;
+  /** Incluye `stops`, `totalDurationMinutes` y `startTime` en propiedades de ruta. */
+  playbackDetails?: boolean;
 }

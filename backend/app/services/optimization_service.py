@@ -25,6 +25,11 @@ from app.domain.crew_service_time import (
     route_service_seconds,
     service_time_seconds_per_stop,
 )
+from app.domain.landfill_service_time import (
+    landfill_node_index,
+    route_operational_elapsed_seconds,
+)
+from app.services.operational_facilities_service import resolve_operational_facilities
 from app.services.scenario_parameters import (
     apply_simulation_parameter_modifiers,
     build_applied_crew_modifiers,
@@ -118,6 +123,32 @@ class RouteSolution:
     aco_stopped_early: bool = False
     aco_parallel_workers: int = 1
     aco_convergence: list[dict[str, float | int]] = field(default_factory=list)
+    uncovered_customer_indices: list[int] = field(default_factory=list)
+
+
+def _landfill_idx(n_customers: int) -> int:
+    return landfill_node_index(n_customers)
+
+
+def _is_collection_idx(idx: int, n_customers: int) -> bool:
+    return 1 <= idx <= n_customers
+
+
+def _route_collection_stop_count(route: list[int], n_customers: int) -> int:
+    return sum(1 for idx in route if _is_collection_idx(idx, n_customers))
+
+
+def _count_landfill_visits(route: list[int], landfill_idx: int) -> int:
+    return sum(1 for idx in route if idx == landfill_idx)
+
+
+def _served_customer_indices(solution: RouteSolution, n_customers: int) -> set[int]:
+    served: set[int] = set()
+    for route in solution.vehicle_routes:
+        for idx in route:
+            if _is_collection_idx(idx, n_customers):
+                served.add(idx)
+    return served
 
 
 def _haversine_m(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
@@ -129,18 +160,60 @@ def _haversine_m(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
     return 2 * r * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
+def _kpi_distance_km(distance_m: float) -> Decimal | None:
+    if not math.isfinite(distance_m) or distance_m < 0:
+        return None
+    return Decimal(str(round(distance_m / 1000, 2)))
+
+
+def _kpi_saving_percentage(current_m: float, optimized_m: float) -> Decimal | None:
+    if not math.isfinite(current_m) or not math.isfinite(optimized_m) or current_m <= 0:
+        return None
+    return Decimal(str(round((1 - optimized_m / current_m) * 100, 1)))
+
+
+def _safe_distance_km(distance_m: float) -> float:
+    if not math.isfinite(distance_m) or distance_m < 0:
+        return 0.0
+    return distance_m / 1000
+
+
+def _coalesce_optimized_solution(optimized: RouteSolution, fallback: RouteSolution) -> RouteSolution:
+    if math.isfinite(optimized.distance_m) and optimized.vehicle_routes:
+        return optimized
+    return RouteSolution(
+        vehicle_routes=[route[:] for route in fallback.vehicle_routes],
+        distance_m=fallback.distance_m,
+        duration_s=fallback.duration_s,
+        aco_iterations_run=optimized.aco_iterations_run,
+        aco_stopped_early=optimized.aco_stopped_early,
+        aco_parallel_workers=optimized.aco_parallel_workers,
+        aco_convergence=optimized.aco_convergence,
+        uncovered_customer_indices=optimized.uncovered_customer_indices,
+    )
+
+
 def _matrix_pair_metrics(
     graph: nx.MultiDiGraph,
     depot_node: int,
     customers: list[CustomerNode],
     i: int,
     j: int,
+    *,
+    depot_lon: float,
+    depot_lat: float,
+    landfill_node: int,
+    landfill_lon: float,
+    landfill_lat: float,
 ) -> tuple[float, float]:
-    graph_nodes = [depot_node] + [c.graph_node for c in customers]
+    landfill_idx = _landfill_idx(len(customers))
+    graph_nodes = [depot_node] + [c.graph_node for c in customers] + [landfill_node]
 
     def coords_for(index: int) -> tuple[float, float]:
         if index == 0:
-            return DEPOT_LON, DEPOT_LAT
+            return depot_lon, depot_lat
+        if index == landfill_idx:
+            return landfill_lon, landfill_lat
         customer = customers[index - 1]
         return customer.lon, customer.lat
 
@@ -157,31 +230,50 @@ def _build_distance_matrix(
     graph: nx.MultiDiGraph | None,
     depot_node: int,
     customers: list[CustomerNode],
+    *,
+    depot_lon: float,
+    depot_lat: float,
+    landfill_node: int,
+    landfill_lon: float,
+    landfill_lat: float,
 ) -> tuple[list[list[float]], list[list[float]]]:
-    """Matriz de distancias (metros) y tiempos (segundos) depósito + clientes."""
-    n = 1 + len(customers)
+    """Matriz depósito + clientes + vertedero (N+2 nodos)."""
+    landfill_idx = _landfill_idx(len(customers))
+    n = landfill_idx + 1
     dist = [[0.0] * n for _ in range(n)]
     time = [[0.0] * n for _ in range(n)]
 
     if graph is not None:
-        graph_nodes = [depot_node] + [c.graph_node for c in customers]
+        graph_nodes = [depot_node] + [c.graph_node for c in customers] + [landfill_node]
         for i in range(n):
             for j in range(n):
                 if i == j:
                     continue
                 d_m, t_s = path_metrics_between_nodes(graph, graph_nodes[i], graph_nodes[j])
                 if not math.isfinite(d_m) or d_m <= 0:
-                    c_i = customers[i - 1] if i > 0 else None
-                    c_j = customers[j - 1] if j > 0 else None
-                    lon_i, lat_i = (DEPOT_LON, DEPOT_LAT) if i == 0 else (c_i.lon, c_i.lat)  # type: ignore[union-attr]
-                    lon_j, lat_j = (DEPOT_LON, DEPOT_LAT) if j == 0 else (c_j.lon, c_j.lat)  # type: ignore[union-attr]
+                    if i == 0:
+                        lon_i, lat_i = depot_lon, depot_lat
+                    elif i == landfill_idx:
+                        lon_i, lat_i = landfill_lon, landfill_lat
+                    else:
+                        lon_i, lat_i = customers[i - 1].lon, customers[i - 1].lat
+                    if j == 0:
+                        lon_j, lat_j = depot_lon, depot_lat
+                    elif j == landfill_idx:
+                        lon_j, lat_j = landfill_lon, landfill_lat
+                    else:
+                        lon_j, lat_j = customers[j - 1].lon, customers[j - 1].lat
                     d_m = _haversine_m(lon_i, lat_i, lon_j, lat_j)
                     t_s = d_m / 1000 / AVG_SPEED_KMH * 3600
                 dist[i][j] = d_m
                 time[i][j] = t_s
         return dist, time
 
-    points = [(DEPOT_LON, DEPOT_LAT)] + [(c.lon, c.lat) for c in customers]
+    points = (
+        [(depot_lon, depot_lat)]
+        + [(c.lon, c.lat) for c in customers]
+        + [(landfill_lon, landfill_lat)]
+    )
     for i in range(n):
         for j in range(n):
             if i == j:
@@ -220,8 +312,8 @@ def compute_service_time_sec(
     return service_time_seconds_per_stop(assigned_effective, ideal=vehicle.ideal_operators)
 
 
-def _route_stop_count(route: list[int]) -> int:
-    return sum(1 for idx in route if idx > 0)
+def _route_stop_count(route: list[int], n_customers: int) -> int:
+    return _route_collection_stop_count(route, n_customers)
 
 
 def _route_operational_duration(
@@ -230,20 +322,30 @@ def _route_operational_duration(
     time_matrix: list[list[float]],
     vehicle: VehicleUnit,
     operators_shortage: int | None = None,
+    *,
+    n_customers: int,
+    unload_seconds: int = 0,
 ) -> tuple[float, float, int]:
-    """Distancia (m), viaje (s) y duración operativa total (viaje + servicio en paradas)."""
+    """Distancia (m), viaje (s) y duración operativa total (viaje + paradas + vertedero)."""
+    landfill_idx = _landfill_idx(n_customers)
     distance_m, travel_s = _route_cost(route, dist_matrix, time_matrix)
-    stops = _route_stop_count(route)
-    service_s = route_service_seconds(
-        stops,
-        resolve_effective_assigned(
-            vehicle.assigned_operators,
-            ideal=vehicle.ideal_operators,
-            operators_shortage=operators_shortage,
-        ),
+    stops = _route_collection_stop_count(route, n_customers)
+    landfill_visits = _count_landfill_visits(route, landfill_idx)
+    assigned_effective = resolve_effective_assigned(
+        vehicle.assigned_operators,
         ideal=vehicle.ideal_operators,
+        operators_shortage=operators_shortage,
     )
-    return distance_m, travel_s, int(round(travel_s)) + service_s
+    service_per_stop = service_time_seconds_per_stop(assigned_effective, ideal=vehicle.ideal_operators)
+    unload_minutes = max(1, int(round(unload_seconds / 60))) if unload_seconds > 0 else None
+    total_s = route_operational_elapsed_seconds(
+        travel_s,
+        stops,
+        service_per_stop,
+        landfill_visits,
+        unload_minutes=unload_minutes,
+    )
+    return distance_m, travel_s, total_s
 
 
 def _fleet_crew_summary(assignments: list[tuple[int, int]]) -> tuple[str, str]:
@@ -266,9 +368,15 @@ def _solution_operational_metrics(
     time_matrix: list[list[float]],
     vehicles: list[VehicleUnit],
     operators_shortage: int | None = None,
+    *,
+    n_customers: int,
+    unload_seconds: int = 0,
+    shift_budget_seconds: int = 0,
 ) -> dict[str, Any]:
     travel_s = 0.0
     service_s = 0
+    unload_s = 0
+    landfill_trips = 0
     stop_count = 0
     crew_assignments: list[tuple[int, int]] = []
 
@@ -282,11 +390,17 @@ def _solution_operational_metrics(
             time_matrix,
             vehicle,
             operators_shortage,
+            n_customers=n_customers,
+            unload_seconds=unload_seconds,
         )
-        stops = _route_stop_count(route)
-        route_service = route_total - int(round(route_travel))
+        stops = _route_collection_stop_count(route, n_customers)
+        landfill_idx = _landfill_idx(n_customers)
+        visits = _count_landfill_visits(route, landfill_idx)
+        route_service = route_total - int(round(route_travel)) - visits * unload_seconds
         travel_s += route_travel
-        service_s += route_service
+        service_s += max(0, route_service)
+        unload_s += visits * unload_seconds
+        landfill_trips += visits
         stop_count += stops
         assigned_effective = resolve_effective_assigned(
             vehicle.assigned_operators,
@@ -296,13 +410,19 @@ def _solution_operational_metrics(
         crew_assignments.append((assigned_effective, vehicle.ideal_operators))
 
     crew_assignment, crew_label = _fleet_crew_summary(crew_assignments)
+    total_s = int(round(travel_s)) + service_s + unload_s
+    shift_utilization = min(100.0, total_s / shift_budget_seconds * 100.0) if shift_budget_seconds > 0 else 0.0
     return {
         "travel_s": travel_s,
         "service_s": service_s,
-        "total_s": int(round(travel_s)) + service_s,
+        "unload_s": unload_s,
+        "landfill_trips": landfill_trips,
+        "total_s": total_s,
         "stop_count": stop_count,
         "crew_assignment": crew_assignment,
         "crew_label": crew_label,
+        "shift_budget_seconds": shift_budget_seconds,
+        "shift_utilization_pct": round(shift_utilization, 1),
     }
 
 
@@ -347,6 +467,10 @@ def _aco_cvrp(
     dist_matrix: list[list[float]],
     time_matrix: list[list[float]],
     *,
+    landfill_idx: int,
+    shift_budget_sec: float,
+    unload_sec: float,
+    service_secs: list[float],
     aco_ants: int = ACO_ANTS,
     aco_iterations: int = ACO_ITERATIONS,
     aco_patience: int = ACO_PATIENCE,
@@ -354,8 +478,7 @@ def _aco_cvrp(
     cancel_check: Callable[[], bool] | None = None,
     on_iteration: Callable[[int, int, float, float], None] | None = None,
 ) -> RouteSolution:
-    """Ant Colony Optimization para CVRP con múltiples vehículos."""
-    n_vehicles = len(capacities)
+    """Ant Colony Optimization para CVRP multi-viaje con vertedero y jornada."""
     parallel_workers = resolve_aco_parallel_workers(aco_ants)
     process_pool = None
     if parallel_workers > 1:
@@ -363,11 +486,13 @@ def _aco_cvrp(
 
         process_pool = ProcessPoolExecutor(max_workers=parallel_workers)
 
-    pheromone = [[1.0 / max(dist_matrix[i][j], 1.0) for j in range(n_customers + 1)] for i in range(n_customers + 1)]
+    n_nodes = landfill_idx + 1
+    pheromone = [[1.0 / max(dist_matrix[i][j], 1.0) for j in range(n_nodes)] for i in range(n_nodes)]
 
     best_routes: list[list[int]] = []
     best_cost = float("inf")
     best_time = float("inf")
+    best_uncovered: list[int] = list(range(1, n_customers + 1))
     stall_count = 0
     iterations_run = 0
     stopped_early = False
@@ -382,6 +507,7 @@ def _aco_cvrp(
 
             iteration_best: list[list[int]] = []
             iteration_cost = float("inf")
+            iteration_uncovered: list[int] = list(range(1, n_customers + 1))
             improved = False
 
             ant_seeds = [seed + iteration * aco_ants + ant_idx for ant_idx in range(aco_ants)]
@@ -395,15 +521,24 @@ def _aco_cvrp(
                 pheromone=pheromone,
                 max_workers=parallel_workers,
                 executor=process_pool,
+                landfill_idx=landfill_idx,
+                shift_budget_sec=shift_budget_sec,
+                unload_sec=unload_sec,
+                service_secs=service_secs,
             )
-            for routes, cost, _dur in ant_results:
-                if cost < iteration_cost:
+            for routes, cost, _dur, uncovered in ant_results:
+                if cost < iteration_cost or (cost == iteration_cost and len(uncovered) < len(iteration_uncovered)):
                     iteration_cost = cost
                     iteration_best = [route[:] for route in routes]
+                    iteration_uncovered = uncovered[:]
 
-            if iteration_best and iteration_cost < best_cost:
+            if iteration_best and (
+                iteration_cost < best_cost
+                or (iteration_cost == best_cost and len(iteration_uncovered) < len(best_uncovered))
+            ):
                 best_cost = iteration_cost
                 best_routes = iteration_best
+                best_uncovered = iteration_uncovered
                 _, best_time = _evaluate_solution(best_routes, dist_matrix, time_matrix)
                 improved = True
 
@@ -427,8 +562,8 @@ def _aco_cvrp(
                     stopped_early = True
                     break
 
-            for i in range(n_customers + 1):
-                for j in range(n_customers + 1):
+            for i in range(n_nodes):
+                for j in range(n_nodes):
                     pheromone[i][j] *= 1 - ACO_RHO
             if iteration_best:
                 for route in iteration_best:
@@ -446,6 +581,7 @@ def _aco_cvrp(
         aco_stopped_early=stopped_early,
         aco_parallel_workers=parallel_workers,
         aco_convergence=convergence,
+        uncovered_customer_indices=best_uncovered,
     )
 
 
@@ -468,6 +604,48 @@ def _critical_coverage_pct(customers: list[CustomerNode], served_codes: set[str]
     return int(round(served / len(critical) * 100))
 
 
+def _route_stops_for_geojson(
+    route_indices: list[int],
+    customers: list[CustomerNode],
+    *,
+    landfill_lon: float,
+    landfill_lat: float,
+) -> list[dict[str, Any]]:
+    """Paradas ordenadas para propiedades GeoJSON (incluye vertedero)."""
+    n_customers = len(customers)
+    landfill_idx = _landfill_idx(n_customers)
+    stops: list[dict[str, Any]] = []
+    seq = 0
+    for idx in route_indices:
+        if idx == 0:
+            continue
+        seq += 1
+        if idx == landfill_idx:
+            stops.append(
+                {
+                    "sequence": seq,
+                    "lng": landfill_lon,
+                    "lat": landfill_lat,
+                    "code": "VERTEDERO",
+                    "stopType": "landfill",
+                }
+            )
+            continue
+        if not _is_collection_idx(idx, n_customers):
+            continue
+        customer = customers[idx - 1]
+        stops.append(
+            {
+                "sequence": seq,
+                "lng": customer.lon,
+                "lat": customer.lat,
+                "code": customer.code,
+                "stopType": "collection",
+            }
+        )
+    return stops
+
+
 def _build_geojson_feature(
     coordinates: list[list[float]],
     *,
@@ -476,18 +654,22 @@ def _build_geojson_feature(
     label: str,
     distance_km: float,
     duration_min: int,
+    stops: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     if coordinates and coordinates[0] != coordinates[-1]:
         coordinates = coordinates + [coordinates[0]]
+    properties: dict[str, Any] = {
+        "id": route_id,
+        "type": kind,
+        "label": label,
+        "distanceKm": round(distance_km, 1),
+        "durationMin": duration_min,
+    }
+    if stops:
+        properties["stops"] = stops
     return {
         "type": "Feature",
-        "properties": {
-            "id": route_id,
-            "type": kind,
-            "label": label,
-            "distanceKm": round(distance_km, 1),
-            "durationMin": duration_min,
-        },
+        "properties": properties,
         "geometry": {"type": "LineString", "coordinates": coordinates},
     }
 
@@ -496,22 +678,34 @@ def _route_geometry(
     graph: nx.MultiDiGraph,
     customers: list[CustomerNode],
     route_indices: list[int],
+    *,
+    depot_lon: float,
+    depot_lat: float,
+    landfill_lon: float,
+    landfill_lat: float,
 ) -> list[list[float]]:
     """Geometría vial cuando hay camino; si no, segmento directo entre puntos."""
-    depot_node = nearest_node(graph, DEPOT_LON, DEPOT_LAT)
+    landfill_idx = _landfill_idx(len(customers))
+    depot_node = nearest_node(graph, depot_lon, depot_lat)
+    landfill_node = nearest_node(graph, landfill_lon, landfill_lat)
     node_seq: list[int] = []
-    coord_seq: list[list[float]] = [[DEPOT_LON, DEPOT_LAT]]
+    coord_seq: list[list[float]] = [[depot_lon, depot_lat]]
 
     for idx in route_indices:
         if idx == 0:
             node_seq.append(depot_node)
             continue
+        if idx == landfill_idx:
+            node_seq.append(landfill_node)
+            coord_seq.append([landfill_lon, landfill_lat])
+            continue
         customer = customers[idx - 1]
         node_seq.append(customer.graph_node)
         coord_seq.append([customer.lon, customer.lat])
 
-    node_seq.append(depot_node)
-    coord_seq.append([DEPOT_LON, DEPOT_LAT])
+    if not node_seq or node_seq[-1] != depot_node:
+        node_seq.append(depot_node)
+        coord_seq.append([depot_lon, depot_lat])
 
     try:
         road_coords = build_tour_coordinates(graph, node_seq)
@@ -533,12 +727,26 @@ def _routes_to_geojson(
     label: str,
     vehicles: list[VehicleUnit] | None = None,
     operators_shortage: int | None = None,
+    depot_lon: float = DEPOT_LON,
+    depot_lat: float = DEPOT_LAT,
+    landfill_lon: float = DEPOT_LON,
+    landfill_lat: float = DEPOT_LAT,
+    unload_seconds: int = 0,
 ) -> dict[str, Any]:
+    n_customers = len(customers)
     features = []
     for v_idx, route_indices in enumerate(solution.vehicle_routes):
         if len(route_indices) < 2:
             continue
-        coords = _route_geometry(graph, customers, route_indices)
+        coords = _route_geometry(
+            graph,
+            customers,
+            route_indices,
+            depot_lon=depot_lon,
+            depot_lat=depot_lat,
+            landfill_lon=landfill_lon,
+            landfill_lat=landfill_lat,
+        )
         vehicle = vehicles[min(v_idx, len(vehicles) - 1)] if vehicles else None
         if vehicle is not None:
             d, _, total_s = _route_operational_duration(
@@ -547,11 +755,19 @@ def _routes_to_geojson(
                 time_matrix,
                 vehicle,
                 operators_shortage,
+                n_customers=n_customers,
+                unload_seconds=unload_seconds,
             )
         else:
             d, t = _route_cost(route_indices, dist_matrix, time_matrix)
             total_s = int(round(t))
 
+        stops = _route_stops_for_geojson(
+            route_indices,
+            customers,
+            landfill_lon=landfill_lon,
+            landfill_lat=landfill_lat,
+        )
         features.append(
             _build_geojson_feature(
                 coords,
@@ -560,6 +776,7 @@ def _routes_to_geojson(
                 label=label if v_idx == 0 else f"{label} — vehículo {v_idx + 1}",
                 distance_km=d / 1000,
                 duration_min=int(total_s / 60),
+                stops=stops,
             )
         )
     return {"type": "FeatureCollection", "features": features}
@@ -572,6 +789,7 @@ def _merge_route_features(features: list[dict[str, Any]], kind: str, label: str)
         return {"type": "FeatureCollection", "features": features}
 
     all_coords: list[list[float]] = []
+    all_stops: list[dict[str, Any]] = []
     total_km = 0.0
     total_min = 0
     for feat in features:
@@ -581,6 +799,8 @@ def _merge_route_features(features: list[dict[str, Any]], kind: str, label: str)
         all_coords.extend(coords)
         total_km += feat["properties"]["distanceKm"]
         total_min += feat["properties"]["durationMin"]
+        for stop in feat["properties"].get("stops", []):
+            all_stops.append({**stop, "sequence": len(all_stops) + 1})
 
     merged = _build_geojson_feature(
         all_coords,
@@ -589,6 +809,7 @@ def _merge_route_features(features: list[dict[str, Any]], kind: str, label: str)
         label=label,
         distance_km=total_km,
         duration_min=total_min,
+        stops=all_stops or None,
     )
     return {"type": "FeatureCollection", "features": [merged]}
 
@@ -604,30 +825,60 @@ def _compute_kpis(
     *,
     operators_shortage: int | None = None,
     workday_hours: int | None = None,
+    unload_seconds: int = 0,
+    shift_budget_seconds: int = 0,
+    uncovered_point_codes: list[str] | None = None,
 ) -> dict[str, Any]:
-    cur_km = current.distance_m / 1000
-    opt_km = optimized.distance_m / 1000
+    n_customers = len(customers)
+    cur_km = _safe_distance_km(current.distance_m)
+    opt_km = _safe_distance_km(optimized.distance_m)
     cur_metrics = _solution_operational_metrics(
-        current, dist_matrix, time_matrix, vehicles, operators_shortage
+        current,
+        dist_matrix,
+        time_matrix,
+        vehicles,
+        operators_shortage,
+        n_customers=n_customers,
+        unload_seconds=unload_seconds,
+        shift_budget_seconds=shift_budget_seconds,
     )
     opt_metrics = _solution_operational_metrics(
-        optimized, dist_matrix, time_matrix, vehicles, operators_shortage
+        optimized,
+        dist_matrix,
+        time_matrix,
+        vehicles,
+        operators_shortage,
+        n_customers=n_customers,
+        unload_seconds=unload_seconds,
+        shift_budget_seconds=shift_budget_seconds,
     )
     cur_h = cur_metrics["total_s"] / 3600
     opt_h = opt_metrics["total_s"] / 3600
-    workday_h = workday_hours or 8
+    workday_h = workday_hours or (shift_budget_seconds / 3600 if shift_budget_seconds else 12)
     cur_fuel = cur_km * FUEL_L_PER_KM
     opt_fuel = opt_km * FUEL_L_PER_KM
     co2_avoided = max(0, (cur_fuel - opt_fuel) * CO2_KG_PER_LITER)
+    served_count = len(served_codes)
+    coverage_pct = int(round(served_count / n_customers * 100)) if n_customers else 100
+    uncovered = uncovered_point_codes or []
 
     def _breakdown(metrics: dict[str, Any]) -> dict[str, Any]:
         return {
             "travelHours": round(metrics["travel_s"] / 3600, 2),
             "serviceHours": round(metrics["service_s"] / 3600, 2),
+            "unloadHours": round(metrics["unload_s"] / 3600, 2),
+            "landfillTrips": metrics["landfill_trips"],
+            "shiftBudgetHours": round(metrics["shift_budget_seconds"] / 3600, 1),
+            "shiftUsedHours": round(metrics["total_s"] / 3600, 2),
+            "shiftUtilizationPct": metrics["shift_utilization_pct"],
+            "uncoveredPoints": len(uncovered),
             "crewLabel": metrics["crew_label"],
             "crewAssignment": metrics["crew_assignment"],
             "stopCount": metrics["stop_count"],
         }
+
+    active_routes = [route for route in optimized.vehicle_routes if len(route) > 2]
+    vehicle_count = max(1, len(active_routes))
 
     return {
         "distanceKm": {"current": round(cur_km, 1), "optimized": round(opt_km, 1)},
@@ -647,7 +898,14 @@ def _compute_kpis(
             "current": _critical_coverage_pct(customers, {c.code for c in customers}),
             "optimized": _critical_coverage_pct(customers, served_codes),
         },
-        "containersServed": len(customers),
+        "coveragePct": {"current": 100, "optimized": coverage_pct},
+        "containersServed": served_count,
+        "uncoveredPointCodes": uncovered,
+        "landfillTrips": opt_metrics["landfill_trips"],
+        "landfillTripsPerVehicle": round(opt_metrics["landfill_trips"] / vehicle_count, 2),
+        "unloadTimeHours": round(opt_metrics["unload_s"] / 3600, 2),
+        "shiftUtilizationPct": opt_metrics["shift_utilization_pct"],
+        "uncoveredPoints": len(uncovered),
     }
 
 
@@ -815,8 +1073,11 @@ def _persist_routes(
     *,
     daily_plan_id: int | None = None,
     planning_level: str | None = None,
+    unload_seconds: int = 0,
 ) -> None:
     """Guarda rutas y waypoints en BD."""
+    n_customers = len(customers)
+    landfill_idx = _landfill_idx(n_customers)
     for kind, solution in [("current", current_solution), ("optimized", optimized_solution)]:
         for v_idx, route_indices in enumerate(solution.vehicle_routes):
             if len(route_indices) <= 2:
@@ -828,6 +1089,8 @@ def _persist_routes(
                 time_matrix,
                 vehicle,
                 operators_shortage,
+                n_customers=n_customers,
+                unload_seconds=unload_seconds,
             )
 
             db_route = OptimizedRoute(
@@ -848,12 +1111,27 @@ def _persist_routes(
             for idx in route_indices:
                 if idx == 0:
                     continue
-                customer = customers[idx - 1]
                 seq += 1
+                if idx == landfill_idx:
+                    db.add(
+                        RouteWaypoint(
+                            route_id=db_route.id,
+                            collection_point_id=None,
+                            waypoint_type="landfill",
+                            facility_code="landfill",
+                            sequence_order=seq,
+                            status="pending",
+                        )
+                    )
+                    continue
+                if not _is_collection_idx(idx, n_customers):
+                    continue
+                customer = customers[idx - 1]
                 db.add(
                     RouteWaypoint(
                         route_id=db_route.id,
                         collection_point_id=customer.point_id,
+                        waypoint_type="collection",
                         sequence_order=seq,
                         status="pending",
                         collected_weight_kg=Decimal(str(round(customer.demand_kg, 2))),
@@ -1009,14 +1287,46 @@ def run_optimization_engine(
     vehicles = _resolve_fleet_crew(vehicles, shortage)
     shortage_for_engine = None
 
+    facilities = resolve_operational_facilities(db)
+    depot_lon, depot_lat = facilities.depot
+    landfill_lon, landfill_lat = facilities.landfill
+    unload_seconds = facilities.unload_seconds
+    shift_budget_sec = float(facilities.shift_budget_seconds)
+    landfill_node = nearest_node(graph, landfill_lon, landfill_lat)
+    n_customers = len(customers)
+    landfill_idx = _landfill_idx(n_customers)
+    service_secs = [
+        compute_service_time_sec(vehicle, shortage_for_engine) for vehicle in vehicles
+    ]
+
     report("matriz_costos", "Construyendo matriz de costos sobre red vial (NetworkX shortest path)")
-    depot_node = nearest_node(graph, DEPOT_LON, DEPOT_LAT)
+    depot_node = nearest_node(graph, depot_lon, depot_lat)
 
     def build_full_matrix() -> tuple[list[list[float]], list[list[float]]]:
-        return _build_distance_matrix(graph, depot_node, customers)
+        return _build_distance_matrix(
+            graph,
+            depot_node,
+            customers,
+            depot_lon=depot_lon,
+            depot_lat=depot_lat,
+            landfill_node=landfill_node,
+            landfill_lon=landfill_lon,
+            landfill_lat=landfill_lat,
+        )
 
     def pair_fn(i: int, j: int) -> tuple[float, float]:
-        return _matrix_pair_metrics(graph, depot_node, customers, i, j)
+        return _matrix_pair_metrics(
+            graph,
+            depot_node,
+            customers,
+            i,
+            j,
+            depot_lon=depot_lon,
+            depot_lat=depot_lat,
+            landfill_node=landfill_node,
+            landfill_lon=landfill_lon,
+            landfill_lat=landfill_lat,
+        )
 
     dist_matrix, time_matrix, matrix_meta = resolve_distance_matrix(
         depot_node=depot_node,
@@ -1025,6 +1335,8 @@ def run_optimization_engine(
         traffic_multiplier=traffic_mult,
         build_full_matrix=build_full_matrix,
         pair_fn=pair_fn,
+        landfill_lon=landfill_lon,
+        landfill_lat=landfill_lat,
     )
     matrix_cache_hit = matrix_meta["matrixCacheHit"]
     if matrix_cache_hit:
@@ -1071,12 +1383,23 @@ def run_optimization_engine(
         [v.capacity_kg for v in vehicles],
         dist_matrix,
         time_matrix,
+        landfill_idx=landfill_idx,
+        shift_budget_sec=shift_budget_sec,
+        unload_sec=float(unload_seconds),
+        service_secs=service_secs,
         aco_ants=resolved_aco_ants,
         aco_iterations=resolved_aco_iterations,
         aco_patience=ACO_PATIENCE,
         cancel_check=cancelled,
         on_iteration=aco_progress,
     )
+    if not math.isfinite(optimized_solution.distance_m) or not optimized_solution.vehicle_routes:
+        report(
+            "aco",
+            "ACO no encontró solución factible; usando ruta base de referencia",
+            "warning",
+        )
+        optimized_solution = _coalesce_optimized_solution(optimized_solution, current_solution)
     aco_seconds = time.perf_counter() - aco_started
     if optimized_solution.aco_stopped_early:
         report(
@@ -1089,11 +1412,9 @@ def run_optimization_engine(
         )
     report("refinamiento_2opt", "Aplicando 2-opt local sobre rutas candidatas", "progress")
 
-    served_codes: set[str] = set()
-    for route in optimized_solution.vehicle_routes:
-        for idx in route:
-            if idx > 0:
-                served_codes.add(customers[idx - 1].code)
+    served_indices = _served_customer_indices(optimized_solution, n_customers)
+    served_codes = {customers[idx - 1].code for idx in served_indices}
+    uncovered_point_codes = [customers[idx - 1].code for idx in optimized_solution.uncovered_customer_indices]
 
     kpis = _compute_kpis(
         current_solution,
@@ -1105,6 +1426,9 @@ def run_optimization_engine(
         time_matrix,
         operators_shortage=shortage_for_engine,
         workday_hours=duration_h,
+        unload_seconds=unload_seconds,
+        shift_budget_seconds=facilities.shift_budget_seconds,
+        uncovered_point_codes=uncovered_point_codes,
     )
 
     computation_seconds = time.perf_counter() - computation_started
@@ -1148,6 +1472,19 @@ def run_optimization_engine(
             ),
             "info",
         )
+    if uncovered_point_codes:
+        report(
+            "refinamiento_2opt",
+            f"{len(uncovered_point_codes)} contenedor(es) no cubiertos por jornada o capacidad de flota",
+            "warning",
+        )
+    landfill_trips = opt_breakdown.get("landfillTrips", 0)
+    if landfill_trips:
+        report(
+            "refinamiento_2opt",
+            f"Viajes al vertedero en rutas optimizadas: {landfill_trips}",
+            "info",
+        )
     if kpis["exceedsWorkday"]["optimized"]:
         report(
             "refinamiento_2opt",
@@ -1166,6 +1503,11 @@ def run_optimization_engine(
             label="Ruta actual (estática)",
             vehicles=vehicles,
             operators_shortage=shortage_for_engine,
+            depot_lon=depot_lon,
+            depot_lat=depot_lat,
+            landfill_lon=landfill_lon,
+            landfill_lat=landfill_lat,
+            unload_seconds=unload_seconds,
         )["features"],
         "current",
         "Ruta actual (estática)",
@@ -1181,6 +1523,11 @@ def run_optimization_engine(
             label="Ruta optimizada (IA)",
             vehicles=vehicles,
             operators_shortage=shortage_for_engine,
+            depot_lon=depot_lon,
+            depot_lat=depot_lat,
+            landfill_lon=landfill_lon,
+            landfill_lat=landfill_lat,
+            unload_seconds=unload_seconds,
         )["features"],
         "optimized",
         "Ruta optimizada (IA)",
@@ -1188,12 +1535,7 @@ def run_optimization_engine(
 
     routes_payload = {"current": current_geo, "optimized": optimized_geo}
 
-    saving_pct = None
-    if current_solution.distance_m > 0:
-        saving_pct = round(
-            (1 - optimized_solution.distance_m / current_solution.distance_m) * 100,
-            1,
-        )
+    saving_pct = _kpi_saving_percentage(current_solution.distance_m, optimized_solution.distance_m)
 
     report("persistencia", "Persistiendo rutas optimizadas y waypoints en PostgreSQL", "success")
 
@@ -1222,9 +1564,9 @@ def run_optimization_engine(
             },
             ensure_ascii=False,
         ),
-        kpi_total_distance_historical=Decimal(str(round(current_solution.distance_m / 1000, 2))),
-        kpi_total_distance_optimized=Decimal(str(round(optimized_solution.distance_m / 1000, 2))),
-        kpi_saving_percentage=Decimal(str(saving_pct)) if saving_pct is not None else None,
+        kpi_total_distance_historical=_kpi_distance_km(current_solution.distance_m),
+        kpi_total_distance_optimized=_kpi_distance_km(optimized_solution.distance_m),
+        kpi_saving_percentage=saving_pct,
     )
     db.add(simulation)
     db.flush()
@@ -1242,6 +1584,7 @@ def run_optimization_engine(
         operators_shortage=shortage_for_engine,
         daily_plan_id=daily_plan_id,
         planning_level=planning_context["level"],
+        unload_seconds=unload_seconds,
     )
     if daily_plan_id is not None:
         from app.services.planning_service import mark_daily_plan_optimized
@@ -1292,4 +1635,5 @@ def run_optimization_engine(
         "contingency": contingency_meta,
         "servedPointCodes": sorted(served_codes),
         "engineMetrics": engine_metrics,
+        "dailyPlanId": daily_plan_id,
     }
