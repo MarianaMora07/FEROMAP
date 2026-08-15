@@ -1,6 +1,5 @@
 import { expect, test } from '@playwright/test';
 import { ensurePlannerSession, expectNoPageErrors } from './helpers/planner-session';
-import { OPERATIONAL_MAP_MIN_ZOOM } from '../src/core/map/operationalMapConfig';
 
 const mockMapContext = {
   vehicles: [
@@ -62,27 +61,12 @@ test.describe('Mapa operativo Unare', () => {
     expectNoPageErrors(page);
   });
 
-  test('dashboard muestra mapa con al menos una ruta y respeta minZoom', async ({ page }) => {
+  test('mapa operativo muestra canvas y capas de rutas', async ({ page }) => {
     await mockOperationalMapContext(page);
-    await ensurePlannerSession(page, '/');
-    await expect(page.getByText('Cargando mapa operativo')).toHaveCount(0, { timeout: 30_000 });
-
-    const mapHost = page.getByTestId('dashboard-operational-map');
-    await expect(mapHost).toBeVisible();
+    await ensurePlannerSession(page, '/map');
+    await expect(page.getByTestId('map-layers-panel')).toBeVisible({ timeout: 30_000 });
     await expect(page.locator('.maplibregl-canvas')).toBeVisible({ timeout: 20_000 });
-
-    await expect(page.getByText(/Mapa de operaciones en tiempo real/)).toBeVisible();
-    await expect(page.getByText(/[1-9]\d* ruta/)).toBeVisible();
-    await expect(page.getByTestId('dashboard-route-legend').locator('li')).toHaveCount(1);
-
-    const zoomOut = page.getByRole('button', { name: 'Alejar' });
-    for (let i = 0; i < 12; i += 1) {
-      await zoomOut.click();
-      await page.waitForTimeout(80);
-    }
-
-    const zoomLevel = await mapHost.evaluate((el) => Number(el.dataset.zoom ?? '0'));
-    expect(zoomLevel).toBeGreaterThanOrEqual(OPERATIONAL_MAP_MIN_ZOOM);
+    await expect(page.getByTestId('map-layer-routes')).toBeChecked();
   });
 
   test('/map permite togglear capa de rutas planificadas', async ({ page }) => {

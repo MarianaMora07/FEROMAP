@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createResource, createSignal, onMount } from 'solid-js';
+import { For, Show, createMemo, createResource, createSignal } from 'solid-js';
 import { A } from '@solidjs/router';
 import {
   AlertTriangle,
@@ -7,14 +7,12 @@ import {
   Radio,
   Wrench,
 } from 'lucide-solid';
-import { Button, Card, CardHeader, KpiCard, LoadingPanel, ProgressBar } from '../../design-system/components';
+import { Button, Card, CardHeader, LoadingPanel } from '../../design-system/components';
 import { fetchDailyPlan } from '../../core/api/planning';
 import { fetchMonitoringStatus } from '../../core/api/monitoring';
 import { fetchOperatorRouteSnapshot } from '../../core/api/operator';
 import { fetchRecentIncidents } from '../../core/api/contingencies';
 import { authUser } from '../../core/stores/authStore';
-import { dashboardView, loadDashboardData } from '../../core/stores/dashboardStore';
-import { recentAlerts as mockRecentAlerts } from '../../data/mock/dashboard';
 import { deriveOperatorFieldContext } from '../../core/operator/operatorUx';
 import { fleetForOperatorField } from '../../core/operator/operatorMonitoringUx';
 import {
@@ -28,11 +26,12 @@ import {
 } from '../../core/operator/operatorDayClosureUx';
 import { OPERATOR_EMPTY_PRESETS } from '../../core/operator/operatorEmptyStates';
 import { PlanningEmptyState } from '../planning/PlanningEmptyState';
-import { PlanningStatusBadge } from '../planning/PlanningStatusBadge';
 import { BreakdownReporter } from '../contingency/BreakdownReporter';
 import { OperatorContingencyBanner } from '../contingency/OperatorContingencyBanner';
 import { OperatorMyIncidents } from '../contingency/OperatorMyIncidents';
 import { OperatorGlossaryStrip } from './OperatorGlossaryStrip';
+import { OperatorHubDashboardMinimal } from './OperatorHubDashboardMinimal';
+import { OperatorJourneyStrip } from './OperatorJourneyStrip';
 import { OperatorRoutePanel } from './OperatorRoutePanel';
 import { OperatorDaySummaryCard } from './OperatorDaySummaryCard';
 import { OperatorLevelBanner } from './OperatorLevelBanner';
@@ -58,17 +57,14 @@ const quickActionIcons = {
 
 interface OperatorHubSectionProps {
   variant?: 'dashboard' | 'landing';
+  /** Oculta el encabezado cuando la página padre ya muestra intro */
+  showPageHeader?: boolean;
 }
 
 export function OperatorHubSection(props: OperatorHubSectionProps) {
   const variant = () => props.variant ?? 'landing';
+  const showPageHeader = () => props.showPageHeader ?? true;
   const operationDate = () => new Date().toISOString().slice(0, 10);
-
-  onMount(() => {
-    if (variant() === 'dashboard') {
-      void loadDashboardData();
-    }
-  });
 
   const [dailyPlan, { refetch: refetchPlan }] = createResource(operationDate, (date) =>
     fetchDailyPlan(date),
@@ -127,7 +123,6 @@ export function OperatorHubSection(props: OperatorHubSectionProps) {
   );
   const [incidentsRefreshKey, setIncidentsRefreshKey] = createSignal(0);
   const loading = () => dailyPlan.loading || monitoring.loading;
-  const recentAlerts = () => dashboardView()?.recentAlerts ?? mockRecentAlerts;
 
   const fleetForReporter = () =>
     fleetForOperatorField(monitoring()?.liveFleet ?? [], authUser()).map((vehicle) => ({
@@ -156,23 +151,29 @@ export function OperatorHubSection(props: OperatorHubSectionProps) {
   };
 
   return (
+    <Show
+      when={variant() === 'landing'}
+      fallback={
+        <OperatorHubDashboardMinimal
+          loading={loading()}
+          context={context()}
+          nextAction={nextAction()}
+          quickActions={quickActions()}
+          showJourney={showActiveJourney()}
+        />
+      }
+    >
     <section class="space-y-4" data-testid="operator-hub">
-      <div class="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <p class="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
-            Campo
-          </p>
-          <h2 class="font-heading text-xl font-bold text-text-primary dark:text-white">Mi operación</h2>
-          <p class="mt-1 text-sm text-text-secondary">
-            Resumen de tu jornada — ejecución en ruta, no planificación.
-          </p>
+      <Show when={showPageHeader()}>
+        <div class="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+              Campo
+            </p>
+            <h2 class="font-heading text-xl font-bold text-text-primary dark:text-white">Mi operación</h2>
+          </div>
         </div>
-        <Show when={variant() === 'dashboard'}>
-          <A href="/operator" class="text-sm font-medium text-fero-blue hover:underline">
-            Ver hub completo
-          </A>
-        </Show>
-      </div>
+      </Show>
 
       <Show when={loading()}>
         <Card aria-busy="true">
@@ -231,7 +232,7 @@ export function OperatorHubSection(props: OperatorHubSectionProps) {
             }
           />
           <Show when={showDaySummary()}>
-            <OperatorDaySummaryCard summary={daySummary()} compact={variant() === 'dashboard'} />
+            <OperatorDaySummaryCard summary={daySummary()} />
           </Show>
           <Show
             when={showActiveJourney()}
@@ -241,51 +242,17 @@ export function OperatorHubSection(props: OperatorHubSectionProps) {
               </Show>
             }
           >
-            <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <KpiCard
-                title="Fecha"
-                value={context().operationDate}
-                iconTone="blue"
-                footer={<span class="text-xs text-text-muted">Jornada operativa</span>}
-              />
-              <KpiCard
-                title="Vehículo"
-                value={context().vehicle?.id ?? '—'}
-                iconTone="green"
-                footer={
-                  <span class="text-xs text-text-muted">{context().vehicle?.route ?? 'Sin ruta'}</span>
-                }
-              />
-              <KpiCard
-                title="Estado"
-                value={operatorRouteStatusLabel(context())}
-                iconTone="amber"
-                footer={
-                  <PlanningStatusBadge status={context().planStatus ?? 'draft'} class="mt-1" />
-                }
-              />
-              <KpiCard
-                title="Avance"
-                value={`${context().vehicle?.progress ?? 0}%`}
-                iconTone="green"
-                footer={
-                  <ProgressBar
-                    value={context().vehicle?.progress ?? 0}
-                    color="green"
-                    size="sm"
-                    class="mt-1"
-                  />
-                }
+            <div class="px-1 pb-1">
+              <OperatorJourneyStrip
+                operationDate={context().operationDate}
+                vehicleId={context().vehicle?.id}
+                routeLabel={context().vehicle?.route}
+                statusLabel={operatorRouteStatusLabel(context())}
+                planStatus={context().planStatus}
+                progress={context().vehicle?.progress ?? 0}
+                nextPoint={context().vehicle?.nextPoint}
               />
             </div>
-            <Show when={context().vehicle}>
-              {(vehicle) => (
-                <p class="mt-3 text-sm text-text-secondary">
-                  Próxima parada:{' '}
-                  <strong class="text-text-primary dark:text-white">{vehicle().nextPoint}</strong>
-                </p>
-              )}
-            </Show>
           </Show>
         </Card>
 
@@ -320,7 +287,6 @@ export function OperatorHubSection(props: OperatorHubSectionProps) {
             <CardHeader title="Reportar avería" subtitle="Contingencia en ruta" />
             <BreakdownReporter
               variant="operator"
-              compact={variant() === 'dashboard'}
               vehicles={fleetForReporter()}
               onComplete={() => {
                 handleRefresh();
@@ -339,31 +305,15 @@ export function OperatorHubSection(props: OperatorHubSectionProps) {
         </Show>
       </Show>
 
-      <Show when={variant() === 'landing'}>
-        <OperatorGlossaryStrip />
-      </Show>
-
-      <Show when={variant() === 'dashboard'}>
-        <Card>
-          <CardHeader title="Alertas recientes" />
-          <ul class="space-y-3">
-            <For each={recentAlerts().slice(0, 3)}>
-              {(alert) => (
-                <li class="flex gap-3 border-b border-border pb-3 last:border-0 dark:border-dark-border">
-                  <AlertTriangle size={16} class="mt-0.5 shrink-0 text-amber-600" />
-                  <div class="min-w-0">
-                    <p class="text-sm font-semibold text-text-primary dark:text-white">{alert.title}</p>
-                    <p class="text-xs text-text-muted">{alert.detail}</p>
-                  </div>
-                </li>
-              )}
-            </For>
-          </ul>
-          <A href="/alerts" class="mt-2 inline-block text-sm font-medium text-fero-blue hover:underline">
-            Ver todas las alertas
-          </A>
-        </Card>
-      </Show>
+      <details class="group rounded-xl border border-default bg-elevated">
+        <summary class="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-text-primary marker:content-none">
+          Glosario de campo
+        </summary>
+        <div class="border-t border-default px-4 py-3">
+          <OperatorGlossaryStrip />
+        </div>
+      </details>
     </section>
+    </Show>
   );
 }

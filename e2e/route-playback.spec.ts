@@ -8,7 +8,7 @@ test.describe('Route playback — optimización', () => {
 
   test('optimizar, reproducir recorrido y ver marcador del camión', async ({ page }) => {
     await ensurePlannerSession(page, '/optimization');
-    await expect(page.getByRole('heading', { name: 'Plan del día' })).toBeVisible({
+    await expect(page.getByTestId('optimization-sticky-toolbar')).toBeVisible({
       timeout: 45_000,
     });
 

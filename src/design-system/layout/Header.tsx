@@ -1,8 +1,15 @@
-import { Show } from 'solid-js';
+import { Show, createResource } from 'solid-js';
 import { useLocation } from '@solidjs/router';
 import { Menu, Bell, RefreshCw, CalendarDays } from 'lucide-solid';
 import { toggleSidebar } from '../../core/stores/appStore';
 import { dashboardSummary, loadDashboardData } from '../../core/stores/dashboardStore';
+import { canOptimize, isConductor, isResident } from '../../core/auth/permissions';
+import { authUser } from '../../core/stores/authStore';
+import { fetchPlanningDashboardSnapshot } from '../../core/api/planningAnalytics';
+import {
+  plannerHomeDateChipLabel,
+  plannerHomeHeaderSubtitle,
+} from '../../core/planning/plannerHomeHeaderUx';
 import { optimizationPageMeta } from '../../data/mock/optimization';
 import { vehiclesPageMeta } from '../../data/mock/vehicles';
 import { collectionPointsPageMeta } from '../../data/mock/collectionPoints';
@@ -41,6 +48,12 @@ const pageMeta: Record<string, PageMeta> = {
 export function Header(props: HeaderProps) {
   const location = useLocation();
   const meta = () => pageMeta[location.pathname];
+  const isPlannerHome = () => location.pathname === '/' && canOptimize(authUser()?.role);
+
+  const [planningSnapshot] = createResource(
+    () => (isPlannerHome() ? 'planner-home-header' : null),
+    () => fetchPlanningDashboardSnapshot(),
+  );
 
   const title = () => {
     if (props.title) return props.title;
@@ -49,10 +62,22 @@ export function Header(props: HeaderProps) {
   };
   const subtitle = () => {
     if (props.subtitle) return props.subtitle;
-    if (location.pathname === '/') return dashboardSummary().subtitle;
+    if (isPlannerHome()) {
+      return plannerHomeHeaderSubtitle(planningSnapshot());
+    }
+    if (location.pathname === '/') {
+      if (isConductor(authUser()?.role)) return 'Tu turno en campo';
+      if (isResident(authUser()?.role)) return 'Estado de recolección en tu sector';
+      return dashboardSummary().subtitle;
+    }
     return meta()?.subtitle;
   };
-  const dateLabel = () => meta()?.dateLabel ?? dashboardSummary().dateLabel;
+  const dateLabel = () => {
+    if (isPlannerHome()) {
+      return plannerHomeDateChipLabel(planningSnapshot());
+    }
+    return meta()?.dateLabel ?? dashboardSummary().dateLabel;
+  };
 
   return (
     <header class="sticky top-0 z-30 flex h-(--header-height) shrink-0 items-center gap-4 border-b border-default bg-elevated/90 px-4 backdrop-blur-md md:px-6 dark:bg-app/95 dark:backdrop-blur-sm">
