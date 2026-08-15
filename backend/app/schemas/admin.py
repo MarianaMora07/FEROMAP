@@ -62,6 +62,11 @@ class OperationalSettings(CamelModel):
     weight_unit: str = "t"
     time_unit: str = "min"
     fill_threshold_pct: int = 80
+    depot_lat: float = -62.715
+    depot_lon: float = 8.295
+    landfill_lat: float = -62.690
+    landfill_lon: float = 8.280
+    landfill_unload_minutes: int = 15
     work_start: str = "06:00"
     work_end: str = "18:00"
     session_timeout_minutes: int = 60
@@ -83,6 +88,11 @@ class OperationalSettingsUpdate(CamelModel):
     weight_unit: str | None = None
     time_unit: str | None = None
     fill_threshold_pct: int | None = Field(default=None, ge=50, le=100)
+    depot_lat: float | None = None
+    depot_lon: float | None = None
+    landfill_lat: float | None = None
+    landfill_lon: float | None = None
+    landfill_unload_minutes: int | None = Field(default=None, ge=1, le=120)
     work_start: str | None = None
     work_end: str | None = None
     session_timeout_minutes: int | None = Field(default=None, ge=15, le=1440)

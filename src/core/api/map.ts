@@ -9,6 +9,7 @@ import {
 import { mapGisMetrics, mapVehicles } from '../../data/mock/mapGis';
 import { apiGet, withMockFallback } from './client';
 import type { MonitoringStatus } from './monitoring';
+import { DEFAULT_MAP_FACILITIES } from '../utils/landfillUx';
 
 export const MAP_CONTEXT_POLL_MS = 20_000;
 
@@ -38,6 +39,7 @@ function buildMockMapContext(): MapOperationalContext {
     mapMetrics: mapGisMetrics,
     liveActivities,
     updatedAt: new Date().toISOString(),
+    facilities: DEFAULT_MAP_FACILITIES,
   };
 }
 
@@ -46,6 +48,8 @@ function buildQuery(filters?: MapContextFilters): string {
   const params = new URLSearchParams();
   if (filters.sector) params.set('sector', filters.sector);
   if (filters.bbox) params.set('bbox', filters.bbox);
+  if (filters.dailyPlanId != null) params.set('dailyPlanId', String(filters.dailyPlanId));
+  if (filters.playbackDetails) params.set('playbackDetails', 'true');
   const query = params.toString();
   return query ? `?${query}` : '';
 }
@@ -67,6 +71,7 @@ export function mapContextFromMonitoring(status: MonitoringStatus): MapOperation
     mapMetrics: status.mapMetrics ?? mapGisMetrics,
     liveActivities: status.liveActivities ?? liveActivities,
     updatedAt: status.updatedAt ?? new Date().toISOString(),
+    facilities: status.facilities ?? DEFAULT_MAP_FACILITIES,
   };
 }
 

@@ -1,40 +1,29 @@
-import { For, Show, createEffect, createMemo, createSignal, onMount } from 'solid-js';
+import { For, Show, createEffect, createMemo, createResource, createSignal, onMount } from 'solid-js';
 import { A, useNavigate, useSearchParams } from '@solidjs/router';
 import {
-  Sparkles,
   MapPin,
   Route,
   Clock,
   Weight,
-  Truck,
-  Fuel,
-  CheckCircle2,
-  Send,
-  Loader2,
   Map,
 } from 'lucide-solid';
 import {
-  Badge,
   Button,
   Card,
   CardHeader,
   ProgressBar,
-  SelectField,
-  TextField,
 } from '../../design-system/components';
-import { canOptimize } from '../../core/auth/permissions';
-import { authUser } from '../../core/stores/authStore';
 import { appState } from '../../core/stores/appStore';
 import {
   dispatchOptimizationResult,
   executeOptimization,
   closeOptimizationDay,
+  closeOptimizationPlayback,
   initOptimizationPage,
+  openOptimizationPlayback,
   optimizationState,
   refreshDailyPlan,
   selectOperationDate,
-  setOptimizationScenario,
-  updateOptimizationPreset,
 } from '../../core/stores/optimizationStore';
 import {
   buildResultsTotals,
@@ -42,38 +31,32 @@ import {
   buildScenarioInfoRows,
 } from '../../core/utils/optimizationResults';
 import {
-  constraints as constraintDefs,
-  optimizationTabs,
   type OptimizationTabId,
 } from '../../data/mock/optimization';
-import type { OptimizationConstraints } from '../../core/api/optimization';
-import type { ScenarioId } from '../../data/types/simulation';
 import { downloadDailyPlanPdf } from '../../core/api/planning';
 import { optimizationDateHref, tomorrowIso } from '../../core/planning/planningUx';
 import { monitoringHref, optimizationHref, operationalMapHref } from '../../core/planning/operationalLinks';
-import { PendingManagementPanel } from './PendingManagementPanel';
-import { ModuleGuidanceBanner } from '../shared/ModuleGuidanceBanner';
+import { parsePlaybackQueryParam } from '../../core/planning/operationalFlowUx';
 import { PlanningContextualCta } from '../planning/PlanningContextualCta';
 import { PlanningEmptyState } from '../planning/PlanningEmptyState';
 import { PLANNING_EMPTY_PRESETS } from '../../core/planning/planningEmptyStates';
-import { PlanningLevelBanner } from '../planning/PlanningLevelBanner';
-import { PlanningStatusBadge } from '../planning/PlanningStatusBadge';
 import { OptimizationRouteMap } from './OptimizationRouteMap';
-import { OptimizationWeekCalendar } from './OptimizationWeekCalendar';
-import { DailyPlanTimeline } from './DailyPlanTimeline';
+import { OptimizationPlaybackPanel } from './OptimizationPlaybackPanel';
+import { OptimizationStickyToolbar } from './OptimizationStickyToolbar';
+import { OptimizationMainTabs } from './OptimizationMainTabs';
+import { OptimizationMoreContextPanel } from './OptimizationMoreContextPanel';
 import { OptimizationHistoryPanel } from './OptimizationHistoryPanel';
-
-const vehicleToneClass = {
-  blue: 'bg-fero-blue/10 text-fero-blue border-fero-blue/20',
-  green: 'bg-fero-green/15 text-fero-green-dark border-fero-green/30',
-  purple: 'bg-violet-100 text-violet-700 border-violet-200',
-};
-
-const vehicleIconClass = {
-  blue: 'bg-fero-blue/10 text-fero-blue',
-  green: 'bg-fero-green/15 text-fero-green-dark',
-  purple: 'bg-violet-100 text-violet-600',
-};
+import { OptimizationParametersForm } from './OptimizationParametersForm';
+import { OptimizationResultsCompact } from './OptimizationResultsCompact';
+import { DurationBreakdownPanel } from '../simulation/DurationBreakdownPanel';
+import { LandfillKpiStrip } from '../landfill/LandfillKpiStrip';
+import { UncoveredPointsAlert } from '../landfill/UncoveredPointsAlert';
+import { OptimizationParametersSheet } from './OptimizationParametersSheet';
+import { useGenerateButtonVisibility } from './useGenerateButtonVisibility';
+import { resolveOptimizationContextualMessage } from './optimizationLayoutUx';
+import { fetchDailyRoutePlayback } from '../../core/api/routePlayback';
+import { useRoutePlayback } from '../../core/route-playback/useRoutePlayback';
+import { mockDailyRoutePlayback } from '../../data/mock/routePlayback';
 
 const scenarioIconMap = {
   'map-pin': MapPin,
@@ -81,171 +64,6 @@ const scenarioIconMap = {
   clock: Clock,
   weight: Weight,
 } as const;
-
-function FieldLabel(props: { children: string }) {
-  return (
-    <p class="mb-1.5 text-sm font-semibold text-text-primary">{props.children}</p>
-  );
-}
-
-function ParametersForm(props: {
-  onGenerate: () => void;
-  onDateChange: (date: string) => void;
-  disabled?: boolean;
-}) {
-  const preset = () => optimizationState.preset;
-  const context = () => optimizationState.context;
-  const assignableVehicles = () => context()?.assignableVehicles ?? [];
-
-  const toggleConstraint = (id: keyof OptimizationConstraints) => {
-    updateOptimizationPreset({
-      constraints: { ...preset().constraints, [id]: !preset().constraints[id] },
-    });
-  };
-
-  return (
-    <Card>
-      <CardHeader title="Parámetros de optimización" />
-      <form
-        class="space-y-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          props.onGenerate();
-        }}
-      >
-        <TextField
-          label="Fecha de operación"
-          type="date"
-          name="operationDate"
-          value={preset().operationDate}
-          onInput={(e) => props.onDateChange(e.currentTarget.value)}
-        />
-
-        <p class="text-xs text-text-muted -mt-2">
-          También puedes elegir el día en el calendario semanal.
-        </p>
-
-        <div>
-          <FieldLabel>Vehículos disponibles ({assignableVehicles().length})</FieldLabel>
-          <div class="flex flex-wrap gap-2 rounded-md border border-default bg-elevated px-3 py-2.5">
-            <Show
-              when={assignableVehicles().length > 0}
-              fallback={<span class="text-xs text-text-muted">Sin vehículos asignables</span>}
-            >
-              <For each={assignableVehicles()}>
-                {(v, index) => {
-                  const tones = ['blue', 'green', 'purple'] as const;
-                  const tone = tones[index() % tones.length]!;
-                  return (
-                    <span
-                      class={`inline-flex flex-col rounded-full border px-2.5 py-0.5 text-xs font-semibold ${vehicleToneClass[tone]}`}
-                      title={v.driver !== '—' ? v.driver : 'Sin conductor asignado'}
-                    >
-                      <span>{v.id}</span>
-                      <Show when={v.driver && v.driver !== '—'}>
-                        <span class="text-[10px] font-medium opacity-80">{v.driver}</span>
-                      </Show>
-                    </span>
-                  );
-                }}
-              </For>
-            </Show>
-          </div>
-        </div>
-
-        <SelectField
-          label="Condición operativa del día"
-          name="scenario"
-          value={preset().scenarioId}
-          onChange={(e) => setOptimizationScenario(e.currentTarget.value as ScenarioId)}
-        >
-          <For each={context()?.scenarios ?? []}>
-            {(scenario) => <option value={scenario.id}>{scenario.label}</option>}
-          </For>
-        </SelectField>
-        <p class="-mt-2 text-xs text-text-muted">
-          Para comparar condiciones (lluvia, saturación, impacto en KPIs), usa{' '}
-          <A href="/simulation" class="font-medium text-fero-blue hover:underline">
-            Simulación de escenarios
-          </A>
-          .
-        </p>
-
-        <div class="rounded-lg border border-default bg-elevated px-3 py-2.5">
-          <p class="text-sm font-semibold text-text-primary">Algoritmo del motor</p>
-          <p class="mt-1 text-sm text-text-secondary">Colonia de Hormigas (ACO) — 12 hormigas × 20 iteraciones</p>
-          <p class="mt-2 text-xs text-text-muted">
-            Único algoritmo soportado por el backend en esta versión.
-          </p>
-        </div>
-
-        <div class="rounded-lg border border-dashed border-default px-3 py-2.5">
-          <p class="text-sm font-semibold text-text-muted">Objetivo de optimización</p>
-          <p class="mt-1 text-xs text-text-muted">
-            Próximamente — el motor minimiza distancia/tiempo con ACO.
-          </p>
-        </div>
-
-        <div>
-          <FieldLabel>Restricciones</FieldLabel>
-          <ul class="space-y-2.5">
-            <For each={constraintDefs}>
-              {(item) => {
-                const connected = item.id === 'avoid_traffic' || item.id === 'critical_first';
-                return (
-                  <li>
-                    <label
-                      class={`flex items-start gap-2.5 text-sm ${
-                        connected ? 'cursor-pointer text-text-secondary' : 'text-text-muted'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        class="mt-0.5 size-4 rounded border-default accent-fero-green-mid"
-                        checked={preset().constraints[item.id as keyof OptimizationConstraints]}
-                        disabled={!connected}
-                        onChange={() =>
-                          connected && toggleConstraint(item.id as keyof OptimizationConstraints)
-                        }
-                      />
-                      <span>
-                        {item.label}
-                        <span class="mt-0.5 block text-[11px] text-text-muted">
-                          {connected
-                            ? 'Influye en el escenario inferido si no eliges uno explícito.'
-                            : 'Próximamente — no modifica el motor actual.'}
-                        </span>
-                      </span>
-                    </label>
-                  </li>
-                );
-              }}
-            </For>
-          </ul>
-        </div>
-
-        <Button
-          type="submit"
-          variant="gradient"
-          size="lg"
-          class="w-full font-semibold"
-          icon={optimizationState.isOptimizing ? <Loader2 size={18} class="animate-spin" /> : <Sparkles size={18} />}
-          disabled={
-            props.disabled ||
-            optimizationState.isOptimizing ||
-            !canOptimize(authUser()?.role) ||
-            !optimizationState.weeklyPlanApproved
-          }
-          title={!optimizationState.weeklyPlanApproved ? 'Falta aprobar plan semanal' : undefined}
-        >
-          {optimizationState.isOptimizing
-            ? `Ejecutando optimización… ${optimizationState.optimizationProgress}%`
-            : 'Generar ruta operativa'}
-        </Button>
-      </form>
-    </Card>
-  );
-}
 
 function ScenarioInfoCard() {
   const context = () => optimizationState.context;
@@ -289,95 +107,11 @@ function ResultsCard(props: {
   driverByVehicleId?: Record<string, string>;
 }) {
   return (
-    <Card>
-      <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h3 class="font-heading font-semibold text-text-primary">
-          Resultados de la optimización
-        </h3>
-        <Badge variant="success" class="gap-1">
-          <CheckCircle2 size={12} />
-          Ruta óptima encontrada
-        </Badge>
-      </div>
-
-      <div class="grid gap-3 sm:grid-cols-3">
-        <For each={props.routeResults}>
-          {(route) => (
-            <div class="rounded-lg border border-default p-3">
-              <div class="mb-3 flex items-start justify-between gap-2">
-                <div class="min-w-0">
-                  <span class={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold ${vehicleToneClass[route.tone]}`}>
-                    {route.id}
-                  </span>
-                  <Show when={props.driverByVehicleId?.[route.id]}>
-                    <p class="mt-1 text-[11px] text-text-muted">{props.driverByVehicleId![route.id]}</p>
-                  </Show>
-                </div>
-                <span class={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${vehicleIconClass[route.tone]}`}>
-                  <Truck size={18} />
-                </span>
-              </div>
-              <dl class="space-y-1.5 text-sm">
-                <div class="flex justify-between gap-2">
-                  <dt class="text-text-muted">Distancia</dt>
-                  <dd class="font-semibold text-text-primary">{route.distanceKm} km</dd>
-                </div>
-                <div class="flex justify-between gap-2">
-                  <dt class="text-text-muted">Tiempo</dt>
-                  <dd class="font-semibold text-text-primary">{route.duration}</dd>
-                </div>
-                <div class="flex justify-between gap-2">
-                  <dt class="text-text-muted">Puntos</dt>
-                  <dd class="font-semibold text-text-primary">{route.points}</dd>
-                </div>
-                <div class="flex justify-between gap-2">
-                  <dt class="text-text-muted">Toneladas</dt>
-                  <dd class="font-semibold text-text-primary">{route.tons} ton</dd>
-                </div>
-              </dl>
-              <div class="mt-3">
-                <div class="mb-1 flex justify-between text-xs">
-                  <span class="text-text-muted">Capacidad</span>
-                  <span class="font-medium text-text-secondary">{route.capacityPct}%</span>
-                </div>
-                <ProgressBar value={route.capacityPct} color="green" size="sm" />
-              </div>
-            </div>
-          )}
-        </For>
-      </div>
-
-      <div class="mt-4 grid grid-cols-2 gap-3 rounded-lg bg-app px-3 py-3 text-sm sm:grid-cols-4">
-        <div class="flex items-center gap-2">
-          <Route size={16} class="text-fero-blue" />
-          <div>
-            <p class="text-xs text-text-muted">Distancia</p>
-            <p class="font-semibold text-text-primary">{props.totals.distanceKm} km</p>
-          </div>
-        </div>
-        <div class="flex items-center gap-2">
-          <Clock size={16} class="text-fero-blue" />
-          <div>
-            <p class="text-xs text-text-muted">Tiempo</p>
-            <p class="font-semibold text-text-primary">{props.totals.duration}</p>
-          </div>
-        </div>
-        <div class="flex items-center gap-2">
-          <Weight size={16} class="text-fero-blue" />
-          <div>
-            <p class="text-xs text-text-muted">Toneladas</p>
-            <p class="font-semibold text-text-primary">{props.totals.tons} ton</p>
-          </div>
-        </div>
-        <div class="flex items-center gap-2">
-          <Fuel size={16} class="text-fero-blue" />
-          <div>
-            <p class="text-xs text-text-muted">Combustible</p>
-            <p class="font-semibold text-text-primary">{props.totals.fuelL} L</p>
-          </div>
-        </div>
-      </div>
-    </Card>
+    <OptimizationResultsCompact
+      routeResults={props.routeResults}
+      totals={props.totals}
+      driverByVehicleId={props.driverByVehicleId}
+    />
   );
 }
 
@@ -385,14 +119,51 @@ export default function OptimizationPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [tab, setTab] = createSignal<OptimizationTabId>('nueva');
+  const [paramsSheetOpen, setParamsSheetOpen] = createSignal(false);
   const [dispatchError, setDispatchError] = createSignal<string | null>(null);
   const [closeNotice, setCloseNotice] = createSignal<string | null>(null);
-  const [showDispatchCta, setShowDispatchCta] = createSignal(false);
+  const { formGenerateInView, showStickyGenerate, setGenerateAnchorRef } = useGenerateButtonVisibility();
 
   const dailyPlan = () => optimizationState.dailyPlan;
   const selectedDate = () => optimizationState.preset.operationDate;
 
   const hasResults = () => optimizationState.kpis != null;
+  const canSimulateRoute = () => dailyPlan()?.status === 'optimized' && hasResults();
+  const scenarioId = () => dailyPlan()?.scenarioId ?? optimizationState.preset.scenarioId;
+  const scenarioLabel = createMemo(() => {
+    const id = scenarioId();
+    return optimizationState.context?.scenarios.find((scenario) => scenario.id === id)?.label ?? id;
+  });
+
+  const [playbackPayload] = createResource(
+    () => {
+      if (!optimizationState.playbackOpen) return null;
+      return dailyPlan()?.id ?? 0;
+    },
+    async (dailyPlanId) => {
+      if (!dailyPlanId) return mockDailyRoutePlayback(0);
+      return fetchDailyRoutePlayback(dailyPlanId);
+    },
+  );
+
+  const playbackRoutes = createMemo(() => playbackPayload()?.routes ?? []);
+  const playback = useRoutePlayback(() => playbackRoutes());
+
+  createEffect(() => {
+    if (!optimizationState.playbackOpen) {
+      playback.reset();
+    }
+  });
+
+  const handleOpenPlayback = () => {
+    openOptimizationPlayback();
+  };
+
+  const handleClosePlayback = () => {
+    playback.pause();
+    playback.reset();
+    closeOptimizationPlayback();
+  };
   const kpis = () => optimizationState.kpis!;
   const routeResults = createMemo(() => {
     if (!hasResults()) return [];
@@ -430,6 +201,13 @@ export default function OptimizationPage() {
     selectOperationDate(dateParam);
   });
 
+  createEffect(() => {
+    if (!parsePlaybackQueryParam(searchParams.playback)) return;
+    if (optimizationState.isLoadingDailyPlan || optimizationState.isLoadingContext) return;
+    if (!canSimulateRoute() || optimizationState.playbackOpen) return;
+    openOptimizationPlayback();
+  });
+
   const handleGenerate = async () => {
     setDispatchError(null);
     try {
@@ -441,10 +219,9 @@ export default function OptimizationPage() {
 
   const handleDispatch = async () => {
     setDispatchError(null);
-    setShowDispatchCta(false);
+    closeOptimizationPlayback();
     try {
       await dispatchOptimizationResult();
-      setShowDispatchCta(true);
     } catch (error) {
       setDispatchError(error instanceof Error ? error.message : 'No se pudieron despachar las rutas');
     }
@@ -476,186 +253,177 @@ export default function OptimizationPage() {
     navigateToDate(operationDate);
   };
 
-  return (
-    <div class="space-y-4 md:space-y-5">
-      <ModuleGuidanceBanner
-        tone="optimization"
-        title="¿Quieres evaluar escenarios?"
-        linkHref="/simulation"
-        linkLabel="Ir a Simulación de escenarios"
-      >
-        Esta pantalla genera y despacha rutas operativas del día. Para comparar condiciones (tráfico, lluvia, saturación) y medir el impacto del algoritmo,
-      </ModuleGuidanceBanner>
+  const pointCount = () => dailyPlan()?.finalPointIds.length ?? optimizationState.context?.pointsToVisit ?? 0;
+  const isDispatched = () => dailyPlan()?.status === 'dispatched';
+  const monitoringLink = () =>
+    isDispatched()
+      ? monitoringHref({
+          date: dailyPlan()?.operationDate ?? selectedDate(),
+          dailyPlanId: dailyPlan()?.id,
+        })
+      : null;
 
-      <PlanningLevelBanner level="administrativo" title="Planificación del día" />
+  const contextualMessage = createMemo(() =>
+    resolveOptimizationContextualMessage({
+      closeNotice: closeNotice(),
+      closeNoticeHref: closeNotice() ? optimizationDateHref(tomorrowIso()) : null,
+    }),
+  );
 
-      <OptimizationWeekCalendar selectedDate={selectedDate()} onDateSelect={navigateToDate} />
-
-      <DailyPlanTimeline />
-
-      <Show when={!optimizationState.isLoadingDailyPlan && !optimizationState.weeklyPlanApproved}>
+  const parametersPanel = () => (
+    <>
+      <OptimizationParametersForm
+        onGenerate={() => void handleGenerate()}
+        disabled={optimizationState.isLoadingContext}
+        formGenerateVisible={formGenerateInView()}
+        generateAnchorRef={setGenerateAnchorRef}
+      />
+      <ScenarioInfoCard />
+      <Show when={optimizationState.isOptimizing}>
         <Card>
-          <PlanningEmptyState {...PLANNING_EMPTY_PRESETS.noWeeklyApproved} />
+          <CardHeader title="Progreso del motor" />
+          <ProgressBar value={optimizationState.optimizationProgress} color="green" />
+          <ul class="mt-3 max-h-40 space-y-1 overflow-y-auto text-xs text-text-muted">
+            <For each={optimizationState.logs}>
+              {(log) => (
+                <li>
+                  <span class="text-text-secondary">{log.timestamp}</span> — {log.message}
+                </li>
+              )}
+            </For>
+          </ul>
         </Card>
       </Show>
+    </>
+  );
 
-      <Card>
-        <CardHeader title="Plan del día" subtitle="Programados + pendientes de ayer" />
-        <Show
-          when={!optimizationState.isLoadingDailyPlan}
-          fallback={<p class="text-sm text-text-muted">Cargando plan del día…</p>}
-        >
-          <div class="space-y-3">
-            <div class="flex flex-wrap items-center gap-3">
-              <PlanningStatusBadge status={dailyPlan()?.status ?? 'draft'} />
-              <span class="text-sm font-semibold text-text-primary">{selectedDate()}</span>
-              <span class="text-sm text-text-secondary">
-                {dailyPlan()?.scheduledPoints.length ?? 0} programados ·{' '}
-                {dailyPlan()?.pendingPoints.length ?? 0} pendientes ·{' '}
-                {dailyPlan()?.finalPointIds.length ?? 0} total
-              </span>
-            </div>
-            <Show when={(dailyPlan()?.pendingPoints.length ?? 0) > 0}>
-              <ul class="space-y-1 text-sm text-text-secondary">
-                <For each={dailyPlan()?.pendingPoints ?? []}>
-                  {(visit) => (
-                    <li>
-                      {visit.code} — origen {visit.originOperationDate} ({visit.reason})
-                    </li>
-                  )}
-                </For>
-              </ul>
-            </Show>
-            <div class="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={() => void refreshDailyPlan()}>
-                Actualizar pendientes
-              </Button>
-              <Button variant="outline" onClick={() => void handleCloseDay()}>
-                Cerrar día
-              </Button>
-              <Button variant="outline" disabled={!dailyPlan()?.id} onClick={() => void handleDownloadDailyPdf()}>
-                Exportar PDF del día
-              </Button>
-            </div>
-            <Show when={dailyPlan()?.status === 'dispatched'}>
-              <PlanningContextualCta
-                message="Plan despachado — supervisa el avance en campo."
-                href={monitoringHref({
-                  date: dailyPlan()?.operationDate ?? selectedDate(),
-                  dailyPlanId: dailyPlan()?.id,
-                })}
-                linkLabel="Ir a monitoreo"
-              />
-            </Show>
-            <Show when={closeNotice()}>
-              <PlanningContextualCta
-                tone="info"
-                message="Día cerrado. Revisa los pendientes que pasan a mañana."
-                href={optimizationDateHref(tomorrowIso())}
-                linkLabel="Ver pendientes de mañana"
-              />
-            </Show>
+  return (
+    <div class="space-y-4 md:space-y-5">
+      <Show
+        when={tab() === 'nueva'}
+        fallback={
+          <div
+            class="sticky top-(--header-height) z-20 -mx-4 border-b border-default bg-elevated/95 px-3 py-2 backdrop-blur-md md:-mx-6 md:px-4"
+            data-testid="optimization-history-toolbar"
+          >
+            <p class="text-sm font-semibold text-text-primary">Historial operativo</p>
+            <p class="text-xs text-text-muted">Audita corridas pasadas sin distracciones del día actual.</p>
           </div>
-        </Show>
-      </Card>
-
-      <PendingManagementPanel operationDate={selectedDate()} />
-
-      <div class="flex gap-1 overflow-x-auto border-b border-default">
-        <For each={[...optimizationTabs]}>
-          {(item) => (
-            <button
-              type="button"
-              class={`shrink-0 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-                tab() === item.id
-                  ? 'border-fero-green-mid text-fero-green-dark'
-                  : 'border-transparent text-text-muted hover:text-text-secondary'
-              }`}
-              onClick={() => setTab(item.id)}
-            >
-              {item.label}
-            </button>
-          )}
-        </For>
-      </div>
-
-      <Show when={optimizationState.error}>
-        <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {optimizationState.error}
-        </div>
+        }
+      >
+        <OptimizationStickyToolbar
+          selectedDate={selectedDate()}
+          dailyStatus={dailyPlan()?.status}
+          pointCount={pointCount()}
+          hasResults={hasResults()}
+          playbackOpen={optimizationState.playbackOpen}
+          weeklyPlanApproved={optimizationState.weeklyPlanApproved}
+          dailyPlanId={dailyPlan()?.id}
+          canSimulate={canSimulateRoute()}
+          isOptimizing={optimizationState.isOptimizing}
+          isDispatching={optimizationState.isDispatching}
+          showStickyGenerate={showStickyGenerate()}
+          isDispatched={isDispatched()}
+          monitoringHref={monitoringLink()}
+          onDateSelect={navigateToDate}
+          onGenerate={() => void handleGenerate()}
+          onSimulate={handleOpenPlayback}
+          onDispatch={() => void handleDispatch()}
+          onOpenPlayback={handleOpenPlayback}
+        />
       </Show>
 
-      <Show when={tab() === 'nueva'}>
-        <div class="grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
-          <div class="space-y-4 xl:col-span-3">
-            <ParametersForm
-              onGenerate={() => void handleGenerate()}
-              onDateChange={navigateToDate}
-              disabled={optimizationState.isLoadingContext}
-            />
-            <ScenarioInfoCard />
-            <Show when={optimizationState.isOptimizing}>
-              <Card>
-                <CardHeader title="Progreso del motor" />
-                <ProgressBar value={optimizationState.optimizationProgress} color="green" />
-                <ul class="mt-3 max-h-40 space-y-1 overflow-y-auto text-xs text-text-muted">
-                  <For each={optimizationState.logs}>
-                    {(log) => (
-                      <li>
-                        <span class="text-text-secondary">{log.timestamp}</span> — {log.message}
-                      </li>
-                    )}
-                  </For>
-                </ul>
-              </Card>
-            </Show>
-          </div>
+      <OptimizationMainTabs tab={tab()} onTabChange={setTab} />
 
-          <div class="space-y-4 xl:col-span-9">
-            <OptimizationRouteMap hasResults={hasResults()} routeResults={routeResults()} />
+      <Show when={tab() === 'nueva'}>
+        <Show when={contextualMessage()}>
+          {(message) => (
+            <div data-testid="optimization-contextual-cta">
+              <PlanningContextualCta
+                message={message().message}
+                href={message().href}
+                linkLabel={message().linkLabel}
+                tone={message().tone}
+              />
+            </div>
+          )}
+        </Show>
+
+        <Show when={dispatchError()}>
+          <p class="text-sm text-red-600" role="alert">
+            {dispatchError()}
+          </p>
+        </Show>
+
+        <Show when={optimizationState.error}>
+          <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {optimizationState.error}
+          </div>
+        </Show>
+
+        <div class="grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
+          <details class="group order-2 hidden space-y-4 xl:order-1 xl:col-span-3 xl:block" open>
+            <summary class="mb-3 cursor-pointer list-none text-sm font-semibold text-text-primary marker:content-none">
+              Parámetros
+            </summary>
+            {parametersPanel()}
+          </details>
+
+          <div class="order-1 space-y-4 xl:order-2 xl:col-span-9">
+            <div class="relative min-h-[420px]">
+              <OptimizationRouteMap
+                hasResults={hasResults()}
+                routeResults={routeResults()}
+                playbackActive={optimizationState.playbackOpen}
+                playbackRoutes={playbackRoutes()}
+                playback={playback}
+              />
+              <Show when={optimizationState.playbackOpen}>
+                <OptimizationPlaybackPanel
+                  routes={playbackRoutes()}
+                  playback={playback}
+                  scenarioId={scenarioId()}
+                  scenarioLabel={scenarioLabel()}
+                  operationDate={selectedDate()}
+                  previewMode={playbackPayload()?.previewMode ?? true}
+                  loading={playbackPayload.loading}
+                  error={
+                    playbackPayload.error
+                      ? playbackPayload.error instanceof Error
+                        ? playbackPayload.error.message
+                        : 'No se pudo cargar el recorrido'
+                      : null
+                  }
+                  onClose={handleClosePlayback}
+                />
+              </Show>
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              class="w-full xl:hidden"
+              data-testid="optimization-parameters-sheet-trigger"
+              onClick={() => setParamsSheetOpen(true)}
+            >
+              Parámetros de optimización
+            </Button>
+
+            <OptimizationParametersSheet open={paramsSheetOpen()} onOpenChange={setParamsSheetOpen}>
+              {parametersPanel()}
+            </OptimizationParametersSheet>
+
             <Show when={hasResults()}>
+              <UncoveredPointsAlert kpis={kpis()!} />
+              <LandfillKpiStrip kpis={kpis()} routes={appState.routes} />
+              <DurationBreakdownPanel kpis={kpis()!} />
               <div class="flex flex-wrap items-center justify-end gap-2">
-                <Show when={optimizationState.lastDispatch}>
-                  {(dispatch) => (
-                    <Badge variant="success">
-                      Despachadas {dispatch().count} ruta(s)
-                    </Badge>
-                  )}
-                </Show>
                 <A href={operationalMapHref({ focus: 'routes' })}>
                   <Button variant="outline" size="sm" icon={<Map size={16} />}>
                     Ver en mapa operativo
                   </Button>
                 </A>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  icon={<Send size={16} />}
-                  disabled={
-                    optimizationState.isDispatching ||
-                    optimizationState.lastSimulationId == null ||
-                    !canOptimize(authUser()?.role) ||
-                    !optimizationState.weeklyPlanApproved
-                  }
-                  title={!optimizationState.weeklyPlanApproved ? 'Falta aprobar plan semanal' : undefined}
-                  onClick={() => void handleDispatch()}
-                >
-                  {optimizationState.isDispatching ? 'Despachando…' : 'Despachar rutas'}
-                </Button>
               </div>
-              <Show when={dispatchError()}>
-                <p class="text-sm text-red-500">{dispatchError()}</p>
-              </Show>
-              <Show when={showDispatchCta() || dailyPlan()?.status === 'dispatched'}>
-                <PlanningContextualCta
-                  message="Rutas despachadas. Sigue el avance en tiempo real."
-                  href={monitoringHref({
-                    date: dailyPlan()?.operationDate ?? selectedDate(),
-                    dailyPlanId: dailyPlan()?.id,
-                  })}
-                  linkLabel="Abrir monitoreo"
-                />
-              </Show>
               <ResultsCard
                 routeResults={routeResults()}
                 totals={totals()!}
@@ -664,6 +432,29 @@ export default function OptimizationPage() {
             </Show>
           </div>
         </div>
+
+        <OptimizationMoreContextPanel
+          selectedDate={selectedDate()}
+          dailyPlan={dailyPlan()}
+          weeklyPlanApproved={optimizationState.weeklyPlanApproved}
+          scenarioLabel={scenarioLabel()}
+          pendingCount={dailyPlan()?.pendingPoints.length ?? 0}
+          scheduledCount={dailyPlan()?.scheduledPoints.length ?? 0}
+          totalCount={dailyPlan()?.finalPointIds.length ?? 0}
+          pendingPoints={dailyPlan()?.pendingPoints ?? []}
+          loading={optimizationState.isLoadingDailyPlan}
+          pdfDisabled={!dailyPlan()?.id}
+          onRefreshPending={() => void refreshDailyPlan()}
+          onCloseDay={() => void handleCloseDay()}
+          onDownloadPdf={() => void handleDownloadDailyPdf()}
+          noWeeklyApprovedSlot={
+            !optimizationState.isLoadingDailyPlan && !optimizationState.weeklyPlanApproved ? (
+              <Card>
+                <PlanningEmptyState {...PLANNING_EMPTY_PRESETS.noWeeklyApproved} />
+              </Card>
+            ) : undefined
+          }
+        />
       </Show>
 
       <Show when={tab() === 'historial'}>

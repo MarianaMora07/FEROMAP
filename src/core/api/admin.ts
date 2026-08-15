@@ -59,6 +59,11 @@ export interface OperationalSettings {
   weightUnit: string;
   timeUnit: string;
   fillThresholdPct: number;
+  depotLat: number;
+  depotLon: number;
+  landfillLat: number;
+  landfillLon: number;
+  landfillUnloadMinutes: number;
   workStart: string;
   workEnd: string;
   sessionTimeoutMinutes: number;

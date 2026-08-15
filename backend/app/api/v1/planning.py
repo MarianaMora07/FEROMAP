@@ -42,6 +42,7 @@ from app.services.planning_service import (
 from app.services.operator_service import operator_route_snapshot_or_403
 from app.services.planning_analytics_service import planning_analytics_summary, planning_dashboard_snapshot
 from app.services.planning_reports_service import export_daily_plan_pdf, export_weekly_plan_pdf
+from app.services.route_playback_service import build_daily_route_playback
 
 router = APIRouter(prefix="/planning", tags=["planning"])
 
@@ -279,6 +280,12 @@ def close_daily(daily_plan_id: int, db: DbSession, user: CurrentUser, _: Planner
     result = close_daily_plan(db, daily_plan_id, user_id=user.id)
     db.commit()
     return result
+
+
+@router.get("/daily/{daily_plan_id}/routes/playback")
+def daily_routes_playback(daily_plan_id: int, db: DbSession, _: PlannerOrAdmin):
+    """Solo lectura: payload para animación de rutas planificadas (sin mutar BD)."""
+    return build_daily_route_playback(db, daily_plan_id)
 
 
 @router.get("/daily/{daily_plan_id}/export.pdf")

@@ -14,9 +14,11 @@ import {
 interface OptimizationWeekCalendarProps {
   selectedDate: string;
   onDateSelect: (date: string) => void;
+  variant?: 'inline' | 'popover';
 }
 
 export function OptimizationWeekCalendar(props: OptimizationWeekCalendarProps) {
+  const variant = () => props.variant ?? 'inline';
   const labels = weekDayLabels();
 
   const handlePrevWeek = () => {
@@ -30,7 +32,13 @@ export function OptimizationWeekCalendar(props: OptimizationWeekCalendarProps) {
   };
 
   return (
-    <div class="rounded-xl border border-default bg-elevated/50 p-3">
+    <div
+      class={
+        variant() === 'popover'
+          ? ''
+          : 'rounded-xl border border-default bg-elevated/50 p-3'
+      }
+    >
       <div class="mb-3 flex items-center justify-between gap-2">
         <p class="text-sm font-semibold text-text-primary">Semana operativa</p>
         <div class="flex items-center gap-1">

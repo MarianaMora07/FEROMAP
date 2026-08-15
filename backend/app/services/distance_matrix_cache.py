@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
@@ -36,13 +37,20 @@ def build_matrix_cache_key(
     point_ids: list[int],
     scenario_id: str,
     traffic_multiplier: float,
+    *,
+    landfill_lon: float | None = None,
+    landfill_lat: float | None = None,
 ) -> str:
-    payload = {
+    payload: dict[str, Any] = {
         "depotNode": depot_node,
         "pointIds": sorted(point_ids),
         "scenarioId": scenario_id,
         "trafficMultiplier": round(float(traffic_multiplier), 4),
     }
+    if landfill_lon is not None and landfill_lat is not None:
+        payload["includesLandfill"] = True
+        payload["landfillLon"] = round(float(landfill_lon), 6)
+        payload["landfillLat"] = round(float(landfill_lat), 6)
     digest = hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8"),
     ).hexdigest()
@@ -59,7 +67,8 @@ def _validate_matrix_payload(payload: dict[str, Any]) -> bool:
     point_ids = payload.get("pointIds")
     if not isinstance(dist, list) or not isinstance(time, list) or not isinstance(point_ids, list):
         return False
-    expected = 1 + len(point_ids)
+    includes_landfill = bool(payload.get("includesLandfill"))
+    expected = (2 + len(point_ids)) if includes_landfill else (1 + len(point_ids))
     return len(dist) == expected and len(time) == expected and all(len(row) == expected for row in dist)
 
 
@@ -97,9 +106,11 @@ def save_distance_matrix_cache(
     point_ids: list[int],
     scenario_id: str,
     traffic_multiplier: float,
+    landfill_lon: float | None = None,
+    landfill_lat: float | None = None,
 ) -> None:
     path = _cache_path(cache_key)
-    payload = {
+    payload: dict[str, Any] = {
         "depotNode": depot_node,
         "pointIds": point_ids,
         "scenarioId": scenario_id,
@@ -107,6 +118,10 @@ def save_distance_matrix_cache(
         "distance": dist_matrix,
         "time": time_matrix,
     }
+    if landfill_lon is not None and landfill_lat is not None:
+        payload["includesLandfill"] = True
+        payload["landfillLon"] = round(float(landfill_lon), 6)
+        payload["landfillLat"] = round(float(landfill_lat), 6)
     try:
         with path.open("w", encoding="utf-8") as fh:
             json.dump(payload, fh, separators=(",", ":"))
@@ -149,6 +164,7 @@ def build_matrix_from_parent(
     parent_dist: list[list[float]] = parent["distance"]
     parent_time: list[list[float]] = parent["time"]
     parent_index = _parent_index_map(parent_point_ids)
+    includes_landfill = bool(parent.get("includesLandfill"))
 
     current_point_ids = [customer.point_id for customer in customers]
     current_set = set(current_point_ids)
@@ -158,7 +174,7 @@ def build_matrix_from_parent(
     if not current_set.issubset(parent_set) and len(added) > settings.matrix_incremental_max_additions:
         raise ValueError("demasiados puntos nuevos para parche incremental")
 
-    n = 1 + len(customers)
+    n = (2 + len(customers)) if includes_landfill else (1 + len(customers))
     dist = [[0.0] * n for _ in range(n)]
     time = [[0.0] * n for _ in range(n)]
     recomputed = 0
@@ -166,6 +182,12 @@ def build_matrix_from_parent(
     for i in range(n):
         for j in range(n):
             if i == j:
+                continue
+            if includes_landfill and (i == n - 1 or j == n - 1):
+                d_m, t_s = pair_fn(i, j)
+                dist[i][j] = d_m
+                time[i][j] = t_s
+                recomputed += 1
                 continue
             pi = _matrix_point_id_at(i, current_point_ids)
             pj = _matrix_point_id_at(j, current_point_ids)
@@ -194,10 +216,13 @@ def find_incremental_parent_cache(
     point_ids: list[int],
     scenario_id: str,
     traffic_multiplier: float,
+    landfill_lon: float | None = None,
+    landfill_lat: float | None = None,
 ) -> dict[str, Any] | None:
     """Busca una matriz padre reutilizable (submatriz o parche incremental)."""
     current_set = set(point_ids)
     traffic = round(float(traffic_multiplier), 4)
+    includes_landfill = landfill_lon is not None and landfill_lat is not None
     best: dict[str, Any] | None = None
     best_score = float("inf")
 
@@ -208,6 +233,13 @@ def find_incremental_parent_cache(
             continue
         if round(float(entry.get("trafficMultiplier", 0)), 4) != traffic:
             continue
+        if bool(entry.get("includesLandfill")) != includes_landfill:
+            continue
+        if includes_landfill:
+            if round(float(entry.get("landfillLon", 0)), 6) != round(float(landfill_lon), 6):
+                continue
+            if round(float(entry.get("landfillLat", 0)), 6) != round(float(landfill_lat), 6):
+                continue
 
         parent_ids: list[int] = entry["pointIds"]
         parent_set = set(parent_ids)
@@ -228,6 +260,44 @@ def find_incremental_parent_cache(
     return best
 
 
+def sanitize_distance_matrix(
+    dist_matrix: list[list[float]],
+    time_matrix: list[list[float]],
+    pair_fn: MatrixPairFn,
+) -> int:
+    """Reemplaza distancias no finitas (p. ej. Infinity del grafo o caché legacy)."""
+    patched = 0
+    n = len(dist_matrix)
+    for i in range(n):
+        for j in range(n):
+            if i == j:
+                continue
+            d_m = dist_matrix[i][j]
+            if math.isfinite(d_m) and d_m > 0:
+                continue
+            d_m, t_s = pair_fn(i, j)
+            if not math.isfinite(d_m) or d_m <= 0:
+                d_m = 1.0
+            if not math.isfinite(t_s) or t_s <= 0:
+                t_s = 1.0
+            dist_matrix[i][j] = d_m
+            time_matrix[i][j] = t_s
+            patched += 1
+    return patched
+
+
+def _finalize_matrix(
+    dist: list[list[float]],
+    time: list[list[float]],
+    pair_fn: MatrixPairFn,
+    meta: dict[str, Any],
+) -> tuple[list[list[float]], list[list[float]], dict[str, Any]]:
+    sanitized = sanitize_distance_matrix(dist, time, pair_fn)
+    if sanitized > 0:
+        meta = {**meta, "matrixSanitizedCells": sanitized}
+    return dist, time, meta
+
+
 def resolve_distance_matrix(
     *,
     depot_node: int,
@@ -236,15 +306,25 @@ def resolve_distance_matrix(
     traffic_multiplier: float,
     build_full_matrix: Callable[[], tuple[list[list[float]], list[list[float]]]],
     pair_fn: MatrixPairFn,
+    landfill_lon: float | None = None,
+    landfill_lat: float | None = None,
 ) -> tuple[list[list[float]], list[list[float]], dict[str, Any]]:
     point_ids = [customer.point_id for customer in customers]
-    cache_key = build_matrix_cache_key(depot_node, point_ids, scenario_id, traffic_multiplier)
+    cache_key = build_matrix_cache_key(
+        depot_node,
+        point_ids,
+        scenario_id,
+        traffic_multiplier,
+        landfill_lon=landfill_lon,
+        landfill_lat=landfill_lat,
+    )
 
     exact = load_distance_matrix_cache_entry(cache_key)
     if exact is not None:
-        return (
+        return _finalize_matrix(
             exact["distance"],
             exact["time"],
+            pair_fn,
             {
                 "matrixCacheHit": True,
                 "matrixCacheIncremental": False,
@@ -258,6 +338,8 @@ def resolve_distance_matrix(
         point_ids=point_ids,
         scenario_id=scenario_id,
         traffic_multiplier=traffic_multiplier,
+        landfill_lon=landfill_lon,
+        landfill_lat=landfill_lat,
     )
     if parent is not None:
         dist, time, recomputed = build_matrix_from_parent(parent, customers, pair_fn)
@@ -269,12 +351,15 @@ def resolve_distance_matrix(
             point_ids=point_ids,
             scenario_id=scenario_id,
             traffic_multiplier=traffic_multiplier,
+            landfill_lon=landfill_lon,
+            landfill_lat=landfill_lat,
         )
         parent_count = len(parent["pointIds"])
         incremental = parent_count != len(point_ids) or recomputed > 0
-        return (
+        return _finalize_matrix(
             dist,
             time,
+            pair_fn,
             {
                 "matrixCacheHit": False,
                 "matrixCacheIncremental": incremental,
@@ -292,10 +377,13 @@ def resolve_distance_matrix(
         point_ids=point_ids,
         scenario_id=scenario_id,
         traffic_multiplier=traffic_multiplier,
+        landfill_lon=landfill_lon,
+        landfill_lat=landfill_lat,
     )
-    return (
+    return _finalize_matrix(
         dist,
         time,
+        pair_fn,
         {
             "matrixCacheHit": False,
             "matrixCacheIncremental": False,

@@ -14,6 +14,12 @@ export interface DurationBreakdown {
   crewLabel: string;
   crewAssignment?: string;
   stopCount?: number;
+  unloadHours?: number;
+  landfillTrips?: number;
+  shiftBudgetHours?: number;
+  shiftUsedHours?: number;
+  shiftUtilizationPct?: number;
+  uncoveredPoints?: number;
 }
 
 export interface AcoConvergencePoint {
@@ -56,6 +62,12 @@ export interface KpiMetrics {
   co2KgAvoided: number;
   criticalCoveragePct: { current: number; optimized: number };
   containersServed: number;
+  uncoveredPointCodes?: string[];
+  landfillTrips?: number;
+  landfillTripsPerVehicle?: number;
+  unloadTimeHours?: number;
+  shiftUtilizationPct?: number;
+  uncoveredPoints?: number;
   engineMetrics?: EngineMetrics;
 }
 

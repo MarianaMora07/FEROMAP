@@ -14,6 +14,7 @@ Documento para futuros cambios de producto y frontend (Opción A).
 |----------|------|
 | `/optimization` | «¿Quieres evaluar escenarios?» → enlace a `/simulation` |
 | `/simulation` | «¿Quieres despachar rutas de hoy?» → enlace a `/optimization` |
+| `/demostracion` | «¿Quieres evaluar escenarios completos?» → enlace a `/simulation` |
 
 Implementación: `src/features/shared/ModuleGuidanceBanner.tsx`.
 
@@ -25,12 +26,13 @@ Implementación: `src/features/shared/ModuleGuidanceBanner.tsx`.
 | `/simulation?view=history` | Historial completo de simulaciones |
 | `/analytics?simulationId=` | Analítica con contexto de simulación |
 | `/reports?simulationId=` | Reportes con contexto de simulación |
+| `/demostracion` | Demostración didáctica del ACO (laberinto) — no evaluación ni despacho |
 
 No enlazar el historial operativo de `/optimization` como sustituto del historial de tesis.
 
 ## Reglas al añadir funcionalidad
 
-1. **Antes de añadir un control**, preguntar: ¿es evaluación de escenario (Simulación) u operación del día (Optimización)?
+1. **Antes de añadir un control**, preguntar: ¿es didáctica ACO (Demostración), evaluación de escenario (Simulación) u operación del día (Optimización)?
 2. **No duplicar formularios**: si un campo ya existe en Simulación con propósito de tesis, no copiarlo en Optimización sin justificación operativa.
 3. **Historial**: las corridas desde `/optimization` deben llamar a `recordOperationalRun(simulationId)`; Simulación usa el listado API completo.
 4. **Despacho**: solo en Planificación operativa; Simulación redirige con banner/enlace.
@@ -43,6 +45,7 @@ No enlazar el historial operativo de `/optimization` como sustituto del historia
 - Mostrar el mismo historial en Simulación y Optimización sin filtrar origen.
 - Añadir «despachar» en Simulación como acción primaria.
 - Renombrar `/optimization` en la URL (mantener por compatibilidad; copy = «Planificación operativa»).
+- Mezclar el laberinto didáctico en Simulación o Optimización (usar `/demostracion`).
 
 ## Referencias
 

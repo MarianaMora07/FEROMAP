@@ -21,11 +21,12 @@
 | Qué mostrar | Mensaje clave |
 |------------|---------------|
 | «Qué hacer ahora» | Prioridad contextual (semana sin plan, día sin despachar, pendientes) |
+| **Recorrido operativo del día** | CTA encadenado: Configurar semana → Optimizar hoy → Simular recorrido → Despachar → Monitorear |
 | Tarjetas semana / hoy / pendientes / incidencias | Tres niveles: directivo, administrativo, operativo |
 | Acciones rápidas | Plan semanal · Hoy · Pendientes · Historial · Monitoreo |
 
 **Guión:**  
-«Desde un solo lugar veo el estado de la semana, el día de hoy y los pendientes abiertos. El glosario recuerda que *semana* es directivo y *día* es administrativo.»
+«Desde un solo lugar veo el estado de la semana, el día de hoy y los pendientes abiertos. El **stepper operativo** me guía paso a paso sin tener que recordar qué módulo abrir. El glosario recuerda que *semana* es directivo y *día* es administrativo.»
 
 **Empty state:** si no hay plan semanal → CTA «Ir al plan semanal».
 
@@ -51,17 +52,20 @@
 
 ## 3. Plan del día — nivel administrativo (2,5 min)
 
-**URL:** `/optimization`
+**URL:** `/optimization` (deep link con replay: `/optimization?date=2026-08-14&playback=1`)
 
 | Elemento | Qué decir |
 |----------|-----------|
 | Calendario semanal | Estado por día (borrador → optimizado → despachado → cerrado) |
 | Ciclo del día (stepper) | Abrir → Optimizar → Despachar → Cerrar |
+| **Experiencia del día (banner)** | Paso 1 situación (escenario heredado + pendientes) → Paso 2 rutas → Paso 3 simulación de recorrido |
+| Escenario heredado | Del plan semanal; override en «Condición operativa del día» antes de optimizar |
 | Pendientes | Carry-over de días anteriores incorporados al plan |
+| **Simular recorrido** | Preview animado del camión antes de despachar |
 | Despachar rutas | CTA post-aprobación semanal |
 
 **Guión:**  
-«Con la semana aprobada, abro el día, incorporo pendientes, genero la ruta operativa y despacho. El timeline muestra en qué paso estoy.»
+«Con la semana aprobada, abro el día y veo el **escenario heredado** del plan semanal — puedo cambiarlo antes de optimizar. Incorporo pendientes, genero la ruta y **simulo el recorrido** en el mapa. El banner de experiencia me dice en qué paso estoy sin salir de esta pantalla. Luego despacho.»
 
 **Empty state:** semana no aprobada → banner «Falta aprobar plan semanal» con enlace.
 
@@ -71,17 +75,18 @@
 
 ## 4. Monitoreo — nivel operativo (1,5 min)
 
-**URL:** `/monitoring?date=…&dailyPlanId=…`
+**URL:** `/monitoring?date=…&dailyPlanId=…` (replay: `&playback=1`)
 
 | Elemento | Qué decir |
 |----------|-----------|
 | Banner «Supervisión operativa» | El planificador supervisa, no conduce |
 | Plan del día en contexto | Mismo día que se despachó |
+| **Reproducir ruta** | Replay del recorrido planificado (solo visual u híbrido con avance operativo) |
 | Incidencias + trazabilidad inline | Incidencia → pendiente → plan siguiente |
 | Volver al plan del día | Enlace bidireccional a optimización |
 
 **Guión:**  
-«Superviso flota e incidencias. Si hay avería, veo la trazabilidad hasta el plan del día siguiente. Un clic me devuelve al plan administrativo.»
+«Superviso flota e incidencias. Puedo **reproducir la ruta** que despachamos para explicar el recorrido sin pedir al tribunal que imagine el mapa. Si hay avería, veo la trazabilidad hasta el plan del día siguiente. Un clic me devuelve al plan administrativo.»
 
 **Empty state:** sin vehículos despachados → «Despacha rutas desde optimización».
 

@@ -14,6 +14,10 @@ import {
 } from '../api/simulationOperations';
 import { loadDashboardData } from './dashboardStore';
 import { kpiByScenario, optimizationLogMessages, scenarios as mockScenarios } from '../../data/mock/kpis';
+import { getScenarioRoutes } from '../../data/mock/routes';
+import { mergeRouteCollections } from '../api/routes';
+import type { RouteCollection } from '../../data/types/geo';
+import { setRoutes } from './appStore';
 import {
   isExecutionPhaseId,
   EXECUTION_PHASE_COUNT,
@@ -45,6 +49,7 @@ interface SimulationState {
   executionPhase: ExecutionPhaseId | null;
   lastOptimizedAt: string | null;
   lastSimulationId: number | null;
+  lastDailyPlanId: number | null;
   lastContingency: VehicleBreakdownResponse | null;
   contingencyComparison: ContingencyComparison | null;
   history: SimulationHistoryRow[];
@@ -65,6 +70,7 @@ const [state, setState] = createStore<SimulationState>({
   executionPhase: null,
   lastOptimizedAt: null,
   lastSimulationId: null,
+  lastDailyPlanId: null,
   lastContingency: null,
   contingencyComparison: null,
   history: [],
@@ -108,17 +114,39 @@ export function currentScenario() {
 }
 
 export function kpiImpactRows(kpis: KpiMetrics) {
-  const row = (metric: string, current: number, optimized: number, unit = '') => ({
+  const row = (metric: string, current: string, simulated: string, delta = 0) => ({
     metric,
-    current: `${current}${unit}`,
-    simulated: `${optimized}${unit}`,
-    delta: savingsPct(current, optimized),
+    current,
+    simulated,
+    delta,
   });
-  return [
-    row('Distancia', kpis.distanceKm.current, kpis.distanceKm.optimized, ' km'),
-    row('Duración', kpis.durationHours.current, kpis.durationHours.optimized, ' h'),
-    row('Combustible', kpis.fuelLiters.current, kpis.fuelLiters.optimized, ' L'),
+  const rows = [
+    row(
+      'Distancia',
+      `${kpis.distanceKm.current} km`,
+      `${kpis.distanceKm.optimized} km`,
+      savingsPct(kpis.distanceKm.current, kpis.distanceKm.optimized),
+    ),
+    row(
+      'Duración',
+      `${kpis.durationHours.current} h`,
+      `${kpis.durationHours.optimized} h`,
+      savingsPct(kpis.durationHours.current, kpis.durationHours.optimized),
+    ),
+    row(
+      'Combustible',
+      `${kpis.fuelLiters.current} L`,
+      `${kpis.fuelLiters.optimized} L`,
+      savingsPct(kpis.fuelLiters.current, kpis.fuelLiters.optimized),
+    ),
   ];
+  if (kpis.landfillTrips != null && kpis.landfillTrips > 0) {
+    rows.push(row('Viajes al vertedero', '—', String(kpis.landfillTrips)));
+  }
+  if ((kpis.uncoveredPoints ?? 0) > 0) {
+    rows.push(row('Puntos no cubiertos', '—', String(kpis.uncoveredPoints)));
+  }
+  return rows;
 }
 
 export function kpiSavingsSummary(kpis: KpiMetrics) {
@@ -197,6 +225,7 @@ export function resetSimulationStoreForTests(): void {
     executionPhase: null,
     lastOptimizedAt: null,
     lastSimulationId: null,
+    lastDailyPlanId: null,
     acoConvergenceLive: [],
   });
 }
@@ -235,6 +264,13 @@ function completeOptimizationRun(): void {
   });
 }
 
+function applyOptimizationRoutes(routes: {
+  current: RouteCollection;
+  optimized: RouteCollection;
+}) {
+  setRoutes(mergeRouteCollections(routes.current, routes.optimized));
+}
+
 export async function runOptimization(parameters?: SimulationRunParameters): Promise<boolean> {
   if (state.isOptimizing || state.isLoadingDetail) return false;
 
@@ -268,7 +304,9 @@ export async function runOptimization(parameters?: SimulationRunParameters): Pro
       setState({
         kpis: kpiByScenario[state.scenarioId],
         lastSimulationId: 1,
+        lastDailyPlanId: null,
       });
+      setRoutes(getScenarioRoutes(state.scenarioId));
     } else {
       const result = await runJobBasedExecution(state.scenarioId, parameters, handlers);
 
@@ -281,7 +319,9 @@ export async function runOptimization(parameters?: SimulationRunParameters): Pro
       setState({
         kpis: result.kpis,
         lastSimulationId: result.simulationId,
+        lastDailyPlanId: result.dailyPlanId ?? null,
       });
+      applyOptimizationRoutes(result.routes);
       if (result.servedPointCodes?.length) {
         writeLastOptimizedCodes(result.servedPointCodes);
       }
@@ -330,6 +370,7 @@ export async function loadSimulationFromHistory(simulationId: number): Promise<v
       kpis: detail.kpis,
       scenarioId: detail.scenarioId,
       lastSimulationId: detail.id,
+      lastDailyPlanId: null,
       isLoadingDetail: false,
       optimizationProgress: 100,
       lastOptimizedAt: detail.executedAt ?? new Date().toISOString(),
@@ -342,6 +383,7 @@ export async function loadSimulationFromHistory(simulationId: number): Promise<v
         },
       ],
     });
+    applyOptimizationRoutes(detail.routes);
   } catch (error) {
     setState({ isLoadingDetail: false, optimizationProgress: 0 });
     throw error;

@@ -1,5 +1,5 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
-import { useSearchParams } from '@solidjs/router';
+import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { A, useSearchParams } from '@solidjs/router';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -26,6 +26,11 @@ import { countSimulationReadyVehicles, fetchVehicles } from '../../core/api/vehi
 import { canOptimize } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
 import { fetchMonitoringStatus } from '../../core/api/monitoring';
+import { fetchDailyRoutePlayback, fetchSimulationRoutePlayback } from '../../core/api/routePlayback';
+import { fetchCurrentWeeklyPlan } from '../../core/api/planning';
+import { useRoutePlayback } from '../../core/route-playback/useRoutePlayback';
+import { optimizationHref } from '../../core/planning/operationalLinks';
+import { todayIso } from '../../core/planning/planningUx';
 import {
   applySimulationScenario,
   cancelOptimization,
@@ -55,21 +60,25 @@ import {
 } from '../../core/utils/simulationWizard';
 import { parseSimulationIdParam } from '../../core/utils/simulationLinks';
 import { BreakdownReporter, ContingencyResultBanner } from '../contingency/BreakdownReporter';
-import { ModuleGuidanceBanner } from '../shared/ModuleGuidanceBanner';
 import { RecentIncidentsPanel } from '../contingency/RecentIncidentsPanel';
 import type { ScenarioId } from '../../data/types/simulation';
 import { ConfigurationSummaryPanel } from './ConfigurationSummaryPanel';
 import { ExecutiveSummary } from './ExecutiveSummary';
 import { DurationBreakdownPanel } from './DurationBreakdownPanel';
 import { EngineComputationPanel } from './EngineComputationPanel';
+import { LandfillKpiStrip } from '../landfill/LandfillKpiStrip';
+import { UncoveredPointsAlert } from '../landfill/UncoveredPointsAlert';
 import { ExecutionPanel } from './ExecutionPanel';
 import { PostSimulationActions } from './PostSimulationActions';
 import { SimulationHistoryPanel } from './SimulationHistoryPanel';
 import { WeeklyPlanTab } from './WeeklyPlanTab';
 import { PlanningGlossaryStrip } from '../planning/PlanningGlossaryStrip';
+import { PlanningContextualCta } from '../planning/PlanningContextualCta';
 import { ThesisVsOperationsNotice } from '../planning/ThesisVsOperationsNotice';
 import { WizardStepNav } from './WizardStepNav';
 import { CancelExecutionConfirmDialog } from './CancelExecutionConfirmDialog';
+import { SimulationMapPanel } from './SimulationMapPanel';
+import { RoutePlaybackPanel } from '../route-playback/RoutePlaybackPanel';
 import {
   EXECUTION_CANCEL_MESSAGES,
   formatWizardExecutionSubstatus,
@@ -271,6 +280,10 @@ export default function SimulationPage() {
   const [runNotice, setRunNotice] = createSignal<string | null>(null);
   const [incidentsRefreshKey, setIncidentsRefreshKey] = createSignal(0);
   const [cancelConfirmOpen, setCancelConfirmOpen] = createSignal(false);
+  const [playbackOpen, setPlaybackOpen] = createSignal(false);
+  const [weeklyPlanBridge] = createResource(() =>
+    fetchCurrentWeeklyPlan().catch(() => null),
+  );
   const [readiness, setReadiness] = createSignal<SimulationReadiness | undefined>();
   const [loadingReadiness, setLoadingReadiness] = createSignal(true);
   const [monitoringData, setMonitoringData] = createSignal<Awaited<ReturnType<typeof fetchMonitoringStatus>> | undefined>();
@@ -304,6 +317,43 @@ export default function SimulationPage() {
   const derivedScenario = createMemo(() =>
     describeDerivedScenario(conditions(), simulationState.scenarios),
   );
+
+  const playbackSource = createMemo(() => {
+    if (!playbackOpen() || !hasResults()) return null;
+    if (simulationState.lastDailyPlanId) {
+      return { kind: 'daily' as const, id: simulationState.lastDailyPlanId };
+    }
+    if (simulationState.lastSimulationId) {
+      return { kind: 'simulation' as const, id: simulationState.lastSimulationId };
+    }
+    return null;
+  });
+
+  const [playbackPayload] = createResource(playbackSource, async (source) => {
+    if (!source) return null;
+    if (source.kind === 'daily') {
+      return fetchDailyRoutePlayback(source.id);
+    }
+    return fetchSimulationRoutePlayback(source.id);
+  });
+
+  const playbackRoutes = createMemo(() => playbackPayload()?.routes ?? []);
+  const playback = useRoutePlayback(() => playbackRoutes(), { pauseAtStops: true });
+
+  createEffect(() => {
+    if (!playbackOpen()) {
+      playback.pause();
+      playback.reset();
+    }
+  });
+
+  const handleOpenPlayback = () => setPlaybackOpen(true);
+  const handleClosePlayback = () => {
+    playback.pause();
+    playback.reset();
+    setPlaybackOpen(false);
+  };
+
   const simulationParams = () =>
     buildSimulationRunParameters({
       rainIntensity: rainIntensity(),
@@ -327,6 +377,8 @@ export default function SimulationPage() {
     acoPreset: acoPreset(),
     acoAnts: acoAnts(),
     acoIterations: acoIterations(),
+    fleetAssignableCount: vehiclesFromFleet(),
+    criticalPointCount: criticalFromPoints(),
   });
 
   const applyAcoPreset = (preset: AcoPresetId) => {
@@ -358,7 +410,7 @@ export default function SimulationPage() {
   const workdayWarning = () => {
     const kpis = currentKpis();
     if (!kpis.exceedsWorkday?.optimized) return null;
-    const hours = kpis.workdayHours ?? 8;
+    const hours = kpis.workdayHours ?? 12;
     const optimized = kpis.durationHours.optimized;
     return `La duración optimizada (${optimized.toFixed(1)} h) supera la jornada de referencia (${hours} h). Revisa la dotación o el número de paradas.`;
   };
@@ -426,6 +478,7 @@ export default function SimulationPage() {
       }
       setHasResults(true);
       setStep(3);
+      setPlaybackOpen(true);
     } catch (error) {
       setRunError(error instanceof Error ? error.message : 'No se pudo ejecutar la simulación');
     }
@@ -439,6 +492,7 @@ export default function SimulationPage() {
     setPageTab('flow');
     setStep(1);
     setHasResults(false);
+    setPlaybackOpen(false);
     setRunError(null);
     setConditions(defaultConditions());
     applySimulationScenario('normal');
@@ -452,6 +506,7 @@ export default function SimulationPage() {
       setHasResults(true);
       setPageTab('flow');
       setStep(3);
+      setPlaybackOpen(true);
     } catch (error) {
       setHistoryError(error instanceof Error ? error.message : 'No se pudo cargar la simulación');
     }
@@ -506,40 +561,7 @@ export default function SimulationPage() {
           />
         </Card>
       </Show>
-      <Show when={vehiclesFromFleet() > 0}>
-        <div class="rounded-xl border border-fero-green/40 bg-fero-green/10 px-4 py-3">
-          <p class="text-sm font-semibold text-fero-green-dark">
-            {vehiclesFromFleet()} vehículo{vehiclesFromFleet() === 1 ? '' : 's'} asignable
-            {vehiclesFromFleet() === 1 ? '' : 's'} desde la flota
-          </p>
-          <p class="mt-1 text-sm text-text-secondary">
-            La simulación usará camiones disponibles o en ruta, excluyendo mantenimiento.
-          </p>
-        </div>
-      </Show>
-      <Show when={criticalFromPoints() > 0}>
-        <div class="rounded-xl border border-amber-300/60 bg-amber-50 px-4 py-3 dark:border-amber-700/50 dark:bg-amber-950/20">
-          <p class="text-sm font-semibold text-amber-800 dark:text-amber-300">
-            {criticalFromPoints()} punto{criticalFromPoints() === 1 ? '' : 's'} crítico
-            {criticalFromPoints() === 1 ? '' : 's'} desde Puntos de Recolección
-          </p>
-          <p class="mt-1 text-sm text-text-secondary">
-            Ejecuta la simulación para incorporar los contenedores más urgentes en la ruta.
-          </p>
-        </div>
-      </Show>
       <ContingencyResultBanner />
-
-      <ModuleGuidanceBanner
-        tone="simulation"
-        title="¿Quieres despachar rutas de hoy?"
-        linkHref="/optimization"
-        linkLabel="Ir a Planificación operativa"
-      >
-        Esta pantalla evalúa escenarios y mide el impacto del algoritmo. Para generar y despachar rutas del día,
-      </ModuleGuidanceBanner>
-
-      <PlanningGlossaryStrip />
 
       <div class="flex gap-1 overflow-x-auto border-b border-border dark:border-dark-border">
         <For each={simulationPageTabs}>
@@ -558,9 +580,36 @@ export default function SimulationPage() {
           )}
         </For>
       </div>
-      <p class="text-xs text-text-muted">{simulationPageTabs.find((item) => item.id === pageTab())?.hint}</p>
+      <Show when={pageTab() === 'weekly'}>
+        <PlanningGlossaryStrip />
+        <p class="text-xs text-text-muted">
+          {simulationPageTabs.find((item) => item.id === 'weekly')?.hint}
+        </p>
+      </Show>
+      <Show when={pageTab() === 'history'}>
+        <p class="text-xs text-text-muted">
+          {simulationPageTabs.find((item) => item.id === 'history')?.hint}
+        </p>
+      </Show>
 
       <Show when={pageTab() === 'flow'}>
+      <div class="space-y-4">
+      <div
+        class="flex flex-col gap-2 rounded-lg border border-default bg-surface/60 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+        data-testid="simulation-flow-intro"
+      >
+        <p class="text-sm text-text-secondary">
+          Compara condiciones con el motor ACO — evaluación de escenarios, sin despacho a campo.
+        </p>
+        <A
+          href="/optimization"
+          class="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-fero-blue hover:underline"
+        >
+          ¿Despachar hoy?
+          <ArrowRight size={14} aria-hidden="true" />
+          Planificación operativa
+        </A>
+      </div>
       <CancelExecutionConfirmDialog
         open={cancelConfirmOpen()}
         onConfirm={confirmCancelExecution}
@@ -596,17 +645,10 @@ export default function SimulationPage() {
           </div>
           <div class="space-y-4 xl:col-span-9">
             <Card>
-              <CardHeader title="Configuración del escenario" />
-              <div class="mb-4 rounded-lg border border-fero-green/30 bg-fero-green/5 px-3 py-2.5 dark:border-fero-green/20">
-                <p class="text-[10px] font-semibold uppercase tracking-wide text-fero-green-dark">
-                  Escenario base
-                </p>
-                <p class="mt-1 text-sm font-semibold text-text-primary dark:text-white">
-                  {derivedScenario().label}
-                </p>
-                <p class="mt-1 text-xs text-text-secondary">{derivedScenario().description}</p>
-                <p class="mt-2 text-[11px] text-text-muted">{derivedScenario().source}</p>
-              </div>
+              <CardHeader
+                title="Condiciones del escenario"
+                subtitle="Activa condiciones; el escenario derivado se muestra en el resumen lateral."
+              />
               <p class="mb-1 text-sm font-semibold text-text-primary dark:text-white">Condiciones a simular</p>
               <div class="mb-4 divide-y divide-border dark:divide-dark-border">
                 <For each={simulationConditions}>
@@ -621,7 +663,7 @@ export default function SimulationPage() {
                   )}
                 </For>
               </div>
-              <p class="mb-1 text-sm font-semibold text-text-primary dark:text-white">Parámetros adicionales</p>
+              <p class="mb-1 mt-4 text-sm font-semibold text-text-primary dark:text-white">Personal del turno</p>
               <div class="mb-4 rounded-lg border border-border px-3 py-2.5 dark:border-dark-border">
                 <Toggle
                   label="Ausentismo del turno"
@@ -632,9 +674,7 @@ export default function SimulationPage() {
                 />
                 <Show when={crewShortageEnabled()}>
                   <div class="mt-3 border-t border-border pt-3 dark:border-dark-border">
-                    <label class="mb-1 block text-xs text-text-muted">
-                      Operarios de campo ausentes <span class="text-fero-green-dark">(conectado)</span>
-                    </label>
+                    <label class="mb-1 block text-xs text-text-muted">Operarios de campo ausentes</label>
                     <select
                       value={operatorsShortage()}
                       onChange={(e) => setOperatorsShortage(e.currentTarget.value)}
@@ -655,9 +695,7 @@ export default function SimulationPage() {
                 <p class="mb-3 text-xs text-text-muted">
                   Más hormigas e iteraciones exploran más soluciones (mejor calidad posible, más tiempo de cálculo).
                 </p>
-                <label class="mb-1 block text-xs text-text-muted">
-                  Perfil <span class="text-fero-green-dark">(conectado)</span>
-                </label>
+                <label class="mb-1 block text-xs text-text-muted">Perfil</label>
                 <select
                   value={acoPreset()}
                   onChange={(e) => applyAcoPreset(e.currentTarget.value as AcoPresetId)}
@@ -669,9 +707,7 @@ export default function SimulationPage() {
                 </select>
                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label class="mb-1 block text-xs text-text-muted">
-                      Hormigas por iteración <span class="text-fero-green-dark">(conectado)</span>
-                    </label>
+                    <label class="mb-1 block text-xs text-text-muted">Hormigas por iteración</label>
                     <select
                       value={acoAnts()}
                       onChange={(e) => handleAcoAntsChange(e.currentTarget.value)}
@@ -683,9 +719,7 @@ export default function SimulationPage() {
                     </select>
                   </div>
                   <div>
-                    <label class="mb-1 block text-xs text-text-muted">
-                      Iteraciones <span class="text-fero-green-dark">(conectado)</span>
-                    </label>
+                    <label class="mb-1 block text-xs text-text-muted">Iteraciones</label>
                     <select
                       value={acoIterations()}
                       onChange={(e) => handleAcoIterationsChange(e.currentTarget.value)}
@@ -700,9 +734,7 @@ export default function SimulationPage() {
               </div>
               <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div class="min-w-0">
-                  <label class="mb-1 block text-xs text-text-muted">
-                    Intensidad de lluvia <span class="text-fero-green-dark">(conectado)</span>
-                  </label>
+                  <label class="mb-1 block text-xs text-text-muted">Intensidad de lluvia</label>
                   <select
                     value={rainIntensity()}
                     onChange={(e) => setRainIntensity(e.currentTarget.value)}
@@ -713,9 +745,7 @@ export default function SimulationPage() {
                   </select>
                 </div>
                 <div class="min-w-0">
-                  <label class="mb-1 block text-xs text-text-muted">
-                    Nivel de desechos <span class="text-fero-green-dark">(conectado)</span>
-                  </label>
+                  <label class="mb-1 block text-xs text-text-muted">Nivel de desechos</label>
                   <select
                     value={wasteLevel()}
                     onChange={(e) => setWasteLevel(e.currentTarget.value)}
@@ -794,6 +824,18 @@ export default function SimulationPage() {
             </Card>
           </div>
           <div class="space-y-4 xl:col-span-9">
+            <SimulationMapPanel
+              hasResults={hasResults()}
+              executionMode
+              executionPhase={simulationState.executionPhase}
+              isRunning={simulationState.isOptimizing}
+              executionProgress={simulationState.optimizationProgress}
+              playbackActive={playbackOpen()}
+              playbackRoutes={playbackRoutes()}
+              playback={playback}
+              playbackLoading={playbackPayload.loading}
+              onOpenPlayback={handleOpenPlayback}
+            />
             <ExecutionPanel
               isRunning={simulationState.isOptimizing}
               progress={simulationState.optimizationProgress}
@@ -867,10 +909,53 @@ export default function SimulationPage() {
           }
         >
           <div class="space-y-4">
+            <div class="grid items-start gap-4 xl:grid-cols-12">
+              <div class="space-y-4 xl:col-span-8">
+                <SimulationMapPanel
+                  hasResults={hasResults()}
+                  playbackActive={playbackOpen()}
+                  playbackRoutes={playbackRoutes()}
+                  playback={playback}
+                  playbackLoading={playbackPayload.loading}
+                  onOpenPlayback={handleOpenPlayback}
+                />
+              </div>
+              <div class="xl:col-span-4">
+                <Show when={playbackOpen()}>
+                  <RoutePlaybackPanel
+                    routes={playbackRoutes()}
+                    playback={playback}
+                    scenarioId={derivedScenario().scenarioId}
+                    scenarioLabel={derivedScenario().label}
+                    operationDate={todayIso()}
+                    previewMode={playbackPayload()?.previewMode ?? true}
+                    loading={playbackPayload.loading}
+                    error={
+                      playbackPayload.error
+                        ? playbackPayload.error instanceof Error
+                          ? playbackPayload.error.message
+                          : 'No se pudo cargar el recorrido'
+                        : null
+                    }
+                    onClose={handleClosePlayback}
+                    variant="inline"
+                    title="Recorrido simulado"
+                  />
+                </Show>
+              </div>
+            </div>
             <PostSimulationActions
               simulationId={simulationState.lastSimulationId}
               onNewSimulation={handleNewSimulation}
             />
+            <Show when={weeklyPlanBridge()?.status === 'approved'}>
+              <PlanningContextualCta
+                tone="info"
+                message="Plan semanal aprobado — lleva el escenario al plan operativo del día."
+                href={optimizationHref({ date: todayIso() })}
+                linkLabel="Ver en plan del día"
+              />
+            </Show>
             <Show when={workdayWarning()}>
               {(message) => (
                 <div class="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
@@ -879,6 +964,8 @@ export default function SimulationPage() {
                 </div>
               )}
             </Show>
+            <UncoveredPointsAlert kpis={currentKpis()} />
+            <LandfillKpiStrip kpis={currentKpis()} />
             <ExecutiveSummary kpis={currentKpis()} />
             <DurationBreakdownPanel kpis={currentKpis()} />
             <EngineComputationPanel kpis={currentKpis()} />
@@ -956,6 +1043,7 @@ export default function SimulationPage() {
           </Button>
         </div>
       </Show>
+      </div>
       </div>
       </Show>
 

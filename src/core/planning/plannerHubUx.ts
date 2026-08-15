@@ -1,4 +1,9 @@
 import type { PlanningDashboardSnapshot } from '../api/planningAnalytics';
+import {
+  monitoringPlaybackHref,
+  optimizationHref,
+  optimizationPlaybackHref,
+} from './operationalLinks';
 import { optimizationDateHref, todayIso } from './planningUx';
 import { planningHistoryHref } from './planningHistoryLinks';
 
@@ -56,12 +61,23 @@ export function deriveNextPlannerAction(snapshot: PlanningDashboardSnapshot): Pl
   }
 
   const isDispatched = daily.dispatched || daily.status === 'dispatched';
+
+  if (daily.status === 'optimized' && !isDispatched) {
+    return {
+      message: 'Rutas optimizadas — simula el recorrido',
+      detail: 'Revisa el preview animado antes de despachar a campo.',
+      href: optimizationPlaybackHref({ date: daily.operationDate, dailyPlanId: daily.id }),
+      label: 'Simular recorrido',
+      tone: 'info',
+    };
+  }
+
   if (!isDispatched && daily.status !== 'completed' && daily.status !== 'partial') {
     return {
       message: 'Hoy sin despachar',
-      detail: `${daily.pointCount} puntos en plan · estado ${daily.status}.`,
-      href: optimizationDateHref(daily.operationDate),
-      label: 'Ir a despachar',
+      detail: `${daily.pointCount} puntos en plan · optimiza y despacha cuando esté listo.`,
+      href: optimizationHref({ date: daily.operationDate, dailyPlanId: daily.id }),
+      label: 'Optimizar hoy',
       tone: 'warning',
     };
   }
@@ -80,7 +96,10 @@ export function deriveNextPlannerAction(snapshot: PlanningDashboardSnapshot): Pl
     return {
       message: `${incidents} incidencia${incidents === 1 ? '' : 's'} abierta${incidents === 1 ? '' : 's'}`,
       detail: 'Revisa averías y recálculos en monitoreo.',
-      href: '/monitoring',
+      href: monitoringPlaybackHref({
+        date: daily.operationDate,
+        dailyPlanId: daily.id,
+      }),
       label: 'Ir a monitoreo',
       tone: 'info',
     };

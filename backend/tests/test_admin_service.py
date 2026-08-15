@@ -46,6 +46,7 @@ def test_ensure_default_settings_creates_singleton():
     assert isinstance(created[0], SystemSettings)
     blob = json.loads(created[0].settings_json)
     assert blob["operational"]["system_name"].startswith("FEROMAP")
+    assert blob["operational"]["landfill_lat"] == -62.690
     assert blob["integrations"]["map_provider"] == "OpenStreetMap"
 
 

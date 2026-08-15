@@ -26,12 +26,21 @@ export interface SectorProperties {
 export type SectorFeature = Feature<Polygon, SectorProperties>;
 export type SectorCollection = FeatureCollection<Polygon, SectorProperties>;
 
+export interface RouteStopProperties {
+  sequence: number;
+  lng: number;
+  lat: number;
+  code: string;
+  stopType?: 'collection' | 'landfill';
+}
+
 export interface RouteProperties {
   id: string;
   type: 'current' | 'optimized';
   label: string;
   distanceKm: number;
   durationMin: number;
+  stops?: RouteStopProperties[];
 }
 
 export type RouteFeature = Feature<LineString, RouteProperties>;

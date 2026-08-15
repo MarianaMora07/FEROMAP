@@ -39,6 +39,11 @@ DEFAULT_OPERATIONAL: dict[str, Any] = {
     "weight_unit": "t",
     "time_unit": "min",
     "fill_threshold_pct": 80,
+    "depot_lat": -62.715,
+    "depot_lon": 8.295,
+    "landfill_lat": -62.690,
+    "landfill_lon": 8.280,
+    "landfill_unload_minutes": 15,
     "work_start": "06:00",
     "work_end": "18:00",
     "session_timeout_minutes": 60,
@@ -250,7 +255,9 @@ def update_user(
 def get_operational_settings(db: Session) -> OperationalSettings:
     ensure_default_settings(db)
     blob = _load_settings_blob(db)
-    return OperationalSettings(**blob.get("operational", DEFAULT_OPERATIONAL))
+    stored = blob.get("operational", {})
+    merged = {**DEFAULT_OPERATIONAL, **stored}
+    return OperationalSettings(**merged)
 
 
 def update_operational_settings(

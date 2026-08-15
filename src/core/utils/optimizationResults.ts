@@ -63,6 +63,8 @@ export interface DurationBreakdownDisplayRow {
   service: string;
   crewAssignment: string;
   total: string;
+  unload?: string;
+  landfillTrips?: string;
 }
 
 export interface DurationBreakdownDisplay {
@@ -80,12 +82,19 @@ function synthesizeBreakdown(hours: number): DurationBreakdown {
 }
 
 function toDisplayRow(breakdown: DurationBreakdown, totalHours: number): DurationBreakdownDisplayRow {
-  return {
+  const row: DurationBreakdownDisplayRow = {
     travel: formatDurationHours(breakdown.travelHours),
     service: formatDurationHours(breakdown.serviceHours),
     crewAssignment: breakdown.crewAssignment ?? breakdown.crewLabel.split(' ')[0] ?? '6/6',
     total: formatDurationHours(totalHours),
   };
+  if (breakdown.unloadHours != null && breakdown.unloadHours > 0) {
+    row.unload = formatDurationHours(breakdown.unloadHours);
+  }
+  if (breakdown.landfillTrips != null && breakdown.landfillTrips > 0) {
+    row.landfillTrips = String(breakdown.landfillTrips);
+  }
+  return row;
 }
 
 /** Desglose Viaje · Paradas (dotación) · Total para el paso 3 de simulación. */
@@ -129,6 +138,26 @@ export function buildComparisonRows(kpis: KpiMetrics): OptimizationComparisonRow
       optimized: `${kpis.criticalCoveragePct.optimized}%`,
       delta: Math.round(kpis.criticalCoveragePct.optimized - kpis.criticalCoveragePct.current),
     },
+    ...(kpis.landfillTrips != null && kpis.landfillTrips > 0
+      ? [
+          {
+            metric: 'Viajes al vertedero',
+            current: '—',
+            optimized: String(kpis.landfillTrips),
+            delta: 0,
+          },
+        ]
+      : []),
+    ...(kpis.uncoveredPoints != null && kpis.uncoveredPoints > 0
+      ? [
+          {
+            metric: 'Puntos no cubiertos',
+            current: '—',
+            optimized: String(kpis.uncoveredPoints),
+            delta: 0,
+          },
+        ]
+      : []),
   ];
 }
 

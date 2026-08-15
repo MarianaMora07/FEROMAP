@@ -88,6 +88,8 @@ def get_map_context(
     current_user: OptionalUser = None,
     sector: str | None = Query(default=None),
     bbox: str | None = Query(default=None),
+    daily_plan_id: int | None = Query(default=None, alias="dailyPlanId"),
+    playback_details: bool = Query(default=False, alias="playbackDetails"),
 ):
     from app.services.catalog_service import _driver_filter
 
@@ -96,4 +98,6 @@ def get_map_context(
         sector=sector,
         bbox=bbox,
         driver_id=_driver_filter(current_user),
+        daily_plan_id=daily_plan_id,
+        playback_details=playback_details,
     )
