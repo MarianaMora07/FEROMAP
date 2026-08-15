@@ -14,9 +14,11 @@ import { Button, Card, CardHeader, LoadingPanel, ProgressBar } from '../../desig
 import { fetchPlanningDashboardSnapshot } from '../../core/api/planningAnalytics';
 import { PLANNING_EMPTY_PRESETS } from '../../core/planning/planningEmptyStates';
 import { deriveNextPlannerAction, PLANNER_QUICK_ACTIONS } from '../../core/planning/plannerHubUx';
+import { buildOperationalJourneySteps } from '../../core/planning/operationalFlowUx';
 import { PlanningEmptyState } from './PlanningEmptyState';
 import { PlanningGlossaryStrip } from './PlanningGlossaryStrip';
 import { PlanningStatusBadge } from './PlanningStatusBadge';
+import { OperationalFlowStepper } from './OperationalFlowStepper';
 
 const toneClass = {
   warning: 'border-amber-300/60 bg-amber-50/90 dark:border-amber-900/40 dark:bg-amber-950/25',
@@ -50,6 +52,14 @@ export function PlannerHubSection(props: PlannerHubSectionProps) {
   const weekly = () => snapshot()?.weeklyPlan;
   const daily = () => snapshot()?.dailyPlan;
   const nextAction = () => (snapshot() ? deriveNextPlannerAction(snapshot()!) : null);
+  const journeySteps = () => {
+    const snap = snapshot();
+    if (!snap) return [];
+    return buildOperationalJourneySteps({
+      weeklyPlan: snap.weeklyPlan,
+      dailyPlan: snap.dailyPlan,
+    });
+  };
 
   return (
     <section class="space-y-4" id="mi-planificacion" data-testid="planner-hub">
@@ -92,6 +102,14 @@ export function PlannerHubSection(props: PlannerHubSectionProps) {
             </div>
           </div>
         )}
+      </Show>
+
+      <Show when={!snapshot.loading && journeySteps().length > 0}>
+        <OperationalFlowStepper
+          steps={journeySteps()}
+          title="Recorrido operativo del día"
+          compact={variant() === 'dashboard'}
+        />
       </Show>
 
       <div class="flex flex-wrap gap-2">

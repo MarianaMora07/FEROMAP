@@ -106,7 +106,7 @@ def test_planned_routes_geojson_assigns_rotating_colors():
 def test_map_operational_context_filters_routes_outside_bbox(monkeypatch):
     db = MagicMock()
 
-    def fake_planned_routes(_db, *, driver_id=None, daily_plan_id=None, scoped_to_daily_plan=False):
+    def fake_planned_routes(_db, **kwargs):
         return {
             "type": "FeatureCollection",
             "features": [

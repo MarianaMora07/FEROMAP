@@ -82,10 +82,10 @@ def test_map_operational_context_uses_active_daily_plan(monkeypatch):
 
     captured: dict[str, object] = {}
 
-    def fake_planned_routes(_db, *, driver_id=None, daily_plan_id=None, scoped_to_daily_plan=False):
-        captured["driver_id"] = driver_id
-        captured["daily_plan_id"] = daily_plan_id
-        captured["scoped_to_daily_plan"] = scoped_to_daily_plan
+    def fake_planned_routes(_db, **kwargs):
+        captured["driver_id"] = kwargs.get("driver_id")
+        captured["daily_plan_id"] = kwargs.get("daily_plan_id")
+        captured["scoped_to_daily_plan"] = kwargs.get("scoped_to_daily_plan")
         return {
             "type": "FeatureCollection",
             "features": [
@@ -120,9 +120,9 @@ def test_map_operational_context_uses_active_daily_plan(monkeypatch):
 def test_map_operational_context_without_active_plan_shows_no_routes(monkeypatch):
     db = MagicMock()
 
-    def fake_planned_routes(_db, *, driver_id=None, daily_plan_id=None, scoped_to_daily_plan=False):
-        assert scoped_to_daily_plan is True
-        assert daily_plan_id is None
+    def fake_planned_routes(_db, **kwargs):
+        assert kwargs.get("scoped_to_daily_plan") is True
+        assert kwargs.get("daily_plan_id") is None
         return {"type": "FeatureCollection", "features": []}
 
     monkeypatch.setattr("app.services.map_context_service.get_active_daily_plan", lambda _db: None)

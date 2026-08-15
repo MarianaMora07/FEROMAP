@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
+from decimal import Decimal
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -816,6 +817,102 @@ def seed_daily_plan_demo(db: Session, payload: dict[str, Any]) -> None:
             scheduled_point_ids_json=_dump_json_list(scheduled_ids),
         )
     )
+
+
+def seed_optimized_daily_playback_demo(
+    db: Session,
+    *,
+    operation_date: date,
+    simulation_id: int,
+    vehicles: list[Any],
+    drivers: list[Any],
+    collection_points: list[CollectionPoint],
+) -> int | None:
+    """Plan del día pre-optimizado con rutas enlazadas para playback rápido en demo."""
+    plan = db.scalar(select(DailyPlan).where(DailyPlan.operation_date == operation_date))
+    week_start, _ = week_range(operation_date)
+    weekly_plan = db.scalar(select(WeeklyPlan).where(WeeklyPlan.week_start_date == week_start))
+
+    scheduled_ids = resolve_scheduled_point_ids(db, operation_date)
+    if not scheduled_ids:
+        scheduled_ids = [point.id for point in collection_points[:12]]
+
+    if plan is None:
+        plan = DailyPlan(
+            operation_date=operation_date,
+            weekly_plan_id=weekly_plan.id if weekly_plan else None,
+            status="optimized",
+            scenario_id=weekly_plan.scenario_id if weekly_plan else "normal",
+            simulation_id=simulation_id,
+            scheduled_point_ids_json=_dump_json_list(scheduled_ids),
+        )
+        db.add(plan)
+        db.flush()
+    else:
+        plan.status = "optimized"
+        plan.simulation_id = simulation_id
+        if weekly_plan:
+            plan.scenario_id = weekly_plan.scenario_id
+            plan.weekly_plan_id = weekly_plan.id
+        db.flush()
+
+    linked_routes = db.scalar(
+        select(func.count())
+        .select_from(OptimizedRoute)
+        .where(
+            OptimizedRoute.daily_plan_id == plan.id,
+            OptimizedRoute.route_kind == "optimized",
+        )
+    )
+    if linked_routes and int(linked_routes) > 0:
+        return plan.id
+
+    available_vehicles = [
+        vehicle for vehicle in vehicles if getattr(vehicle, "status", "available") != "maintenance"
+    ][:2]
+    if not available_vehicles:
+        available_vehicles = vehicles[:2]
+    default_driver_id = drivers[0].id if drivers else None
+    points_pool = collection_points[:12] if len(collection_points) >= 4 else collection_points
+
+    for route_index, vehicle in enumerate(available_vehicles):
+        driver_id = vehicle.default_driver_id or default_driver_id
+        if driver_id is None:
+            continue
+        slice_start = route_index * 4
+        route_points = points_pool[slice_start : slice_start + 4]
+        if len(route_points) < 2:
+            route_points = points_pool[: min(4, len(points_pool))]
+        if len(route_points) < 2:
+            continue
+
+        route = OptimizedRoute(
+            vehicle_id=vehicle.id,
+            driver_id=driver_id,
+            daily_plan_id=plan.id,
+            simulation_id=simulation_id,
+            route_kind="optimized",
+            total_distance_meters=Decimal("14500"),
+            estimated_duration_seconds=260 * 60,
+            status="pending",
+        )
+        db.add(route)
+        db.flush()
+
+        base_time = datetime.combine(operation_date, time(6, 15), tzinfo=timezone.utc)
+        for sequence, point in enumerate(route_points, start=1):
+            arrival = base_time + timedelta(minutes=18 * sequence)
+            db.add(
+                RouteWaypoint(
+                    route_id=route.id,
+                    collection_point_id=point.id,
+                    sequence_order=sequence,
+                    status="pending",
+                    estimated_arrival_at=arrival,
+                )
+            )
+
+    return plan.id
 
 
 def autofill_weekly_plan_from_schedules(db: Session, plan_id: int) -> dict[str, Any]:

@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, onMount } from 'solid-js';
+import { For, Show, createEffect, createMemo, createResource, createSignal, onMount } from 'solid-js';
 import { A, useNavigate, useSearchParams } from '@solidjs/router';
 import {
   Sparkles,
@@ -12,6 +12,7 @@ import {
   Send,
   Loader2,
   Map,
+  Play,
 } from 'lucide-solid';
 import {
   Badge,
@@ -29,7 +30,9 @@ import {
   dispatchOptimizationResult,
   executeOptimization,
   closeOptimizationDay,
+  closeOptimizationPlayback,
   initOptimizationPage,
+  openOptimizationPlayback,
   optimizationState,
   refreshDailyPlan,
   selectOperationDate,
@@ -51,6 +54,7 @@ import type { ScenarioId } from '../../data/types/simulation';
 import { downloadDailyPlanPdf } from '../../core/api/planning';
 import { optimizationDateHref, tomorrowIso } from '../../core/planning/planningUx';
 import { monitoringHref, optimizationHref, operationalMapHref } from '../../core/planning/operationalLinks';
+import { parsePlaybackQueryParam } from '../../core/planning/operationalFlowUx';
 import { PendingManagementPanel } from './PendingManagementPanel';
 import { ModuleGuidanceBanner } from '../shared/ModuleGuidanceBanner';
 import { PlanningContextualCta } from '../planning/PlanningContextualCta';
@@ -59,9 +63,15 @@ import { PLANNING_EMPTY_PRESETS } from '../../core/planning/planningEmptyStates'
 import { PlanningLevelBanner } from '../planning/PlanningLevelBanner';
 import { PlanningStatusBadge } from '../planning/PlanningStatusBadge';
 import { OptimizationRouteMap } from './OptimizationRouteMap';
+import { OptimizationPlaybackPanel } from './OptimizationPlaybackPanel';
 import { OptimizationWeekCalendar } from './OptimizationWeekCalendar';
 import { DailyPlanTimeline } from './DailyPlanTimeline';
 import { OptimizationHistoryPanel } from './OptimizationHistoryPanel';
+import { OptimizationExperienceStepper } from './OptimizationExperienceStepper';
+import { DailyScenarioBanner } from './DailyScenarioBanner';
+import { fetchDailyRoutePlayback } from '../../core/api/routePlayback';
+import { useRoutePlayback } from '../../core/route-playback/useRoutePlayback';
+import { mockDailyRoutePlayback } from '../../data/mock/routePlayback';
 
 const vehicleToneClass = {
   blue: 'bg-fero-blue/10 text-fero-blue border-fero-blue/20',
@@ -393,6 +403,42 @@ export default function OptimizationPage() {
   const selectedDate = () => optimizationState.preset.operationDate;
 
   const hasResults = () => optimizationState.kpis != null;
+  const canSimulateRoute = () => dailyPlan()?.status === 'optimized' && hasResults();
+  const scenarioId = () => dailyPlan()?.scenarioId ?? optimizationState.preset.scenarioId;
+  const scenarioLabel = createMemo(() => {
+    const id = scenarioId();
+    return optimizationState.context?.scenarios.find((scenario) => scenario.id === id)?.label ?? id;
+  });
+
+  const [playbackPayload] = createResource(
+    () => {
+      if (!optimizationState.playbackOpen) return null;
+      return dailyPlan()?.id ?? 0;
+    },
+    async (dailyPlanId) => {
+      if (!dailyPlanId) return mockDailyRoutePlayback(0);
+      return fetchDailyRoutePlayback(dailyPlanId);
+    },
+  );
+
+  const playbackRoutes = createMemo(() => playbackPayload()?.routes ?? []);
+  const playback = useRoutePlayback(() => playbackRoutes());
+
+  createEffect(() => {
+    if (!optimizationState.playbackOpen) {
+      playback.reset();
+    }
+  });
+
+  const handleOpenPlayback = () => {
+    openOptimizationPlayback();
+  };
+
+  const handleClosePlayback = () => {
+    playback.pause();
+    playback.reset();
+    closeOptimizationPlayback();
+  };
   const kpis = () => optimizationState.kpis!;
   const routeResults = createMemo(() => {
     if (!hasResults()) return [];
@@ -430,6 +476,13 @@ export default function OptimizationPage() {
     selectOperationDate(dateParam);
   });
 
+  createEffect(() => {
+    if (!parsePlaybackQueryParam(searchParams.playback)) return;
+    if (optimizationState.isLoadingDailyPlan || optimizationState.isLoadingContext) return;
+    if (!canSimulateRoute() || optimizationState.playbackOpen) return;
+    openOptimizationPlayback();
+  });
+
   const handleGenerate = async () => {
     setDispatchError(null);
     try {
@@ -442,6 +495,7 @@ export default function OptimizationPage() {
   const handleDispatch = async () => {
     setDispatchError(null);
     setShowDispatchCta(false);
+    closeOptimizationPlayback();
     try {
       await dispatchOptimizationResult();
       setShowDispatchCta(true);
@@ -492,6 +546,24 @@ export default function OptimizationPage() {
       <OptimizationWeekCalendar selectedDate={selectedDate()} onDateSelect={navigateToDate} />
 
       <DailyPlanTimeline />
+
+      <Show when={!optimizationState.isLoadingDailyPlan}>
+        <DailyScenarioBanner
+          scenarioId={scenarioId()}
+          scenarioLabel={scenarioLabel()}
+          weeklyPlanApproved={optimizationState.weeklyPlanApproved}
+          pendingCount={dailyPlan()?.pendingPoints.length ?? 0}
+        />
+        <OptimizationExperienceStepper
+          dailyStatus={dailyPlan()?.status}
+          hasResults={hasResults()}
+          playbackOpen={optimizationState.playbackOpen}
+          weeklyPlanApproved={optimizationState.weeklyPlanApproved}
+          operationDate={selectedDate()}
+          dailyPlanId={dailyPlan()?.id}
+          onOpenPlayback={handleOpenPlayback}
+        />
+      </Show>
 
       <Show when={!optimizationState.isLoadingDailyPlan && !optimizationState.weeklyPlanApproved}>
         <Card>
@@ -612,9 +684,47 @@ export default function OptimizationPage() {
           </div>
 
           <div class="space-y-4 xl:col-span-9">
-            <OptimizationRouteMap hasResults={hasResults()} routeResults={routeResults()} />
+            <div class="relative">
+              <OptimizationRouteMap
+                hasResults={hasResults()}
+                routeResults={routeResults()}
+                playbackActive={optimizationState.playbackOpen}
+                playbackRoutes={playbackRoutes()}
+                playback={playback}
+              />
+              <Show when={optimizationState.playbackOpen}>
+                <OptimizationPlaybackPanel
+                  routes={playbackRoutes()}
+                  playback={playback}
+                  scenarioId={scenarioId()}
+                  scenarioLabel={scenarioLabel()}
+                  operationDate={selectedDate()}
+                  previewMode={playbackPayload()?.previewMode ?? true}
+                  loading={playbackPayload.loading}
+                  error={
+                    playbackPayload.error
+                      ? playbackPayload.error instanceof Error
+                        ? playbackPayload.error.message
+                        : 'No se pudo cargar el recorrido'
+                      : null
+                  }
+                  onClose={handleClosePlayback}
+                />
+              </Show>
+            </div>
             <Show when={hasResults()}>
               <div class="flex flex-wrap items-center justify-end gap-2">
+                <Show when={canSimulateRoute() && !optimizationState.playbackOpen}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={<Play size={16} />}
+                    onClick={handleOpenPlayback}
+                    data-testid="optimization-simulate-route"
+                  >
+                    Simular recorrido
+                  </Button>
+                </Show>
                 <Show when={optimizationState.lastDispatch}>
                   {(dispatch) => (
                     <Badge variant="success">

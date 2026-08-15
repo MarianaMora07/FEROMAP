@@ -28,4 +28,7 @@ export interface MapOperationalContext {
 export interface MapContextFilters {
   sector?: string;
   bbox?: string;
+  dailyPlanId?: number;
+  /** Incluye `stops`, `totalDurationMinutes` y `startTime` en propiedades de ruta. */
+  playbackDetails?: boolean;
 }
