@@ -249,8 +249,10 @@ export function OperatorHubSection(props: OperatorHubSectionProps) {
                 routeLabel={context().vehicle?.route}
                 statusLabel={operatorRouteStatusLabel(context())}
                 planStatus={context().planStatus}
-                progress={context().vehicle?.progress ?? 0}
-                nextPoint={context().vehicle?.nextPoint}
+                progress={routeSnapshot()?.progress ?? context().vehicle?.progress ?? 0}
+                nextPoint={routeSnapshot()?.nextStop?.code ?? context().vehicle?.nextPoint}
+                nextStopType={routeSnapshot()?.nextStop?.stopType}
+                shiftUtilizationPct={routeSnapshot()?.shiftUtilizationPct}
               />
             </div>
           </Show>

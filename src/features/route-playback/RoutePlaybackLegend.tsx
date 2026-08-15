@@ -46,6 +46,15 @@ export function RoutePlaybackLegend(props: RoutePlaybackLegendProps) {
           </span>
           Parada completada
         </li>
+        <li class="flex items-center gap-2">
+          <span
+            class="flex h-4 w-4 items-center justify-center rounded-full border border-stone-500 bg-stone-100 text-[9px] font-bold text-stone-700"
+            aria-hidden="true"
+          >
+            ♻
+          </span>
+          Vertedero (descarga)
+        </li>
       </ul>
     </div>
   );

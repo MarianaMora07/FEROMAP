@@ -15,6 +15,14 @@ import type { RoutePlaybackModel } from '../../core/route-playback/routePlayback
 import type { RoutePlaybackController } from '../../core/route-playback/useRoutePlayback';
 import { RoutePlaybackLayer } from '../route-playback/RoutePlaybackLayer';
 import { RoutePlaybackLegend } from '../route-playback/RoutePlaybackLegend';
+import {
+  syncLandfillFacilityMarker,
+  syncRouteLandfillStopMarkers,
+  removeLandfillFacilityMarker,
+} from '../../core/map/landfillMapLayers';
+import { DEFAULT_MAP_FACILITIES } from '../../core/utils/landfillUx';
+import { fetchAdminSettings } from '../../core/api/admin';
+import { useMocks } from '../../core/api/client';
 
 const vehicleLegendClass: Record<string, string> = {
   blue: 'text-fero-blue',
@@ -34,6 +42,9 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
   let mapContainer!: HTMLDivElement;
   const mapRef: { current?: MapLibreMap } = {};
   const [mapInstance, setMapInstance] = createSignal<MapLibreMap | undefined>();
+  const landfillMarkerHolder: { marker?: maplibregl.Marker } = {};
+  const routeLandfillMarkers: maplibregl.Marker[] = [];
+  const [facilities, setFacilities] = createSignal(DEFAULT_MAP_FACILITIES);
   let mapReady = false;
 
   const syncRoutes = () => {
@@ -83,23 +94,35 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
           routes: { type: 'FeatureCollection', features },
         });
       }
-      return;
+    } else {
+      (map.getSource('opt-routes') as maplibregl.GeoJSONSource).setData({
+        type: 'FeatureCollection',
+        features,
+      });
+      if (map.getLayer('opt-current')) {
+        map.setPaintProperty('opt-current', 'line-opacity', currentOpacity);
+      }
+      if (map.getLayer('opt-optimized')) {
+        map.setPaintProperty('opt-optimized', 'line-opacity', lineOpacity);
+      }
+      if (features.length > 0 && !playbackActive) {
+        fitMapToOperationalData(map, {
+          routes: { type: 'FeatureCollection', features },
+        });
+      }
     }
 
-    (map.getSource('opt-routes') as maplibregl.GeoJSONSource).setData({
-      type: 'FeatureCollection',
-      features,
-    });
-    if (map.getLayer('opt-current')) {
-      map.setPaintProperty('opt-current', 'line-opacity', currentOpacity);
-    }
-    if (map.getLayer('opt-optimized')) {
-      map.setPaintProperty('opt-optimized', 'line-opacity', lineOpacity);
-    }
-    if (features.length > 0 && !playbackActive) {
-      fitMapToOperationalData(map, {
-        routes: { type: 'FeatureCollection', features },
-      });
+    if (props.hasResults) {
+      syncLandfillFacilityMarker(map, facilities(), landfillMarkerHolder);
+      syncRouteLandfillStopMarkers(
+        map,
+        { type: 'FeatureCollection', features },
+        routeLandfillMarkers,
+      );
+    } else {
+      removeLandfillFacilityMarker(landfillMarkerHolder);
+      routeLandfillMarkers.forEach((marker) => marker.remove());
+      routeLandfillMarkers.length = 0;
     }
   };
 
@@ -110,6 +133,20 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
   );
 
   onMount(() => {
+    if (!useMocks()) {
+      void fetchAdminSettings().then((settings) => {
+        setFacilities({
+          depotLat: settings.depotLat,
+          depotLon: settings.depotLon,
+          landfillLat: settings.landfillLat,
+          landfillLon: settings.landfillLon,
+          landfillUnloadMinutes: settings.landfillUnloadMinutes,
+          workStart: settings.workStart,
+          workEnd: settings.workEnd,
+        });
+      });
+    }
+
     const map = new maplibregl.Map(
       createOperationalMapOptions({
         container: mapContainer,
@@ -131,6 +168,9 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
 
     onCleanup(() => {
       ro.disconnect();
+      removeLandfillFacilityMarker(landfillMarkerHolder);
+      routeLandfillMarkers.forEach((marker) => marker.remove());
+      routeLandfillMarkers.length = 0;
       mapRef.current?.remove();
       mapRef.current = undefined;
       setMapInstance(undefined);
@@ -142,6 +182,7 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
     props.hasResults;
     props.playbackActive;
     appState.routes;
+    facilities();
     syncRoutes();
   });
 
@@ -246,6 +287,10 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
             </span>
           )}
         </For>
+        <span class="inline-flex items-center gap-1.5 font-medium text-stone-600">
+          <span aria-hidden="true">♻</span>
+          Vertedero
+        </span>
       </div>
     </Card>
   );

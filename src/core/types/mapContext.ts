@@ -16,6 +16,8 @@ export interface LiveActivity {
   tone: 'success' | 'info' | 'warning' | 'danger' | 'default';
 }
 
+import type { MapFacilities } from '../utils/landfillUx';
+
 export interface MapOperationalContext {
   vehicles: LiveVehicle[];
   routes: RouteCollection;
@@ -23,6 +25,7 @@ export interface MapOperationalContext {
   mapMetrics: MapMetric[];
   liveActivities: LiveActivity[];
   updatedAt: string;
+  facilities?: MapFacilities;
 }
 
 export interface MapContextFilters {

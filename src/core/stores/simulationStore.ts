@@ -108,17 +108,39 @@ export function currentScenario() {
 }
 
 export function kpiImpactRows(kpis: KpiMetrics) {
-  const row = (metric: string, current: number, optimized: number, unit = '') => ({
+  const row = (metric: string, current: string, simulated: string, delta = 0) => ({
     metric,
-    current: `${current}${unit}`,
-    simulated: `${optimized}${unit}`,
-    delta: savingsPct(current, optimized),
+    current,
+    simulated,
+    delta,
   });
-  return [
-    row('Distancia', kpis.distanceKm.current, kpis.distanceKm.optimized, ' km'),
-    row('Duración', kpis.durationHours.current, kpis.durationHours.optimized, ' h'),
-    row('Combustible', kpis.fuelLiters.current, kpis.fuelLiters.optimized, ' L'),
+  const rows = [
+    row(
+      'Distancia',
+      `${kpis.distanceKm.current} km`,
+      `${kpis.distanceKm.optimized} km`,
+      savingsPct(kpis.distanceKm.current, kpis.distanceKm.optimized),
+    ),
+    row(
+      'Duración',
+      `${kpis.durationHours.current} h`,
+      `${kpis.durationHours.optimized} h`,
+      savingsPct(kpis.durationHours.current, kpis.durationHours.optimized),
+    ),
+    row(
+      'Combustible',
+      `${kpis.fuelLiters.current} L`,
+      `${kpis.fuelLiters.optimized} L`,
+      savingsPct(kpis.fuelLiters.current, kpis.fuelLiters.optimized),
+    ),
   ];
+  if (kpis.landfillTrips != null && kpis.landfillTrips > 0) {
+    rows.push(row('Viajes al vertedero', '—', String(kpis.landfillTrips)));
+  }
+  if ((kpis.uncoveredPoints ?? 0) > 0) {
+    rows.push(row('Puntos no cubiertos', '—', String(kpis.uncoveredPoints)));
+  }
+  return rows;
 }
 
 export function kpiSavingsSummary(kpis: KpiMetrics) {

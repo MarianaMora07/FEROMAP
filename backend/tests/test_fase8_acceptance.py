@@ -30,19 +30,11 @@ from app.services.optimization_service import (
     compute_service_time_sec,
 )
 from app.services.scenario_parameters import build_applied_crew_modifiers
+from tests.vrp_matrix_helpers import aco_multi_trip_kwargs, vrp_matrix
 
 
 def _symmetric_matrix(n: int, base: float = 100.0) -> tuple[list[list[float]], list[list[float]]]:
-    dist = [[0.0] * n for _ in range(n)]
-    time = [[0.0] * n for _ in range(n)]
-    for i in range(n):
-        for j in range(n):
-            if i == j:
-                continue
-            d = base * abs(i - j)
-            dist[i][j] = d
-            time[i][j] = d / 10
-    return dist, time
+    return vrp_matrix(max(1, n - 2), base=base)
 
 
 def _vehicle(assigned: int) -> VehicleUnit:
@@ -89,9 +81,10 @@ class TestKpiDurationWithCrew:
         n_customers = 5
         demands = [8.0] * n_customers
         capacities = [80.0]
-        dist, time = _symmetric_matrix(n_customers + 1, base=100.0)
+        dist, time = vrp_matrix(n_customers, base=100.0)
+        kwargs = aco_multi_trip_kwargs(n_customers, 1)
 
-        optimized = _aco_cvrp(n_customers, demands, capacities, dist, time, seed=42)
+        optimized = _aco_cvrp(n_customers, demands, capacities, dist, time, seed=42, **kwargs)
         current = _baseline_route(n_customers, dist, time)
         customers = [
             CustomerNode(i, f"C{i}", 0, 8.0, 50, 0.0, 0.0) for i in range(1, n_customers + 1)
@@ -140,8 +133,9 @@ class TestOperatorsShortageGlobalModifier:
 
     def test_shortage_increases_kpi_duration_with_same_aco_solution(self) -> None:
         n_customers = 4
-        dist, time = _symmetric_matrix(n_customers + 1, base=90.0)
-        optimized = _aco_cvrp(n_customers, [5.0] * n_customers, [40.0], dist, time, seed=7)
+        dist, time = vrp_matrix(n_customers, base=90.0)
+        kwargs = aco_multi_trip_kwargs(n_customers, 1)
+        optimized = _aco_cvrp(n_customers, [5.0] * n_customers, [40.0], dist, time, seed=7, **kwargs)
         current = _baseline_route(n_customers, dist, time)
         customers = [
             CustomerNode(i, f"C{i}", 0, 5.0, 50, 0.0, 0.0) for i in range(1, n_customers + 1)
@@ -171,10 +165,11 @@ class TestAcoFitnessIndependentOfCrew:
         n_customers = 6
         demands = [10.0, 15.0, 8.0, 12.0, 20.0, 5.0]
         capacities = [40.0, 40.0]
-        dist, time = _symmetric_matrix(n_customers + 1, base=80.0)
+        dist, time = vrp_matrix(n_customers, base=80.0)
+        kwargs = aco_multi_trip_kwargs(n_customers, 2)
 
-        first = _aco_cvrp(n_customers, demands, capacities, dist, time, seed=99)
-        second = _aco_cvrp(n_customers, demands, capacities, dist, time, seed=99)
+        first = _aco_cvrp(n_customers, demands, capacities, dist, time, seed=99, **kwargs)
+        second = _aco_cvrp(n_customers, demands, capacities, dist, time, seed=99, **kwargs)
 
         assert first.distance_m == pytest.approx(second.distance_m)
         assert first.vehicle_routes == second.vehicle_routes
@@ -184,9 +179,10 @@ class TestAcoFitnessIndependentOfCrew:
         n_customers = 5
         demands = [8.0] * n_customers
         capacities = [80.0]
-        dist, time = _symmetric_matrix(n_customers + 1, base=100.0)
+        dist, time = vrp_matrix(n_customers, base=100.0)
+        kwargs = aco_multi_trip_kwargs(n_customers, 1)
 
-        optimized = _aco_cvrp(n_customers, demands, capacities, dist, time, seed=42)
+        optimized = _aco_cvrp(n_customers, demands, capacities, dist, time, seed=42, **kwargs)
         current = _baseline_route(n_customers, dist, time)
         customers = [
             CustomerNode(i, f"C{i}", 0, 8.0, 50, 0.0, 0.0) for i in range(1, n_customers + 1)

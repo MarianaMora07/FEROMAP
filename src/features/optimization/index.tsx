@@ -48,6 +48,9 @@ import { OptimizationMoreContextPanel } from './OptimizationMoreContextPanel';
 import { OptimizationHistoryPanel } from './OptimizationHistoryPanel';
 import { OptimizationParametersForm } from './OptimizationParametersForm';
 import { OptimizationResultsCompact } from './OptimizationResultsCompact';
+import { DurationBreakdownPanel } from '../simulation/DurationBreakdownPanel';
+import { LandfillKpiStrip } from '../landfill/LandfillKpiStrip';
+import { UncoveredPointsAlert } from '../landfill/UncoveredPointsAlert';
 import { OptimizationParametersSheet } from './OptimizationParametersSheet';
 import { useGenerateButtonVisibility } from './useGenerateButtonVisibility';
 import { resolveOptimizationContextualMessage } from './optimizationLayoutUx';
@@ -411,6 +414,9 @@ export default function OptimizationPage() {
             </OptimizationParametersSheet>
 
             <Show when={hasResults()}>
+              <UncoveredPointsAlert kpis={kpis()!} />
+              <LandfillKpiStrip kpis={kpis()} routes={appState.routes} />
+              <DurationBreakdownPanel kpis={kpis()!} />
               <div class="flex flex-wrap items-center justify-end gap-2">
                 <A href={operationalMapHref({ focus: 'routes' })}>
                   <Button variant="outline" size="sm" icon={<Map size={16} />}>

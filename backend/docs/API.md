@@ -620,6 +620,76 @@ durationSec      = travelSec + stopCount × serviceTimeSec
 
 El conductor **no** se resta con `operatorsShortage`. Código: `backend/app/domain/crew_service_time.py`. ADR: [docs/fase-8/adr-dotacion-tiempo-servicio.md](../../docs/fase-8/adr-dotacion-tiempo-servicio.md).
 
+### Vertedero multi-viaje y jornada operativa (ADR-004)
+
+**Estado:** Fase 0 (contrato). **Fase 1:** campos persistidos en `OperationalSettings` y UI admin. Motor en Fase 2.
+
+| Pregunta | Respuesta |
+|----------|-----------|
+| ¿Qué hace el ACO con el vertedero? | **Nada en el fitness.** Sigue minimizando distancia. Las visitas al vertedero son consecuencia de la restricción de capacidad (multi-viaje). |
+| ¿Qué reportan los KPIs? | **Duración operativa** = viaje + paradas (ADR-003) + descargas en vertedero + corte por jornada 06:00–18:00. |
+| ¿Por qué separar? | Dos corridas con la **misma ruta en km** pueden tener **distinta duración** si cambia el tiempo de descarga o la jornada — y pueden dejar contenedores sin cubrir. |
+
+**Instalaciones (contrato `OperationalSettings`, Fase 1):**
+
+| Campo | Tipo | Default | Descripción |
+|-------|------|---------|-------------|
+| `depotLat` | float | `-62.715` | Latitud depósito (base) |
+| `depotLon` | float | `8.295` | Longitud depósito |
+| `landfillLat` | float | `-62.690` | Latitud vertedero (placeholder editable) |
+| `landfillLon` | float | `8.280` | Longitud vertedero |
+| `landfillUnloadMinutes` | int | `15` | Tiempo de descarga por visita |
+| `workStart` | string | `"06:00"` | Inicio jornada (`HH:MM`) |
+| `workEnd` | string | `"18:00"` | Fin jornada (`HH:MM`) |
+
+**Índices del motor (Fase 2):** `0` = depósito · `1…N` = contenedores · `N+1` = vertedero.
+
+**Fórmulas:**
+
+```
+landfillUnloadSec = landfillUnloadMinutes × 60
+shiftBudgetSec    = secondsBetween(workStart, workEnd)   // 06:00→18:00 = 43 200 s
+
+elapsedSec = travelSec
+           + (n_collection_stops × serviceTimeSec)
+           + (n_landfill_visits × landfillUnloadSec)
+
+canFitStop = elapsedSec + travelTo(candidate) + serviceAt(candidate) ≤ shiftBudgetSec
+```
+
+Si `canFitStop` es falso → cerrar ruta (vertedero si `load > 0`, luego depósito); contenedores restantes en `uncoveredPointCodes`.
+
+**KPIs (Fase 2–3):**
+
+```json
+{
+  "landfillTrips": 2,
+  "landfillTripsPerVehicle": 1.0,
+  "unloadTimeHours": 0.5,
+  "shiftUtilizationPct": 30,
+  "uncoveredPoints": 3,
+  "uncoveredPointCodes": ["CNT-042", "CNT-043", "CNT-044"],
+  "durationBreakdown": {
+    "optimized": {
+      "travelHours": 2.4,
+      "serviceHours": 0.7,
+      "unloadHours": 0.5,
+      "landfillTrips": 2,
+      "shiftBudgetHours": 12.0,
+      "shiftUsedHours": 3.6,
+      "shiftUtilizationPct": 30,
+      "uncoveredPoints": 3
+    }
+  }
+}
+```
+
+**GeoJSON rutas (Fase 3):** cada `Feature` LineString incluye `properties.stops[]` con `stopType: "collection"` o `"landfill"` (código `VERTEDERO`).
+
+**Playback (Fase 3):** paradas landfill en `stops[]` con `code: "VERTEDERO"` y `serviceMinutes` según `landfillUnloadMinutes` (default 15).
+
+Código: `backend/app/domain/landfill_service_time.py`, `src/core/types/landfillServiceTime.ts`. ADR: [docs/fase-9/adr-vertedero-multi-viaje.md](../../docs/fase-9/adr-vertedero-multi-viaje.md).
+
 **Algoritmo:** ACO (`aco_vrp_osmnx`). Defaults por `APP_ENV`: local `6×10`, staging/prod `12×20`. Parada anticipada (`ACO_PATIENCE`), hormigas en paralelo (`ACO_PARALLEL_WORKERS`) y cola de jobs (`OPTIMIZATION_MAX_WORKERS`). No hay selector de algoritmo en API.
 
 **Response (201)**
@@ -859,11 +929,13 @@ Actualiza nombre, teléfono, rol, sector, estado o contraseña.
 
 ### `GET /admin/settings`
 
-Configuración operativa persistida (umbrales, unidades, timeouts, jornada).
+Configuración operativa persistida (umbrales, unidades, timeouts, jornada, instalaciones).
+
+Incluye `workStart` / `workEnd` (default `06:00` / `18:00`), coordenadas de depósito y vertedero (`depotLat`, `depotLon`, `landfillLat`, `landfillLon`), y `landfillUnloadMinutes` (default `15`).
 
 ### `PATCH /admin/settings`
 
-Actualiza parcialmente la configuración operativa.
+Actualiza parcialmente la configuración operativa (incl. coordenadas del vertedero y tiempo de descarga).
 
 ### `GET /admin/integrations`
 

@@ -78,6 +78,13 @@ import {
   type OperationalRouteFeatureProps,
 } from '../../core/map/operationalMapLayers';
 import {
+  LANDFILL_LAYER_ID,
+  removeLandfillFacilityMarker,
+  syncLandfillFacilityMarker,
+  syncRouteLandfillStopMarkers,
+} from '../../core/map/landfillMapLayers';
+import { DEFAULT_MAP_FACILITIES } from '../../core/utils/landfillUx';
+import {
   createOperationalMapOptions,
   fitMapToOperationalData,
   operationalMapContextFilters,
@@ -156,6 +163,8 @@ export default function MapPage() {
   const operatorMode = () => isConductor(authUser()?.role) && !residentScope();
   const nextStopHolder: { marker?: maplibregl.Marker } = {};
   const residentNextStopHolder: { marker?: maplibregl.Marker } = {};
+  const landfillMarkerHolder: { marker?: maplibregl.Marker } = {};
+  const routeLandfillMarkers: Marker[] = [];
 
   const residentMapFocus = () => parseResidentMapFocus(searchParams.focus);
   const residentSectorName = () =>
@@ -522,6 +531,27 @@ export default function MapPage() {
     } else {
       vehicleMarkersById.forEach((marker) => marker.remove());
       vehicleMarkersById.clear();
+    }
+
+    const facilities = mapContext()?.facilities ?? DEFAULT_MAP_FACILITIES;
+    if (state.landfill) {
+      syncLandfillFacilityMarker(map, facilities, landfillMarkerHolder);
+      if (map.getLayer(LANDFILL_LAYER_ID)) {
+        map.setLayoutProperty(LANDFILL_LAYER_ID, 'visibility', 'visible');
+      }
+      if (routesVisible) {
+        syncRouteLandfillStopMarkers(map, operationalRoutes(), routeLandfillMarkers);
+      } else {
+        routeLandfillMarkers.forEach((marker) => marker.remove());
+        routeLandfillMarkers.length = 0;
+      }
+    } else {
+      removeLandfillFacilityMarker(landfillMarkerHolder);
+      if (map.getLayer(LANDFILL_LAYER_ID)) {
+        map.setLayoutProperty(LANDFILL_LAYER_ID, 'visibility', 'none');
+      }
+      routeLandfillMarkers.forEach((marker) => marker.remove());
+      routeLandfillMarkers.length = 0;
     }
   };
 

@@ -57,6 +57,7 @@ export interface MonitoringStatus {
   mapMetrics?: MapMetric[];
   liveActivities?: LiveActivity[];
   updatedAt?: string;
+  facilities?: import('../utils/landfillUx').MapFacilities;
 }
 
 export function fetchMonitoringStatus(): Promise<MonitoringStatus> {

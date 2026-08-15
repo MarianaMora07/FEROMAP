@@ -13,6 +13,7 @@ from app.services.contingency_service import list_recent_incidents
 from app.services.geo_service import collection_points_geojson, fill_level_pct
 from app.services.operations_service import live_fleet_view
 from app.services.planning_service import get_active_daily_plan
+from app.services.operational_facilities_service import resolve_operational_facilities
 from app.services.route_geometry_service import build_route_linestring_cached
 from app.services.route_playback_service import (
     playback_stops_for_route_feature,
@@ -90,6 +91,8 @@ def planned_routes_geojson(
         stmt = stmt.where(OptimizedRoute.daily_plan_id == daily_plan_id)
 
     routes = db.scalars(stmt).unique().all()
+    facilities = resolve_operational_facilities(db)
+    landfill_lon, landfill_lat = facilities.landfill
     features: list[dict[str, Any]] = []
     for index, route in enumerate(routes):
         waypoints = sorted(route.waypoints, key=lambda wp: wp.sequence_order)
@@ -98,7 +101,7 @@ def planned_routes_geojson(
             continue
         vehicle = route.vehicle
         code = vehicle.code if vehicle else f"R-{route.id}"
-        waypoints_total = sum(1 for wp in waypoints if wp.collection_point is not None)
+        waypoints_total = len(waypoints)
         waypoints_done = sum(1 for wp in waypoints if wp.status == "completed")
         properties: dict[str, Any] = {
             "id": f"route-{route.id}",
@@ -114,7 +117,13 @@ def planned_routes_geojson(
         }
         if include_playback_stops:
             per_stop = service_minutes_per_stop or _service_minutes_per_stop(operators_shortage=None)
-            stops = playback_stops_for_route_feature(route, service_minutes=per_stop)
+            stops = playback_stops_for_route_feature(
+                route,
+                service_minutes=per_stop,
+                landfill_service_minutes=facilities.landfill_unload_minutes,
+                landfill_lon=landfill_lon,
+                landfill_lat=landfill_lat,
+            )
             total_seconds = int(route.estimated_duration_seconds or 0)
             if total_seconds <= 0 and stops:
                 total_seconds = len(stops) * per_stop * 60
@@ -323,6 +332,7 @@ def map_operational_context(
 
     metrics = _build_map_metrics(db, active_routes=len(routes.get("features", [])))
     activities = _build_live_activities(db, fleet)
+    facilities = resolve_operational_facilities(db)
 
     return {
         "vehicles": fleet,
@@ -331,4 +341,13 @@ def map_operational_context(
         "mapMetrics": metrics,
         "liveActivities": activities,
         "updatedAt": datetime.now(timezone.utc).isoformat(),
+        "facilities": {
+            "depotLat": facilities.depot[1],
+            "depotLon": facilities.depot[0],
+            "landfillLat": facilities.landfill[1],
+            "landfillLon": facilities.landfill[0],
+            "landfillUnloadMinutes": facilities.landfill_unload_minutes,
+            "workStart": facilities.work_start,
+            "workEnd": facilities.work_end,
+        },
     }

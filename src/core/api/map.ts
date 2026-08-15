@@ -9,6 +9,7 @@ import {
 import { mapGisMetrics, mapVehicles } from '../../data/mock/mapGis';
 import { apiGet, withMockFallback } from './client';
 import type { MonitoringStatus } from './monitoring';
+import { DEFAULT_MAP_FACILITIES } from '../utils/landfillUx';
 
 export const MAP_CONTEXT_POLL_MS = 20_000;
 
@@ -38,6 +39,7 @@ function buildMockMapContext(): MapOperationalContext {
     mapMetrics: mapGisMetrics,
     liveActivities,
     updatedAt: new Date().toISOString(),
+    facilities: DEFAULT_MAP_FACILITIES,
   };
 }
 
@@ -69,6 +71,7 @@ export function mapContextFromMonitoring(status: MonitoringStatus): MapOperation
     mapMetrics: status.mapMetrics ?? mapGisMetrics,
     liveActivities: status.liveActivities ?? liveActivities,
     updatedAt: status.updatedAt ?? new Date().toISOString(),
+    facilities: status.facilities ?? DEFAULT_MAP_FACILITIES,
   };
 }
 

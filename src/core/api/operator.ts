@@ -11,6 +11,7 @@ export interface OperatorRouteStop {
   status: OperatorStopStatus;
   collectionPointId: number | null;
   code: string;
+  stopType?: 'collection' | 'landfill';
   sectorName?: string | null;
   address: string;
   notes?: string | null;
@@ -37,6 +38,7 @@ export interface OperatorRouteSnapshot {
   remainingDistanceKm: number | null;
   nextStop: OperatorRouteStop | null;
   stops: OperatorRouteStop[];
+  shiftUtilizationPct?: number | null;
 }
 
 function isDemoOperatorClosedDay(): boolean {
@@ -140,4 +142,9 @@ export function operatorStopStatusVariant(
     default:
       return 'default';
   }
+}
+
+export function isOperatorLandfillStop(stop: Pick<OperatorRouteStop, 'code' | 'stopType'>): boolean {
+  if (stop.stopType === 'landfill') return true;
+  return stop.code.toUpperCase() === 'VERTEDERO';
 }

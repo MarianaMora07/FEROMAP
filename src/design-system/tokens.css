@@ -347,3 +347,42 @@ html.dark .route-playback-stop-marker__dot {
 html.dark .route-playback-stop-marker--next .route-playback-stop-marker__dot {
   color: #60a5fa;
 }
+
+.route-playback-stop-marker--landfill .route-playback-stop-marker__dot {
+  background: #f5f5f4;
+  border-color: #78716c !important;
+  color: #44403c;
+  width: 24px;
+  height: 24px;
+  font-size: 12px;
+}
+
+.landfill-map-marker__pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9999px;
+  border: 2px solid #fff;
+  background: #78716c;
+  color: #fff;
+  font-size: 16px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
+  cursor: grab;
+}
+
+.route-landfill-stop-marker__dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  border: 2px solid #78716c;
+  background: #f5f5f4;
+  color: #44403c;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}

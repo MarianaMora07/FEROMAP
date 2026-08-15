@@ -7,6 +7,7 @@ export interface RoutePlaybackStop {
   lat: number;
   code: string;
   serviceMinutes: number;
+  stopType?: 'collection' | 'landfill';
 }
 
 /**

@@ -7,6 +7,8 @@ import {
   updateAdminSettings,
   type OperationalSettings,
 } from '../../core/api/admin';
+import { DEFAULT_OPERATIONAL_FACILITIES } from '../../core/types/operationalSettings';
+import { LandfillPinMap } from './LandfillPinMap';
 import { logout } from '../../core/stores/authStore';
 import {
   dateFormatOptions,
@@ -238,16 +240,70 @@ export function AdminOperationalSettings(props: { onFlash: (message: string) => 
               >
                 <For each={fillThresholdOptions}>{(o) => <option value={o.value}>{o.label}</option>}</For>
               </SelectField>
+            </div>
+          </Card>
+
+          <Card class="space-y-4 p-4">
+            <h3 class="font-heading text-base font-semibold text-text-primary dark:text-white">
+              Instalaciones operativas
+            </h3>
+            <p class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+              Coordenadas demo — actualizar con ubicación real del relleno sanitario antes de operar en campo.
+            </p>
+            <LandfillPinMap
+              lat={s().landfillLat ?? DEFAULT_OPERATIONAL_FACILITIES.landfillLat}
+              lon={s().landfillLon ?? DEFAULT_OPERATIONAL_FACILITIES.landfillLon}
+              onCoordsChange={({ lat, lon }) => patch({ landfillLat: lat, landfillLon: lon })}
+            />
+            <div class="grid gap-4 sm:grid-cols-2">
+              <TextField
+                label="Depósito — latitud"
+                type="number"
+                step="any"
+                value={String(s().depotLat ?? DEFAULT_OPERATIONAL_FACILITIES.depotLat)}
+                readOnly
+                class="opacity-80"
+              />
+              <TextField
+                label="Depósito — longitud"
+                type="number"
+                step="any"
+                value={String(s().depotLon ?? DEFAULT_OPERATIONAL_FACILITIES.depotLon)}
+                readOnly
+                class="opacity-80"
+              />
+              <TextField
+                label="Vertedero — latitud"
+                type="number"
+                step="any"
+                value={String(s().landfillLat ?? DEFAULT_OPERATIONAL_FACILITIES.landfillLat)}
+                onInput={(e) => patch({ landfillLat: Number(e.currentTarget.value) })}
+              />
+              <TextField
+                label="Vertedero — longitud"
+                type="number"
+                step="any"
+                value={String(s().landfillLon ?? DEFAULT_OPERATIONAL_FACILITIES.landfillLon)}
+                onInput={(e) => patch({ landfillLon: Number(e.currentTarget.value) })}
+              />
+              <TextField
+                label="Tiempo de descarga (min)"
+                type="number"
+                min="1"
+                max="120"
+                value={String(s().landfillUnloadMinutes ?? DEFAULT_OPERATIONAL_FACILITIES.landfillUnloadMinutes)}
+                onInput={(e) => patch({ landfillUnloadMinutes: Number(e.currentTarget.value) })}
+              />
               <TextField
                 label="Inicio jornada"
                 type="time"
-                value={s().workStart}
+                value={s().workStart ?? DEFAULT_OPERATIONAL_FACILITIES.workStart}
                 onInput={(e) => patch({ workStart: e.currentTarget.value })}
               />
               <TextField
                 label="Fin jornada"
                 type="time"
-                value={s().workEnd}
+                value={s().workEnd ?? DEFAULT_OPERATIONAL_FACILITIES.workEnd}
                 onInput={(e) => patch({ workEnd: e.currentTarget.value })}
               />
             </div>
