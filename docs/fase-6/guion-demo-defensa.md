@@ -26,9 +26,11 @@ No hace falta explicar “dos pantallas parecidas”: los banners y el menú ya 
 | **4:00–4:30** | Paso 2 (opcional) | Pulsar **Cancelar ejecución** o **Esc** | «El usuario puede interrumpir; el sistema confirma y no guarda un resultado a medias.» (solo si quieres demostrar cancelación; luego re-ejecutar). |
 | **4:30–5:30** | Paso 3 | KPIs comparativos, **desglose Viaje · Paradas · Total**, mapa | «El algoritmo minimiza **kilómetros**; la **duración** suma viaje más tiempo en paradas según la dotación. Aquí veo el desglose: viaje, paradas con dotación 6/6, y total.» |
 | **5:30–6:15** | Paso 3 acciones | **Ver en analítica** (deep link con `simulationId`) | «Desde el resultado sigo el análisis sin perder el contexto de esta corrida.» |
-| **6:15–6:45** | `/simulation?view=history` | Pestaña Historial — una corrida anterior | «Historial de escenarios de tesis; no es el despacho operativo del día.» |
-| **6:45–7:15** | `/optimization` (opcional) | Banner + **Generar ruta operativa** | «Aquí es operación diaria; la evaluación de escenarios está en Simulación.» |
-| **7:15–8:00** | `/reports` | Descargar CSV o PDF | Evidencia exportable para el capítulo de resultados |
+| **6:15–6:30** | Paso 3 (opcional) | **Ver en plan del día** (si hay plan semanal aprobado) | «El escenario de tesis no se mezcla con operación; este enlace solo aparece cuando la semana está aprobada y lleva al plan administrativo.» |
+| **6:30–7:00** | `/planning` | Stepper **Recorrido operativo del día** | «El hub encadena semana → optimizar → simular → despachar → monitorear sin que yo recuerde URLs.» |
+| **7:00–7:30** | `/optimization?playback=1` | Banner experiencia del día + **Simular recorrido** | «Mismo día: rutas generadas y replay animado antes de despachar.» |
+| **7:30–8:00** | `/monitoring?dailyPlanId=…&playback=1` | **Reproducir ruta** en monitoreo | «Tras despachar, el replay operativo cierra la narrativa del camión en campo.» |
+| **(alternativa)** | `/simulation?view=history` | Pestaña Historial — una corrida anterior | «Historial de escenarios de tesis; no es el despacho operativo del día.» |
 
 **Duración total:** ~7–8 min (se puede acortar omitiendo cancelación u Optimización).
 

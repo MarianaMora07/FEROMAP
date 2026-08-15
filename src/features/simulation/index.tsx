@@ -1,5 +1,5 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
-import { useSearchParams } from '@solidjs/router';
+import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { A, useSearchParams } from '@solidjs/router';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -26,6 +26,9 @@ import { countSimulationReadyVehicles, fetchVehicles } from '../../core/api/vehi
 import { canOptimize } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
 import { fetchMonitoringStatus } from '../../core/api/monitoring';
+import { fetchCurrentWeeklyPlan } from '../../core/api/planning';
+import { optimizationHref } from '../../core/planning/operationalLinks';
+import { todayIso } from '../../core/planning/planningUx';
 import {
   applySimulationScenario,
   cancelOptimization,
@@ -67,6 +70,7 @@ import { PostSimulationActions } from './PostSimulationActions';
 import { SimulationHistoryPanel } from './SimulationHistoryPanel';
 import { WeeklyPlanTab } from './WeeklyPlanTab';
 import { PlanningGlossaryStrip } from '../planning/PlanningGlossaryStrip';
+import { PlanningContextualCta } from '../planning/PlanningContextualCta';
 import { ThesisVsOperationsNotice } from '../planning/ThesisVsOperationsNotice';
 import { WizardStepNav } from './WizardStepNav';
 import { CancelExecutionConfirmDialog } from './CancelExecutionConfirmDialog';
@@ -271,6 +275,9 @@ export default function SimulationPage() {
   const [runNotice, setRunNotice] = createSignal<string | null>(null);
   const [incidentsRefreshKey, setIncidentsRefreshKey] = createSignal(0);
   const [cancelConfirmOpen, setCancelConfirmOpen] = createSignal(false);
+  const [weeklyPlanBridge] = createResource(() =>
+    fetchCurrentWeeklyPlan().catch(() => null),
+  );
   const [readiness, setReadiness] = createSignal<SimulationReadiness | undefined>();
   const [loadingReadiness, setLoadingReadiness] = createSignal(true);
   const [monitoringData, setMonitoringData] = createSignal<Awaited<ReturnType<typeof fetchMonitoringStatus>> | undefined>();
@@ -871,6 +878,14 @@ export default function SimulationPage() {
               simulationId={simulationState.lastSimulationId}
               onNewSimulation={handleNewSimulation}
             />
+            <Show when={weeklyPlanBridge()?.status === 'approved'}>
+              <PlanningContextualCta
+                tone="info"
+                message="Plan semanal aprobado — lleva el escenario al plan operativo del día."
+                href={optimizationHref({ date: todayIso() })}
+                linkLabel="Ver en plan del día"
+              />
+            </Show>
             <Show when={workdayWarning()}>
               {(message) => (
                 <div class="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">

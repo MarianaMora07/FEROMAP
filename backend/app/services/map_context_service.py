@@ -14,6 +14,11 @@ from app.services.geo_service import collection_points_geojson, fill_level_pct
 from app.services.operations_service import live_fleet_view
 from app.services.planning_service import get_active_daily_plan
 from app.services.route_geometry_service import build_route_linestring_cached
+from app.services.route_playback_service import (
+    playback_stops_for_route_feature,
+    route_start_time,
+    service_minutes_for_plan,
+)
 
 ROUTE_COLORS = ("#34D634", "#1143F3", "#7c3aed", "#f59e0b", "#ef4444", "#06b6d4")
 PLANNED_ROUTE_STATUSES = ("pending", "in_progress")
@@ -58,6 +63,9 @@ def planned_routes_geojson(
     driver_id: int | None = None,
     daily_plan_id: int | None = None,
     scoped_to_daily_plan: bool = False,
+    include_playback_stops: bool = False,
+    service_minutes_per_stop: int | None = None,
+    daily_plan: DailyPlan | None = None,
 ) -> dict[str, Any]:
     if scoped_to_daily_plan and daily_plan_id is None:
         return {"type": "FeatureCollection", "features": []}
@@ -92,20 +100,34 @@ def planned_routes_geojson(
         code = vehicle.code if vehicle else f"R-{route.id}"
         waypoints_total = sum(1 for wp in waypoints if wp.collection_point is not None)
         waypoints_done = sum(1 for wp in waypoints if wp.status == "completed")
+        properties: dict[str, Any] = {
+            "id": f"route-{route.id}",
+            "routeId": route.id,
+            "label": f"Ruta {code}",
+            "color": ROUTE_COLORS[index % len(ROUTE_COLORS)],
+            "vehicleId": code,
+            "vehicleDbId": getattr(vehicle, "id", None) if vehicle else None,
+            "status": route.status,
+            "routeKind": route.route_kind,
+            "waypointsTotal": waypoints_total,
+            "waypointsDone": waypoints_done,
+        }
+        if include_playback_stops:
+            per_stop = service_minutes_per_stop or _service_minutes_per_stop(operators_shortage=None)
+            stops = playback_stops_for_route_feature(route, service_minutes=per_stop)
+            total_seconds = int(route.estimated_duration_seconds or 0)
+            if total_seconds <= 0 and stops:
+                total_seconds = len(stops) * per_stop * 60
+            properties["stops"] = stops
+            properties["totalDurationMinutes"] = max(1, int(round(total_seconds / 60)))
+            if daily_plan is not None:
+                start_time = route_start_time(daily_plan, waypoints)
+                if start_time is not None:
+                    properties["startTime"] = start_time.isoformat()
         features.append(
             {
                 "type": "Feature",
-                "properties": {
-                    "id": f"route-{route.id}",
-                    "routeId": route.id,
-                    "label": f"Ruta {code}",
-                    "color": ROUTE_COLORS[index % len(ROUTE_COLORS)],
-                    "vehicleId": code,
-                    "status": route.status,
-                    "routeKind": route.route_kind,
-                    "waypointsTotal": waypoints_total,
-                    "waypointsDone": waypoints_done,
-                },
+                "properties": properties,
                 "geometry": {"type": "LineString", "coordinates": coordinates},
             }
         )
@@ -261,15 +283,25 @@ def map_operational_context(
     sector: str | None = None,
     bbox: str | None = None,
     driver_id: int | None = None,
+    daily_plan_id: int | None = None,
+    playback_details: bool = False,
 ) -> dict[str, Any]:
     bbox_tuple = _parse_bbox(bbox)
     fleet = _filter_fleet(live_fleet_view(db, driver_id=driver_id), bbox=bbox_tuple)
     active_plan = get_active_daily_plan(db)
+    resolved_plan_id = daily_plan_id if daily_plan_id is not None else (active_plan.id if active_plan else None)
+    resolved_plan = db.get(DailyPlan, resolved_plan_id) if resolved_plan_id is not None else None
+    service_minutes: int | None = None
+    if playback_details and resolved_plan is not None:
+        service_minutes = service_minutes_for_plan(db, resolved_plan)
     routes = planned_routes_geojson(
         db,
         driver_id=driver_id,
-        daily_plan_id=active_plan.id if active_plan else None,
-        scoped_to_daily_plan=True,
+        daily_plan_id=resolved_plan_id,
+        scoped_to_daily_plan=daily_plan_id is None,
+        include_playback_stops=playback_details,
+        service_minutes_per_stop=service_minutes,
+        daily_plan=resolved_plan,
     )
 
     if bbox_tuple is not None:

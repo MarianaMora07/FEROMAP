@@ -46,6 +46,8 @@ function buildQuery(filters?: MapContextFilters): string {
   const params = new URLSearchParams();
   if (filters.sector) params.set('sector', filters.sector);
   if (filters.bbox) params.set('bbox', filters.bbox);
+  if (filters.dailyPlanId != null) params.set('dailyPlanId', String(filters.dailyPlanId));
+  if (filters.playbackDetails) params.set('playbackDetails', 'true');
   const query = params.toString();
   return query ? `?${query}` : '';
 }

@@ -40,6 +40,7 @@ from app.services.admin_service import ensure_default_settings
 from app.services.alert_service import seed_alerts_from_json
 from app.services.planning_service import (
     seed_daily_plan_demo,
+    seed_optimized_daily_playback_demo,
     seed_pending_visits_demo,
     seed_visit_schedules,
     seed_weekly_plan_demo,
@@ -412,6 +413,16 @@ def seed_into_session(session: Session) -> dict[str, Any]:
                 "status": "draft",
             },
         )
+        first_simulation = session.scalar(select(Simulation).order_by(Simulation.id).limit(1))
+        if first_simulation is not None:
+            seed_optimized_daily_playback_demo(
+                session,
+                operation_date=date.today(),
+                simulation_id=first_simulation.id,
+                vehicles=list(vehicle_by_code.values()),
+                drivers=list(driver_by_name.values()),
+                collection_points=collection_points,
+            )
     except FileNotFoundError:
         pass
 

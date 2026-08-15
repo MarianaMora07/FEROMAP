@@ -46,6 +46,7 @@ import { appState } from '../../core/stores/appStore';
 import { canSimulateFleetAdvance, isConductor, isOperationalSupervisor } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
 import { optimizationHref } from '../../core/planning/operationalLinks';
+import { parsePlaybackQueryParam } from '../../core/planning/operationalFlowUx';
 import { BreakdownReporter, ContingencyResultBanner } from '../contingency/BreakdownReporter';
 import { OperatorContingencyBanner } from '../contingency/OperatorContingencyBanner';
 import { OperatorMyIncidents } from '../contingency/OperatorMyIncidents';
@@ -62,6 +63,23 @@ import {
   OperatorFieldBottomPanel,
   OperatorNextStopCard,
 } from './OperatorFieldPanel';
+import {
+  MonitoringPlaybackPanel,
+  MonitoringPlaybackToggle,
+} from './MonitoringPlaybackPanel';
+import { fetchDailyRoutePlayback } from '../../core/api/routePlayback';
+import { useRoutePlayback } from '../../core/route-playback/useRoutePlayback';
+import { RoutePlaybackLayer } from '../route-playback/RoutePlaybackLayer';
+import { RoutePlaybackLegend } from '../route-playback/RoutePlaybackLegend';
+import {
+  canShowMonitoringRoutePlayback,
+  filterPlaybackRoutesForMonitoring,
+  initialCompletedStopsByRoute,
+  mergeRouteProgressWithPlayback,
+  monitoringPlaybackInitialProgress,
+  type MonitoringPlaybackMode,
+} from '../../core/monitoring/monitoringPlaybackUx';
+import { mockDailyRoutePlayback } from '../../data/mock/routePlayback';
 import { bindMapTheme, mapStyleForTheme } from '../../core/utils/mapStyle';
 import {
   createOperationalMapOptions,
@@ -176,6 +194,10 @@ export default function MonitoringPage() {
     fetchOperatorRouteSnapshot(date),
   );
   const [advancing, setAdvancing] = createSignal(false);
+  const [playbackOpen, setPlaybackOpen] = createSignal(false);
+  const [playbackMode, setPlaybackMode] = createSignal<MonitoringPlaybackMode>('visual');
+  const [mapInstance, setMapInstance] = createSignal<MapLibreMap | undefined>();
+  const hybridCompletedBaseline = new Map<number, number>();
   const fieldMode = () => isConductor(authUser()?.role);
   const monitoringKpis = () => monitoringData()?.kpis ?? [];
   const liveFleet = () => monitoringData()?.liveFleet ?? [];
@@ -209,6 +231,101 @@ export default function MonitoringPage() {
   const operatorVehicle = createMemo(() => operatorFleet()[0] ?? null);
   const mapFleet = createMemo(() => (fieldMode() ? operatorFleet() : liveFleet()));
 
+  const playbackPlanId = () => dailyPlan()?.id ?? dailyPlanIdParam() ?? 0;
+  const [playbackPayload] = createResource(
+    () => (playbackOpen() ? playbackPlanId() : null),
+    async (dailyPlanId) => {
+      if (!dailyPlanId) return mockDailyRoutePlayback(0);
+      return fetchDailyRoutePlayback(dailyPlanId);
+    },
+  );
+  const playbackRoutes = createMemo(() =>
+    filterPlaybackRoutesForMonitoring(
+      playbackPayload()?.routes ?? [],
+      fieldMode(),
+      operatorVehicle(),
+    ),
+  );
+  const playback = useRoutePlayback(() => playbackRoutes(), { pauseAtStops: true });
+  const displayRouteProgress = createMemo(() =>
+    mergeRouteProgressWithPlayback(
+      routeProgress(),
+      playbackRoutes(),
+      playback.routeStates(),
+      playbackOpen(),
+    ),
+  );
+  const canOpenPlayback = createMemo(() =>
+    canShowMonitoringRoutePlayback({
+      fieldMode: fieldMode(),
+      inRouteCount: monitoringData()?.fleetCounts.inRoute ?? 0,
+      operatorVehicle: operatorVehicle(),
+      routeSnapshot: routeSnapshot(),
+    }),
+  );
+
+  const initialPlaybackProgress = () =>
+    monitoringPlaybackInitialProgress({
+      fieldMode: fieldMode(),
+      routeSnapshot: routeSnapshot(),
+      routeProgress: routeProgress(),
+      operatorVehicle: operatorVehicle(),
+    });
+
+  const handleOpenPlayback = () => {
+    setPlaybackOpen(true);
+  };
+
+  const handleClosePlayback = () => {
+    playback.pause();
+    playback.setProgress(initialPlaybackProgress());
+    setPlaybackOpen(false);
+    if (mapReady()) syncOperationalMap();
+  };
+
+  let playbackSeeded = false;
+  let playbackDeepLinkHandled = false;
+
+  createEffect(() => {
+    if (!parsePlaybackQueryParam(searchParams.playback)) return;
+    if (playbackDeepLinkHandled || playbackOpen()) return;
+    if (!canOpenPlayback()) return;
+    playbackDeepLinkHandled = true;
+    setPlaybackOpen(true);
+  });
+
+  createEffect(() => {
+    if (!playbackOpen()) {
+      playbackSeeded = false;
+      return;
+    }
+    if (playbackSeeded || playbackRoutes().length === 0) return;
+    const initial = initialPlaybackProgress();
+    playback.setProgress(initial);
+    const baseline = initialCompletedStopsByRoute(playbackRoutes(), initial);
+    hybridCompletedBaseline.clear();
+    baseline.forEach((value, key) => hybridCompletedBaseline.set(key, value));
+    playbackSeeded = true;
+  });
+
+  createEffect(() => {
+    if (!playbackOpen() || playbackMode() !== 'hybrid') return;
+    for (const state of playback.routeStates()) {
+      const baseline = hybridCompletedBaseline.get(state.routeId) ?? 0;
+      if (state.completedStops <= baseline) continue;
+      hybridCompletedBaseline.set(state.routeId, state.completedStops);
+      void (async () => {
+        try {
+          await advanceRouteById(state.routeId);
+          await refetch();
+          await refetchRouteSnapshot();
+        } catch {
+          // Mantener animación aunque falle el avance puntual.
+        }
+      })();
+    }
+  });
+
   const filteredFleet = createMemo(() => {
     const q = search().trim().toLowerCase();
     const status = statusFilter();
@@ -229,28 +346,43 @@ export default function MonitoringPage() {
 
     ensureOperationalRouteLayer(map, operationalRoutes(), 'live-routes', { splitByStatus: true });
 
+    if (playbackOpen() && map.getLayer('live-routes-active')) {
+      map.setPaintProperty('live-routes-active', 'line-opacity', 0.2);
+      map.setPaintProperty('live-routes-pending', 'line-opacity', 0.15);
+    } else if (map.getLayer('live-routes-active')) {
+      map.setPaintProperty('live-routes-active', 'line-opacity', 0.95);
+      map.setPaintProperty('live-routes-pending', 'line-opacity', 0.75);
+    }
+
     syncContainerMarkers(map, operationalContainers(), binMarkers, {
       createMarkerElement: (color) => createPin(color, trashSvg('#fff'), 24),
     });
 
-    syncFleetMarkers(map, mapFleet(), markersById, {
-      createMarkerElement: (vehicle) => {
-        const el = createPin(vehicle.color, truckSvg('#fff'), 30);
-        el.addEventListener('click', (e) => {
-          e.stopPropagation();
-          setSelectedId(vehicle.id);
-        });
-        return el;
-      },
-      buildPopupHtml: buildVehiclePopup,
-    });
+    if (playbackOpen()) {
+      markersById.forEach((marker) => marker.remove());
+      markersById.clear();
+    } else {
+      syncFleetMarkers(map, mapFleet(), markersById, {
+        createMarkerElement: (vehicle) => {
+          const el = createPin(vehicle.color, truckSvg('#fff'), 30);
+          el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            setSelectedId(vehicle.id);
+          });
+          return el;
+        },
+        buildPopupHtml: buildVehiclePopup,
+      });
+    }
 
     const first = mapFleet()[0];
-    if (first && (!selectedId() || fieldMode())) setSelectedId(first.id);
-    fitMapToOperationalData(map, {
-      vehicles: mapFleet(),
-      routes: operationalRoutes(),
-    });
+    if (first && (!selectedId() || fieldMode()) && !playbackOpen()) setSelectedId(first.id);
+    if (!playbackOpen()) {
+      fitMapToOperationalData(map, {
+        vehicles: mapFleet(),
+        routes: operationalRoutes(),
+      });
+    }
   };
 
   const centerOnVehicle = (id: string) => {
@@ -319,6 +451,7 @@ export default function MonitoringPage() {
       }),
     );
     mapRef.current = map;
+    setMapInstance(map);
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
 
     map.on('load', () => {
@@ -352,6 +485,7 @@ export default function MonitoringPage() {
       binMarkers.forEach((m) => m.remove());
       mapRef.current?.remove();
       mapRef.current = undefined;
+      setMapInstance(undefined);
     });
   });
 
@@ -363,6 +497,7 @@ export default function MonitoringPage() {
   createEffect(() => {
     monitoringData();
     routeSnapshot();
+    playbackOpen();
     if (mapReady()) syncOperationalMap();
   });
 
@@ -509,38 +644,64 @@ export default function MonitoringPage() {
               onComplete={() => void refetch()}
             />
           </Show>
+          <MonitoringPlaybackToggle
+            visible={canOpenPlayback()}
+            open={playbackOpen()}
+            fieldMode={fieldMode()}
+            onOpen={handleOpenPlayback}
+          />
           <Show
             when={canSimulateFleetAdvance(authUser()?.role)}
             fallback={
               <Show when={isOperationalSupervisor(authUser()?.role)}>
                 <p class="max-w-xs text-xs text-text-muted">
-                  El avance simulado de flota es solo para conductores en campo.
+                  El avance operativo discreto de flota es solo para conductores en campo.
                 </p>
               </Show>
             }
           >
             <Button
-              variant="primary"
+              variant="outline"
               size={fieldMode() ? 'lg' : 'sm'}
               class={`gap-2 ${fieldMode() ? 'min-h-12' : ''}`}
               icon={<FastForward size={fieldMode() ? 18 : 16} />}
               disabled={
                 advancing() ||
+                playbackOpen() ||
                 (fieldMode()
                   ? operatorVehicle()?.routeId == null && routeSnapshot()?.routeId == null
                   : !monitoringData()?.fleetCounts.inRoute)
               }
               onClick={() => void handleAdvance()}
+              title="Avance operativo simulado (salta parada a parada en BD)"
             >
               {advancing()
                 ? 'Avanzando…'
                 : fieldMode()
-                  ? 'Marcar avance de ruta (demo)'
-                  : 'Simular avance de flota'}
+                  ? 'Avance operativo (demo)'
+                  : 'Avance operativo flota'}
             </Button>
           </Show>
         </div>
       </div>
+
+      <MonitoringPlaybackPanel
+        open={playbackOpen()}
+        mode={playbackMode()}
+        onModeChange={setPlaybackMode}
+        onClose={handleClosePlayback}
+        routes={playbackRoutes()}
+        playback={playback}
+        fieldMode={fieldMode()}
+        loading={playbackPayload.loading}
+        error={
+          playbackPayload.error
+            ? playbackPayload.error instanceof Error
+              ? playbackPayload.error.message
+              : 'No se pudo cargar la reproducción'
+            : null
+        }
+      />
 
       <Show when={fieldMode()}>
         <OperatorNextStopCard
@@ -628,6 +789,22 @@ export default function MonitoringPage() {
             }`}
           >
             <div ref={mapContainer} class="absolute inset-0 h-full w-full" />
+
+            <Show when={playbackOpen()}>
+              <RoutePlaybackLegend class="absolute bottom-16 left-3 z-10 max-w-[220px]" />
+              <RoutePlaybackLayer
+                map={mapInstance}
+                routes={() => playbackRoutes()}
+                playback={playback}
+                showControls={false}
+              />
+            </Show>
+
+            <Show when={playbackOpen()}>
+              <div class="absolute top-3 left-3 z-10 rounded-md border border-fero-blue/40 bg-elevated/95 px-2.5 py-1.5 text-xs font-semibold text-fero-blue shadow-sm backdrop-blur-sm">
+                Reproducción {playbackMode() === 'visual' ? 'solo visual' : 'híbrida'}
+              </div>
+            </Show>
 
             <Show when={legendOpen()}>
               <div class="absolute top-3 left-3 z-10 rounded-md border border-default bg-elevated/95 p-2.5 text-xs shadow-md backdrop-blur-sm">
@@ -775,7 +952,7 @@ export default function MonitoringPage() {
         <Card>
           <CardHeader title="Progreso de recolección por ruta" />
           <ul class="space-y-3.5">
-            <For each={routeProgress()}>
+            <For each={displayRouteProgress()}>
               {(r) => (
                 <li>
                   <div class="mb-1 flex items-center justify-between gap-2 text-sm">
