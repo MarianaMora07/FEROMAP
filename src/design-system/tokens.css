@@ -48,6 +48,9 @@
   --fero-nav-section: rgba(255, 255, 255, 0.35);
   --fero-sidebar-border: transparent;
   --fero-sidebar-divider: rgba(255, 255, 255, 0.1);
+  --fero-surface-hover: #f8fafc;
+  --fero-surface-active: #f1f5f9;
+  --fero-border-light: #f1f5f9;
   --fero-glass-bg: rgba(255, 255, 255, 0.8);
   --fero-glass-border: rgba(255, 255, 255, 0.2);
 }
@@ -69,6 +72,9 @@ html.dark {
   --fero-nav-section: #475569;
   --fero-sidebar-border: #334155;
   --fero-sidebar-divider: #334155;
+  --fero-surface-hover: #334155;
+  --fero-surface-active: #475569;
+  --fero-border-light: #334155;
   --fero-glass-bg: rgba(15, 23, 42, 0.8);
   --fero-glass-border: rgba(51, 65, 85, 0.5);
 }
@@ -116,10 +122,10 @@ html.dark {
   --color-important: #34d634;
   --color-info: #1143f3;
   --color-surface: var(--fero-bg-elevated);
-  --color-surface-hover: #f8fafc;
-  --color-surface-active: #f1f5f9;
+  --color-surface-hover: var(--fero-surface-hover);
+  --color-surface-active: var(--fero-surface-active);
   --color-border: var(--fero-border-default);
-  --color-border-light: #f1f5f9;
+  --color-border-light: var(--fero-border-light);
   --color-text-primary: var(--fero-text-primary);
   --color-text-secondary: var(--fero-text-secondary);
   --color-text-muted: var(--fero-text-muted);
@@ -149,12 +155,6 @@ html.dark {
 
   --sidebar-width: 260px;
   --header-height: 64px;
-}
-
-html.dark {
-  --color-surface-hover: #1e293b;
-  --color-surface-active: #334155;
-  --color-border-light: #334155;
 }
 
 /* Base Styles */

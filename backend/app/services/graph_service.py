@@ -201,21 +201,44 @@ def nearest_node(graph: nx.MultiDiGraph, lon: float, lat: float) -> int:
     return ox.distance.nearest_nodes(graph, lon, lat)
 
 
+def weakly_connected_component_nodes(graph: nx.MultiDiGraph, node: int) -> set[int]:
+    for component in nx.weakly_connected_components(graph):
+        if node in component:
+            return set(component)
+    return {node}
+
+
+def nearest_node_in_component(
+    graph: nx.MultiDiGraph,
+    lon: float,
+    lat: float,
+    component: set[int],
+) -> int:
+    """Nodo más cercano restringido a un componente conexo (evita saltos entre islas del grafo)."""
+    if not component:
+        return nearest_node(graph, lon, lat)
+    if len(component) == graph.number_of_nodes():
+        return nearest_node(graph, lon, lat)
+    subgraph = graph.subgraph(component)
+    return ox.distance.nearest_nodes(subgraph, lon, lat)
+
+
 def path_metrics_between_nodes(
     graph: nx.MultiDiGraph,
     orig: int,
     dest: int,
 ) -> tuple[float, float]:
     """Distancia (m) y tiempo (s) por camino mínimo en el grafo vial."""
-    try:
-        path = nx.shortest_path(graph, orig, dest, weight="weight")
-    except nx.NetworkXNoPath:
+    path = shortest_path_nodes(graph, orig, dest)
+    if len(path) < 2 or path == [orig]:
+        if orig == dest:
+            return 0.0, 0.0
         return float("inf"), float("inf")
 
     dist_m = 0.0
     time_s = 0.0
     for u, v in zip(path[:-1], path[1:]):
-        edge_data = graph.get_edge_data(u, v)
+        edge_data = graph.get_edge_data(u, v) or graph.get_edge_data(v, u)
         if not edge_data:
             continue
         edge = min(edge_data.values(), key=lambda d: d.get("weight", float("inf")))
@@ -231,40 +254,69 @@ def shortest_path_cost(graph_id: int, orig: int, dest: int) -> tuple[float, floa
     return path_metrics_between_nodes(graph, orig, dest)
 
 
+def _edge_geometry_coords(
+    graph: nx.MultiDiGraph,
+    u: int,
+    v: int,
+) -> list[list[float]] | None:
+    """Geometría de arista u→v; si solo existe v→u (sentido contrario), la invierte."""
+    forward = graph.get_edge_data(u, v)
+    if forward:
+        edge = min(forward.values(), key=lambda d: d.get("weight", float("inf")))
+        if edge.get("geometry") is not None:
+            return [list(c) for c in edge["geometry"].coords]
+        return [[graph.nodes[u]["x"], graph.nodes[u]["y"]], [graph.nodes[v]["x"], graph.nodes[v]["y"]]]
+
+    reverse = graph.get_edge_data(v, u)
+    if reverse:
+        edge = min(reverse.values(), key=lambda d: d.get("weight", float("inf")))
+        if edge.get("geometry") is not None:
+            return [list(c) for c in reversed(list(edge["geometry"].coords))]
+        return [[graph.nodes[u]["x"], graph.nodes[u]["y"]], [graph.nodes[v]["x"], graph.nodes[v]["y"]]]
+    return None
+
+
 def route_path_coordinates(graph: nx.MultiDiGraph, path_nodes: list[int]) -> list[list[float]]:
     """Convierte secuencia de nodos en coordenadas [lon, lat] siguiendo geometría vial."""
     coords: list[list[float]] = []
     for u, v in zip(path_nodes[:-1], path_nodes[1:]):
-        edge_data = graph.get_edge_data(u, v)
-        if not edge_data:
+        line_coords = _edge_geometry_coords(graph, u, v)
+        if not line_coords:
             continue
-        edge = min(edge_data.values(), key=lambda d: d.get("weight", float("inf")))
-        if edge.get("geometry") is not None:
-            line_coords = list(edge["geometry"].coords)
-            if coords and line_coords and line_coords[0] == tuple(coords[-1]):
-                line_coords = line_coords[1:]
-            coords.extend([list(c) for c in line_coords])
-        else:
-            coords.append([graph.nodes[u]["x"], graph.nodes[u]["y"]])
+        if coords and line_coords and line_coords[0] == coords[-1]:
+            line_coords = line_coords[1:]
+        coords.extend(line_coords)
+    if path_nodes and not coords:
+        first = path_nodes[0]
+        coords.append([graph.nodes[first]["x"], graph.nodes[first]["y"]])
     if path_nodes:
         last = path_nodes[-1]
         last_pt = [graph.nodes[last]["x"], graph.nodes[last]["y"]]
         if not coords or coords[-1] != last_pt:
-            coords.append(last_pt)
+            # Solo cierra al último nodo si ya hay tramo vial; evita saltos rectos huérfanos.
+            if coords:
+                coords.append(last_pt)
     return coords
 
 
 def shortest_path_nodes(graph: nx.MultiDiGraph, orig: int, dest: int) -> list[int]:
+    """Camino mínimo dirigido; si no hay, undirected. Nunca inventa un salto [orig, dest]."""
     if orig == dest:
         return [orig]
     try:
         return nx.shortest_path(graph, orig, dest, weight="weight")
     except (nx.NetworkXNoPath, nx.NodeNotFound):
-        return [orig, dest]
+        pass
+    try:
+        undirected = graph.to_undirected()
+        return nx.shortest_path(undirected, orig, dest, weight="length")
+    except (nx.NetworkXNoPath, nx.NodeNotFound, nx.NetworkXError):
+        logger.debug("Sin camino vial entre nodos %s → %s", orig, dest)
+        return [orig]
 
 
 def _edge_metrics(graph: nx.MultiDiGraph, u: int, v: int) -> tuple[float, float]:
-    edge_data = graph.get_edge_data(u, v)
+    edge_data = graph.get_edge_data(u, v) or graph.get_edge_data(v, u)
     if not edge_data:
         return 0.0, 0.0
     edge = min(edge_data.values(), key=lambda d: d.get("weight", float("inf")))
@@ -275,8 +327,14 @@ def build_tour_coordinates(graph: nx.MultiDiGraph, node_sequence: list[int]) -> 
     """Une coordenadas de segmentos entre nodos consecutivos de una ruta."""
     all_coords: list[list[float]] = []
     for orig, dest in zip(node_sequence[:-1], node_sequence[1:]):
+        if orig == dest:
+            continue
         segment_nodes = shortest_path_nodes(graph, orig, dest)
+        if len(segment_nodes) < 2:
+            continue
         segment_coords = route_path_coordinates(graph, segment_nodes)
+        if len(segment_coords) < 2:
+            continue
         if all_coords and segment_coords and segment_coords[0] == all_coords[-1]:
             segment_coords = segment_coords[1:]
         all_coords.extend(segment_coords)
