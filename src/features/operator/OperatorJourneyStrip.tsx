@@ -1,6 +1,7 @@
 import { Show } from 'solid-js';
 import { ProgressBar } from '../../design-system/components';
 import { PlanningStatusBadge } from '../planning/PlanningStatusBadge';
+import { formatNextStopLabel } from '../../core/utils/landfillUx';
 
 interface OperatorJourneyStripProps {
   operationDate: string;
@@ -10,9 +11,13 @@ interface OperatorJourneyStripProps {
   planStatus?: string | null;
   progress: number;
   nextPoint?: string | null;
+  nextStopType?: string | null;
+  shiftUtilizationPct?: number | null;
 }
 
 export function OperatorJourneyStrip(props: OperatorJourneyStripProps) {
+  const nextLabel = () => formatNextStopLabel(props.nextPoint, props.nextStopType);
+
   return (
     <div
       class="rounded-lg border border-default bg-elevated px-3 py-2.5"
@@ -42,15 +47,26 @@ export function OperatorJourneyStrip(props: OperatorJourneyStripProps) {
       <div class="mt-2 flex flex-wrap items-center gap-3">
         <div class="min-w-40 flex-1">
           <div class="mb-1 flex items-center justify-between text-xs text-text-muted">
-            <span>Avance</span>
+            <span>Avance de ruta</span>
             <span class="font-semibold text-text-primary dark:text-white">{props.progress}%</span>
           </div>
           <ProgressBar value={props.progress} color="green" size="sm" />
         </div>
+        <Show when={props.shiftUtilizationPct != null}>
+          <div class="min-w-36 flex-1">
+            <div class="mb-1 flex items-center justify-between text-xs text-text-muted">
+              <span>Jornada 06:00–18:00</span>
+              <span class="font-semibold text-text-primary dark:text-white">
+                {Math.round(props.shiftUtilizationPct!)}%
+              </span>
+            </div>
+            <ProgressBar value={props.shiftUtilizationPct!} color="blue" size="sm" />
+          </div>
+        </Show>
         <Show when={props.nextPoint}>
           <p class="text-xs text-text-secondary">
             Próxima parada:{' '}
-            <span class="font-semibold text-text-primary dark:text-white">{props.nextPoint}</span>
+            <span class="font-semibold text-text-primary dark:text-white">{nextLabel()}</span>
           </p>
         </Show>
       </div>

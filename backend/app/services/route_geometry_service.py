@@ -6,6 +6,7 @@ import logging
 from datetime import datetime
 from typing import Any, Sequence
 
+from app.domain.landfill_service_time import DEFAULT_LANDFILL_LAT, DEFAULT_LANDFILL_LON
 from app.services.graph_service import (
     DEPOT_LAT,
     DEPOT_LON,
@@ -25,6 +26,9 @@ def clear_route_geometry_cache() -> None:
 
 
 def _waypoint_lon_lat(waypoint: Any) -> tuple[float, float] | None:
+    waypoint_type = getattr(waypoint, "waypoint_type", None) or "collection"
+    if waypoint_type == "landfill":
+        return DEFAULT_LANDFILL_LON, DEFAULT_LANDFILL_LAT
     point = getattr(waypoint, "collection_point", None)
     if point is None:
         return None
@@ -107,11 +111,12 @@ def build_route_linestring(
 
 def _route_cache_key(route: Any, waypoints: Sequence[Any], *, include_depot: bool) -> tuple[Any, ...]:
     ordered = sorted(waypoints, key=lambda wp: getattr(wp, "sequence_order", 0))
-    coords_key = tuple(
-        coord
-        for wp in ordered
-        if (coord := _waypoint_lon_lat(wp)) is not None
-    )
+    coords_key: list[tuple[Any, ...]] = []
+    for wp in ordered:
+        waypoint_type = getattr(wp, "waypoint_type", None) or "collection"
+        coord = _waypoint_lon_lat(wp)
+        if coord is not None:
+            coords_key.append((waypoint_type, coord))
     updated_at = getattr(route, "updated_at", None)
     if isinstance(updated_at, datetime):
         updated_key = updated_at.isoformat()
@@ -121,7 +126,7 @@ def _route_cache_key(route: Any, waypoints: Sequence[Any], *, include_depot: boo
         int(getattr(route, "id", 0)),
         updated_key,
         getattr(route, "status", ""),
-        coords_key,
+        tuple(coords_key),
         include_depot,
     )
 

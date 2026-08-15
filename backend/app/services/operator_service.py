@@ -13,6 +13,7 @@ from app.db.models import CollectionPoint, DailyPlan, OptimizedRoute, RouteWaypo
 from app.services.collection_point_service import seed_meta_by_code
 from app.services.geo_service import fill_level_pct
 from app.services.operations_service import route_progress_percent
+from app.services.operational_facilities_service import resolve_operational_facilities
 
 
 def _empty_snapshot(operation_date: date | None = None) -> dict[str, Any]:
@@ -44,7 +45,40 @@ def _driver_filter_for_user(user: User) -> int | None:
     return None
 
 
-def _serialize_stop(waypoint: RouteWaypoint) -> dict[str, Any]:
+def _serialize_stop(
+    waypoint: RouteWaypoint,
+    *,
+    landfill_lon: float,
+    landfill_lat: float,
+    landfill_unload_minutes: int,
+) -> dict[str, Any]:
+    waypoint_type = getattr(waypoint, "waypoint_type", None) or "collection"
+    status_ui = waypoint.status
+    if status_ui == "completed":
+        status_ui = "visited"
+    elif status_ui == "skipped":
+        status_ui = "omitted"
+
+    if waypoint_type == "landfill":
+        return {
+            "waypointId": waypoint.id,
+            "sequenceOrder": waypoint.sequence_order,
+            "status": status_ui,
+            "collectionPointId": None,
+            "code": "VERTEDERO",
+            "stopType": "landfill",
+            "sectorName": "Instalación",
+            "address": "Relleno sanitario — descarga",
+            "notes": f"Descarga estimada: {landfill_unload_minutes} min",
+            "fillLevelPct": None,
+            "lng": landfill_lon,
+            "lat": landfill_lat,
+            "estimatedArrivalAt": waypoint.estimated_arrival_at.isoformat()
+            if waypoint.estimated_arrival_at
+            else None,
+            "actualArrivalAt": waypoint.actual_arrival_at.isoformat() if waypoint.actual_arrival_at else None,
+        }
+
     point = waypoint.collection_point
     meta = seed_meta_by_code().get(point.code, {}) if point else {}
     sector_name = point.sector.name if point and point.sector else meta.get("sectorName")
@@ -57,18 +91,13 @@ def _serialize_stop(waypoint: RouteWaypoint) -> dict[str, Any]:
     if meta.get("priority"):
         notes_parts.append(f"Prioridad {meta['priority']}")
 
-    status_ui = waypoint.status
-    if status_ui == "completed":
-        status_ui = "visited"
-    elif status_ui == "skipped":
-        status_ui = "omitted"
-
     return {
         "waypointId": waypoint.id,
         "sequenceOrder": waypoint.sequence_order,
         "status": status_ui,
         "collectionPointId": point.id if point else None,
         "code": point.code if point else "—",
+        "stopType": "collection",
         "sectorName": sector_name,
         "address": meta.get("address") or sector_name or "—",
         "notes": ". ".join(notes_parts) if notes_parts else None,
@@ -123,9 +152,25 @@ def _route_query(*, driver_id: int | None, statuses: tuple[str, ...]):
     return stmt
 
 
-def _serialize_route_snapshot(route: OptimizedRoute, operation_date: date | None = None) -> dict[str, Any]:
+def _serialize_route_snapshot(
+    route: OptimizedRoute,
+    operation_date: date | None = None,
+    *,
+    landfill_lon: float,
+    landfill_lat: float,
+    landfill_unload_minutes: int,
+    shift_budget_seconds: int,
+) -> dict[str, Any]:
     waypoints = sorted(route.waypoints, key=lambda wp: wp.sequence_order)
-    stops = [_serialize_stop(wp) for wp in waypoints]
+    stops = [
+        _serialize_stop(
+            wp,
+            landfill_lon=landfill_lon,
+            landfill_lat=landfill_lat,
+            landfill_unload_minutes=landfill_unload_minutes,
+        )
+        for wp in waypoints
+    ]
     progress = route_progress_percent(waypoints)
     completed = sum(1 for wp in waypoints if wp.status == "completed")
     next_stop = next((stop for stop in stops if stop["status"] == "pending"), None)
@@ -133,6 +178,12 @@ def _serialize_route_snapshot(route: OptimizedRoute, operation_date: date | None
     daily_plan = route.daily_plan
     vehicle = route.vehicle
     operation = daily_plan.operation_date if daily_plan else (operation_date or date.today())
+    shift_utilization_pct = None
+    if route.estimated_duration_seconds and shift_budget_seconds > 0:
+        shift_utilization_pct = min(
+            100.0,
+            round(float(route.estimated_duration_seconds) / shift_budget_seconds * 100, 1),
+        )
 
     return {
         "operationDate": operation.isoformat(),
@@ -152,6 +203,7 @@ def _serialize_route_snapshot(route: OptimizedRoute, operation_date: date | None
         "remainingDistanceKm": _remaining_distance_km(route, progress),
         "nextStop": next_stop,
         "stops": stops,
+        "shiftUtilizationPct": shift_utilization_pct,
     }
 
 
@@ -167,6 +219,8 @@ def operator_route_snapshot(
 
     today = operation_date or date.today()
     daily_plan = db.scalar(select(DailyPlan).where(DailyPlan.operation_date == today))
+    facilities = resolve_operational_facilities(db)
+    landfill_lon, landfill_lat = facilities.landfill
 
     route = db.scalars(_route_query(driver_id=driver_id, statuses=("in_progress",))).unique().first()
     if route is None and daily_plan is not None:
@@ -176,7 +230,14 @@ def operator_route_snapshot(
         route = db.scalars(stmt).unique().first()
 
     if route is not None:
-        return _serialize_route_snapshot(route, operation_date)
+        return _serialize_route_snapshot(
+            route,
+            operation_date,
+            landfill_lon=landfill_lon,
+            landfill_lat=landfill_lat,
+            landfill_unload_minutes=facilities.landfill_unload_minutes,
+            shift_budget_seconds=facilities.shift_budget_seconds,
+        )
 
     if daily_plan is None:
         return _empty_snapshot(today)

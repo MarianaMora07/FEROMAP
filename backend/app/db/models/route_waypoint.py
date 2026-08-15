@@ -13,7 +13,9 @@ class RouteWaypoint(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     route_id: Mapped[int] = mapped_column(ForeignKey("optimized_routes.id"), nullable=False)
-    collection_point_id: Mapped[int] = mapped_column(ForeignKey("collection_points.id"), nullable=False)
+    collection_point_id: Mapped[int | None] = mapped_column(ForeignKey("collection_points.id"), nullable=True)
+    waypoint_type: Mapped[str] = mapped_column(String(20), nullable=False, server_default="collection")
+    facility_code: Mapped[str | None] = mapped_column(String(30), nullable=True)
     sequence_order: Mapped[int] = mapped_column(nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="pending")
     estimated_arrival_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

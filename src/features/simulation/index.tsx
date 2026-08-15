@@ -64,6 +64,8 @@ import { ConfigurationSummaryPanel } from './ConfigurationSummaryPanel';
 import { ExecutiveSummary } from './ExecutiveSummary';
 import { DurationBreakdownPanel } from './DurationBreakdownPanel';
 import { EngineComputationPanel } from './EngineComputationPanel';
+import { LandfillKpiStrip } from '../landfill/LandfillKpiStrip';
+import { UncoveredPointsAlert } from '../landfill/UncoveredPointsAlert';
 import { ExecutionPanel } from './ExecutionPanel';
 import { PostSimulationActions } from './PostSimulationActions';
 import { SimulationHistoryPanel } from './SimulationHistoryPanel';
@@ -366,7 +368,7 @@ export default function SimulationPage() {
   const workdayWarning = () => {
     const kpis = currentKpis();
     if (!kpis.exceedsWorkday?.optimized) return null;
-    const hours = kpis.workdayHours ?? 8;
+    const hours = kpis.workdayHours ?? 12;
     const optimized = kpis.durationHours.optimized;
     return `La duración optimizada (${optimized.toFixed(1)} h) supera la jornada de referencia (${hours} h). Revisa la dotación o el número de paradas.`;
   };
@@ -870,6 +872,8 @@ export default function SimulationPage() {
                 </div>
               )}
             </Show>
+            <UncoveredPointsAlert kpis={currentKpis()} />
+            <LandfillKpiStrip kpis={currentKpis()} />
             <ExecutiveSummary kpis={currentKpis()} />
             <DurationBreakdownPanel kpis={currentKpis()} />
             <EngineComputationPanel kpis={currentKpis()} />

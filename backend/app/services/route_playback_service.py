@@ -15,6 +15,8 @@ from app.domain.crew_service_time import (
     resolve_effective_assigned,
     service_time_seconds_per_stop,
 )
+from app.domain.landfill_service_time import DEFAULT_LANDFILL_LAT, DEFAULT_LANDFILL_LON
+from app.services.operational_facilities_service import resolve_operational_facilities
 from app.services.route_geometry_service import build_route_linestring_cached
 
 PLAYBACK_ROUTE_STATUSES = ("pending", "in_progress", "completed")
@@ -46,7 +48,24 @@ def _service_minutes_per_stop(*, operators_shortage: int | None) -> int:
     return max(1, int(round(seconds / 60)))
 
 
-def _build_stop(waypoint: RouteWaypoint, *, service_minutes: int) -> dict[str, Any] | None:
+def _build_stop(
+    waypoint: RouteWaypoint,
+    *,
+    service_minutes: int,
+    landfill_service_minutes: int = 15,
+    landfill_lon: float = DEFAULT_LANDFILL_LON,
+    landfill_lat: float = DEFAULT_LANDFILL_LAT,
+) -> dict[str, Any] | None:
+    waypoint_type = getattr(waypoint, "waypoint_type", None) or "collection"
+    if waypoint_type == "landfill":
+        return {
+            "sequence": int(waypoint.sequence_order),
+            "lng": landfill_lon,
+            "lat": landfill_lat,
+            "code": "VERTEDERO",
+            "serviceMinutes": landfill_service_minutes,
+            "stopType": "landfill",
+        }
     point = waypoint.collection_point
     if point is None:
         return None
@@ -61,6 +80,7 @@ def _build_stop(waypoint: RouteWaypoint, *, service_minutes: int) -> dict[str, A
         "lat": lat,
         "code": str(point.code),
         "serviceMinutes": service_minutes,
+        "stopType": "collection",
     }
 
 
@@ -83,6 +103,9 @@ def _serialize_route(
     color: str,
     service_minutes: int,
     plan: DailyPlan,
+    landfill_service_minutes: int = 15,
+    landfill_lon: float = DEFAULT_LANDFILL_LON,
+    landfill_lat: float = DEFAULT_LANDFILL_LAT,
 ) -> dict[str, Any] | None:
     waypoints = sorted(route.waypoints, key=lambda wp: wp.sequence_order)
     line_coordinates = build_route_linestring_cached(route, waypoints, include_depot=True)
@@ -92,7 +115,16 @@ def _serialize_route(
     stops = [
         stop
         for wp in waypoints
-        if (stop := _build_stop(wp, service_minutes=service_minutes)) is not None
+        if (
+            stop := _build_stop(
+                wp,
+                service_minutes=service_minutes,
+                landfill_service_minutes=landfill_service_minutes,
+                landfill_lon=landfill_lon,
+                landfill_lat=landfill_lat,
+            )
+        )
+        is not None
     ]
     if not stops:
         return None
@@ -124,6 +156,9 @@ def build_daily_route_playback(db: Session, daily_plan_id: int) -> dict[str, Any
     simulation = db.get(Simulation, plan.simulation_id) if plan.simulation_id else None
     operators_shortage = _operators_shortage_from_simulation(simulation)
     service_minutes = _service_minutes_per_stop(operators_shortage=operators_shortage)
+    facilities = resolve_operational_facilities(db)
+    landfill_lon, landfill_lat = facilities.landfill
+    landfill_service_minutes = facilities.landfill_unload_minutes
 
     routes = db.scalars(
         select(OptimizedRoute)
@@ -147,6 +182,9 @@ def build_daily_route_playback(db: Session, daily_plan_id: int) -> dict[str, Any
             color=PLAYBACK_ROUTE_COLORS[index % len(PLAYBACK_ROUTE_COLORS)],
             service_minutes=service_minutes,
             plan=plan,
+            landfill_service_minutes=landfill_service_minutes,
+            landfill_lon=landfill_lon,
+            landfill_lat=landfill_lat,
         )
         if item is not None:
             serialized.append(item)
@@ -180,11 +218,23 @@ def playback_stops_for_route_feature(
     route: OptimizedRoute,
     *,
     service_minutes: int,
+    landfill_service_minutes: int = 15,
+    landfill_lon: float = DEFAULT_LANDFILL_LON,
+    landfill_lat: float = DEFAULT_LANDFILL_LAT,
 ) -> list[dict[str, Any]]:
     """Paradas serializadas para enriquecer propiedades GeoJSON en map/context."""
     waypoints = sorted(route.waypoints, key=lambda wp: wp.sequence_order)
     return [
         stop
         for wp in waypoints
-        if (stop := _build_stop(wp, service_minutes=service_minutes)) is not None
+        if (
+            stop := _build_stop(
+                wp,
+                service_minutes=service_minutes,
+                landfill_service_minutes=landfill_service_minutes,
+                landfill_lon=landfill_lon,
+                landfill_lat=landfill_lat,
+            )
+        )
+        is not None
     ]

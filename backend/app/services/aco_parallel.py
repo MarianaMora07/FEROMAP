@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 ACO_ALPHA = 1.0
 ACO_BETA = 3.0
 
-AntSolution = tuple[list[list[int]], float, float]
+AntSolution = tuple[list[list[int]], float, float, list[int]]
 
 
 def resolve_aco_parallel_workers(aco_ants: int) -> int:
@@ -43,7 +43,9 @@ def _route_cost(
     return distance, duration
 
 
-def _two_opt(route: list[int], dist_matrix: list[list[float]]) -> list[int]:
+def _two_opt(route: list[int], dist_matrix: list[list[float]], *, landfill_idx: int) -> list[int]:
+    if landfill_idx in route[1:-1]:
+        return route
     if len(route) <= 3:
         return route
     best = route[:]
@@ -76,6 +78,77 @@ def _evaluate_solution(
     return total_d, total_t
 
 
+def _pick_candidate(
+    rng: random.Random,
+    current: int,
+    candidates: list[int],
+    pheromone: list[list[float]],
+    dist_matrix: list[list[float]],
+    *,
+    alpha: float,
+    beta: float,
+) -> int:
+    weights = []
+    for c in candidates:
+        tau = pheromone[current][c] ** alpha
+        eta = (1.0 / max(dist_matrix[current][c], 1.0)) ** beta
+        weights.append(tau * eta)
+    total = sum(weights)
+    if total <= 0:
+        return rng.choice(candidates)
+    r = rng.random() * total
+    acc = 0.0
+    chosen = candidates[-1]
+    for c, weight in zip(candidates, weights):
+        acc += weight
+        if acc >= r:
+            chosen = c
+            break
+    return chosen
+
+
+def _can_visit_landfill(
+    elapsed: float,
+    current: int,
+    landfill_idx: int,
+    time_matrix: list[list[float]],
+    unload_sec: float,
+    shift_budget_sec: float | None,
+) -> bool:
+    travel = time_matrix[current][landfill_idx]
+    if shift_budget_sec is None:
+        return True
+    return elapsed + travel + unload_sec <= shift_budget_sec
+
+
+def _close_route(
+    route: list[int],
+    *,
+    current: int,
+    load: float,
+    elapsed: float,
+    landfill_idx: int,
+    time_matrix: list[list[float]],
+    unload_sec: float,
+    shift_budget_sec: float | None,
+) -> tuple[list[int], int, float]:
+    if load > 0 and _can_visit_landfill(
+        elapsed, current, landfill_idx, time_matrix, unload_sec, shift_budget_sec
+    ):
+        route.append(landfill_idx)
+        elapsed += time_matrix[current][landfill_idx] + unload_sec
+        current = landfill_idx
+        load = 0.0
+
+    travel_depot = time_matrix[current][0]
+    if shift_budget_sec is None or elapsed + travel_depot <= shift_budget_sec:
+        route.append(0)
+    elif route[-1] != 0:
+        route.append(0)
+
+    return route, current, elapsed
+
+
 def build_ant_solution(
     ant_seed: int,
     n_customers: int,
@@ -85,11 +158,17 @@ def build_ant_solution(
     time_matrix: list[list[float]],
     pheromone: list[list[float]],
     *,
+    landfill_idx: int | None = None,
+    shift_budget_sec: float | None = None,
+    unload_sec: float = 0.0,
+    service_secs: list[float] | None = None,
     alpha: float = ACO_ALPHA,
     beta: float = ACO_BETA,
 ) -> AntSolution:
     rng = random.Random(ant_seed)
     n_vehicles = len(capacities)
+    landfill = landfill_idx if landfill_idx is not None else n_customers + 1
+    service_per_vehicle = service_secs or [0.0] * n_vehicles
     customer_indices = list(range(1, n_customers + 1))
     unvisited = set(customer_indices)
     routes: list[list[int]] = []
@@ -98,53 +177,75 @@ def build_ant_solution(
         route = [0]
         load = 0.0
         current = 0
+        elapsed = 0.0
+        cap = capacities[v_idx]
+        service_sec = service_per_vehicle[min(v_idx, len(service_per_vehicle) - 1)]
+
         while unvisited:
-            candidates = [c for c in unvisited if load + demands[c - 1] <= capacities[v_idx]]
+            candidates = [c for c in unvisited if load + demands[c - 1] <= cap]
+
+            if not candidates and load > 0:
+                if _can_visit_landfill(
+                    elapsed, current, landfill, time_matrix, unload_sec, shift_budget_sec
+                ):
+                    route.append(landfill)
+                    elapsed += time_matrix[current][landfill] + unload_sec
+                    load = 0.0
+                    current = landfill
+                    continue
+                break
+
             if not candidates:
                 break
-            weights = []
-            for c in candidates:
-                tau = pheromone[current][c] ** alpha
-                eta = (1.0 / max(dist_matrix[current][c], 1.0)) ** beta
-                weights.append(tau * eta)
-            total = sum(weights)
-            if total <= 0:
-                chosen = rng.choice(candidates)
-            else:
-                r = rng.random() * total
-                acc = 0.0
-                chosen = candidates[-1]
-                for c, weight in zip(candidates, weights):
-                    acc += weight
-                    if acc >= r:
-                        chosen = c
-                        break
+
+            affordable = candidates
+            if shift_budget_sec is not None:
+                affordable = [
+                    c
+                    for c in candidates
+                    if elapsed + time_matrix[current][c] + service_sec <= shift_budget_sec
+                ]
+            if not affordable:
+                break
+
+            chosen = _pick_candidate(
+                rng,
+                current,
+                affordable,
+                pheromone,
+                dist_matrix,
+                alpha=alpha,
+                beta=beta,
+            )
+            travel = time_matrix[current][chosen]
             route.append(chosen)
+            elapsed += travel + service_sec
             load += demands[chosen - 1]
             unvisited.remove(chosen)
             current = chosen
-        route.append(0)
-        if len(route) > 2:
-            routes.append(_two_opt(route, dist_matrix))
 
-    if unvisited:
-        remaining = sorted(unvisited, key=lambda c: demands[c - 1], reverse=True)
-        for customer in remaining:
-            placed = False
-            for r_idx, route in enumerate(routes):
-                v_cap = capacities[min(r_idx, n_vehicles - 1)]
-                route_load = sum(demands[node - 1] for node in route if node != 0)
-                if route_load + demands[customer - 1] <= v_cap:
-                    route.insert(-1, customer)
-                    routes[r_idx] = _two_opt(route, dist_matrix)
-                    placed = True
-                    break
-            if not placed and routes:
-                routes[-1].insert(-1, customer)
-                routes[-1] = _two_opt(routes[-1], dist_matrix)
+        route, _, _ = _close_route(
+            route,
+            current=current,
+            load=load,
+            elapsed=elapsed,
+            landfill_idx=landfill,
+            time_matrix=time_matrix,
+            unload_sec=unload_sec,
+            shift_budget_sec=shift_budget_sec,
+        )
+        if len(route) > 2:
+            routes.append(_two_opt(route, dist_matrix, landfill_idx=landfill))
+
+    served: set[int] = set()
+    for route in routes:
+        for idx in route:
+            if 1 <= idx <= n_customers:
+                served.add(idx)
+    uncovered = [c for c in customer_indices if c not in served]
 
     cost, duration = _evaluate_solution(routes, dist_matrix, time_matrix)
-    return routes, cost, duration
+    return routes, cost, duration, uncovered
 
 
 def _ant_task_payload(
@@ -155,6 +256,10 @@ def _ant_task_payload(
     dist_matrix: list[list[float]],
     time_matrix: list[list[float]],
     pheromone: list[list[float]],
+    landfill_idx: int,
+    shift_budget_sec: float | None,
+    unload_sec: float,
+    service_secs: list[float],
 ) -> AntSolution:
     return build_ant_solution(
         ant_seed,
@@ -164,6 +269,10 @@ def _ant_task_payload(
         dist_matrix,
         time_matrix,
         pheromone,
+        landfill_idx=landfill_idx,
+        shift_budget_sec=shift_budget_sec,
+        unload_sec=unload_sec,
+        service_secs=service_secs,
     )
 
 
@@ -178,8 +287,14 @@ def run_ant_solutions(
     pheromone: list[list[float]],
     max_workers: int,
     executor: ProcessPoolExecutor | None = None,
+    landfill_idx: int,
+    shift_budget_sec: float | None = None,
+    unload_sec: float = 0.0,
+    service_secs: list[float] | None = None,
 ) -> list[AntSolution]:
     from concurrent.futures import ProcessPoolExecutor
+
+    service_secs = service_secs or [0.0] * len(capacities)
 
     if max_workers <= 1 or len(ant_seeds) <= 1:
         return [
@@ -191,6 +306,10 @@ def run_ant_solutions(
                 dist_matrix,
                 time_matrix,
                 pheromone,
+                landfill_idx=landfill_idx,
+                shift_budget_sec=shift_budget_sec,
+                unload_sec=unload_sec,
+                service_secs=service_secs,
             )
             for seed in ant_seeds
         ]
@@ -208,6 +327,10 @@ def run_ant_solutions(
                 dist_matrix,
                 time_matrix,
                 pheromone,
+                landfill_idx,
+                shift_budget_sec,
+                unload_sec,
+                service_secs,
             )
             for seed in ant_seeds
         ]
@@ -215,4 +338,3 @@ def run_ant_solutions(
     finally:
         if owns_pool:
             pool.shutdown(wait=True)
-

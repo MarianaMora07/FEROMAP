@@ -15,15 +15,18 @@ function updateStopMarkerElement(
   element: HTMLElement,
   kind: 'completed' | 'next' | 'pending',
   color: string,
+  isLandfill: boolean,
 ) {
-  element.className = `route-playback-stop-marker route-playback-stop-marker--${kind}`;
-  const symbol = kind === 'completed' ? '✓' : kind === 'next' ? '●' : '○';
+  element.className = `route-playback-stop-marker route-playback-stop-marker--${kind}${
+    isLandfill ? ' route-playback-stop-marker--landfill' : ''
+  }`;
+  const symbol = isLandfill ? '♻' : kind === 'completed' ? '✓' : kind === 'next' ? '●' : '○';
   element.innerHTML = `<span class="route-playback-stop-marker__dot" style="border-color:${color}">${symbol}</span>`;
 }
 
-function createStopMarker(kind: 'completed' | 'next' | 'pending', color: string) {
+function createStopMarker(kind: 'completed' | 'next' | 'pending', color: string, isLandfill: boolean) {
   const el = document.createElement('div');
-  updateStopMarkerElement(el, kind, color);
+  updateStopMarkerElement(el, kind, color, isLandfill);
   return el;
 }
 
@@ -81,6 +84,7 @@ export function RoutePlaybackMarkers(props: RoutePlaybackMarkersProps) {
       route.stops.forEach((stop, index) => {
         const key = `${route.routeId}-${stop.sequence}`;
         nextStopKeys.add(key);
+        const isLandfill = stop.stopType === 'landfill' || stop.code.toUpperCase() === 'VERTEDERO';
 
         let kind: 'completed' | 'next' | 'pending' = 'pending';
         if (index < state.completedStops) kind = 'completed';
@@ -89,14 +93,14 @@ export function RoutePlaybackMarkers(props: RoutePlaybackMarkersProps) {
         let marker = stopMarkers.get(key);
         if (!marker) {
           marker = new maplibregl.Marker({
-            element: createStopMarker(kind, route.color),
+            element: createStopMarker(kind, route.color, isLandfill),
             anchor: 'center',
           })
             .setLngLat([stop.lng, stop.lat])
             .addTo(map);
           stopMarkers.set(key, marker);
         } else {
-          updateStopMarkerElement(marker.getElement(), kind, route.color);
+          updateStopMarkerElement(marker.getElement(), kind, route.color, isLandfill);
           marker.setLngLat([stop.lng, stop.lat]);
         }
       });
