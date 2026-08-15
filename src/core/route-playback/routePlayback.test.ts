@@ -4,8 +4,11 @@ import { mapContextFeatureToPlaybackModel } from './mapContextRoutePlayback';
 import type { MapContextPlaybackRouteFeature } from './mapContextRoutePlayback';
 import {
   assertPlaybackRouteCount,
+  inferRoutePlaybackStopType,
   isDailyRoutePlaybackResponse,
+  isLandfillPlaybackStop,
   isRoutePlaybackModel,
+  normalizeRoutePlaybackStop,
 } from './routePlaybackValidation';
 
 describe('routePlayback validation', () => {
@@ -16,6 +19,50 @@ describe('routePlayback validation', () => {
     payload.routes.forEach((route) => {
       expect(isRoutePlaybackModel(route)).toBe(true);
     });
+  });
+
+  it('mock route 1 includes landfill stop for playback marker test', () => {
+    const route = mockDailyRoutePlayback(1).routes[0]!;
+    const landfill = route.stops.find((stop) => stop.stopType === 'landfill');
+    expect(landfill).toBeDefined();
+    expect(landfill?.code).toBe('VERTEDERO');
+    expect(isLandfillPlaybackStop(landfill!)).toBe(true);
+  });
+
+  it('infers landfill stopType from VERTEDERO code when missing', () => {
+    expect(inferRoutePlaybackStopType('VERTEDERO')).toBe('landfill');
+    expect(inferRoutePlaybackStopType('CNT-001')).toBe('collection');
+    const normalized = normalizeRoutePlaybackStop({
+      sequence: 1,
+      lng: -62.69,
+      lat: 8.28,
+      code: 'VERTEDERO',
+      serviceMinutes: 15,
+    });
+    expect(normalized?.stopType).toBe('landfill');
+  });
+
+  it('rejects invalid stopType', () => {
+    const invalid = {
+      sequence: 1,
+      lng: -62.718,
+      lat: 8.296,
+      code: 'CNT-001',
+      serviceMinutes: 5,
+      stopType: 'depot',
+    };
+    expect(isRoutePlaybackModel({
+      routeId: 1,
+      vehicleId: 1,
+      vehicleLabel: 'TR-01',
+      color: '#000',
+      lineCoordinates: [
+        [-62.715, 8.295],
+        [-62.718, 8.296],
+      ],
+      stops: [invalid],
+      totalDurationMinutes: 10,
+    })).toBe(false);
   });
 
   it('rejects route without stops', () => {
@@ -49,7 +96,14 @@ describe('routePlayback validation', () => {
         waypointsTotal: 2,
         waypointsDone: 0,
         stops: [
-          { sequence: 1, lng: -62.718, lat: 8.296, code: 'CNT-001', serviceMinutes: 5 },
+          {
+            sequence: 1,
+            lng: -62.718,
+            lat: 8.296,
+            code: 'CNT-001',
+            serviceMinutes: 5,
+            stopType: 'collection',
+          },
         ],
         totalDurationMinutes: 45,
         startTime: '2026-08-14T06:00:00+00:00',

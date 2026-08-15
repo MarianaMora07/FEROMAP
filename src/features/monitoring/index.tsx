@@ -29,10 +29,11 @@ import { fetchDailyPlan } from '../../core/api/planning';
 import { fetchOperatorRouteSnapshot } from '../../core/api/operator';
 import { MAP_CONTEXT_POLL_MS } from '../../core/api/map';
 import {
-  ensureOperationalRouteLayer,
   syncContainerMarkers,
   syncFleetMarkers,
 } from '../../core/map/operationalMapLayers';
+import { OperationalMap } from '../../core/map/OperationalMap';
+import { useOperationalRoutesLayer } from '../../core/map/useOperationalRoutesLayer';
 import { appState } from '../../core/stores/appStore';
 import { canSimulateFleetAdvance, isConductor, isOperationalSupervisor } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
@@ -70,12 +71,14 @@ import {
   monitoringPlaybackInitialProgress,
   type MonitoringPlaybackMode,
 } from '../../core/monitoring/monitoringPlaybackUx';
-import { mockDailyRoutePlayback } from '../../data/mock/routePlayback';
-import { bindMapTheme, mapStyleForTheme } from '../../core/utils/mapStyle';
 import {
-  createOperationalMapOptions,
-  fitMapToOperationalData,
-} from '../../core/map/operationalMapConfig';
+  deriveOperatorPlaybackSync,
+  OPERATOR_PLAYBACK_AUTO_PLAY,
+} from '../../core/operator/operatorPlaybackUx';
+import { applyPlaybackCamera } from '../../core/route-playback/playbackCameraUx';
+import { OperatorMobilePlaybackControls } from '../operator/OperatorMobilePlaybackControls';
+import { mockDailyRoutePlayback } from '../../data/mock/routePlayback';
+import { fitMapToOperationalData } from '../../core/map/operationalMapConfig';
 import {
   vehicleFilterOptions,
   type FleetLiveStatus,
@@ -130,7 +133,6 @@ function statusForBadge(status: FleetLiveStatus) {
 
 export default function MonitoringPage() {
   const [searchParams] = useSearchParams();
-  let mapContainer!: HTMLDivElement;
   const mapRef: { current?: MapLibreMap } = {};
   const markersById = new Map<string, Marker>();
   const binMarkers: Marker[] = [];
@@ -156,6 +158,7 @@ export default function MonitoringPage() {
   const [advancing, setAdvancing] = createSignal(false);
   const [playbackOpen, setPlaybackOpen] = createSignal(false);
   const [playbackMode, setPlaybackMode] = createSignal<MonitoringPlaybackMode>('visual');
+  const [playbackSync, setPlaybackSync] = createSignal<ReturnType<typeof deriveOperatorPlaybackSync>>(null);
   const [mapInstance, setMapInstance] = createSignal<MapLibreMap | undefined>();
   const hybridCompletedBaseline = new Map<number, number>();
   const fieldMode = () => isConductor(authUser()?.role);
@@ -193,7 +196,7 @@ export default function MonitoringPage() {
 
   const playbackPlanId = () => dailyPlan()?.id ?? dailyPlanIdParam() ?? 0;
   const [playbackPayload] = createResource(
-    () => (playbackOpen() ? playbackPlanId() : null),
+    () => (playbackOpen() || fieldMode() ? playbackPlanId() : null),
     async (dailyPlanId) => {
       if (!dailyPlanId) return mockDailyRoutePlayback(0);
       return fetchDailyRoutePlayback(dailyPlanId);
@@ -206,7 +209,10 @@ export default function MonitoringPage() {
       operatorVehicle(),
     ),
   );
-  const playback = useRoutePlayback(() => playbackRoutes(), { pauseAtStops: true });
+  const playback = useRoutePlayback(() => playbackRoutes(), {
+    pauseAtStops: true,
+    autoPlay: fieldMode() ? OPERATOR_PLAYBACK_AUTO_PLAY : undefined,
+  });
   const displayRouteProgress = createMemo(() =>
     mergeRouteProgressWithPlayback(
       routeProgress(),
@@ -245,6 +251,39 @@ export default function MonitoringPage() {
 
   let playbackSeeded = false;
   let playbackDeepLinkHandled = false;
+
+  createEffect(() => {
+    if (!fieldMode() || playbackOpen()) return;
+    if (!canOpenPlayback()) return;
+    setPlaybackOpen(true);
+  });
+
+  createEffect(() => {
+    if (!playbackOpen() && !fieldMode()) {
+      setPlaybackSync(null);
+      return;
+    }
+    const sync = deriveOperatorPlaybackSync(
+      playbackRoutes()[0],
+      playback.routeStates()[0],
+      playback.isPlaying(),
+    );
+    setPlaybackSync(sync);
+  });
+
+  createEffect(() => {
+    if (!fieldMode() || !playbackOpen() || !playback.isPlaying()) return;
+    const map = mapRef.current;
+    if (!map?.isStyleLoaded()) return;
+    playback.routeStates();
+    applyPlaybackCamera(
+      map,
+      'follow',
+      playbackRoutes(),
+      playback.routeStates(),
+      operatorVehicle()?.id,
+    );
+  });
 
   createEffect(() => {
     if (!parsePlaybackQueryParam(searchParams.playback)) return;
@@ -303,16 +342,6 @@ export default function MonitoringPage() {
   const syncOperationalMap = () => {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
-
-    ensureOperationalRouteLayer(map, operationalRoutes(), 'live-routes', { splitByStatus: true });
-
-    if (playbackOpen() && map.getLayer('live-routes-active')) {
-      map.setPaintProperty('live-routes-active', 'line-opacity', 0.2);
-      map.setPaintProperty('live-routes-pending', 'line-opacity', 0.15);
-    } else if (map.getLayer('live-routes-active')) {
-      map.setPaintProperty('live-routes-active', 'line-opacity', 0.95);
-      map.setPaintProperty('live-routes-pending', 'line-opacity', 0.75);
-    }
 
     syncContainerMarkers(map, operationalContainers(), binMarkers, {
       createMarkerElement: (color) => createPin(color, trashSvg('#fff'), 24),
@@ -397,40 +426,32 @@ export default function MonitoringPage() {
     syncOperationalMap();
   };
 
-  bindMapTheme(
-    () => mapRef.current,
+  useOperationalRoutesLayer({
+    map: () => mapRef.current,
     mapReady,
-    () => setupMonitoringMap(mapRef.current!),
-  );
+    routes: operationalRoutes,
+    sourceId: 'live-routes',
+    splitByStatus: true,
+    playbackActive: playbackOpen,
+    playbackOpacity: { active: 0.2, pending: 0.15 },
+  });
 
-  onMount(() => {
-    const map = new maplibregl.Map(
-      createOperationalMapOptions({
-        container: mapContainer,
-        style: mapStyleForTheme(appState.darkMode),
-      }),
-    );
+  const handleMonitoringMapReady = (map: MapLibreMap) => {
     mapRef.current = map;
     setMapInstance(map);
-    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
+    setupMonitoringMap(map);
+    setMapReady(true);
+    const first = mapFleet()[0];
+    if (first) openVehiclePopup(first.id);
+  };
 
-    map.on('load', () => {
-      map.resize();
-      setupMonitoringMap(map);
-      setMapReady(true);
-      const first = mapFleet()[0];
-      if (first) openVehiclePopup(first.id);
-    });
-
+  onMount(() => {
     const onPopupClick = (e: MouseEvent) => {
       const btn = (e.target as HTMLElement | null)?.closest?.('.popup-ver-vehiculo') as HTMLElement | null;
       if (!btn?.dataset.vehicleId) return;
       setSelectedId(btn.dataset.vehicleId);
     };
     document.addEventListener('click', onPopupClick);
-
-    const ro = new ResizeObserver(() => mapRef.current?.resize());
-    ro.observe(mapContainer);
 
     const pollTimer = window.setInterval(() => {
       void refetch();
@@ -439,11 +460,9 @@ export default function MonitoringPage() {
     onCleanup(() => {
       window.clearInterval(pollTimer);
       document.removeEventListener('click', onPopupClick);
-      ro.disconnect();
       markersById.forEach((m) => m.remove());
       markersById.clear();
       binMarkers.forEach((m) => m.remove());
-      mapRef.current?.remove();
       mapRef.current = undefined;
       setMapInstance(undefined);
     });
@@ -564,7 +583,7 @@ export default function MonitoringPage() {
             />
           </Show>
           <MonitoringPlaybackToggle
-            visible={canOpenPlayback()}
+            visible={canOpenPlayback() && !fieldMode()}
             open={playbackOpen()}
             fieldMode={fieldMode()}
             onOpen={handleOpenPlayback}
@@ -586,7 +605,7 @@ export default function MonitoringPage() {
               icon={<FastForward size={fieldMode() ? 18 : 16} />}
               disabled={
                 advancing() ||
-                playbackOpen() ||
+                (!fieldMode() && playbackOpen()) ||
                 (fieldMode()
                   ? operatorVehicle()?.routeId == null && routeSnapshot()?.routeId == null
                   : !monitoringData()?.fleetCounts.inRoute)
@@ -604,6 +623,7 @@ export default function MonitoringPage() {
         </div>
       </div>
 
+      <Show when={playbackOpen() && !fieldMode()}>
       <MonitoringPlaybackPanel
         open={playbackOpen()}
         mode={playbackMode()}
@@ -621,12 +641,14 @@ export default function MonitoringPage() {
             : null
         }
       />
+      </Show>
 
       <Show when={fieldMode()}>
         <OperatorNextStopCard
           snapshot={routeSnapshot()}
           vehicle={operatorVehicle()}
           onNavigate={navigateToNextStop}
+          playbackSync={playbackSync()}
         />
       </Show>
 
@@ -676,8 +698,10 @@ export default function MonitoringPage() {
               fieldMode() ? 'min-h-[50vh]' : 'lg:min-h-105'
             }`}
           >
-            <div ref={mapContainer} class="absolute inset-0 h-full w-full" />
-
+            <OperationalMap
+              onMapReady={handleMonitoringMapReady}
+              onStyleRestored={() => setupMonitoringMap(mapRef.current!)}
+            >
             <Show when={playbackOpen()}>
               <RoutePlaybackLegend class="absolute bottom-16 left-3 z-10 max-w-[220px]" />
               <RoutePlaybackLayer
@@ -686,9 +710,12 @@ export default function MonitoringPage() {
                 playback={playback}
                 showControls={false}
               />
+              <Show when={fieldMode()}>
+                <OperatorMobilePlaybackControls playback={playback} />
+              </Show>
             </Show>
 
-            <Show when={playbackOpen()}>
+            <Show when={playbackOpen() && !fieldMode()}>
               <div class="absolute top-3 left-3 z-10 rounded-md border border-fero-blue/40 bg-elevated/95 px-2.5 py-1.5 text-xs font-semibold text-fero-blue shadow-sm backdrop-blur-sm">
                 Reproducción {playbackMode() === 'visual' ? 'solo visual' : 'híbrida'}
               </div>
@@ -729,6 +756,7 @@ export default function MonitoringPage() {
                 <Maximize2 size={14} />
               </button>
             </div>
+            </OperationalMap>
           </div>
         </Card>
 

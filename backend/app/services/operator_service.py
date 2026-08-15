@@ -14,6 +14,7 @@ from app.services.collection_point_service import seed_meta_by_code
 from app.services.geo_service import fill_level_pct
 from app.services.operations_service import route_progress_percent
 from app.services.operational_facilities_service import resolve_operational_facilities
+from app.services.route_geometry_service import build_route_linestring_cached
 
 
 def _empty_snapshot(operation_date: date | None = None) -> dict[str, Any]:
@@ -34,6 +35,7 @@ def _empty_snapshot(operation_date: date | None = None) -> dict[str, Any]:
         "remainingDistanceKm": None,
         "nextStop": None,
         "stops": [],
+        "lineCoordinates": None,
     }
 
 
@@ -171,6 +173,9 @@ def _serialize_route_snapshot(
         )
         for wp in waypoints
     ]
+    line_coordinates = build_route_linestring_cached(route, waypoints, include_depot=True)
+    if len(line_coordinates) < 2:
+        line_coordinates = None
     progress = route_progress_percent(waypoints)
     completed = sum(1 for wp in waypoints if wp.status == "completed")
     next_stop = next((stop for stop in stops if stop["status"] == "pending"), None)
@@ -203,6 +208,7 @@ def _serialize_route_snapshot(
         "remainingDistanceKm": _remaining_distance_km(route, progress),
         "nextStop": next_stop,
         "stops": stops,
+        "lineCoordinates": line_coordinates,
         "shiftUtilizationPct": shift_utilization_pct,
     }
 

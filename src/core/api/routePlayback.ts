@@ -5,8 +5,12 @@ import {
   mapContextFeatureToPlaybackModel,
   type MapContextPlaybackRouteFeature,
 } from '../route-playback/mapContextRoutePlayback';
-import type { DailyRoutePlaybackResponse, RoutePlaybackModel } from '../route-playback/routePlaybackTypes';
-import { isDailyRoutePlaybackResponse } from '../route-playback/routePlaybackValidation';
+import type {
+  DailyRoutePlaybackResponse,
+  RoutePlaybackModel,
+  SimulationRoutePlaybackResponse,
+} from '../route-playback/routePlaybackTypes';
+import { isDailyRoutePlaybackResponse, isSimulationRoutePlaybackResponse } from '../route-playback/routePlaybackValidation';
 import { mockDailyRoutePlayback } from '../../data/mock/routePlayback';
 
 export type RoutePlaybackSource = 'playback-endpoint' | 'map-context';
@@ -15,7 +19,7 @@ export function fetchDailyRoutePlayback(
   dailyPlanId: number,
 ): Promise<DailyRoutePlaybackResponse> {
   return withMockFallback(
-    `route-playback-${dailyPlanId}`,
+    `route-playback-daily-${dailyPlanId}`,
     async () => {
       const payload = await apiGet<unknown>(
         `/api/v1/planning/daily/${dailyPlanId}/routes/playback`,
@@ -26,6 +30,29 @@ export function fetchDailyRoutePlayback(
       return payload;
     },
     mockDailyRoutePlayback(dailyPlanId),
+  );
+}
+
+export function fetchSimulationRoutePlayback(
+  simulationId: number,
+): Promise<SimulationRoutePlaybackResponse> {
+  return withMockFallback(
+    `route-playback-simulation-${simulationId}`,
+    async () => {
+      const payload = await apiGet<unknown>(
+        `/api/v1/simulations/${simulationId}/routes/playback`,
+      );
+      if (!isSimulationRoutePlaybackResponse(payload)) {
+        throw new Error('Respuesta inválida del playback de simulación.');
+      }
+      return payload;
+    },
+    {
+      simulationId,
+      operationDate: new Date().toISOString().slice(0, 10),
+      previewMode: true,
+      routes: mockDailyRoutePlayback(simulationId).routes,
+    },
   );
 }
 

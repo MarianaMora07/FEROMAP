@@ -1,8 +1,11 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import Field
 
 from app.schemas.common import CamelModel
+
+RoutePlaybackStopType = Literal["collection", "landfill"]
 
 
 class RoutePlaybackStop(CamelModel):
@@ -11,6 +14,9 @@ class RoutePlaybackStop(CamelModel):
     lat: float
     code: str
     service_minutes: int
+    stop_type: RoutePlaybackStopType = Field(
+        description='Tipo de parada: "collection" (contenedor) o "landfill" (vertedero).',
+    )
 
 
 class RoutePlaybackRoute(CamelModel):

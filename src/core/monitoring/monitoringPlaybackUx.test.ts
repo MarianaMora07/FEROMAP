@@ -47,6 +47,7 @@ describe('monitoringPlaybackUx', () => {
           lineProgress: 0.2,
           currentStopIndex: 1,
           completedStops: 1,
+          bearing: 0,
           position: [-62.715, 8.295],
           isAtStop: false,
         },

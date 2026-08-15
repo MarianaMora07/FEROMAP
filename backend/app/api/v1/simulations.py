@@ -14,6 +14,7 @@ from app.services.optimization_job_service import (
     create_optimization_job,
     get_optimization_job_view,
 )
+from app.services.route_playback_service import build_simulation_route_playback
 
 router = APIRouter(tags=["simulations"])
 
@@ -81,3 +82,9 @@ def get_simulation(simulation_id: int, db: DbSession):
         return simulation_detail(db, simulation_id)
     except LookupError:
         raise HTTPException(status_code=404, detail="Simulación no encontrada") from None
+
+
+@router.get("/simulations/{simulation_id}/routes/playback")
+def simulation_routes_playback(simulation_id: int, db: DbSession, _: PlannerOrAdmin):
+    """Solo lectura: payload de playback para rutas optimizadas de una simulación."""
+    return build_simulation_route_playback(db, simulation_id)

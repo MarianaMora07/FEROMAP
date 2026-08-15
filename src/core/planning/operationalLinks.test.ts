@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  mapPlaybackHref,
   monitoringPlaybackHref,
   operationalMapHref,
   optimizationPlaybackHref,
@@ -18,5 +19,11 @@ describe('operationalLinks', () => {
 
   it('builds monitoring playback deep link', () => {
     expect(monitoringPlaybackHref({ dailyPlanId: 9 })).toBe('/monitoring?dailyPlanId=9&playback=1');
+  });
+
+  it('builds map GIS playback deep link', () => {
+    expect(mapPlaybackHref({ date: '2026-08-15', dailyPlanId: 4 })).toBe(
+      '/map?date=2026-08-15&dailyPlanId=4&playback=1',
+    );
   });
 });

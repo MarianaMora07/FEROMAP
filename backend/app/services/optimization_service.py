@@ -160,6 +160,39 @@ def _haversine_m(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
     return 2 * r * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
+def _kpi_distance_km(distance_m: float) -> Decimal | None:
+    if not math.isfinite(distance_m) or distance_m < 0:
+        return None
+    return Decimal(str(round(distance_m / 1000, 2)))
+
+
+def _kpi_saving_percentage(current_m: float, optimized_m: float) -> Decimal | None:
+    if not math.isfinite(current_m) or not math.isfinite(optimized_m) or current_m <= 0:
+        return None
+    return Decimal(str(round((1 - optimized_m / current_m) * 100, 1)))
+
+
+def _safe_distance_km(distance_m: float) -> float:
+    if not math.isfinite(distance_m) or distance_m < 0:
+        return 0.0
+    return distance_m / 1000
+
+
+def _coalesce_optimized_solution(optimized: RouteSolution, fallback: RouteSolution) -> RouteSolution:
+    if math.isfinite(optimized.distance_m) and optimized.vehicle_routes:
+        return optimized
+    return RouteSolution(
+        vehicle_routes=[route[:] for route in fallback.vehicle_routes],
+        distance_m=fallback.distance_m,
+        duration_s=fallback.duration_s,
+        aco_iterations_run=optimized.aco_iterations_run,
+        aco_stopped_early=optimized.aco_stopped_early,
+        aco_parallel_workers=optimized.aco_parallel_workers,
+        aco_convergence=optimized.aco_convergence,
+        uncovered_customer_indices=optimized.uncovered_customer_indices,
+    )
+
+
 def _matrix_pair_metrics(
     graph: nx.MultiDiGraph,
     depot_node: int,
@@ -797,8 +830,8 @@ def _compute_kpis(
     uncovered_point_codes: list[str] | None = None,
 ) -> dict[str, Any]:
     n_customers = len(customers)
-    cur_km = current.distance_m / 1000
-    opt_km = optimized.distance_m / 1000
+    cur_km = _safe_distance_km(current.distance_m)
+    opt_km = _safe_distance_km(optimized.distance_m)
     cur_metrics = _solution_operational_metrics(
         current,
         dist_matrix,
@@ -1360,6 +1393,13 @@ def run_optimization_engine(
         cancel_check=cancelled,
         on_iteration=aco_progress,
     )
+    if not math.isfinite(optimized_solution.distance_m) or not optimized_solution.vehicle_routes:
+        report(
+            "aco",
+            "ACO no encontró solución factible; usando ruta base de referencia",
+            "warning",
+        )
+        optimized_solution = _coalesce_optimized_solution(optimized_solution, current_solution)
     aco_seconds = time.perf_counter() - aco_started
     if optimized_solution.aco_stopped_early:
         report(
@@ -1495,12 +1535,7 @@ def run_optimization_engine(
 
     routes_payload = {"current": current_geo, "optimized": optimized_geo}
 
-    saving_pct = None
-    if current_solution.distance_m > 0:
-        saving_pct = round(
-            (1 - optimized_solution.distance_m / current_solution.distance_m) * 100,
-            1,
-        )
+    saving_pct = _kpi_saving_percentage(current_solution.distance_m, optimized_solution.distance_m)
 
     report("persistencia", "Persistiendo rutas optimizadas y waypoints en PostgreSQL", "success")
 
@@ -1529,9 +1564,9 @@ def run_optimization_engine(
             },
             ensure_ascii=False,
         ),
-        kpi_total_distance_historical=Decimal(str(round(current_solution.distance_m / 1000, 2))),
-        kpi_total_distance_optimized=Decimal(str(round(optimized_solution.distance_m / 1000, 2))),
-        kpi_saving_percentage=Decimal(str(saving_pct)) if saving_pct is not None else None,
+        kpi_total_distance_historical=_kpi_distance_km(current_solution.distance_m),
+        kpi_total_distance_optimized=_kpi_distance_km(optimized_solution.distance_m),
+        kpi_saving_percentage=saving_pct,
     )
     db.add(simulation)
     db.flush()
@@ -1600,4 +1635,5 @@ def run_optimization_engine(
         "contingency": contingency_meta,
         "servedPointCodes": sorted(served_codes),
         "engineMetrics": engine_metrics,
+        "dailyPlanId": daily_plan_id,
     }

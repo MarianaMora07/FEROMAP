@@ -14,6 +14,10 @@ import {
 } from '../api/simulationOperations';
 import { loadDashboardData } from './dashboardStore';
 import { kpiByScenario, optimizationLogMessages, scenarios as mockScenarios } from '../../data/mock/kpis';
+import { getScenarioRoutes } from '../../data/mock/routes';
+import { mergeRouteCollections } from '../api/routes';
+import type { RouteCollection } from '../../data/types/geo';
+import { setRoutes } from './appStore';
 import {
   isExecutionPhaseId,
   EXECUTION_PHASE_COUNT,
@@ -45,6 +49,7 @@ interface SimulationState {
   executionPhase: ExecutionPhaseId | null;
   lastOptimizedAt: string | null;
   lastSimulationId: number | null;
+  lastDailyPlanId: number | null;
   lastContingency: VehicleBreakdownResponse | null;
   contingencyComparison: ContingencyComparison | null;
   history: SimulationHistoryRow[];
@@ -65,6 +70,7 @@ const [state, setState] = createStore<SimulationState>({
   executionPhase: null,
   lastOptimizedAt: null,
   lastSimulationId: null,
+  lastDailyPlanId: null,
   lastContingency: null,
   contingencyComparison: null,
   history: [],
@@ -219,6 +225,7 @@ export function resetSimulationStoreForTests(): void {
     executionPhase: null,
     lastOptimizedAt: null,
     lastSimulationId: null,
+    lastDailyPlanId: null,
     acoConvergenceLive: [],
   });
 }
@@ -257,6 +264,13 @@ function completeOptimizationRun(): void {
   });
 }
 
+function applyOptimizationRoutes(routes: {
+  current: RouteCollection;
+  optimized: RouteCollection;
+}) {
+  setRoutes(mergeRouteCollections(routes.current, routes.optimized));
+}
+
 export async function runOptimization(parameters?: SimulationRunParameters): Promise<boolean> {
   if (state.isOptimizing || state.isLoadingDetail) return false;
 
@@ -290,7 +304,9 @@ export async function runOptimization(parameters?: SimulationRunParameters): Pro
       setState({
         kpis: kpiByScenario[state.scenarioId],
         lastSimulationId: 1,
+        lastDailyPlanId: null,
       });
+      setRoutes(getScenarioRoutes(state.scenarioId));
     } else {
       const result = await runJobBasedExecution(state.scenarioId, parameters, handlers);
 
@@ -303,7 +319,9 @@ export async function runOptimization(parameters?: SimulationRunParameters): Pro
       setState({
         kpis: result.kpis,
         lastSimulationId: result.simulationId,
+        lastDailyPlanId: result.dailyPlanId ?? null,
       });
+      applyOptimizationRoutes(result.routes);
       if (result.servedPointCodes?.length) {
         writeLastOptimizedCodes(result.servedPointCodes);
       }
@@ -352,6 +370,7 @@ export async function loadSimulationFromHistory(simulationId: number): Promise<v
       kpis: detail.kpis,
       scenarioId: detail.scenarioId,
       lastSimulationId: detail.id,
+      lastDailyPlanId: null,
       isLoadingDetail: false,
       optimizationProgress: 100,
       lastOptimizedAt: detail.executedAt ?? new Date().toISOString(),
@@ -364,6 +383,7 @@ export async function loadSimulationFromHistory(simulationId: number): Promise<v
         },
       ],
     });
+    applyOptimizationRoutes(detail.routes);
   } catch (error) {
     setState({ isLoadingDetail: false, optimizationProgress: 0 });
     throw error;

@@ -1,6 +1,6 @@
 import type { Feature, LineString } from 'geojson';
 import type { RoutePlaybackModel, RoutePlaybackStop } from './routePlaybackTypes';
-import { assertPlaybackRouteCount } from './routePlaybackValidation';
+import { assertPlaybackRouteCount, normalizeRoutePlaybackStop } from './routePlaybackValidation';
 
 /** Propiedades extendidas de ruta en `GET /map/context?playbackDetails=true`. */
 export interface MapContextPlaybackRouteProperties {
@@ -24,19 +24,11 @@ export type MapContextPlaybackRouteFeature = Feature<
   MapContextPlaybackRouteProperties
 >;
 
-function parseStops(raw: unknown): RoutePlaybackStop[] {
+function parseStops(raw: unknown) {
   if (!Array.isArray(raw)) return [];
-  return raw.filter((item): item is RoutePlaybackStop => {
-    if (!item || typeof item !== 'object') return false;
-    const stop = item as RoutePlaybackStop;
-    return (
-      typeof stop.sequence === 'number' &&
-      typeof stop.lng === 'number' &&
-      typeof stop.lat === 'number' &&
-      typeof stop.code === 'string' &&
-      typeof stop.serviceMinutes === 'number'
-    );
-  });
+  return raw
+    .map((item) => normalizeRoutePlaybackStop(item))
+    .filter((stop): stop is NonNullable<typeof stop> => stop !== null);
 }
 
 export function mapContextFeatureToPlaybackModel(

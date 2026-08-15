@@ -1,4 +1,5 @@
 import { apiGet, useMocks, withMockFallback } from './client';
+import { densifyLineByDistance } from '../route-playback/routePlaybackGeometry';
 import { authUser } from '../stores/authStore';
 import { collectionPointsList } from '../../data/mock/collectionPoints';
 import { liveFleet } from '../../data/mock/monitoring';
@@ -38,12 +39,32 @@ export interface OperatorRouteSnapshot {
   remainingDistanceKm: number | null;
   nextStop: OperatorRouteStop | null;
   stops: OperatorRouteStop[];
+  /** Geometría vial [lng, lat] (misma fuente que optimización/monitoreo). */
+  lineCoordinates?: Array<[number, number]> | null;
   shiftUtilizationPct?: number | null;
 }
 
 function isDemoOperatorClosedDay(): boolean {
   if (typeof localStorage === 'undefined') return false;
   return localStorage.getItem('feromap.demo.operatorClosedDay') === '1';
+}
+
+function buildMockLineCoordinates(stops: OperatorRouteStop[]): Array<[number, number]> {
+  const ordered = [...stops]
+    .sort((a, b) => a.sequenceOrder - b.sequenceOrder)
+    .filter((stop) => stop.lng != null && stop.lat != null) as Array<
+    OperatorRouteStop & { lng: number; lat: number }
+  >;
+  if (ordered.length < 2) return [];
+
+  const coordinates: Array<[number, number]> = [[ordered[0]!.lng, ordered[0]!.lat]];
+  for (let index = 1; index < ordered.length; index += 1) {
+    const from: [number, number] = [ordered[index - 1]!.lng, ordered[index - 1]!.lat];
+    const to: [number, number] = [ordered[index]!.lng, ordered[index]!.lat];
+    const leg = densifyLineByDistance(from, to, 4);
+    coordinates.push(...leg.slice(1));
+  }
+  return coordinates;
 }
 
 function mockOperatorRouteSnapshot(): OperatorRouteSnapshot {
@@ -105,6 +126,7 @@ function mockOperatorRouteSnapshot(): OperatorRouteSnapshot {
     remainingDistanceKm: closedDay ? 0 : 12.4,
     nextStop,
     stops,
+    lineCoordinates: buildMockLineCoordinates(stops),
   };
 }
 

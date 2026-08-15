@@ -1,22 +1,52 @@
 import maplibregl, { type Map as MapLibreMap, type Marker, Popup } from 'maplibre-gl';
+import type { OperatorRouteSnapshot, OperatorRouteStop } from '../api/operator';
 import type { RouteCollection } from '../types/geo';
-import type { OperatorRouteStop } from '../api/operator';
 import { ensureOperationalRouteLayer } from './operationalMapLayers';
 
 export const OPERATOR_ROUTE_SOURCE_ID = 'operator-my-route';
 export const OPERATOR_ROUTE_LAYER_ID = 'operator-my-route-line';
 export const OPERATOR_ROUTE_GLOW_LAYER_ID = 'operator-my-route-glow';
 
-export function routeCollectionFromStops(
+export type OperatorRouteCollectionOptions = {
+  color?: string;
+  label?: string;
+  routeId?: number | string | null;
+};
+
+function isValidCoordinate(pair: unknown): pair is [number, number] {
+  return (
+    Array.isArray(pair) &&
+    pair.length === 2 &&
+    typeof pair[0] === 'number' &&
+    Number.isFinite(pair[0]) &&
+    typeof pair[1] === 'number' &&
+    Number.isFinite(pair[1])
+  );
+}
+
+/** Línea recta entre paradas ordenadas (fallback cuando la API no envía geometría vial). */
+export function straightLineCoordinatesFromStops(
   stops: OperatorRouteStop[],
-  options?: { color?: string; label?: string },
-): RouteCollection {
-  const color = options?.color ?? '#1143F3';
-  const coordinates = [...stops]
+): Array<[number, number]> {
+  return [...stops]
     .sort((a, b) => a.sequenceOrder - b.sequenceOrder)
     .filter((stop) => stop.lng != null && stop.lat != null)
     .map((stop) => [stop.lng!, stop.lat!]);
+}
 
+function resolveOperatorRouteCoordinates(
+  snapshot: Pick<OperatorRouteSnapshot, 'stops' | 'lineCoordinates'>,
+): Array<[number, number]> {
+  const fromApi = snapshot.lineCoordinates?.filter(isValidCoordinate) ?? [];
+  if (fromApi.length >= 2) return fromApi;
+  return straightLineCoordinatesFromStops(snapshot.stops);
+}
+
+function routeCollectionFromCoordinates(
+  coordinates: Array<[number, number]>,
+  options?: OperatorRouteCollectionOptions,
+): RouteCollection {
+  const color = options?.color ?? '#1143F3';
   if (coordinates.length < 2) {
     return { type: 'FeatureCollection', features: [] };
   }
@@ -27,7 +57,8 @@ export function routeCollectionFromStops(
       {
         type: 'Feature',
         properties: {
-          id: 'my-route-today',
+          id: options?.routeId != null ? String(options.routeId) : 'my-route-today',
+          routeId: options?.routeId ?? undefined,
           color,
           label: options?.label ?? 'Mi ruta hoy',
         },
@@ -38,6 +69,29 @@ export function routeCollectionFromStops(
       },
     ],
   };
+}
+
+/**
+ * Construye la capa de ruta del operador.
+ * Prefiere `lineCoordinates` de la API (misma geometría que optimización/monitoreo).
+ */
+export function routeCollectionFromOperatorSnapshot(
+  snapshot: Pick<OperatorRouteSnapshot, 'stops' | 'lineCoordinates' | 'routeId'>,
+  options?: OperatorRouteCollectionOptions,
+): RouteCollection {
+  const coordinates = resolveOperatorRouteCoordinates(snapshot);
+  return routeCollectionFromCoordinates(coordinates, {
+    ...options,
+    routeId: options?.routeId ?? snapshot.routeId,
+  });
+}
+
+/** @deprecated Usar `routeCollectionFromOperatorSnapshot` con fallback integrado. */
+export function routeCollectionFromStops(
+  stops: OperatorRouteStop[],
+  options?: OperatorRouteCollectionOptions,
+): RouteCollection {
+  return routeCollectionFromCoordinates(straightLineCoordinatesFromStops(stops), options);
 }
 
 export function ensureOperatorRouteLayer(map: MapLibreMap, routes: RouteCollection) {
@@ -113,4 +167,21 @@ export function fitMapToStops(map: MapLibreMap, stops: OperatorRouteStop[], padd
     return;
   }
   map.fitBounds(bounds, { padding, maxZoom: 15, duration: 800 });
+}
+
+export function fitMapToOperatorRoute(
+  map: MapLibreMap,
+  snapshot: Pick<OperatorRouteSnapshot, 'stops' | 'lineCoordinates'>,
+  padding = 48,
+) {
+  const coordinates = resolveOperatorRouteCoordinates(snapshot);
+  if (coordinates.length >= 2) {
+    const bounds = new maplibregl.LngLatBounds();
+    for (const [lng, lat] of coordinates) {
+      bounds.extend([lng, lat]);
+    }
+    map.fitBounds(bounds, { padding, maxZoom: 15, duration: 800 });
+    return;
+  }
+  fitMapToStops(map, snapshot.stops, padding);
 }

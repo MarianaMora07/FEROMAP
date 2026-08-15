@@ -26,7 +26,9 @@ import { countSimulationReadyVehicles, fetchVehicles } from '../../core/api/vehi
 import { canOptimize } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
 import { fetchMonitoringStatus } from '../../core/api/monitoring';
+import { fetchDailyRoutePlayback, fetchSimulationRoutePlayback } from '../../core/api/routePlayback';
 import { fetchCurrentWeeklyPlan } from '../../core/api/planning';
+import { useRoutePlayback } from '../../core/route-playback/useRoutePlayback';
 import { optimizationHref } from '../../core/planning/operationalLinks';
 import { todayIso } from '../../core/planning/planningUx';
 import {
@@ -75,6 +77,8 @@ import { PlanningContextualCta } from '../planning/PlanningContextualCta';
 import { ThesisVsOperationsNotice } from '../planning/ThesisVsOperationsNotice';
 import { WizardStepNav } from './WizardStepNav';
 import { CancelExecutionConfirmDialog } from './CancelExecutionConfirmDialog';
+import { SimulationMapPanel } from './SimulationMapPanel';
+import { RoutePlaybackPanel } from '../route-playback/RoutePlaybackPanel';
 import {
   EXECUTION_CANCEL_MESSAGES,
   formatWizardExecutionSubstatus,
@@ -276,6 +280,7 @@ export default function SimulationPage() {
   const [runNotice, setRunNotice] = createSignal<string | null>(null);
   const [incidentsRefreshKey, setIncidentsRefreshKey] = createSignal(0);
   const [cancelConfirmOpen, setCancelConfirmOpen] = createSignal(false);
+  const [playbackOpen, setPlaybackOpen] = createSignal(false);
   const [weeklyPlanBridge] = createResource(() =>
     fetchCurrentWeeklyPlan().catch(() => null),
   );
@@ -312,6 +317,43 @@ export default function SimulationPage() {
   const derivedScenario = createMemo(() =>
     describeDerivedScenario(conditions(), simulationState.scenarios),
   );
+
+  const playbackSource = createMemo(() => {
+    if (!playbackOpen() || !hasResults()) return null;
+    if (simulationState.lastDailyPlanId) {
+      return { kind: 'daily' as const, id: simulationState.lastDailyPlanId };
+    }
+    if (simulationState.lastSimulationId) {
+      return { kind: 'simulation' as const, id: simulationState.lastSimulationId };
+    }
+    return null;
+  });
+
+  const [playbackPayload] = createResource(playbackSource, async (source) => {
+    if (!source) return null;
+    if (source.kind === 'daily') {
+      return fetchDailyRoutePlayback(source.id);
+    }
+    return fetchSimulationRoutePlayback(source.id);
+  });
+
+  const playbackRoutes = createMemo(() => playbackPayload()?.routes ?? []);
+  const playback = useRoutePlayback(() => playbackRoutes(), { pauseAtStops: true });
+
+  createEffect(() => {
+    if (!playbackOpen()) {
+      playback.pause();
+      playback.reset();
+    }
+  });
+
+  const handleOpenPlayback = () => setPlaybackOpen(true);
+  const handleClosePlayback = () => {
+    playback.pause();
+    playback.reset();
+    setPlaybackOpen(false);
+  };
+
   const simulationParams = () =>
     buildSimulationRunParameters({
       rainIntensity: rainIntensity(),
@@ -436,6 +478,7 @@ export default function SimulationPage() {
       }
       setHasResults(true);
       setStep(3);
+      setPlaybackOpen(true);
     } catch (error) {
       setRunError(error instanceof Error ? error.message : 'No se pudo ejecutar la simulación');
     }
@@ -449,6 +492,7 @@ export default function SimulationPage() {
     setPageTab('flow');
     setStep(1);
     setHasResults(false);
+    setPlaybackOpen(false);
     setRunError(null);
     setConditions(defaultConditions());
     applySimulationScenario('normal');
@@ -462,6 +506,7 @@ export default function SimulationPage() {
       setHasResults(true);
       setPageTab('flow');
       setStep(3);
+      setPlaybackOpen(true);
     } catch (error) {
       setHistoryError(error instanceof Error ? error.message : 'No se pudo cargar la simulación');
     }
@@ -779,6 +824,18 @@ export default function SimulationPage() {
             </Card>
           </div>
           <div class="space-y-4 xl:col-span-9">
+            <SimulationMapPanel
+              hasResults={hasResults()}
+              executionMode
+              executionPhase={simulationState.executionPhase}
+              isRunning={simulationState.isOptimizing}
+              executionProgress={simulationState.optimizationProgress}
+              playbackActive={playbackOpen()}
+              playbackRoutes={playbackRoutes()}
+              playback={playback}
+              playbackLoading={playbackPayload.loading}
+              onOpenPlayback={handleOpenPlayback}
+            />
             <ExecutionPanel
               isRunning={simulationState.isOptimizing}
               progress={simulationState.optimizationProgress}
@@ -852,6 +909,41 @@ export default function SimulationPage() {
           }
         >
           <div class="space-y-4">
+            <div class="grid items-start gap-4 xl:grid-cols-12">
+              <div class="space-y-4 xl:col-span-8">
+                <SimulationMapPanel
+                  hasResults={hasResults()}
+                  playbackActive={playbackOpen()}
+                  playbackRoutes={playbackRoutes()}
+                  playback={playback}
+                  playbackLoading={playbackPayload.loading}
+                  onOpenPlayback={handleOpenPlayback}
+                />
+              </div>
+              <div class="xl:col-span-4">
+                <Show when={playbackOpen()}>
+                  <RoutePlaybackPanel
+                    routes={playbackRoutes()}
+                    playback={playback}
+                    scenarioId={derivedScenario().scenarioId}
+                    scenarioLabel={derivedScenario().label}
+                    operationDate={todayIso()}
+                    previewMode={playbackPayload()?.previewMode ?? true}
+                    loading={playbackPayload.loading}
+                    error={
+                      playbackPayload.error
+                        ? playbackPayload.error instanceof Error
+                          ? playbackPayload.error.message
+                          : 'No se pudo cargar el recorrido'
+                        : null
+                    }
+                    onClose={handleClosePlayback}
+                    variant="inline"
+                    title="Recorrido simulado"
+                  />
+                </Show>
+              </div>
+            </div>
             <PostSimulationActions
               simulationId={simulationState.lastSimulationId}
               onNewSimulation={handleNewSimulation}
