@@ -20,7 +20,3 @@ export function sidebarNavLinkClass(active: boolean) {
 
   return `${base} group text-nav hover:bg-sidebar-elevated hover:text-white dark:hover:text-nav`;
 }
-
-export const sidebarActionButtonClass = `flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-nav transition-all duration-200 hover:bg-sidebar-elevated hover:text-white dark:hover:text-nav ${sidebarFocusRingClass}`;
-
-export const sidebarInteractiveRowClass = `flex items-center gap-3 rounded-md px-2 py-2 transition-colors hover:bg-sidebar-elevated ${sidebarFocusRingClass}`;
