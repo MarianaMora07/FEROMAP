@@ -22,10 +22,18 @@ function ensureChart() {
 interface AcoConvergenceChartProps {
   points: AcoConvergencePoint[];
   compact?: boolean;
+  /** Etiqueta del eje Y (default: distancia en km). */
+  yAxisTitle?: string;
+  bestSeriesLabel?: string;
+  iterationSeriesLabel?: string;
 }
 
 export function AcoConvergenceChart(props: AcoConvergenceChartProps) {
   onMount(ensureChart);
+
+  const yTitle = () => props.yAxisTitle ?? 'Distancia (km)';
+  const bestLabel = () => props.bestSeriesLabel ?? 'Mejor distancia global (km)';
+  const iterationLabel = () => props.iterationSeriesLabel ?? 'Mejor de la iteración (km)';
 
   const chartData = createMemo(() => {
     const labels = props.points.map((point) => String(point.iteration));
@@ -33,7 +41,7 @@ export function AcoConvergenceChart(props: AcoConvergenceChartProps) {
       labels,
       datasets: [
         {
-          label: 'Mejor distancia global (km)',
+          label: bestLabel(),
           data: props.points.map((point) => point.bestDistanceKm),
           borderColor: '#16a34a',
           backgroundColor: 'rgba(22, 163, 74, 0.12)',
@@ -41,7 +49,7 @@ export function AcoConvergenceChart(props: AcoConvergenceChartProps) {
           pointRadius: 3,
         },
         {
-          label: 'Mejor de la iteración (km)',
+          label: iterationLabel(),
           data: props.points.map((point) => point.iterationBestDistanceKm),
           borderColor: '#2563eb',
           backgroundColor: 'rgba(37, 99, 235, 0.08)',
@@ -69,7 +77,7 @@ export function AcoConvergenceChart(props: AcoConvergenceChartProps) {
         ticks: { maxTicksLimit: props.compact ? 6 : 12 },
       },
       y: {
-        title: { display: !props.compact, text: 'Distancia (km)' },
+        title: { display: !props.compact, text: yTitle() },
         beginAtZero: false,
       },
     },

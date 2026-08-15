@@ -13,6 +13,7 @@ import {
 import { optimizationPageMeta } from '../../data/mock/optimization';
 import { vehiclesPageMeta } from '../../data/mock/vehicles';
 import { collectionPointsPageMeta } from '../../data/mock/collectionPoints';
+import { demostracionPageMeta } from '../../data/mock/demostracion';
 import { simulationPageMeta } from '../../data/mock/simulationScenarios';
 import { monitoringPageMeta } from '../../data/mock/monitoring';
 import { reportsPageMeta } from '../../data/mock/reports';
@@ -33,6 +34,7 @@ const pageMeta: Record<string, PageMeta> = {
   '/vehicles': vehiclesPageMeta,
   '/collection-points': collectionPointsPageMeta,
   '/simulation': simulationPageMeta,
+  '/demostracion': demostracionPageMeta,
   '/monitoring': monitoringPageMeta,
   '/reports': reportsPageMeta,
   '/analytics': analyticsPageMeta,

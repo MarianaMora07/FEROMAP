@@ -30,6 +30,7 @@ No hace falta explicar “dos pantallas parecidas”: los banners y el menú ya 
 | **6:30–7:00** | `/planning` | Stepper **Recorrido operativo del día** | «El hub encadena semana → optimizar → simular → despachar → monitorear sin que yo recuerde URLs.» |
 | **7:00–7:30** | `/optimization?playback=1` | Banner experiencia del día + **Simular recorrido** | «Mismo día: rutas generadas y replay animado antes de despachar.» |
 | **7:30–8:00** | `/monitoring?dailyPlanId=…&playback=1` | **Reproducir ruta** en monitoreo | «Tras despachar, el replay operativo cierra la narrativa del camión en campo.» |
+| **(alternativa)** | `/demostracion` | **Modo presentación (60 s)** o Iniciar demo → pestaña Convergencia | «Antes del mapa real, el laberinto muestra cómo el ACO explora, deposita feromonas y converge — mismo α, β y ρ que el motor de producción.» |
 | **(alternativa)** | `/simulation?view=history` | Pestaña Historial — una corrida anterior | «Historial de escenarios de tesis; no es el despacho operativo del día.» |
 
 **Duración total:** ~7–8 min (se puede acortar omitiendo cancelación u Optimización).
@@ -89,6 +90,29 @@ Documentación técnica: [docs/fase-8/adr-dotacion-tiempo-servicio.md](../fase-8
 
 ---
 
+## Escena «Demostración ACO» (~2 min, ideal antes de simulación)
+
+**Mensaje clave:** el tribunal entiende el algoritmo sin leer código ni logs del servidor.
+
+### Secuencia
+
+1. **Ir a** `/demostracion` (menú **Análisis → Demostración**).
+2. **Pestaña Laberinto** (por defecto): pulsar **Modo presentación (60 s)** *o* **Iniciar demo**.
+   - Narrar: «Cada hormiga elige el siguiente paso con probabilidad según feromonas (α) y distancia (β).»
+   - Señalar el heatmap: azul = poca feromona, ámbar = mucha (contraste legible).
+3. **Pestaña Convergencia**: curva de costo vs iteración y tabla laberinto vs VRP.
+   - Decir: «El patrón de mejora gradual es el mismo que verán en el mapa real de Bucaramanga.»
+4. **(Opcional)** Banner **Ir a simulación de escenarios** → transición a `/simulation`.
+
+### Frases listas
+
+- «Este laberinto usa los mismos parámetros del proyecto: α=1, β=3, ρ=0,12.»
+- «Aquí optimizamos pasos en una grilla; en FEROMAP optimizamos kilómetros con capacidad y turno.»
+
+Guion detallado: [docs/fase-11/guion-demo-aco.md](../fase-11/guion-demo-aco.md).
+
+---
+
 ## Plan B (si el motor tarda)
 
 - Tener una simulación previa en historial → abrir con `?simulationId=…`
@@ -112,6 +136,7 @@ Documentación técnica: [docs/fase-8/adr-dotacion-tiempo-servicio.md](../fase-8
 - [ ] Probar una corrida con **ausentismo del turno** y ver desglose «Paradas (4/6)» en paso 3
 - [ ] (Opcional) Probar Esc → confirmar cancelación
 - [ ] (Opcional) Una corrida previa en historial por si falla la red
+- [ ] (Opcional) `/demostracion` — modo presentación 60 s y curva de convergencia
 - [ ] `npm test` (unit) en verde
 
 ---
@@ -121,4 +146,5 @@ Documentación técnica: [docs/fase-8/adr-dotacion-tiempo-servicio.md](../fase-8
 ```bash
 npm test              # unit: fases y cancelación en store/runner
 npm run test:e2e      # requiere API en :8000 + VITE_USE_MOCKS=true en dev
+npm run test:e2e -- e2e/demostracion.spec.ts   # flujo mínimo ACO didáctico
 ```

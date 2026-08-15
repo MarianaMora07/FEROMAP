@@ -32,6 +32,7 @@ const VehiclesPage = lazyPage(() => import('../features/vehicles'));
 const DriversPage = lazyPage(() => import('../features/drivers'));
 const CollectionPointsPage = lazyPage(() => import('../features/collection-points'));
 const SimulationPage = lazyPage(() => import('../features/simulation'));
+const DemostracionPage = lazyPage(() => import('../features/demostracion'));
 const MonitoringPage = lazyPage(() => import('../features/monitoring'));
 const AnalyticsPage = lazyPage(() => import('../features/analytics'));
 const ReportsPage = lazyPage(() => import('../features/reports'));
@@ -78,6 +79,7 @@ export default function App() {
         <Route path="/drivers" component={DriversPage} />
         <Route path="/collection-points" component={CollectionPointsPage} />
         <Route path="/simulation" component={SimulationPage} />
+        <Route path="/demostracion" component={DemostracionPage} />
         <Route path="/monitoring" component={MonitoringPage} />
         <Route path="/analytics" component={AnalyticsPage} />
         <Route path="/reports" component={ReportsPage} />
