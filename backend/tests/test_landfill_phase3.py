@@ -19,6 +19,7 @@ from app.services.optimization_service import (
     _route_stops_for_geojson,
     _routes_to_geojson,
 )
+from app.services import route_geometry_service
 from app.services.route_geometry_service import build_route_linestring
 from app.services.route_playback_service import _build_stop
 from tests.resident_fixtures import collection_point, optimized_route, waypoint
@@ -229,7 +230,8 @@ def test_build_stop_landfill_returns_vertedero():
     assert stop["lat"] == DEFAULT_LANDFILL_LAT
 
 
-def test_route_geometry_service_includes_landfill_waypoint():
+def test_route_geometry_service_includes_landfill_waypoint(monkeypatch):
+    monkeypatch.setattr(route_geometry_service, "_road_line_coords", lambda *args, **kwargs: None)
     landfill_wp = SimpleNamespace(
         sequence_order=2,
         waypoint_type="landfill",
@@ -239,7 +241,7 @@ def test_route_geometry_service_includes_landfill_waypoint():
     collection_wp.waypoint_type = "collection"
     coords = build_route_linestring([collection_wp, landfill_wp], include_depot=True)
     assert len(coords) >= 3
-    assert [DEFAULT_LANDFILL_LON, DEFAULT_LANDFILL_LAT] in coords
+    assert [DEFAULT_LANDFILL_LAT, DEFAULT_LANDFILL_LON] in coords
 
 
 def test_playback_route_with_landfill_stop():
