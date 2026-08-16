@@ -14,8 +14,8 @@ import {
   ProgressBar,
 } from '../../design-system/components';
 import { appState } from '../../core/stores/appStore';
+import { routeDisplayKind } from '../../core/map/operationalMapLayers';
 import {
-  dispatchOptimizationResult,
   executeOptimization,
   closeOptimizationDay,
   closeOptimizationPlayback,
@@ -35,14 +35,15 @@ import {
 } from '../../data/mock/optimization';
 import { downloadDailyPlanPdf } from '../../core/api/planning';
 import { optimizationDateHref, tomorrowIso } from '../../core/planning/planningUx';
-import { monitoringHref, optimizationHref, operationalMapHref } from '../../core/planning/operationalLinks';
+import { optimizationHref, operationalMapHref } from '../../core/planning/operationalLinks';
 import { parsePlaybackQueryParam } from '../../core/planning/operationalFlowUx';
 import { PlanningContextualCta } from '../planning/PlanningContextualCta';
 import { PlanningEmptyState } from '../planning/PlanningEmptyState';
 import { PLANNING_EMPTY_PRESETS } from '../../core/planning/planningEmptyStates';
+import { AppShellSubheader } from '../../design-system/layout/pageChromeSlots';
+import { OptimizationHeaderBar } from './OptimizationHeaderChrome';
 import { OptimizationRouteMap } from './OptimizationRouteMap';
 import { OptimizationPlaybackPanel } from './OptimizationPlaybackPanel';
-import { OptimizationStickyToolbar } from './OptimizationStickyToolbar';
 import { OptimizationMainTabs } from './OptimizationMainTabs';
 import { OptimizationMoreContextPanel } from './OptimizationMoreContextPanel';
 import { OptimizationHistoryPanel } from './OptimizationHistoryPanel';
@@ -122,7 +123,7 @@ export default function OptimizationPage() {
   const [paramsSheetOpen, setParamsSheetOpen] = createSignal(false);
   const [dispatchError, setDispatchError] = createSignal<string | null>(null);
   const [closeNotice, setCloseNotice] = createSignal<string | null>(null);
-  const { formGenerateInView, showStickyGenerate, setGenerateAnchorRef } = useGenerateButtonVisibility();
+  const { formGenerateInView, setGenerateAnchorRef } = useGenerateButtonVisibility();
 
   const dailyPlan = () => optimizationState.dailyPlan;
   const selectedDate = () => optimizationState.preset.operationDate;
@@ -155,10 +156,6 @@ export default function OptimizationPage() {
     }
   });
 
-  const handleOpenPlayback = () => {
-    openOptimizationPlayback();
-  };
-
   const handleClosePlayback = () => {
     playback.pause();
     playback.reset();
@@ -170,7 +167,9 @@ export default function OptimizationPage() {
     const optimized =
       optimizationState.lastResult?.routes.optimized ?? {
         type: 'FeatureCollection' as const,
-        features: appState.routes.features.filter((feature) => feature.properties.type === 'optimized'),
+        features: appState.routes.features.filter(
+          (feature) => routeDisplayKind(feature.properties) === 'optimized',
+        ),
       };
     return buildRouteResults(optimized, kpis());
   });
@@ -217,16 +216,6 @@ export default function OptimizationPage() {
     }
   };
 
-  const handleDispatch = async () => {
-    setDispatchError(null);
-    closeOptimizationPlayback();
-    try {
-      await dispatchOptimizationResult();
-    } catch (error) {
-      setDispatchError(error instanceof Error ? error.message : 'No se pudieron despachar las rutas');
-    }
-  };
-
   const handleCloseDay = async () => {
     setCloseNotice(null);
     try {
@@ -252,16 +241,6 @@ export default function OptimizationPage() {
     setTab('nueva');
     navigateToDate(operationDate);
   };
-
-  const pointCount = () => dailyPlan()?.finalPointIds.length ?? optimizationState.context?.pointsToVisit ?? 0;
-  const isDispatched = () => dailyPlan()?.status === 'dispatched';
-  const monitoringLink = () =>
-    isDispatched()
-      ? monitoringHref({
-          date: dailyPlan()?.operationDate ?? selectedDate(),
-          dailyPlanId: dailyPlan()?.id,
-        })
-      : null;
 
   const contextualMessage = createMemo(() =>
     resolveOptimizationContextualMessage({
@@ -299,40 +278,9 @@ export default function OptimizationPage() {
 
   return (
     <div class="space-y-4 md:space-y-5">
-      <Show
-        when={tab() === 'nueva'}
-        fallback={
-          <div
-            class="sticky top-(--header-height) z-20 -mx-4 border-b border-default bg-elevated/95 px-3 py-2 backdrop-blur-md md:-mx-6 md:px-4"
-            data-testid="optimization-history-toolbar"
-          >
-            <p class="text-sm font-semibold text-text-primary">Historial operativo</p>
-            <p class="text-xs text-text-muted">Audita corridas pasadas sin distracciones del día actual.</p>
-          </div>
-        }
-      >
-        <OptimizationStickyToolbar
-          selectedDate={selectedDate()}
-          dailyStatus={dailyPlan()?.status}
-          pointCount={pointCount()}
-          hasResults={hasResults()}
-          playbackOpen={optimizationState.playbackOpen}
-          weeklyPlanApproved={optimizationState.weeklyPlanApproved}
-          dailyPlanId={dailyPlan()?.id}
-          canSimulate={canSimulateRoute()}
-          isOptimizing={optimizationState.isOptimizing}
-          isDispatching={optimizationState.isDispatching}
-          showStickyGenerate={showStickyGenerate()}
-          isDispatched={isDispatched()}
-          monitoringHref={monitoringLink()}
-          onDateSelect={navigateToDate}
-          onGenerate={() => void handleGenerate()}
-          onSimulate={handleOpenPlayback}
-          onDispatch={() => void handleDispatch()}
-          onOpenPlayback={handleOpenPlayback}
-        />
-      </Show>
-
+      <AppShellSubheader>
+        <OptimizationHeaderBar />
+      </AppShellSubheader>
       <OptimizationMainTabs tab={tab()} onTabChange={setTab} />
 
       <Show when={tab() === 'nueva'}>

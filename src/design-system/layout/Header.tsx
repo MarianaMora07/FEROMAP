@@ -22,6 +22,7 @@ import { alertsPageMeta } from '../../data/mock/alerts';
 import { adminPageMeta } from '../../data/mock/admin';
 import { profilePageMeta } from '../../data/mock/profile';
 import { UserMenu } from './UserMenu';
+import { useHeaderChrome } from './pageChromeSlots';
 
 interface HeaderProps {
   title?: string;
@@ -50,7 +51,9 @@ const pageMeta: Record<string, PageMeta> = {
 
 export function Header(props: HeaderProps) {
   const location = useLocation();
+  const chrome = useHeaderChrome();
   const meta = () => pageMeta[location.pathname];
+  const isOptimization = () => location.pathname === '/optimization';
   const isPlannerHome = () => location.pathname === '/' && canOptimize(authUser()?.role);
 
   const [planningSnapshot] = createResource(
@@ -83,57 +86,70 @@ export function Header(props: HeaderProps) {
   };
 
   return (
-    <header class="sticky top-0 z-30 flex h-(--header-height) shrink-0 items-center gap-4 border-b border-default bg-elevated/90 px-4 backdrop-blur-md md:px-6 dark:bg-app/95 dark:backdrop-blur-sm">
-      <button
-        type="button"
-        onClick={toggleSidebar}
-        class="flex h-9 w-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
-        aria-label="Alternar menú"
-      >
-        <Menu size={20} />
-      </button>
+    <header class="sticky top-0 z-30 flex shrink-0 flex-col border-b border-default bg-elevated/90 backdrop-blur-md dark:bg-app/95 dark:backdrop-blur-sm">
+      <div class="flex h-(--header-height) items-center gap-4 px-4 md:px-6">
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          class="flex h-9 w-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+          aria-label="Alternar menú"
+        >
+          <Menu size={20} />
+        </button>
 
-      <div class="min-w-0 flex-1">
-        <Show when={title()}>
-          <h1 class="truncate font-heading text-lg font-bold text-text-primary">
-            {title()}
-          </h1>
-        </Show>
-        <Show when={subtitle()}>
-          <p class="truncate text-xs text-text-muted">{subtitle()}</p>
-        </Show>
-      </div>
-
-      <div class="flex items-center gap-2 sm:gap-3">
-        <div class="hidden items-center gap-2 rounded-md border border-default bg-elevated px-3 py-1.5 text-sm text-text-secondary sm:flex dark:bg-sidebar-elevated">
-          <CalendarDays size={16} class="text-fero-blue" />
-          <span>{dateLabel()}</span>
+        <div class="min-w-0 flex-1">
+          <Show when={title()}>
+            <h1 class="truncate font-heading text-lg font-bold text-text-primary">
+              {title()}
+            </h1>
+          </Show>
+          <Show when={subtitle()}>
+            <p class="truncate text-xs text-text-muted">{subtitle()}</p>
+          </Show>
         </div>
 
-        <button
-          type="button"
-          class="relative flex h-9 w-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
-          aria-label="Notificaciones"
-        >
-          <Bell size={18} />
-          <Show when={dashboardSummary().notifications > 0}>
-            <span class="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-              {dashboardSummary().notifications}
-            </span>
+        <Show when={chrome?.actions()}>
+          <div class="flex shrink-0 items-center gap-1.5">{chrome?.actions()}</div>
+        </Show>
+
+        <div class="flex items-center gap-2 sm:gap-3">
+          <Show when={!isOptimization()}>
+            <div class="hidden items-center gap-2 rounded-md border border-default bg-elevated px-3 py-1.5 text-sm text-text-secondary sm:flex dark:bg-sidebar-elevated">
+              <CalendarDays size={16} class="text-fero-blue" />
+              <span>{dateLabel()}</span>
+            </div>
           </Show>
-        </button>
 
-        <button
-          type="button"
-          class="flex h-9 w-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
-          aria-label="Actualizar"
-          onClick={() => void loadDashboardData()}
-        >
-          <RefreshCw size={18} />
-        </button>
+          <button
+            type="button"
+            class="relative flex h-9 w-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+            aria-label="Notificaciones"
+          >
+            <Bell size={18} />
+            <Show when={dashboardSummary().notifications > 0}>
+              <span class="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                {dashboardSummary().notifications}
+              </span>
+            </Show>
+          </button>
 
-        <UserMenu />
+          <button
+            type="button"
+            class="flex h-9 w-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+            aria-label="Actualizar"
+            onClick={() => void loadDashboardData()}
+          >
+            <RefreshCw size={18} />
+          </button>
+
+          <UserMenu />
+        </div>
       </div>
+      <Show when={chrome?.subheader()}>
+        <div class="flex items-center border-t border-default px-4 py-2 md:px-6">
+          {chrome?.subheader()}
+        </div>
+      </Show>
     </header>
   );
 }

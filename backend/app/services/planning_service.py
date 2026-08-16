@@ -817,6 +817,7 @@ def seed_daily_plan_demo(db: Session, payload: dict[str, Any]) -> None:
             scheduled_point_ids_json=_dump_json_list(scheduled_ids),
         )
     )
+    db.flush()
 
 
 def seed_optimized_daily_playback_demo(

@@ -67,6 +67,34 @@ export function themeBaseStyleId(_darkMode: boolean): MapBaseStyleId {
   return 'unare-local';
 }
 
+let unareTilesAvailable: boolean | null = null;
+
+export function resetMapStyleCache(): void {
+  unareTilesAvailable = null;
+}
+
+async function probeUnareTiles(): Promise<boolean> {
+  try {
+    const res = await fetch('/api/v1/map/tiles/meta', { credentials: 'include' });
+    if (!res.ok) return false;
+    const meta = (await res.json()) as { available?: boolean };
+    return Boolean(meta.available);
+  } catch {
+    return false;
+  }
+}
+
 export function mapStyleForTheme(darkMode: boolean): StyleSpecification {
+  if (unareTilesAvailable === false) {
+    return darkMode ? mapStylesById.oscuro : mapStylesById.claro;
+  }
   return mapStylesById[themeBaseStyleId(darkMode)];
+}
+
+/** Resuelve el estilo: Unare local si el backend tiene MBTiles; si no, OSM. */
+export async function resolveMapStyle(darkMode: boolean): Promise<StyleSpecification> {
+  if (unareTilesAvailable === null) {
+    unareTilesAvailable = await probeUnareTiles();
+  }
+  return mapStyleForTheme(darkMode);
 }

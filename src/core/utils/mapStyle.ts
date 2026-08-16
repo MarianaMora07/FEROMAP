@@ -5,6 +5,7 @@ import { mapStyleForTheme } from './mapStyleConfig';
 
 export {
   mapStyleForTheme,
+  resolveMapStyle,
   mapStylesById,
   osmMapStyle,
   themeBaseStyleId,
