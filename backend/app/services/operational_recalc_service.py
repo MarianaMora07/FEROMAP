@@ -52,7 +52,7 @@ def collect_remaining_day_point_ids(db: Session, daily_plan_id: int) -> list[int
             OptimizedRoute.route_kind == "optimized",
         )
         .options(joinedload(OptimizedRoute.waypoints))
-    ).all()
+    ).unique().all()
     point_ids: list[int] = []
     for route in routes:
         for waypoint in route.waypoints:

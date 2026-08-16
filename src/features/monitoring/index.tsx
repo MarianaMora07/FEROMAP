@@ -427,7 +427,7 @@ export default function MonitoringPage() {
   };
 
   useOperationalRoutesLayer({
-    map: () => mapRef.current,
+    map: mapInstance,
     mapReady,
     routes: operationalRoutes,
     sourceId: 'live-routes',

@@ -113,32 +113,13 @@ def _serialize_stop(
     }
 
 
-def _remaining_distance_km(route: OptimizedRoute, progress: int) -> float | None:
-    if route.total_distance_meters is None:
-        return None
-    total_km = float(route.total_distance_meters) / 1000
-    if progress >= 100:
-        return 0.0
-    return round(total_km * (1 - progress / 100), 1)
-
-
-def _total_distance_km(route: OptimizedRoute) -> float | None:
-    if route.total_distance_meters is None:
-        return None
-    return round(float(route.total_distance_meters) / 1000, 1)
-
-
-def _traveled_distance_km(route: OptimizedRoute, progress: int) -> float | None:
-    total = _total_distance_km(route)
-    if total is None:
-        return None
-    return round(total * progress / 100, 1)
-
-
 def _route_query(*, driver_id: int | None, statuses: tuple[str, ...]):
     stmt = (
         select(OptimizedRoute)
-        .where(OptimizedRoute.status.in_(statuses))
+        .where(
+            OptimizedRoute.status.in_(statuses),
+            OptimizedRoute.route_kind == "optimized",
+        )
         .options(
             joinedload(OptimizedRoute.vehicle),
             joinedload(OptimizedRoute.driver),
@@ -147,15 +128,56 @@ def _route_query(*, driver_id: int | None, statuses: tuple[str, ...]):
             .joinedload(RouteWaypoint.collection_point)
             .joinedload(CollectionPoint.sector),
         )
-        .order_by(OptimizedRoute.id.desc())
+        .order_by(OptimizedRoute.id.asc())
     )
     if driver_id is not None:
         stmt = stmt.where(OptimizedRoute.driver_id == driver_id)
     return stmt
 
 
+def _merge_line_coordinates(segments: list[list[list[float]]]) -> list[list[float]] | None:
+    merged: list[list[float]] = []
+    for coords in segments:
+        if len(coords) < 2:
+            continue
+        if merged and coords[0] == merged[-1]:
+            coords = coords[1:]
+        merged.extend(coords)
+    return merged if len(merged) >= 2 else None
+
+
+def _primary_route(routes: list[OptimizedRoute]) -> OptimizedRoute:
+    for status in ("in_progress", "pending"):
+        for route in routes:
+            if route.status == status:
+                return route
+    return routes[-1]
+
+
+def _load_driver_routes(
+    db: Session,
+    *,
+    driver_id: int | None,
+    daily_plan: DailyPlan | None,
+) -> list[OptimizedRoute]:
+    if driver_id is None:
+        route = db.scalars(_route_query(driver_id=None, statuses=("in_progress",))).unique().first()
+        return [route] if route is not None else []
+
+    if daily_plan is not None:
+        stmt = _route_query(
+            driver_id=driver_id,
+            statuses=("pending", "in_progress", "completed"),
+        ).where(OptimizedRoute.daily_plan_id == daily_plan.id)
+        routes = list(db.scalars(stmt).unique().all())
+        if routes:
+            return routes
+
+    return list(db.scalars(_route_query(driver_id=driver_id, statuses=("in_progress",))).unique().all())
+
+
 def _serialize_route_snapshot(
-    route: OptimizedRoute,
+    routes: list[OptimizedRoute],
     operation_date: date | None = None,
     *,
     landfill_lon: float,
@@ -163,49 +185,76 @@ def _serialize_route_snapshot(
     landfill_unload_minutes: int,
     shift_budget_seconds: int,
 ) -> dict[str, Any]:
-    waypoints = sorted(route.waypoints, key=lambda wp: wp.sequence_order)
-    stops = [
-        _serialize_stop(
-            wp,
-            landfill_lon=landfill_lon,
-            landfill_lat=landfill_lat,
-            landfill_unload_minutes=landfill_unload_minutes,
-        )
-        for wp in waypoints
-    ]
-    line_coordinates = build_route_linestring_cached(route, waypoints, include_depot=True)
-    if len(line_coordinates) < 2:
-        line_coordinates = None
-    progress = route_progress_percent(waypoints)
-    completed = sum(1 for wp in waypoints if wp.status == "completed")
+    primary = _primary_route(routes)
+    stops: list[dict[str, Any]] = []
+    all_waypoints: list[RouteWaypoint] = []
+    line_segments: list[list[list[float]]] = []
+    total_meters = 0.0
+    has_distance = False
+    duration_seconds = 0
+
+    for route in routes:
+        waypoints = sorted(route.waypoints, key=lambda wp: wp.sequence_order)
+        all_waypoints.extend(waypoints)
+        for waypoint in waypoints:
+            stop = _serialize_stop(
+                waypoint,
+                landfill_lon=landfill_lon,
+                landfill_lat=landfill_lat,
+                landfill_unload_minutes=landfill_unload_minutes,
+            )
+            stop["sequenceOrder"] = len(stops) + 1
+            stops.append(stop)
+        line_segments.append(build_route_linestring_cached(route, waypoints, include_depot=True))
+        if route.total_distance_meters is not None:
+            total_meters += float(route.total_distance_meters)
+            has_distance = True
+        if route.estimated_duration_seconds:
+            duration_seconds += int(route.estimated_duration_seconds)
+
+    line_coordinates = _merge_line_coordinates(line_segments)
+    progress = route_progress_percent(all_waypoints)
+    completed = sum(1 for wp in all_waypoints if wp.status == "completed")
     next_stop = next((stop for stop in stops if stop["status"] == "pending"), None)
 
-    daily_plan = route.daily_plan
-    vehicle = route.vehicle
+    daily_plan = primary.daily_plan
+    vehicle = primary.vehicle
     operation = daily_plan.operation_date if daily_plan else (operation_date or date.today())
     shift_utilization_pct = None
-    if route.estimated_duration_seconds and shift_budget_seconds > 0:
+    if duration_seconds and shift_budget_seconds > 0:
         shift_utilization_pct = min(
             100.0,
-            round(float(route.estimated_duration_seconds) / shift_budget_seconds * 100, 1),
+            round(float(duration_seconds) / shift_budget_seconds * 100, 1),
         )
+
+    total_km = round(total_meters / 1000, 1) if has_distance else None
+    remaining_km = None
+    traveled_km = None
+    if total_km is not None:
+        remaining_km = 0.0 if progress >= 100 else round(total_km * (1 - progress / 100), 1)
+        traveled_km = round(total_km * progress / 100, 1)
+
+    vehicle_code = vehicle.code if vehicle else None
+    label = f"Ruta {vehicle_code}" if vehicle_code else f"Ruta {primary.id}"
+    if len(routes) > 1:
+        label = f"{label} · {len(routes)} tramos"
 
     return {
         "operationDate": operation.isoformat(),
-        "dailyPlanId": daily_plan.id if daily_plan else route.daily_plan_id,
+        "dailyPlanId": daily_plan.id if daily_plan else primary.daily_plan_id,
         "dailyPlanStatus": daily_plan.status if daily_plan else None,
         "dailyPlanClosedAt": daily_plan.closed_at.isoformat()
         if daily_plan and daily_plan.closed_at
         else None,
-        "routeId": route.id,
-        "vehicleId": vehicle.code if vehicle else None,
-        "routeLabel": f"Ruta {vehicle.code}" if vehicle else f"Ruta {route.id}",
+        "routeId": primary.id,
+        "vehicleId": vehicle_code,
+        "routeLabel": label,
         "progress": progress,
         "stopsDone": completed,
-        "stopsTotal": len(waypoints),
-        "totalDistanceKm": _total_distance_km(route),
-        "traveledDistanceKm": _traveled_distance_km(route, progress),
-        "remainingDistanceKm": _remaining_distance_km(route, progress),
+        "stopsTotal": len(all_waypoints),
+        "totalDistanceKm": total_km,
+        "traveledDistanceKm": traveled_km,
+        "remainingDistanceKm": remaining_km,
         "nextStop": next_stop,
         "stops": stops,
         "lineCoordinates": line_coordinates,
@@ -226,21 +275,14 @@ def operator_route_snapshot(
     today = operation_date or date.today()
     daily_plan = db.scalar(select(DailyPlan).where(DailyPlan.operation_date == today))
     facilities = resolve_operational_facilities(db)
-    landfill_lon, landfill_lat = facilities.landfill
+    routes = _load_driver_routes(db, driver_id=driver_id, daily_plan=daily_plan)
 
-    route = db.scalars(_route_query(driver_id=driver_id, statuses=("in_progress",))).unique().first()
-    if route is None and daily_plan is not None:
-        stmt = _route_query(driver_id=driver_id, statuses=("completed",)).where(
-            OptimizedRoute.daily_plan_id == daily_plan.id,
-        )
-        route = db.scalars(stmt).unique().first()
-
-    if route is not None:
+    if routes:
         return _serialize_route_snapshot(
-            route,
+            routes,
             operation_date,
-            landfill_lon=landfill_lon,
-            landfill_lat=landfill_lat,
+            landfill_lon=facilities.landfill[0],
+            landfill_lat=facilities.landfill[1],
             landfill_unload_minutes=facilities.landfill_unload_minutes,
             shift_budget_seconds=facilities.shift_budget_seconds,
         )

@@ -5,6 +5,11 @@ import { Card } from '../../design-system/components';
 import { appState } from '../../core/stores/appStore';
 import { OperationalMap } from '../../core/map/OperationalMap';
 import { fitMapToOperationalData } from '../../core/map/operationalMapConfig';
+import {
+  routeDisplayKind,
+  syncContainerMarkers,
+  toPlainRouteCollection,
+} from '../../core/map/operationalMapLayers';
 import { mapLegendContainers } from '../../data/mock/optimization';
 import type { OptimizationRouteResult } from '../../core/utils/optimizationResults';
 import type { RoutePlaybackModel } from '../../core/route-playback/routePlaybackTypes';
@@ -14,11 +19,20 @@ import { RoutePlaybackLegend } from '../route-playback/RoutePlaybackLegend';
 import {
   syncLandfillFacilityMarker,
   syncRouteLandfillStopMarkers,
-  removeLandfillFacilityMarker,
 } from '../../core/map/landfillMapLayers';
 import { DEFAULT_MAP_FACILITIES } from '../../core/utils/landfillUx';
+import { buildContainerPopupHtml } from '../../core/utils/popupHtml';
 import { fetchAdminSettings } from '../../core/api/admin';
 import { useMocks } from '../../core/api/client';
+
+function containerPin(color: string) {
+  const el = document.createElement('div');
+  el.style.cssText =
+    'width:14px;height:14px;border-radius:9999px;background:' +
+    color +
+    ';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.25)';
+  return el;
+}
 
 const vehicleLegendClass: Record<string, string> = {
   blue: 'text-fero-blue',
@@ -39,6 +53,7 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
   const [mapInstance, setMapInstance] = createSignal<MapLibreMap | undefined>();
   const landfillMarkerHolder: { marker?: maplibregl.Marker } = {};
   const routeLandfillMarkers: maplibregl.Marker[] = [];
+  const containerMarkers: maplibregl.Marker[] = [];
   const [facilities, setFacilities] = createSignal(DEFAULT_MAP_FACILITIES);
 
   const syncRoutes = () => {
@@ -46,11 +61,11 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
     if (!map || !map.isStyleLoaded()) return;
 
     const features = props.hasResults
-      ? appState.routes.features.map((feature) => ({
+      ? toPlainRouteCollection(appState.routes).features.map((feature) => ({
           ...feature,
           properties: {
             ...feature.properties,
-            kind: feature.properties.type,
+            kind: routeDisplayKind(feature.properties),
           },
         }))
       : [];
@@ -106,17 +121,30 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
       }
     }
 
+    syncContainerMarkers(map, appState.containers, containerMarkers, {
+      createMarkerElement: (color) => containerPin(color),
+      buildPopupHtml: buildContainerPopupHtml,
+    });
+    syncLandfillFacilityMarker(map, facilities(), landfillMarkerHolder);
+
     if (props.hasResults) {
-      syncLandfillFacilityMarker(map, facilities(), landfillMarkerHolder);
       syncRouteLandfillStopMarkers(
         map,
         { type: 'FeatureCollection', features },
         routeLandfillMarkers,
       );
     } else {
-      removeLandfillFacilityMarker(landfillMarkerHolder);
       routeLandfillMarkers.forEach((marker) => marker.remove());
       routeLandfillMarkers.length = 0;
+    }
+
+    if (features.length === 0 && !playbackActive) {
+      fitMapToOperationalData(map, {
+        points: appState.containers.features.map((feature) => ({
+          lng: feature.geometry.coordinates[0],
+          lat: feature.geometry.coordinates[1],
+        })),
+      });
     }
   };
 
@@ -127,7 +155,7 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
   };
 
   onMount(() => {
-    if (!useMocks()) {
+    if (!useMocks) {
       void fetchAdminSettings().then((settings) => {
         setFacilities({
           depotLat: settings.depotLat,
@@ -146,6 +174,7 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
     props.hasResults;
     props.playbackActive;
     appState.routes;
+    appState.containers;
     facilities();
     syncRoutes();
   });
@@ -180,14 +209,14 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
         </div>
       </div>
 
-      <div class="relative h-85 bg-app lg:h-95">
+      <div class="relative h-85 bg-slate-100 lg:h-95 dark:bg-slate-900">
         <OperationalMap
           onMapReady={handleMapReady}
           onStyleRestored={() => syncRoutes()}
         >
           <Show when={!props.hasResults}>
-            <div class="absolute inset-0 z-10 flex items-center justify-center bg-elevated/50 text-sm text-text-muted backdrop-blur-sm">
-              Ejecute la optimización para visualizar las rutas
+            <div class="absolute bottom-3 left-3 z-10 rounded-md border border-default bg-elevated/95 px-2.5 py-1.5 text-xs text-text-secondary shadow-sm">
+              Genere la ruta para ver el recorrido
             </div>
           </Show>
 
@@ -225,6 +254,10 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
               onClick={() =>
                 fitMapToOperationalData(mapRef.current!, {
                   routes: props.hasResults ? appState.routes : { type: 'FeatureCollection', features: [] },
+                  points: appState.containers.features.map((feature) => ({
+                    lng: feature.geometry.coordinates[0],
+                    lat: feature.geometry.coordinates[1],
+                  })),
                 })
               }
             >

@@ -10,10 +10,15 @@ import {
 describe('operatorPlaybackUx', () => {
   const routes = mockDailyRoutePlayback(1).routes;
 
-  it('filters playback to a single operator vehicle', () => {
-    const filtered = filterOperatorPlaybackRoute(routes, 'TR-08');
-    expect(filtered).toHaveLength(1);
-    expect(filtered[0]?.vehicleLabel).toBe('TR-08');
+  it('keeps every playback route of the operator vehicle', () => {
+    const extra = { ...routes[0]!, routeId: 99 };
+    const filtered = filterOperatorPlaybackRoute([...routes, extra], 'TR-08');
+    expect(filtered).toHaveLength(2);
+    expect(filtered.every((route) => route.vehicleLabel === 'TR-08')).toBe(true);
+  });
+
+  it('does not fall back to another driver route', () => {
+    expect(filterOperatorPlaybackRoute(routes, 'TR-99')).toEqual([]);
   });
 
   it('derives next stop from playback route state', () => {

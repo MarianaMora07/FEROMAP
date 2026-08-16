@@ -5,6 +5,7 @@ import { Button, Card } from '../../design-system/components';
 import { appState } from '../../core/stores/appStore';
 import { OperationalMap } from '../../core/map/OperationalMap';
 import { fitMapToOperationalData } from '../../core/map/operationalMapConfig';
+import { routeDisplayKind, toPlainRouteCollection } from '../../core/map/operationalMapLayers';
 import { fillLevelColor } from '../../core/utils/geoUtils';
 import { buildContainerPopupHtml } from '../../core/utils/popupHtml';
 import type { RoutePlaybackModel } from '../../core/route-playback/routePlaybackTypes';
@@ -86,9 +87,9 @@ export function SimulationMapPanel(props: SimulationMapPanelProps) {
     if (!map || !map.isStyleLoaded() || showExecutionOverlay()) return;
 
     const routeFeatures = props.hasResults
-      ? appState.routes.features.map((feature) => ({
+      ? toPlainRouteCollection(appState.routes).features.map((feature) => ({
           ...feature,
-          properties: { ...feature.properties, kind: feature.properties.type },
+          properties: { ...feature.properties, kind: routeDisplayKind(feature.properties) },
         }))
       : [];
 

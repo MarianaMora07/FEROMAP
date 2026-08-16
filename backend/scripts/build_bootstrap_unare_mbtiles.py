@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import http.client
 import math
 import sqlite3
 import time
@@ -14,7 +15,12 @@ from pathlib import Path
 UNARE_BBOX = (-62.81, 8.24, -62.69, 8.31)
 DEFAULT_MIN_ZOOM = 12
 DEFAULT_MAX_ZOOM = 16
-TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+TILE_URLS = (
+    "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png",
+)
 USER_AGENT = "FEROMAP-MBTiles-Bootstrap/1.0 (thesis; one-time local cache)"
 
 
@@ -40,22 +46,22 @@ def xyz_to_tms_row(z: int, y: int) -> int:
     return (1 << z) - 1 - y
 
 
-def fetch_tile(z: int, x: int, y: int, retries: int = 3) -> bytes | None:
-    url = TILE_URL.format(z=z, x=x, y=y)
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+def fetch_tile(z: int, x: int, y: int, retries: int = 6) -> bytes | None:
     for attempt in range(retries):
+        url = TILE_URLS[attempt % len(TILE_URLS)].format(z=z, x=x, y=y)
+        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
+            with urllib.request.urlopen(request, timeout=60) as response:
                 return response.read()
         except urllib.error.HTTPError as exc:
             if exc.code == 404:
                 return None
             if attempt == retries - 1:
                 raise
-        except urllib.error.URLError:
+        except (urllib.error.URLError, TimeoutError, http.client.IncompleteRead, OSError):
             if attempt == retries - 1:
                 raise
-        time.sleep(0.5 * (attempt + 1))
+        time.sleep(1.0 * (attempt + 1))
     return None
 
 
@@ -111,7 +117,7 @@ def create_mbtiles(
                     inserted += 1
                     if inserted % 25 == 0:
                         print(f"  · {inserted} tiles (z{zoom}, x{x}, y{y})")
-                    time.sleep(0.05)
+                    time.sleep(0.12)
 
         conn.commit()
 

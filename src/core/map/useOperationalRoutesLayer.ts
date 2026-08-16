@@ -1,4 +1,4 @@
-import { createEffect } from 'solid-js';
+import { createEffect, createSignal, onCleanup } from 'solid-js';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { RouteCollection } from '../types/geo';
 import {
@@ -24,9 +24,30 @@ const DEFAULT_PLAYBACK_OPACITY = { active: 0.2, pending: 0.12 };
 const DEFAULT_NORMAL_OPACITY = { active: 0.95, pending: 0.75 };
 
 export function useOperationalRoutesLayer(options: UseOperationalRoutesLayerOptions) {
+  const [styleEpoch, setStyleEpoch] = createSignal(0);
+
   createEffect(() => {
+    if (!options.mapReady()) return;
     const map = options.map();
-    if (!map?.isStyleLoaded() || !options.mapReady()) return;
+    if (!map) return;
+
+    const bump = () => setStyleEpoch((epoch) => epoch + 1);
+    map.on('style.load', bump);
+    onCleanup(() => {
+      map.off('style.load', bump);
+    });
+  });
+
+  createEffect(() => {
+    styleEpoch();
+    const map = options.map();
+    if (!map || !options.mapReady()) return;
+    if (!map.isStyleLoaded()) {
+      const retry = () => setStyleEpoch((epoch) => epoch + 1);
+      map.once('idle', retry);
+      map.once('style.load', retry);
+      return;
+    }
 
     const routes = options.routes();
     const sourceId = options.sourceId ?? 'operational-routes';

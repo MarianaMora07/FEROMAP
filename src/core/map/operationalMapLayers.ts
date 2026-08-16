@@ -22,7 +22,34 @@ export type OperationalRouteFeatureProps = {
   status?: string;
   vehicleId?: string;
   routeKind?: string;
+  type?: string;
+  kind?: string;
 };
+
+export const PENDING_ROUTE_STATUS_FILTER: FilterSpecification = ['==', ['get', 'status'], 'pending'];
+/** Cualquier ruta que no sea planificada (incluye status ausente o del API). */
+export const ACTIVE_ROUTE_STATUS_FILTER: FilterSpecification = ['!=', ['get', 'status'], 'pending'];
+
+/** MapLibre no serializa proxies de Solid Store; hay que pasar JSON plano. */
+export function toPlainRouteCollection(routes: RouteCollection): RouteCollection {
+  return JSON.parse(JSON.stringify(routes)) as RouteCollection;
+}
+
+export function routeDisplayKind(
+  props: Pick<OperationalRouteFeatureProps, 'kind' | 'type' | 'routeKind'>,
+): 'current' | 'optimized' {
+  const raw = props.kind ?? props.type ?? props.routeKind;
+  return raw === 'current' ? 'current' : 'optimized';
+}
+
+export function resolveOperationalRouteStatus(
+  props: Pick<OperationalRouteFeatureProps, 'status' | 'type' | 'routeKind' | 'kind'>,
+): 'pending' | 'in_progress' | 'completed' {
+  if (props.status === 'pending' || props.status === 'in_progress' || props.status === 'completed') {
+    return props.status;
+  }
+  return 'in_progress';
+}
 
 export type EnsureOperationalRouteLayerOptions = {
   splitByStatus?: boolean;
@@ -41,19 +68,20 @@ export function routeLayerStateKey(routeId: number | string): string {
 }
 
 export function normalizeOperationalRoutes(routes: RouteCollection): RouteCollection {
+  const plain = toPlainRouteCollection(routes);
   return {
-    ...routes,
-    features: routes.features.map((feature) => ({
-      ...feature,
-      properties: {
-        ...feature.properties,
-        status:
-          (feature.properties as OperationalRouteFeatureProps).status ??
-          (feature.properties as { type?: string }).type === 'active'
-            ? 'in_progress'
-            : 'in_progress',
-      },
-    })),
+    ...plain,
+    features: plain.features.map((feature) => {
+      const props = feature.properties as OperationalRouteFeatureProps;
+      return {
+        ...feature,
+        properties: {
+          ...props,
+          status: resolveOperationalRouteStatus(props),
+          kind: routeDisplayKind(props),
+        },
+      };
+    }),
   };
 }
 
@@ -119,23 +147,10 @@ export function syncOperationalRouteLayerFilters(
     if (!options.routesVisible) return;
 
     if (map.getLayer(pending)) {
-      map.setFilter(
-        pending,
-        combineFilters(['==', ['get', 'status'], 'pending'], routeFilter),
-      );
+      map.setFilter(pending, combineFilters(PENDING_ROUTE_STATUS_FILTER, routeFilter));
     }
     if (map.getLayer(active)) {
-      map.setFilter(
-        active,
-        combineFilters(
-          [
-            'any',
-            ['==', ['get', 'status'], 'in_progress'],
-            ['!', ['has', 'status']],
-          ],
-          routeFilter,
-        ),
-      );
+      map.setFilter(active, combineFilters(ACTIVE_ROUTE_STATUS_FILTER, routeFilter));
     }
     return;
   }
@@ -157,6 +172,42 @@ export function vehicleStatusKey(status: string): string {
   return status.replace('-', '_');
 }
 
+function addSplitOperationalRouteLayers(map: MapLibreMap, sourceId: string) {
+  const { pending, active } = operationalRouteLayerIds(sourceId);
+  const pendingStyle = OPERATIONAL_ROUTE_MAP_STYLES.pending;
+  const activeStyle = OPERATIONAL_ROUTE_MAP_STYLES.in_progress;
+
+  if (!map.getLayer(pending)) {
+    map.addLayer({
+      id: pending,
+      type: 'line',
+      source: sourceId,
+      filter: PENDING_ROUTE_STATUS_FILTER,
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: {
+        'line-color': ['coalesce', ['get', 'color'], '#1143F3'],
+        'line-width': 4,
+        'line-opacity': pendingStyle.opacity,
+        'line-dasharray': [2, 2],
+      },
+    });
+  }
+  if (!map.getLayer(active)) {
+    map.addLayer({
+      id: active,
+      type: 'line',
+      source: sourceId,
+      filter: ACTIVE_ROUTE_STATUS_FILTER,
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: {
+        'line-color': ['coalesce', ['get', 'color'], '#34D634'],
+        'line-width': 4,
+        'line-opacity': activeStyle.opacity,
+      },
+    });
+  }
+}
+
 export function ensureOperationalRouteLayer(
   map: MapLibreMap,
   routes: RouteCollection,
@@ -173,56 +224,38 @@ export function ensureOperationalRouteLayer(
 
   if (!map.getSource(sourceId)) {
     map.addSource(sourceId, { type: 'geojson', data });
-    if (splitByStatus) {
-      const { pending, active } = operationalRouteLayerIds(sourceId);
-      const pendingStyle = OPERATIONAL_ROUTE_MAP_STYLES.pending;
-      const activeStyle = OPERATIONAL_ROUTE_MAP_STYLES.in_progress;
+  } else {
+    (map.getSource(sourceId) as maplibregl.GeoJSONSource).setData(data);
+  }
 
-      map.addLayer({
-        id: pending,
-        type: 'line',
-        source: sourceId,
-        filter: ['==', ['get', 'status'], 'pending'],
-        paint: {
-          'line-color': ['coalesce', ['get', 'color'], '#1143F3'],
-          'line-width': 4,
-          'line-opacity': pendingStyle.opacity,
-          'line-dasharray': [2, 2],
-        },
-      });
-      map.addLayer({
-        id: active,
-        type: 'line',
-        source: sourceId,
-        filter: [
-          'any',
-          ['==', ['get', 'status'], 'in_progress'],
-          ['!', ['has', 'status']],
-        ],
-        paint: {
-          'line-color': ['coalesce', ['get', 'color'], '#34D634'],
-          'line-width': 4,
-          'line-opacity': activeStyle.opacity,
-        },
-      });
-      return;
-    }
+  if (splitByStatus) {
+    addSplitOperationalRouteLayers(map, sourceId);
+    return;
+  }
 
-    const layerId = resolved.singleLayerId ?? `${sourceId}-line`;
+  const layerId = resolved.singleLayerId ?? `${sourceId}-line`;
+  if (!map.getLayer(layerId)) {
     map.addLayer({
       id: layerId,
       type: 'line',
       source: sourceId,
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: {
         'line-color': ['coalesce', ['get', 'color'], '#34D634'],
         'line-width': 4,
         'line-opacity': 0.9,
       },
     });
-    return;
   }
+}
 
-  (map.getSource(sourceId) as maplibregl.GeoJSONSource).setData(data);
+export function operationalRouteLayerIdsToFront(map: MapLibreMap, sourceId = OPERATIONAL_ROUTES_SOURCE_ID) {
+  const { pending, active } = operationalRouteLayerIds(sourceId);
+  const single = `${sourceId}-line`;
+  for (const layerId of [pending, active, single]) {
+    if (!map.getLayer(layerId)) continue;
+    map.moveLayer(layerId);
+  }
 }
 
 export interface FleetMarkerOptions {

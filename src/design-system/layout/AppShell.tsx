@@ -3,6 +3,7 @@ import { useLocation } from '@solidjs/router';
 import { ToastContainer } from '../components/Toast';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
+import { HeaderChromeProvider } from './pageChromeSlots';
 import {
   appState,
   closeSidebarIfMobile,
@@ -20,6 +21,7 @@ interface AppShellProps {
 export function AppShell(props: AppShellProps) {
   const location = useLocation();
   const isMapView = () => props.fullWidth || location.pathname === '/map';
+  const isOptimization = () => location.pathname === '/optimization';
 
   createEffect(() => {
     location.pathname;
@@ -27,6 +29,7 @@ export function AppShell(props: AppShellProps) {
   });
 
   return (
+    <HeaderChromeProvider>
     <div class="flex h-full overflow-hidden bg-app">
       <Sidebar open={appState.sidebarOpen} />
 
@@ -52,7 +55,9 @@ export function AppShell(props: AppShellProps) {
           class={`min-h-0 flex-1 ${
             isMapView()
               ? 'overflow-hidden p-0'
-              : 'overflow-auto bg-app p-4 md:p-6'
+              : isOptimization()
+                ? 'overflow-auto bg-app px-4 pb-4 pt-3 md:px-6 md:pb-6 md:pt-3'
+                : 'overflow-auto bg-app p-4 md:p-6'
           }`}
         >
           {props.children}
@@ -61,6 +66,7 @@ export function AppShell(props: AppShellProps) {
 
       <ToastContainer toasts={globalToast.toasts()} onDismiss={globalToast.removeToast} />
     </div>
+    </HeaderChromeProvider>
   );
 }
 
