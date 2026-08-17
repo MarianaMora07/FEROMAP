@@ -22,7 +22,7 @@ class OptimizeRequest(CamelModel):
         default=None,
         ge=1,
         le=12,
-        description="Duración estimada de operación (horas). Se persiste; no modifica el motor VRP.",
+        description="Jornada de referencia en horas (1–12). Turno típico: 12 h. Se persiste y define exceedsWorkday; no modifica el motor VRP.",
     )
     operators_shortage: int | None = Field(
         default=None,

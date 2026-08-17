@@ -50,10 +50,10 @@ export const wasteLevelOptions = [
 ];
 
 export const durationOptions = [
-  { value: '2', label: '2 horas' },
-  { value: '4', label: '4 horas' },
   { value: '6', label: '6 horas' },
   { value: '8', label: '8 horas' },
+  { value: '10', label: '10 horas' },
+  { value: '12', label: '12 horas (turno típico)' },
 ];
 
 export const currentScenarioSummary = {

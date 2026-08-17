@@ -11,6 +11,8 @@ export interface OperationalMapProps {
   containerClass?: string;
   /** Sincroniza claro/oscuro con `appState.darkMode` (desactivar si el padre controla `setStyle`). */
   themeSync?: boolean;
+  minZoom?: number;
+  maxBounds?: maplibregl.LngLatBoundsLike;
   onMapReady?: (map: MapLibreMap) => void;
   onStyleRestored?: (map: MapLibreMap) => void;
   children?: JSX.Element;
@@ -37,6 +39,8 @@ export function OperationalMap(props: OperationalMapProps) {
       createOperationalMapOptions({
         container: mapContainer,
         style: mapStyleForTheme(appState.darkMode),
+        minZoom: props.minZoom,
+        maxBounds: props.maxBounds,
       }),
     );
     mapRef.current = map;

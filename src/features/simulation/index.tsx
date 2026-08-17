@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   ArrowRight,
   CloudRain,
-  Leaf,
   Play,
   Plus,
   Square,
@@ -13,7 +12,6 @@ import {
   TrendingUp,
   Truck,
   Users,
-  Wrench,
 } from 'lucide-solid';
 import {
   Button,
@@ -25,11 +23,9 @@ import { fetchCollectionPointsSummary } from '../../core/api/collectionPoints';
 import { countSimulationReadyVehicles, fetchVehicles } from '../../core/api/vehicles';
 import { canOptimize } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
-import { fetchMonitoringStatus } from '../../core/api/monitoring';
 import { fetchDailyRoutePlayback, fetchSimulationRoutePlayback } from '../../core/api/routePlayback';
 import { fetchCurrentWeeklyPlan } from '../../core/api/planning';
 import { useRoutePlayback } from '../../core/route-playback/useRoutePlayback';
-import { optimizationHref } from '../../core/planning/operationalLinks';
 import { todayIso } from '../../core/planning/planningUx';
 import {
   applySimulationScenario,
@@ -59,26 +55,22 @@ import {
   type SimulationReadiness,
 } from '../../core/utils/simulationWizard';
 import { parseSimulationIdParam } from '../../core/utils/simulationLinks';
-import { BreakdownReporter, ContingencyResultBanner } from '../contingency/BreakdownReporter';
-import { RecentIncidentsPanel } from '../contingency/RecentIncidentsPanel';
+import { ContingencyResultBanner } from '../contingency/BreakdownReporter';
 import type { ScenarioId } from '../../data/types/simulation';
 import { ConfigurationSummaryPanel } from './ConfigurationSummaryPanel';
-import { ExecutiveSummary } from './ExecutiveSummary';
-import { DurationBreakdownPanel } from './DurationBreakdownPanel';
-import { EngineComputationPanel } from './EngineComputationPanel';
-import { LandfillKpiStrip } from '../landfill/LandfillKpiStrip';
-import { UncoveredPointsAlert } from '../landfill/UncoveredPointsAlert';
 import { ExecutionPanel } from './ExecutionPanel';
-import { PostSimulationActions } from './PostSimulationActions';
 import { SimulationHistoryPanel } from './SimulationHistoryPanel';
 import { WeeklyPlanTab } from './WeeklyPlanTab';
 import { PlanningGlossaryStrip } from '../planning/PlanningGlossaryStrip';
-import { PlanningContextualCta } from '../planning/PlanningContextualCta';
 import { ThesisVsOperationsNotice } from '../planning/ThesisVsOperationsNotice';
 import { WizardStepNav } from './WizardStepNav';
+import { SimulationResultsStep } from './SimulationResultsStep';
+import {
+  DEFAULT_SIMULATION_RESULTS_TAB,
+  type SimulationResultsTabId,
+} from './simulationResultsConfig';
 import { CancelExecutionConfirmDialog } from './CancelExecutionConfirmDialog';
 import { SimulationMapPanel } from './SimulationMapPanel';
-import { RoutePlaybackPanel } from '../route-playback/RoutePlaybackPanel';
 import {
   EXECUTION_CANCEL_MESSAGES,
   formatWizardExecutionSubstatus,
@@ -88,6 +80,7 @@ import {
 import {
   conditionsForScenario,
   defaultConditions,
+  DEFAULT_SHIFT_REFERENCE_HOURS,
   durationOptions,
   operatorsShortageOptions,
   acoAntsOptions,
@@ -176,64 +169,6 @@ function ConditionRowIcon(props: { icon: (typeof simulationConditions)[number]['
   }
 }
 
-function EfficiencyGauge(props: { value: number }) {
-  const r = 54;
-  const c = 2 * Math.PI * r;
-  const half = c / 2;
-  const offset = half - (half * props.value) / 100;
-
-  return (
-    <div class="relative w-40 shrink-0">
-      <svg viewBox="0 0 140 96" class="w-full">
-        <defs>
-          <linearGradient id="eff-gauge" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stop-color="#34D634" />
-            <stop offset="55%" stop-color="#93F555" />
-            <stop offset="100%" stop-color="#56E93D" />
-          </linearGradient>
-        </defs>
-        <path
-          d="M 16 78 A 54 54 0 0 1 124 78"
-          fill="none"
-          stroke="#e2e8f0"
-          stroke-width="12"
-          stroke-linecap="round"
-        />
-        <path
-          d="M 16 78 A 54 54 0 0 1 124 78"
-          fill="none"
-          stroke="url(#eff-gauge)"
-          stroke-width="12"
-          stroke-linecap="round"
-          stroke-dasharray={`${half}`}
-          stroke-dashoffset={offset}
-        />
-      </svg>
-      <div class="absolute inset-x-0 top-[58%] -translate-y-1/2 text-center">
-        <p class="font-heading text-3xl font-bold leading-none text-text-primary dark:text-white">
-          {props.value}%
-        </p>
-      </div>
-      <p class="-mt-1.5 text-center text-xs text-fero-blue">Eficiencia del escenario</p>
-    </div>
-  );
-}
-
-function MetricBar(props: { label: string; value: number }) {
-  return (
-    <li class="grid grid-cols-[7.5rem_1fr_2.25rem] items-center gap-2">
-      <span class="truncate text-xs text-text-secondary">{props.label}</span>
-      <div class="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-        <div
-          class="h-full rounded-full bg-linear-to-r from-fero-green-dark via-fero-green-mid to-fero-green"
-          style={{ width: `${props.value}%` }}
-        />
-      </div>
-      <span class="text-right text-xs font-semibold text-text-primary dark:text-white">{props.value}%</span>
-    </li>
-  );
-}
-
 async function fetchReadiness() {
   const [vehicles, pointsSummary] = await Promise.all([
     fetchVehicles(),
@@ -268,7 +203,7 @@ export default function SimulationPage() {
   const [conditions, setConditions] = createSignal(defaultConditions());
   const [rainIntensity, setRainIntensity] = createSignal('alta');
   const [wasteLevel, setWasteLevel] = createSignal('30');
-  const [duration, setDuration] = createSignal('4');
+  const [duration, setDuration] = createSignal(DEFAULT_SHIFT_REFERENCE_HOURS);
   const [crewShortageEnabled, setCrewShortageEnabled] = createSignal(false);
   const [operatorsShortage, setOperatorsShortage] = createSignal('2');
   const [acoPreset, setAcoPreset] = createSignal<AcoPresetId>(initialAcoPreset);
@@ -278,16 +213,14 @@ export default function SimulationPage() {
   const [historyError, setHistoryError] = createSignal<string | null>(null);
   const [runError, setRunError] = createSignal<string | null>(null);
   const [runNotice, setRunNotice] = createSignal<string | null>(null);
-  const [incidentsRefreshKey, setIncidentsRefreshKey] = createSignal(0);
   const [cancelConfirmOpen, setCancelConfirmOpen] = createSignal(false);
   const [playbackOpen, setPlaybackOpen] = createSignal(false);
+  const [resultsTab, setResultsTab] = createSignal<SimulationResultsTabId>(DEFAULT_SIMULATION_RESULTS_TAB);
   const [weeklyPlanBridge] = createResource(() =>
     fetchCurrentWeeklyPlan().catch(() => null),
   );
   const [readiness, setReadiness] = createSignal<SimulationReadiness | undefined>();
   const [loadingReadiness, setLoadingReadiness] = createSignal(true);
-  const [monitoringData, setMonitoringData] = createSignal<Awaited<ReturnType<typeof fetchMonitoringStatus>> | undefined>();
-
   const loadReadiness = async () => {
     setLoadingReadiness(true);
     try {
@@ -298,21 +231,6 @@ export default function SimulationPage() {
       setLoadingReadiness(false);
     }
   };
-
-  const loadMonitoring = async () => {
-    try {
-      setMonitoringData(await fetchMonitoringStatus());
-    } catch {
-      setMonitoringData(undefined);
-    }
-  };
-
-  const fleetForBreakdown = () =>
-    (monitoringData()?.liveFleet ?? []).map((v) => ({
-      id: v.id,
-      routeId: v.routeId,
-      status: v.status,
-    }));
 
   const derivedScenario = createMemo(() =>
     describeDerivedScenario(conditions(), simulationState.scenarios),
@@ -478,6 +396,7 @@ export default function SimulationPage() {
       }
       setHasResults(true);
       setStep(3);
+      setResultsTab('map');
       setPlaybackOpen(true);
     } catch (error) {
       setRunError(error instanceof Error ? error.message : 'No se pudo ejecutar la simulación');
@@ -493,6 +412,7 @@ export default function SimulationPage() {
     setStep(1);
     setHasResults(false);
     setPlaybackOpen(false);
+    setResultsTab(DEFAULT_SIMULATION_RESULTS_TAB);
     setRunError(null);
     setConditions(defaultConditions());
     applySimulationScenario('normal');
@@ -506,17 +426,12 @@ export default function SimulationPage() {
       setHasResults(true);
       setPageTab('flow');
       setStep(3);
+      setResultsTab('map');
       setPlaybackOpen(true);
     } catch (error) {
       setHistoryError(error instanceof Error ? error.message : 'No se pudo cargar la simulación');
     }
   };
-
-  createEffect(() => {
-    if (step() >= 2) {
-      void loadMonitoring();
-    }
-  });
 
   onMount(() => {
     void loadReadiness();
@@ -757,7 +672,7 @@ export default function SimulationPage() {
                 </div>
                 <div class="min-w-0">
                   <label class="mb-1 block text-xs text-text-muted">
-                    Duración estimada <span class="text-text-muted">(informativo)</span>
+                    Jornada de referencia <span class="text-text-muted">(turno típico 12 h)</span>
                   </label>
                   <select
                     value={duration()}
@@ -784,7 +699,7 @@ export default function SimulationPage() {
         </div>
       </Show>
 
-      {/* Paso 2 — Revisión y ejecución */}
+      {/* Paso 2 — Revisión y ejecución (misma rejilla 3+9 que configuración) */}
       <Show when={step() === 2}>
         <div class="grid items-start gap-4 xl:grid-cols-12">
           <div class="space-y-4 xl:col-span-3">
@@ -827,6 +742,11 @@ export default function SimulationPage() {
             <SimulationMapPanel
               hasResults={hasResults()}
               executionMode
+              squareLayout
+              largeMap
+              studyAreaFit
+              showBaselineRoute
+              uniformContainers
               executionPhase={simulationState.executionPhase}
               isRunning={simulationState.isOptimizing}
               executionProgress={simulationState.optimizationProgress}
@@ -836,27 +756,28 @@ export default function SimulationPage() {
               playbackLoading={playbackPayload.loading}
               onOpenPlayback={handleOpenPlayback}
             />
-            <ExecutionPanel
-              isRunning={simulationState.isOptimizing}
-              progress={simulationState.optimizationProgress}
-              logs={simulationState.logs}
-              error={runError()}
-              notice={runNotice()}
-              executionPhase={simulationState.executionPhase}
-              executionPhaseIndex={executionPhaseIndex()}
-              executionTotalPhases={executionTotalPhases()}
-              executionNarrative={executionNarrative()}
-              scenarioLabel={derivedScenario().label}
-              acoConvergence={simulationState.acoConvergenceLive}
-            />
-            <Card>
-              <CardHeader title="Reportar contingencia" />
-              <BreakdownReporter
-                vehicles={fleetForBreakdown()}
-                onComplete={() => setIncidentsRefreshKey((value) => value + 1)}
+            <Show
+              when={
+                simulationState.isOptimizing ||
+                simulationState.logs.length > 0 ||
+                Boolean(runError()) ||
+                Boolean(runNotice())
+              }
+            >
+              <ExecutionPanel
+                isRunning={simulationState.isOptimizing}
+                progress={simulationState.optimizationProgress}
+                logs={simulationState.logs}
+                error={runError()}
+                notice={runNotice()}
+                executionPhase={simulationState.executionPhase}
+                executionPhaseIndex={executionPhaseIndex()}
+                executionTotalPhases={executionTotalPhases()}
+                executionNarrative={executionNarrative()}
+                scenarioLabel={derivedScenario().label}
+                acoConvergence={simulationState.acoConvergenceLive}
               />
-            </Card>
-            <RecentIncidentsPanel refreshKey={incidentsRefreshKey()} compact />
+            </Show>
           </div>
         </div>
         <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4 dark:border-dark-border">
@@ -898,136 +819,37 @@ export default function SimulationPage() {
 
       {/* Paso 3 — Resultados e impacto */}
       <Show when={step() === 3}>
-        <Show
-          when={hasResults()}
-          fallback={
-            <Card>
-              <p class="py-12 text-center text-sm text-text-muted">
-                Aún no hay resultados. Vuelve al paso 2 y ejecuta una simulación.
-              </p>
-            </Card>
+        <SimulationResultsStep
+          hasResults={hasResults()}
+          tab={resultsTab()}
+          onTabChange={setResultsTab}
+          kpis={currentKpis()}
+          efficiencyValue={efficiencyValue()}
+          performanceIndicators={performanceIndicators()}
+          impactRows={impactRows()}
+          savings={savings()}
+          workdayWarning={workdayWarning()}
+          simulationId={simulationState.lastSimulationId}
+          onNewSimulation={handleNewSimulation}
+          weeklyPlanApproved={weeklyPlanBridge()?.status === 'approved'}
+          operationDate={todayIso()}
+          scenarioId={derivedScenario().scenarioId}
+          scenarioLabel={derivedScenario().label}
+          playbackOpen={playbackOpen()}
+          playbackRoutes={playbackRoutes()}
+          playback={playback}
+          playbackLoading={playbackPayload.loading}
+          playbackError={
+            playbackPayload.error
+              ? playbackPayload.error instanceof Error
+                ? playbackPayload.error.message
+                : 'No se pudo cargar el recorrido'
+              : null
           }
-        >
-          <div class="space-y-4">
-            <div class="grid items-start gap-4 xl:grid-cols-12">
-              <div class="space-y-4 xl:col-span-8">
-                <SimulationMapPanel
-                  hasResults={hasResults()}
-                  playbackActive={playbackOpen()}
-                  playbackRoutes={playbackRoutes()}
-                  playback={playback}
-                  playbackLoading={playbackPayload.loading}
-                  onOpenPlayback={handleOpenPlayback}
-                />
-              </div>
-              <div class="xl:col-span-4">
-                <Show when={playbackOpen()}>
-                  <RoutePlaybackPanel
-                    routes={playbackRoutes()}
-                    playback={playback}
-                    scenarioId={derivedScenario().scenarioId}
-                    scenarioLabel={derivedScenario().label}
-                    operationDate={todayIso()}
-                    previewMode={playbackPayload()?.previewMode ?? true}
-                    loading={playbackPayload.loading}
-                    error={
-                      playbackPayload.error
-                        ? playbackPayload.error instanceof Error
-                          ? playbackPayload.error.message
-                          : 'No se pudo cargar el recorrido'
-                        : null
-                    }
-                    onClose={handleClosePlayback}
-                    variant="inline"
-                    title="Recorrido simulado"
-                  />
-                </Show>
-              </div>
-            </div>
-            <PostSimulationActions
-              simulationId={simulationState.lastSimulationId}
-              onNewSimulation={handleNewSimulation}
-            />
-            <Show when={weeklyPlanBridge()?.status === 'approved'}>
-              <PlanningContextualCta
-                tone="info"
-                message="Plan semanal aprobado — lleva el escenario al plan operativo del día."
-                href={optimizationHref({ date: todayIso() })}
-                linkLabel="Ver en plan del día"
-              />
-            </Show>
-            <Show when={workdayWarning()}>
-              {(message) => (
-                <div class="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
-                  <AlertTriangle size={18} class="mt-0.5 shrink-0" />
-                  <p>{message()}</p>
-                </div>
-              )}
-            </Show>
-            <UncoveredPointsAlert kpis={currentKpis()} />
-            <LandfillKpiStrip kpis={currentKpis()} />
-            <ExecutiveSummary kpis={currentKpis()} />
-            <DurationBreakdownPanel kpis={currentKpis()} />
-            <EngineComputationPanel kpis={currentKpis()} />
-            <div class="grid items-start gap-4 xl:grid-cols-2">
-              <Card>
-                <CardHeader title="Comparación de rutas" subtitle="Ruta actual vs ruta simulada" />
-                <div class="overflow-x-auto">
-                  <table class="w-full text-sm">
-                    <thead>
-                      <tr class="border-b border-border text-left text-[10px] uppercase tracking-wide text-text-muted">
-                        <th class="pb-2 font-semibold">Métrica</th>
-                        <th class="pb-2 font-semibold">Actual</th>
-                        <th class="pb-2 font-semibold text-fero-green-dark">Simulado</th>
-                      </tr>
-                    </thead>
-                    <tbody class="divide-y divide-border dark:divide-dark-border">
-                      <For each={impactRows()}>
-                        {(row) => (
-                          <tr>
-                            <td class="py-2.5 text-text-secondary">{row.metric}</td>
-                            <td class="py-2.5 text-text-muted">{row.current}</td>
-                            <td class="py-2.5">
-                              <span class="font-semibold text-fero-green-dark">{row.simulated}</span>
-                              <span class="ml-1.5 text-xs font-medium text-fero-green-dark">
-                                {row.delta}%
-                              </span>
-                            </td>
-                          </tr>
-                        )}
-                      </For>
-                    </tbody>
-                  </table>
-                </div>
-                <div class="mt-3 flex items-start gap-2.5 rounded-lg border border-fero-green/30 bg-fero-green/10 px-3 py-2.5">
-                  <Leaf size={18} class="mt-0.5 shrink-0 text-fero-green-dark" />
-                  <div>
-                    <p class="text-xs font-semibold text-fero-green-dark">Ahorro estimado</p>
-                    <p class="mt-0.5 text-sm font-medium text-text-primary dark:text-white">
-                      {savings().distanceKm} km · {savings().timeMin} min · {savings().fuelL} L ·{' '}
-                      {savings().co2Kg} kg CO₂ evitados
-                    </p>
-                  </div>
-                </div>
-              </Card>
-              <Card padding={false} class="overflow-hidden">
-                <div class="px-4 pt-4">
-                  <h3 class="font-heading font-semibold text-text-primary dark:text-white">
-                    Indicadores de desempeño
-                  </h3>
-                </div>
-                <div class="flex flex-col items-center gap-5 px-4 py-4 sm:flex-row sm:items-center">
-                  <EfficiencyGauge value={efficiencyValue()} />
-                  <ul class="w-full flex-1 space-y-3">
-                    <For each={performanceIndicators()}>
-                      {(ind) => <MetricBar label={ind.label} value={ind.value} />}
-                    </For>
-                  </ul>
-                </div>
-              </Card>
-            </div>
-          </div>
-        </Show>
+          playbackPreviewMode={playbackPayload()?.previewMode ?? true}
+          onOpenPlayback={handleOpenPlayback}
+          onClosePlayback={handleClosePlayback}
+        />
         <div class="flex flex-wrap justify-between gap-2 border-t border-border pt-4 dark:border-dark-border">
           <Button
             variant="outline"

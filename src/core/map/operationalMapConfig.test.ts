@@ -23,10 +23,13 @@ import {
   OPERATIONAL_MAP_MIN_ZOOM,
   createOperationalMapOptions,
   fitMapToOperationalData,
+  fitMapToStudyArea,
   operationalMapContextFilters,
+  STUDY_AREA_FIT_MAX_ZOOM,
+  boundsFromSectorCollection,
 } from './operationalMapConfig';
 import { UNARE_BBOX_QUERY, UNARE_BOUNDS, UNARE_CENTER, UNARE_ZOOM } from '../types/geo';
-import type { RouteCollection } from '../types/geo';
+import type { RouteCollection, SectorCollection } from '../types/geo';
 
 function createMockMap(initialZoom = 13): MapLibreMap {
   return {
@@ -84,6 +87,57 @@ describe('operationalMapConfig', () => {
       bbox: UNARE_BBOX_QUERY,
       sector: 'Unare I',
     });
+  });
+});
+
+describe('fitMapToStudyArea', () => {
+  it('ajusta el mapa al bbox de Unare cuando no hay sectores', () => {
+    const map = createMockMap();
+
+    fitMapToStudyArea(map);
+
+    expect(map.fitBounds).toHaveBeenCalledWith(
+      expect.any(MockLngLatBounds),
+      expect.objectContaining({
+        padding: OPERATIONAL_MAP_FIT_PADDING,
+        maxZoom: STUDY_AREA_FIT_MAX_ZOOM,
+      }),
+    );
+  });
+
+  it('ajusta el mapa a los polígonos de sectores cuando están disponibles', () => {
+    const map = createMockMap();
+    const sectors: SectorCollection = {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: { name: 'Unare I', population: 100, avgWasteKg: 100 },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [
+              [
+                [-62.825, 8.241],
+                [-62.72, 8.241],
+                [-62.72, 8.286],
+                [-62.825, 8.286],
+                [-62.825, 8.241],
+              ],
+            ],
+          },
+        },
+      ],
+    };
+
+    fitMapToStudyArea(map, { sectors });
+
+    expect(boundsFromSectorCollection(sectors)).not.toBeNull();
+    expect(map.fitBounds).toHaveBeenCalledWith(
+      expect.any(MockLngLatBounds),
+      expect.objectContaining({
+        maxZoom: STUDY_AREA_FIT_MAX_ZOOM,
+      }),
+    );
   });
 });
 

@@ -148,9 +148,10 @@ export function buildParameterEffectNotes(params: SimulationUiParameters): Param
   }
 
   notes.push({
-    label: `Duración estimada (${params.durationHours} h)`,
+    label: `Jornada de referencia (${params.durationHours} h)`,
     status: 'informative',
-    detail: 'Se registra en la simulación; no modifica el cálculo del motor VRP.',
+    detail:
+      'Turno típico de recolección (p. ej. 12 h). Se usa para avisar si la ruta optimizada excede la jornada; no modifica el cálculo del motor VRP.',
   });
 
   if (params.crewShortageEnabled) {
