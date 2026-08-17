@@ -1,7 +1,7 @@
 import { For, Show } from 'solid-js';
 import { Card, CardHeader } from '../../design-system/components';
 import type { Scenario } from '../../data/types/simulation';
-import type { ConditionId } from './simulationConfig';
+import { DEFAULT_SHIFT_REFERENCE_HOURS, type ConditionId } from './simulationConfig';
 import {
   buildParameterEffectNotes,
   describeDerivedScenario,
@@ -33,7 +33,7 @@ export function ConfigurationSummaryPanel(props: ConfigurationSummaryPanelProps)
     buildParameterEffectNotes({
       rainIntensity: props.rainIntensity ?? 'alta',
       wasteLevel: props.wasteLevel ?? '30',
-      durationHours: props.durationHours ?? '4',
+      durationHours: props.durationHours ?? DEFAULT_SHIFT_REFERENCE_HOURS,
       conditions: props.conditions,
       scenarioId: derived().scenarioId,
       crewShortageEnabled: props.crewShortageEnabled ?? false,

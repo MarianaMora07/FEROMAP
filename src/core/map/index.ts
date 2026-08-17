@@ -10,6 +10,9 @@ export {
 export {
   createOperationalMapOptions,
   fitMapToOperationalData,
+  fitMapToStudyArea,
+  boundsFromSectorCollection,
+  studyAreaBoundsLike,
   operationalMapContextFilters,
 } from './operationalMapConfig';
 export {

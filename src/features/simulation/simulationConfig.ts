@@ -70,11 +70,14 @@ export const wasteLevelOptions = [
   { value: '50', label: '+50%' },
 ];
 
+/** Jornada operativa de referencia para KPI exceedsWorkday (turno típico 06:00–18:00). */
+export const DEFAULT_SHIFT_REFERENCE_HOURS = '12';
+
 export const durationOptions = [
-  { value: '2', label: '2 horas' },
-  { value: '4', label: '4 horas' },
   { value: '6', label: '6 horas' },
   { value: '8', label: '8 horas' },
+  { value: '10', label: '10 horas' },
+  { value: '12', label: '12 horas (turno típico)' },
 ];
 
 export const acoPresetOptions = [
@@ -138,11 +141,45 @@ export const mapRouteLegend = [
   { id: 'optimized', label: 'Ruta optimizada', style: 'solid-green' as const },
 ];
 
+export const mapManualRouteLegend = [
+  { id: 'current', label: 'Ruta planificada a mano', style: 'dashed-slate' as const },
+];
+
 export const mapMarkerLegend = [
   { id: 'normal', label: 'Contenedor normal', icon: 'trash' as const, class: 'text-fero-green-dark' },
   { id: 'full', label: 'Contenedor lleno', icon: 'trash' as const, class: 'text-amber-500' },
   { id: 'critical', label: 'Contenedor crítico', icon: 'trash' as const, class: 'text-red-500' },
 ];
+
+/** Leyenda neutra en planificación — aún no se conoce el nivel de llenado. */
+export const mapPlanningMarkerLegend = [
+  { id: 'containers', label: 'Contenedores', icon: 'trash' as const, class: 'text-fero-green-dark' },
+];
+
+export const PLANNING_CONTAINER_MARKER_COLOR = '#22c55e';
+export const PLANNING_CONTAINER_MARKER_HALO_COLOR = 'rgba(34, 197, 94, 0.35)';
+export const DEFAULT_PLANNING_CONTAINER_MARKER_SIZE_PX = 48;
+
+export const planningContainerMarkerSizeOptions = [
+  { value: 24, label: '24 px — muy pequeño' },
+  { value: 32, label: '32 px — pequeño' },
+  { value: 48, label: '48 px — medio' },
+  { value: 64, label: '64 px — grande' },
+  { value: 80, label: '80 px' },
+  { value: 100, label: '100 px' },
+  { value: 120, label: '120 px' },
+  { value: 150, label: '150 px' },
+  { value: 200, label: '200 px — muy grande' },
+] as const;
+
+export function planningContainerCircleMetrics(sizePx: number) {
+  const radius = sizePx / 2;
+  return {
+    radius,
+    haloRadius: radius + Math.max(10, Math.round(radius * 0.18)),
+    strokeWidth: Math.max(2, Math.min(10, Math.round(sizePx / 22))),
+  };
+}
 
 const SCENARIO_IDS: ScenarioId[] = ['normal', 'peak_traffic', 'rain', 'saturated', 'broken_vehicle'];
 

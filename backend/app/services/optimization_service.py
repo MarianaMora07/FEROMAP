@@ -1488,7 +1488,7 @@ def run_optimization_engine(
     if kpis["exceedsWorkday"]["optimized"]:
         report(
             "refinamiento_2opt",
-            f"La duración optimizada supera la jornada de referencia ({duration_h or 8} h)",
+            f"La duración optimizada supera la jornada de referencia ({duration_h or 12} h)",
             "warning",
         )
 

@@ -6,14 +6,14 @@ describe('buildSimulationRunParameters', () => {
   const base = {
     rainIntensity: 'alta',
     wasteLevel: '30',
-    durationHours: '4',
+    durationHours: '12',
     conditions: defaultConditions(),
     scenarioId: 'normal' as const,
   };
 
   it('omits operatorsShortage when crew shortage toggle is off', () => {
     expect(buildSimulationRunParameters(base)).toEqual({
-      estimatedDurationHours: 4,
+      estimatedDurationHours: 12,
       acoAnts: 12,
       acoIterations: 20,
     });
@@ -27,7 +27,7 @@ describe('buildSimulationRunParameters', () => {
         operatorsShortage: '2',
       }),
     ).toEqual({
-      estimatedDurationHours: 4,
+      estimatedDurationHours: 12,
       operatorsShortage: 2,
       acoAnts: 12,
       acoIterations: 20,
@@ -42,7 +42,7 @@ describe('buildSimulationRunParameters', () => {
         acoIterations: '10',
       }),
     ).toEqual({
-      estimatedDurationHours: 4,
+      estimatedDurationHours: 12,
       acoAnts: 6,
       acoIterations: 10,
     });
