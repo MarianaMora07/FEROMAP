@@ -2,6 +2,7 @@ export type FillStatus = 'critico' | 'lleno' | 'normal' | 'parcial' | 'fuera-de-
 
 export interface CollectionPoint {
   id: string;
+  numericId?: number;
   label: string;
   address: string;
   sector: string;

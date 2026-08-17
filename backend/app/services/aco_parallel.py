@@ -43,14 +43,13 @@ def _route_cost(
     return distance, duration
 
 
-def _two_opt(route: list[int], dist_matrix: list[list[float]], *, landfill_idx: int) -> list[int]:
+def _two_opt(route: list[int], dist_matrix: list[list[float]], *, landfill_idx: int, max_passes: int = 10) -> list[int]:
     if landfill_idx in route[1:-1]:
         return route
     if len(route) <= 3:
         return route
     best = route[:]
-    improved = True
-    while improved:
+    for _ in range(max_passes):
         improved = False
         for i in range(1, len(best) - 2):
             for j in range(i + 1, len(best) - 1):
@@ -61,6 +60,8 @@ def _two_opt(route: list[int], dist_matrix: list[list[float]], *, landfill_idx: 
                 if new_cost < old_cost - 1e-6:
                     best[i : j + 1] = reversed(best[i : j + 1])
                     improved = True
+        if not improved:
+            break
     return best
 
 
