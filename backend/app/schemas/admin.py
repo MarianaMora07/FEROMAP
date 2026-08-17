@@ -62,10 +62,10 @@ class OperationalSettings(CamelModel):
     weight_unit: str = "t"
     time_unit: str = "min"
     fill_threshold_pct: int = 80
-    depot_lat: float = -62.715
-    depot_lon: float = 8.295
-    landfill_lat: float = -62.690
-    landfill_lon: float = 8.280
+    depot_lat: float = 8.295
+    depot_lon: float = -62.715
+    landfill_lat: float = 8.280
+    landfill_lon: float = -62.690
     landfill_unload_minutes: int = 15
     work_start: str = "06:00"
     work_end: str = "18:00"

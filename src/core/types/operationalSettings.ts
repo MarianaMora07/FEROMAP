@@ -34,10 +34,10 @@ export type OperationalFacilitiesSettings = Pick<
 >;
 
 export const DEFAULT_OPERATIONAL_FACILITIES: OperationalFacilitiesSettings = {
-  depotLat: -62.715,
-  depotLon: 8.295,
-  landfillLat: -62.69,
-  landfillLon: 8.28,
+  depotLat: 8.295,
+  depotLon: -62.715,
+  landfillLat: 8.28,
+  landfillLon: -62.69,
   landfillUnloadMinutes: 15,
   workStart: '06:00',
   workEnd: '18:00',

@@ -37,7 +37,8 @@ import type { KpiMetrics, ScenarioId } from '../../data/types/simulation';
 import { optimizationLogMessages } from '../../data/mock/kpis';
 import { getScenarioRoutes } from '../../data/mock/routes';
 import { kpiByScenario } from '../../data/mock/kpis';
-import { loadRoutesOnMap, showOptimizedRoute } from './appStore';
+import { isPlausibleDailyOptimizationKpis, formatDurationHours } from '../utils/optimizationResults';
+import { loadRoutesOnMap, loadRoutesWithRoadSnapping, showOptimizedRoute } from './appStore';
 import { loadDashboardData } from './dashboardStore';
 import { writeLastOptimizedCodes } from '../utils/collectionPointsOptimization';
 import { recordOperationalRun } from '../utils/operationalHistory';
@@ -135,6 +136,55 @@ export async function refreshWeekCalendar(weekStart?: string): Promise<void> {
   }
 }
 
+function canHydrateDailySimulation(dailyPlan: DailyPlan, detail: Awaited<ReturnType<typeof fetchSimulationDetail>>): boolean {
+  if (dailyPlan.status !== 'optimized' && dailyPlan.status !== 'dispatched') {
+    return false;
+  }
+  const context = detail.planningContext;
+  if (context?.level === 'strategic') {
+    return false;
+  }
+  if (context?.operationDate && context.operationDate !== dailyPlan.operationDate) {
+    return false;
+  }
+  const pointCount = dailyPlan.finalPointIds?.length ?? dailyPlan.scheduledPoints.length;
+  return isPlausibleDailyOptimizationKpis(detail.kpis, pointCount);
+}
+
+async function clearOptimizationResultsOnMap(): Promise<void> {
+  await loadRoutesOnMap({ type: 'FeatureCollection', features: [] });
+  showOptimizedRoute(false);
+}
+
+async function hydrateOptimizationFromDailyPlan(dailyPlan: DailyPlan): Promise<void> {
+  if (!dailyPlan.simulationId) return;
+  try {
+    const detail = await fetchSimulationDetail(dailyPlan.simulationId);
+    if (!canHydrateDailySimulation(dailyPlan, detail)) {
+      await clearOptimizationResultsOnMap();
+      return;
+    }
+    const merged = mergeRouteCollections(detail.routes.current, detail.routes.optimized);
+    await loadRoutesWithRoadSnapping(merged);
+    setState({
+      kpis: detail.kpis,
+      lastSimulationId: detail.id,
+      preset: { ...state.preset, scenarioId: detail.scenarioId },
+    });
+    showOptimizedRoute(true);
+  } catch {
+    await clearOptimizationResultsOnMap();
+  }
+}
+
+function assertPlausibleOptimizationResult(kpis: KpiMetrics, pointCount: number): void {
+  if (!isPlausibleDailyOptimizationKpis(kpis, pointCount)) {
+    throw new Error(
+      `La optimización devolvió métricas incoherentes (${kpis.distanceKm.optimized.toFixed(1)} km, ${formatDurationHours(kpis.durationHours.optimized)}) para ${pointCount} puntos del día. Reinicie el backend si acaba de actualizar el código y vuelva a generar la ruta.`,
+    );
+  }
+}
+
 export async function initOptimizationPage(operationDate?: string): Promise<void> {
   const dateValue = operationDate ?? state.preset.operationDate;
   if (contextLoaded && state.context && state.dailyPlan?.operationDate === dateValue) return;
@@ -157,8 +207,13 @@ export async function initOptimizationPage(operationDate?: string): Promise<void
         scenarioId: dailyPlan.scenarioId ?? state.preset.scenarioId,
       },
       lastSimulationId: dailyPlan.simulationId ?? state.lastSimulationId,
-      kpis: dailyPlan.simulationId ? state.kpis : null,
+      kpis: null,
     });
+    if (dailyPlan.status === 'draft') {
+      await clearOptimizationResultsOnMap();
+    } else if (dailyPlan.simulationId) {
+      await hydrateOptimizationFromDailyPlan(dailyPlan);
+    }
     saveOptimizationPreset(state.preset);
     await refreshWeekCalendar(mondayOfDate(dateValue));
     contextLoaded = true;
@@ -256,6 +311,8 @@ export async function executeOptimization(): Promise<void> {
       const routes = getScenarioRoutes(state.preset.scenarioId);
       await loadRoutesOnMap(routes);
       const kpis = kpiByScenario[state.preset.scenarioId];
+      const pointCount = state.dailyPlan?.finalPointIds?.length ?? state.context?.pointsToVisit ?? 0;
+      assertPlausibleOptimizationResult(kpis, pointCount);
       setState({
         kpis,
         lastSimulationId: 1,
@@ -305,6 +362,12 @@ export async function executeOptimization(): Promise<void> {
         setState('logs', (logs) => [...logs, result.logs[i]]);
       }
 
+      const pointCount = Math.max(
+        state.dailyPlan?.finalPointIds?.length ?? 0,
+        result.kpis.containersServed ?? 0,
+        result.servedPointCodes?.length ?? 0,
+      );
+      assertPlausibleOptimizationResult(result.kpis, pointCount);
       const merged = mergeRouteCollections(result.routes.current, result.routes.optimized);
       await loadRoutesOnMap(merged);
       setState({

@@ -98,6 +98,15 @@ export function isCurrentWeek(weekStartDate: string, reference = new Date()): bo
   return weekStartDate === mondayIso(reference);
 }
 
+export function sanitizeWeeklyPlanDays(days: WeeklyPlanDay[]): WeeklyPlanDay[] {
+  return days.map((day) => ({
+    ...day,
+    collectionPointIds: day.collectionPointIds.filter(
+      (id): id is number => typeof id === 'number' && Number.isFinite(id) && id > 0,
+    ),
+  }));
+}
+
 function mockWeeklyPlan(): WeeklyPlan {
   const start = mondayIso();
   const days: WeeklyPlanDay[] = [];
@@ -120,6 +129,72 @@ function mockWeeklyPlan(): WeeklyPlan {
     scenarioId: 'normal',
     days,
   };
+}
+
+let mockWeeklyPlanItems: WeeklyPlan[] | null = null;
+let mockWeeklyPlanNextId = 10;
+
+function weekEndFromStart(weekStart: string): string {
+  const date = new Date(`${weekStart}T12:00:00`);
+  date.setDate(date.getDate() + 4);
+  return date.toISOString().slice(0, 10);
+}
+
+function buildMockAutofillDays(weekStartDate: string): WeeklyPlanDay[] {
+  const pointIds = [1, 2, 3, 4, 5];
+  const chunk = Math.max(1, Math.ceil(pointIds.length / 5));
+  return Array.from({ length: 5 }, (_, offset) => {
+    const date = new Date(`${weekStartDate}T12:00:00`);
+    date.setDate(date.getDate() + offset);
+    return {
+      operationDate: date.toISOString().slice(0, 10),
+      weekday: offset,
+      sectorIds: [],
+      collectionPointIds: pointIds.slice(offset * chunk, (offset + 1) * chunk),
+      status: 'planned',
+    };
+  });
+}
+
+function ensureMockWeeklyPlans(): WeeklyPlan[] {
+  if (mockWeeklyPlanItems) return mockWeeklyPlanItems;
+  const current = mondayIso();
+  const prev = addWeeksToMonday(current, -1);
+  const next = addWeeksToMonday(current, 1);
+  mockWeeklyPlanItems = [
+    {
+      ...mockWeeklyPlan(),
+      id: 3,
+      weekStartDate: next,
+      weekEndDate: weekEndFromStart(next),
+      status: 'draft',
+      days: [],
+    },
+    { ...mockWeeklyPlan(), id: 1, weekStartDate: current, status: 'approved' },
+    {
+      ...mockWeeklyPlan(),
+      id: 2,
+      weekStartDate: prev,
+      weekEndDate: weekEndFromStart(prev),
+      status: 'approved',
+    },
+  ];
+  return mockWeeklyPlanItems;
+}
+
+function findMockWeeklyPlan(planId: number): WeeklyPlan | undefined {
+  return ensureMockWeeklyPlans().find((plan) => plan.id === planId);
+}
+
+function upsertMockWeeklyPlan(plan: WeeklyPlan): WeeklyPlan {
+  const items = ensureMockWeeklyPlans();
+  const index = items.findIndex((row) => row.id === plan.id);
+  if (index >= 0) {
+    items[index] = plan;
+  } else {
+    items.push(plan);
+  }
+  return plan;
 }
 
 function mockDailyPlan(operationDate: string): DailyPlan {
@@ -155,42 +230,28 @@ function mockDailyPlan(operationDate: string): DailyPlan {
 
 export function fetchWeeklyPlans(): Promise<{ items: WeeklyPlan[]; count: number }> {
   if (useMocks) {
-    const current = mondayIso();
-    const prev = addWeeksToMonday(current, -1);
-    const next = addWeeksToMonday(current, 1);
-    const nextEnd = new Date(next);
-    nextEnd.setDate(nextEnd.getDate() + 4);
-    return Promise.resolve({
-      items: [
-        {
-          ...mockWeeklyPlan(),
-          id: 3,
-          weekStartDate: next,
-          weekEndDate: nextEnd.toISOString().slice(0, 10),
-          status: 'draft',
-          days: [],
-        },
-        { ...mockWeeklyPlan(), id: 1, weekStartDate: current, status: 'approved' },
-        {
-          ...mockWeeklyPlan(),
-          id: 2,
-          weekStartDate: prev,
-          status: 'approved',
-        },
-      ],
-      count: 3,
-    });
+    const items = ensureMockWeeklyPlans();
+    return Promise.resolve({ items: [...items], count: items.length });
   }
   return apiGet('/api/v1/planning/weekly');
 }
 
 export function fetchWeeklyPlanById(planId: number): Promise<WeeklyPlan> {
-  if (useMocks) return Promise.resolve({ ...mockWeeklyPlan(), id: planId });
+  if (useMocks) {
+    const plan = findMockWeeklyPlan(planId);
+    if (!plan) {
+      return Promise.resolve({ ...mockWeeklyPlan(), id: planId });
+    }
+    return Promise.resolve({ ...plan });
+  }
   return apiGet(`/api/v1/planning/weekly/${planId}`);
 }
 
 export function archiveWeeklyPlan(planId: number): Promise<WeeklyPlan> {
-  if (useMocks) return Promise.resolve({ ...mockWeeklyPlan(), id: planId, status: 'archived' });
+  if (useMocks) {
+    const plan = findMockWeeklyPlan(planId) ?? { ...mockWeeklyPlan(), id: planId };
+    return Promise.resolve(upsertMockWeeklyPlan({ ...plan, status: 'archived' }));
+  }
   return apiPost(`/api/v1/planning/weekly/${planId}/archive`, {});
 }
 
@@ -243,29 +304,55 @@ export function createWeeklyPlan(payload: {
   days: Array<{ operationDate: string; collectionPointIds: number[] }>;
   notes?: string;
 }): Promise<WeeklyPlan> {
+  const sanitizedPayload = {
+    ...payload,
+    days: payload.days.map((day) => ({
+      operationDate: day.operationDate,
+      collectionPointIds: day.collectionPointIds.filter(
+        (id) => typeof id === 'number' && Number.isFinite(id) && id > 0,
+      ),
+    })),
+  };
   if (useMocks) {
-    return Promise.resolve({
+    const id = mockWeeklyPlanNextId++;
+    const plan = upsertMockWeeklyPlan({
       ...mockWeeklyPlan(),
+      id,
       status: 'draft',
-      weekStartDate: payload.weekStartDate,
-      days: payload.days.map((day, index) => ({
+      weekStartDate: sanitizedPayload.weekStartDate,
+      weekEndDate: weekEndFromStart(sanitizedPayload.weekStartDate),
+      days: sanitizedPayload.days.map((day, index) => ({
         operationDate: day.operationDate,
-        weekday: new Date(day.operationDate).getDay(),
+        weekday: new Date(day.operationDate).getDay() === 0 ? 6 : new Date(day.operationDate).getDay() - 1,
         sectorIds: [],
         collectionPointIds: day.collectionPointIds,
         id: index + 1,
       })),
     });
+    return Promise.resolve(plan);
   }
-  return apiPost('/api/v1/planning/weekly', payload);
+  return apiPost('/api/v1/planning/weekly', sanitizedPayload);
 }
 
 export function updateWeeklyPlan(
   planId: number,
   payload: { scenarioId?: ScenarioId; days?: WeeklyPlanDay[]; notes?: string },
 ): Promise<WeeklyPlan> {
-  if (useMocks) return Promise.resolve(mockWeeklyPlan());
-  return apiPatch(`/api/v1/planning/weekly/${planId}`, payload);
+  const sanitizedPayload = payload.days
+    ? { ...payload, days: sanitizeWeeklyPlanDays(payload.days) }
+    : payload;
+  if (useMocks) {
+    const existing = findMockWeeklyPlan(planId) ?? { ...mockWeeklyPlan(), id: planId };
+    const plan = upsertMockWeeklyPlan({
+      ...existing,
+      ...sanitizedPayload,
+      days: sanitizedPayload.days
+        ? sanitizeWeeklyPlanDays(sanitizedPayload.days)
+        : existing.days,
+    });
+    return Promise.resolve(plan);
+  }
+  return apiPatch(`/api/v1/planning/weekly/${planId}`, sanitizedPayload);
 }
 
 export function validateWeeklyPlan(planId: number): Promise<{ jobId: string; weeklyPlanId: number }> {
@@ -277,7 +364,10 @@ export function approveWeeklyPlan(
   planId: number,
   payload?: { referenceSimulationId?: number; expectedKpis?: Record<string, unknown> },
 ): Promise<WeeklyPlan> {
-  if (useMocks) return Promise.resolve({ ...mockWeeklyPlan(), status: 'approved' });
+  if (useMocks) {
+    const existing = findMockWeeklyPlan(planId) ?? { ...mockWeeklyPlan(), id: planId };
+    return Promise.resolve(upsertMockWeeklyPlan({ ...existing, status: 'approved' }));
+  }
   return apiPost(`/api/v1/planning/weekly/${planId}/approve`, payload ?? {});
 }
 
@@ -327,7 +417,15 @@ export function fetchPendingVisits(params?: {
 }
 
 export function autofillWeeklyPlanFromSchedules(planId: number): Promise<WeeklyPlan> {
-  if (useMocks) return Promise.resolve(mockWeeklyPlan());
+  if (useMocks) {
+    const existing = findMockWeeklyPlan(planId) ?? { ...mockWeeklyPlan(), id: planId, status: 'draft' };
+    const plan = upsertMockWeeklyPlan({
+      ...existing,
+      status: 'draft',
+      days: buildMockAutofillDays(existing.weekStartDate),
+    });
+    return Promise.resolve(plan);
+  }
   return apiPost(`/api/v1/planning/weekly/${planId}/autofill-from-schedules`, {});
 }
 

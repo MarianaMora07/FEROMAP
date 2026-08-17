@@ -3,6 +3,7 @@ import type { KpiMetrics } from '../../data/types/simulation';
 import {
   buildComparisonRows,
   buildDurationBreakdownDisplay,
+  isPlausibleDailyOptimizationKpis,
 } from './optimizationResults';
 
 describe('buildDurationBreakdownDisplay', () => {
@@ -86,5 +87,33 @@ describe('buildComparisonRows', () => {
     const rows = buildComparisonRows(kpis);
     expect(rows.some((row) => row.metric === 'Viajes al vertedero' && row.optimized === '2')).toBe(true);
     expect(rows.some((row) => row.metric === 'Puntos no cubiertos' && row.optimized === '3')).toBe(true);
+  });
+});
+
+describe('isPlausibleDailyOptimizationKpis', () => {
+  const base: KpiMetrics = {
+    distanceKm: { current: 30, optimized: 22 },
+    durationHours: { current: 3, optimized: 2 },
+    fuelLiters: { current: 10, optimized: 7 },
+    co2KgAvoided: 2,
+    criticalCoveragePct: { current: 50, optimized: 90 },
+    containersServed: 12,
+  };
+
+  it('acepta métricas razonables para el día', () => {
+    expect(isPlausibleDailyOptimizationKpis(base, 3)).toBe(true);
+  });
+
+  it('rechaza KPIs de validación semanal desproporcionados', () => {
+    expect(
+      isPlausibleDailyOptimizationKpis(
+        {
+          ...base,
+          distanceKm: { current: 19771, optimized: 19771 },
+          durationHours: { current: 791, optimized: 791 },
+        },
+        3,
+      ),
+    ).toBe(false);
   });
 });

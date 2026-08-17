@@ -14,6 +14,7 @@ import { Button, Card, CardHeader, LoadingPanel, ProgressBar } from '../../desig
 import { fetchPlanningDashboardSnapshot } from '../../core/api/planningAnalytics';
 import { PLANNING_EMPTY_PRESETS } from '../../core/planning/planningEmptyStates';
 import { deriveNextPlannerAction, PLANNER_QUICK_ACTIONS } from '../../core/planning/plannerHubUx';
+import { weeklyPlanHref } from '../../core/planning/weeklyPlanLinks';
 import { buildOperationalJourneySteps } from '../../core/planning/operationalFlowUx';
 import { PlanningEmptyState } from './PlanningEmptyState';
 import { PlanningGlossaryStrip } from './PlanningGlossaryStrip';
@@ -139,7 +140,7 @@ export function PlannerHubSection(props: PlannerHubSectionProps) {
               title="Semana actual"
               subtitle="Nivel directivo"
               action={
-                <A href="/simulation?view=weekly" class="text-xs font-medium text-fero-blue hover:underline">
+                <A href={weeklyPlanHref} class="text-xs font-medium text-fero-blue hover:underline">
                   Gestionar
                 </A>
               }
@@ -249,7 +250,7 @@ export function PlannerHubSection(props: PlannerHubSectionProps) {
           <Card class="border-violet-300/40 bg-violet-50/50 dark:border-violet-900/30 dark:bg-violet-950/20">
             <CardHeader title="Directivo" subtitle="Plan semanal" />
             <p class="mb-3 text-sm text-text-secondary">Aprueba qué puntos visitar cada día de la semana.</p>
-            <A href="/simulation?view=weekly">
+            <A href={weeklyPlanHref}>
               <Button size="sm" variant="outline" class="gap-2" icon={<CalendarDays size={14} />}>
                 Plan semanal
               </Button>

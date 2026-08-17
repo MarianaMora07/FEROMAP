@@ -66,13 +66,13 @@ export function WeeklyPlanListPanel() {
         when={sortedHistory().length > 0}
         fallback={<PlanningEmptyState {...PLANNING_EMPTY_PRESETS.noWeeklyPlansList} compact />}
       >
-        <ul class="max-h-[28rem] space-y-1 overflow-y-auto">
+        <ul class="max-h-[28rem] space-y-1 overflow-y-auto" data-testid="weekly-plan-list">
           <For each={sortedHistory()}>
             {(row) => {
               const selected = () => weeklyPlanState.selectedPlanId === row.id;
               const current = () => isCurrentWeek(row.weekStartDate);
               return (
-                <li>
+                <li data-weekly-plan-status={row.status} data-testid={`weekly-plan-row-${row.id}`}>
                   <div
                     role="button"
                     tabIndex={0}

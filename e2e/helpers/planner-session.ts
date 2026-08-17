@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 
-const API_URL = process.env.E2E_API_URL ?? 'http://localhost:8000';
+export const API_URL = process.env.E2E_API_URL ?? 'http://localhost:8000';
 export const PLAN_EMAIL = 'plan@fero.com';
 export const PLAN_PASSWORD = '123456789';
 

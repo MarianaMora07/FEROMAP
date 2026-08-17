@@ -81,6 +81,44 @@ export function fetchCollectionPointsList(): Promise<CollectionPoint[]> {
   );
 }
 
+export interface PlanningCollectionPointRef {
+  id: number;
+  code: string;
+  sectorName?: string | null;
+}
+
+function resolvePlanningCollectionPointId(
+  properties: ContainerCollection['features'][number]['properties'],
+  fallbackIndex: number,
+): number | null {
+  const explicit = properties.pointId;
+  if (typeof explicit === 'number' && Number.isFinite(explicit) && explicit > 0) {
+    return explicit;
+  }
+  const parsed = Number(properties.id);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed;
+  }
+  // Mocks sin pointId (p. ej. CNT-001): índice estable para desarrollo local.
+  return fallbackIndex + 1;
+}
+
+export function fetchCollectionPointsForPlanning(): Promise<PlanningCollectionPointRef[]> {
+  return fetchCollectionPoints().then((geo) =>
+    geo.features
+      .map((feature, index) => {
+        const id = resolvePlanningCollectionPointId(feature.properties, index);
+        if (id == null) return null;
+        return {
+          id,
+          code: String(feature.properties.id),
+          sectorName: feature.properties.sector,
+        };
+      })
+      .filter((row): row is PlanningCollectionPointRef => row != null),
+  );
+}
+
 export interface SectorOption {
   id: number;
   name: string;

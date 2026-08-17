@@ -1,6 +1,7 @@
 import type { PlanningAnalyticsSummary, PlanningDashboardSnapshot } from '../api/planningAnalytics';
 import type { WeeklyPlan } from '../api/planning';
 import { addWeeksToMonday, mondayIso } from '../api/planning';
+import { weeklyPlanHref as planningWeeklyPath } from './weeklyPlanLinks';
 
 export interface WeekendClosureItem {
   id: 'days-closed' | 'pending-incorporated' | 'next-week-plan';
@@ -12,8 +13,7 @@ export interface WeekendClosureItem {
 }
 
 export function weeklyPlanHref(planId?: number): string {
-  const base = '/simulation?view=weekly';
-  return planId ? `${base}&planId=${planId}` : base;
+  return planId ? `${planningWeeklyPath}?planId=${planId}` : planningWeeklyPath;
 }
 
 export function isFriday(reference = new Date()): boolean {

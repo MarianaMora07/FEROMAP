@@ -178,6 +178,32 @@ def _safe_distance_km(distance_m: float) -> float:
     return distance_m / 1000
 
 
+_MAX_MATRIX_LEG_M = 80_000.0
+
+
+def _matrix_max_leg_m(dist_matrix: list[list[float]]) -> float:
+    max_leg = 0.0
+    for i, row in enumerate(dist_matrix):
+        for j, value in enumerate(row):
+            if i == j or not isinstance(value, (int, float)):
+                continue
+            if math.isfinite(value) and value > max_leg:
+                max_leg = float(value)
+    return max_leg
+
+
+def _distance_matrix_implausible(
+    n_customers: int,
+    dist_matrix: list[list[float]],
+    time_matrix: list[list[float]],
+) -> bool:
+    if _matrix_max_leg_m(dist_matrix) > _MAX_MATRIX_LEG_M:
+        return True
+    baseline = _baseline_route(n_customers, dist_matrix, time_matrix)
+    probe_km = baseline.distance_m / 1000
+    return probe_km > max(100.0, n_customers * 15.0)
+
+
 def _coalesce_optimized_solution(optimized: RouteSolution, fallback: RouteSolution) -> RouteSolution:
     if math.isfinite(optimized.distance_m) and optimized.vehicle_routes:
         return optimized
@@ -1338,6 +1364,23 @@ def run_optimization_engine(
         landfill_lon=landfill_lon,
         landfill_lat=landfill_lat,
     )
+    if _distance_matrix_implausible(n_customers, dist_matrix, time_matrix):
+        report(
+            "matriz_costos",
+            "Matriz vial incoherente; recalculando con distancias Haversine entre coordenadas",
+            "warning",
+        )
+        dist_matrix, time_matrix = _build_distance_matrix(
+            None,
+            depot_node,
+            customers,
+            depot_lon=depot_lon,
+            depot_lat=depot_lat,
+            landfill_node=landfill_node,
+            landfill_lon=landfill_lon,
+            landfill_lat=landfill_lat,
+        )
+        matrix_meta = {**matrix_meta, "matrixCacheHit": False, "matrixFallback": "haversine"}
     matrix_cache_hit = matrix_meta["matrixCacheHit"]
     if matrix_cache_hit:
         report(

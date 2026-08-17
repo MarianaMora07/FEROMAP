@@ -9,7 +9,6 @@ import {
 import { mondayOfDate } from '../../../core/planning/dailyPlanningUx';
 import { planningHistoryHref } from '../../../core/planning/planningHistoryLinks';
 import { PlanningLevelBanner } from '../PlanningLevelBanner';
-import { ThesisVsOperationsNotice } from '../ThesisVsOperationsNotice';
 import { PlanningHistoryFilters, type HistoryFilterValues } from './PlanningHistoryFilters';
 import { PlanningHistoryWeekView } from './PlanningHistoryWeekView';
 import { PlanningHistoryDayView } from './PlanningHistoryDayView';
@@ -125,8 +124,6 @@ export default function PlanningHistoryPage() {
           Busca por semana, día o incidencia en un solo lugar — simulación y operación siguen separados en sus módulos.
         </p>
       </PlanningLevelBanner>
-
-      <ThesisVsOperationsNotice variant="operations" />
 
       <PlanningHistoryFilters
         values={filters()}

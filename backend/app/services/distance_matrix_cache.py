@@ -13,6 +13,9 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Tramo máximo creíble dentro de la parroquia Unare (evita reutilizar cachés corruptos).
+_MAX_LEG_DISTANCE_M = 80_000.0
+
 MatrixPairFn = Callable[[int, int], tuple[float, float]]
 
 
@@ -59,6 +62,14 @@ def build_matrix_cache_key(
 
 def _cache_path(cache_key: str) -> Path:
     return _cache_dir() / f"{cache_key}.json"
+
+
+def _matrix_has_implausible_distances(dist_matrix: list[list[float]]) -> bool:
+    for row in dist_matrix:
+        for value in row:
+            if isinstance(value, (int, float)) and value > _MAX_LEG_DISTANCE_M:
+                return True
+    return False
 
 
 def _validate_matrix_payload(payload: dict[str, Any]) -> bool:
@@ -320,7 +331,7 @@ def resolve_distance_matrix(
     )
 
     exact = load_distance_matrix_cache_entry(cache_key)
-    if exact is not None:
+    if exact is not None and not _matrix_has_implausible_distances(exact["distance"]):
         return _finalize_matrix(
             exact["distance"],
             exact["time"],
@@ -332,6 +343,8 @@ def resolve_distance_matrix(
                 "matrixParentPointCount": len(point_ids),
             },
         )
+    if exact is not None:
+        logger.warning("Ignorando cache de matriz con distancias implausibles (%s)", cache_key)
 
     parent = find_incremental_parent_cache(
         depot_node=depot_node,
@@ -341,7 +354,7 @@ def resolve_distance_matrix(
         landfill_lon=landfill_lon,
         landfill_lat=landfill_lat,
     )
-    if parent is not None:
+    if parent is not None and not _matrix_has_implausible_distances(parent["distance"]):
         dist, time, recomputed = build_matrix_from_parent(parent, customers, pair_fn)
         save_distance_matrix_cache(
             cache_key,

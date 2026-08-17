@@ -15,6 +15,13 @@ export interface SimulationHistoryRow {
   contingency: boolean;
 }
 
+export interface SimulationPlanningContext {
+  level?: string;
+  operationDate?: string | null;
+  dailyPlanId?: number | null;
+  weeklyPlanId?: number | null;
+}
+
 export interface SimulationDetail {
   id: number;
   executedAt: string | null;
@@ -22,6 +29,7 @@ export interface SimulationDetail {
   scenarioName: string;
   kpis: KpiMetrics;
   kpiSavingPercentage: number;
+  planningContext?: SimulationPlanningContext | null;
   routes: {
     current: RouteCollection;
     optimized: RouteCollection;
@@ -112,6 +120,7 @@ export function fetchSimulationDetail(id: number): Promise<SimulationDetail> {
     scenarioName: string;
     kpis: KpiMetrics;
     kpiSavingPercentage: number;
+    parameters?: { planningContext?: SimulationPlanningContext };
     routes: SimulationDetail['routes'];
   }>(`/api/v1/simulations/${id}`).then((detail) => ({
     id: detail.id,
@@ -120,6 +129,7 @@ export function fetchSimulationDetail(id: number): Promise<SimulationDetail> {
     scenarioName: detail.scenarioName,
     kpis: detail.kpis,
     kpiSavingPercentage: detail.kpiSavingPercentage,
+    planningContext: detail.parameters?.planningContext ?? null,
     routes: detail.routes,
   }));
 }
