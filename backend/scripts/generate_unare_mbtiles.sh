@@ -65,10 +65,34 @@ if command -v tilemaker >/dev/null 2>&1; then
 fi
 
 echo "→ Fallback: bootstrap Python (descarga tiles OSM para Unare)"
-python3 "${ROOT_DIR}/backend/scripts/build_bootstrap_unare_mbtiles.py" \
-  --output "${OUTPUT}" \
-  --min-zoom "${MIN_ZOOM}" \
-  --max-zoom "${MAX_ZOOM}"
+
+BOOTSTRAP="${ROOT_DIR}/backend/scripts/build_bootstrap_unare_mbtiles.py"
+API_CONTAINER="${API_CONTAINER:-${COMPOSE_PROJECT_NAME:-feromap}-api}"
+
+run_python_bootstrap() {
+  if command -v python >/dev/null 2>&1; then
+    python "${BOOTSTRAP}" --output "${OUTPUT}" --min-zoom "${MIN_ZOOM}" --max-zoom "${MAX_ZOOM}"
+    return
+  fi
+  if command -v python >/dev/null 2>&1; then
+    python "${BOOTSTRAP}" --output "${OUTPUT}" --min-zoom "${MIN_ZOOM}" --max-zoom "${MAX_ZOOM}"
+    return
+  fi
+  if command -v docker >/dev/null 2>&1 && docker inspect "${API_CONTAINER}" >/dev/null 2>&1; then
+    echo "→ python no está en el PATH; generando dentro de ${API_CONTAINER}"
+    docker exec "${API_CONTAINER}" python /app/scripts/build_bootstrap_unare_mbtiles.py \
+      --output /tmp/unare.mbtiles \
+      --min-zoom "${MIN_ZOOM}" \
+      --max-zoom "${MAX_ZOOM}"
+    docker cp "${API_CONTAINER}:/tmp/unare.mbtiles" "${OUTPUT}"
+    return
+  fi
+  echo "Error: no se encontró python ni python, y el contenedor ${API_CONTAINER} no está en marcha." >&2
+  echo "Instala Python 3 o levanta el stack (docker compose) y vuelve a ejecutar este script." >&2
+  exit 1
+}
+
+run_python_bootstrap
 
 echo "✓ MBTiles generado: ${OUTPUT}"
 du -h "${OUTPUT}"

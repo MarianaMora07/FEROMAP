@@ -1,7 +1,7 @@
-import { For, Show, createSignal, onMount } from 'solid-js';
-import { Pencil, Plus, UserCheck, UserX } from 'lucide-solid';
+import { For, Show, createMemo, createSignal, onMount } from 'solid-js';
+import { Pencil, Plus, Search, UserCheck, UserX } from 'lucide-solid';
 import { A } from '@solidjs/router';
-import { Badge, Button, Card, SelectField, TextField } from '../../design-system/components';
+import { Badge, Button, Card } from '../../design-system/components';
 import {
   createDriver,
   driverDisplayName,
@@ -12,87 +12,81 @@ import {
 } from '../../core/api/drivers';
 import { canManageVehicles } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
+import { DriverFormModal } from './DriverFormModal';
 
 export default function DriversPage() {
   const [drivers, setDrivers] = createSignal<Driver[]>([]);
   const [loading, setLoading] = createSignal(true);
-  const [editingId, setEditingId] = createSignal<number | null>(null);
-  const [creating, setCreating] = createSignal(false);
-  const [form, setForm] = createSignal({
-    email: '',
-    password: '',
-    document: '',
-    firstName: '',
-    lastName: '',
-    phone: '',
-    active: true,
-  });
+  const [query, setQuery] = createSignal('');
+  const [modalOpen, setModalOpen] = createSignal(false);
+  const [modalMode, setModalMode] = createSignal<'create' | 'edit'>('create');
+  const [editingDriver, setEditingDriver] = createSignal<Driver | null>(null);
+  const [submitting, setSubmitting] = createSignal(false);
+  const [alertMsg, setAlertMsg] = createSignal('');
+  const [alertType, setAlertType] = createSignal<'error' | 'success'>('error');
 
   const canManage = () => canManageVehicles(authUser()?.role);
+
+  const filtered = createMemo(() => {
+    const q = query().toLowerCase().trim();
+    if (!q) return drivers();
+    return drivers().filter(
+      (d) =>
+        d.firstName.toLowerCase().includes(q) ||
+        d.lastName.toLowerCase().includes(q) ||
+        d.document.toLowerCase().includes(q) ||
+        (d.email ?? '').toLowerCase().includes(q) ||
+        (d.phone ?? '').toLowerCase().includes(q),
+    );
+  });
 
   const load = () =>
     fetchDrivers()
       .then(setDrivers)
       .finally(() => setLoading(false));
 
-  onMount(() => {
-    void load();
-  });
+  onMount(() => void load());
 
-  const resetForm = () => {
-    setForm({
-      email: '',
-      password: '',
-      document: '',
-      firstName: '',
-      lastName: '',
-      phone: '',
-      active: true,
-    });
-    setEditingId(null);
-    setCreating(false);
+  const openCreate = () => {
+    setModalMode('create');
+    setEditingDriver(null);
+    setModalOpen(true);
   };
 
-  const startEdit = (driver: Driver) => {
-    setCreating(false);
-    setEditingId(driver.id);
-    setForm({
-      email: driver.email ?? '',
-      password: '',
-      document: driver.document,
-      firstName: driver.firstName,
-      lastName: driver.lastName,
-      phone: driver.phone ?? '',
-      active: driver.active,
-    });
+  const openEdit = (d: Driver) => {
+    setModalMode('edit');
+    setEditingDriver(d);
+    setModalOpen(true);
   };
 
-  const save = async () => {
-    const data = form();
+  const showAlert = (type: 'error' | 'success', msg: string) => {
+    setAlertType(type);
+    setAlertMsg(msg);
+    setTimeout(() => setAlertMsg(''), 5000);
+  };
+
+  const handleSubmit = async (values: DriverCreate) => {
+    setSubmitting(true);
     try {
-      if (creating()) {
-        const payload: DriverCreate = {
-          email: data.email,
-          password: data.password,
-          document: data.document,
-          firstName: data.firstName,
-          lastName: data.lastName,
-          phone: data.phone || null,
-        };
-        await createDriver(payload);
-      } else if (editingId() !== null) {
-        await updateDriver(editingId()!, {
-          document: data.document,
-          firstName: data.firstName,
-          lastName: data.lastName,
-          phone: data.phone || null,
-          active: data.active,
+      if (modalMode() === 'create') {
+        await createDriver(values);
+        showAlert('success', 'Conductor creado correctamente');
+      } else if (editingDriver()) {
+        await updateDriver(editingDriver()!.id, {
+          document: values.document,
+          firstName: values.firstName,
+          lastName: values.lastName,
+          phone: values.phone || null,
         });
+        showAlert('success', 'Conductor actualizado correctamente');
       }
-      resetForm();
+      setModalOpen(false);
       await load();
-    } catch {
-      // caller could add toast later
+    } catch (err: any) {
+      const msg = err?.message ?? 'Error al guardar el conductor';
+      showAlert('error', msg);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -112,83 +106,35 @@ export default function DriversPage() {
             </Button>
           </A>
           <Show when={canManage()}>
-            <Button
-              type="button"
-              size="sm"
-              variant="primary"
-              icon={<Plus size={14} />}
-              onClick={() => {
-                resetForm();
-                setCreating(true);
-              }}
-            >
+            <Button type="button" size="sm" variant="primary" icon={<Plus size={14} />} onClick={openCreate}>
               Nuevo conductor
             </Button>
           </Show>
         </div>
       </div>
 
-      <Show when={creating() || editingId() !== null}>
-        <Card class="space-y-3 p-4">
-          <p class="text-sm font-semibold text-text-primary dark:text-white">
-            {creating() ? 'Registrar conductor' : 'Editar conductor'}
-          </p>
-          <div class="grid gap-3 sm:grid-cols-2">
-            <Show when={creating()}>
-              <TextField
-                label="Correo"
-                type="email"
-                value={form().email}
-                onInput={(e) => setForm((f) => ({ ...f, email: e.currentTarget.value }))}
-              />
-              <TextField
-                label="Contraseña"
-                type="password"
-                value={form().password}
-                onInput={(e) => setForm((f) => ({ ...f, password: e.currentTarget.value }))}
-              />
-            </Show>
-            <TextField
-              label="Documento"
-              value={form().document}
-              onInput={(e) => setForm((f) => ({ ...f, document: e.currentTarget.value }))}
-            />
-            <TextField
-              label="Nombre"
-              value={form().firstName}
-              onInput={(e) => setForm((f) => ({ ...f, firstName: e.currentTarget.value }))}
-            />
-            <TextField
-              label="Apellido"
-              value={form().lastName}
-              onInput={(e) => setForm((f) => ({ ...f, lastName: e.currentTarget.value }))}
-            />
-            <TextField
-              label="Teléfono"
-              value={form().phone}
-              onInput={(e) => setForm((f) => ({ ...f, phone: e.currentTarget.value }))}
-            />
-          </div>
-          <Show when={!creating()}>
-            <label class="flex items-center gap-2 text-sm text-text-secondary">
-              <input
-                type="checkbox"
-                checked={form().active}
-                onChange={(e) => setForm((f) => ({ ...f, active: e.currentTarget.checked }))}
-              />
-              Conductor activo
-            </label>
-          </Show>
-          <div class="flex gap-2">
-            <Button type="button" size="sm" variant="primary" onClick={() => void save()}>
-              Guardar
-            </Button>
-            <Button type="button" size="sm" variant="outline" onClick={resetForm}>
-              Cancelar
-            </Button>
-          </div>
-        </Card>
+      <Show when={alertMsg()}>
+        <div
+          class={`rounded-lg border px-4 py-3 text-sm ${
+            alertType() === 'error'
+              ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300'
+              : 'border-green-200 bg-green-50 text-green-700 dark:border-green-900 dark:bg-green-950 dark:text-green-300'
+          }`}
+        >
+          {alertMsg()}
+        </div>
       </Show>
+
+      <div class="relative">
+        <Search size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+        <input
+          type="text"
+          placeholder="Buscar por nombre, documento, correo o teléfono..."
+          value={query()}
+          onInput={(e) => setQuery(e.currentTarget.value)}
+          class="w-full rounded-lg border border-border bg-white py-2.5 pl-9 pr-4 text-sm text-text-primary placeholder:text-text-muted focus:border-fero-blue focus:outline-none focus:ring-1 focus:ring-fero-blue dark:border-dark-border dark:bg-dark-surface dark:text-white"
+        />
+      </div>
 
       <Show when={loading()}>
         <p class="text-sm text-text-muted">Cargando conductores...</p>
@@ -207,7 +153,7 @@ export default function DriversPage() {
             </tr>
           </thead>
           <tbody class="divide-y divide-border dark:divide-dark-border">
-            <For each={drivers()}>
+            <For each={filtered()}>
               {(driver) => (
                 <tr>
                   <td class="px-3 py-2.5">
@@ -229,7 +175,7 @@ export default function DriversPage() {
                           type="button"
                           class="flex h-8 w-8 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover hover:text-fero-blue"
                           aria-label="Editar"
-                          onClick={() => startEdit(driver)}
+                          onClick={() => openEdit(driver)}
                         >
                           <Pencil size={14} />
                         </button>
@@ -237,9 +183,14 @@ export default function DriversPage() {
                           type="button"
                           class="flex h-8 w-8 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover"
                           aria-label={driver.active ? 'Desactivar' : 'Activar'}
-                          onClick={() =>
-                            void updateDriver(driver.id, { active: !driver.active }).then(() => load())
-                          }
+                          onClick={async () => {
+                            try {
+                              await updateDriver(driver.id, { active: !driver.active });
+                              await load();
+                            } catch (err: any) {
+                              showAlert('error', err?.message ?? 'Error al actualizar estado');
+                            }
+                          }}
                         >
                           {driver.active ? <UserX size={14} /> : <UserCheck size={14} />}
                         </button>
@@ -252,6 +203,21 @@ export default function DriversPage() {
           </tbody>
         </table>
       </div>
+
+      <Show when={!loading() && filtered().length === 0}>
+        <p class="text-sm text-text-muted text-center py-8">
+          {query() ? 'No se encontraron conductores con ese criterio de búsqueda.' : 'No hay conductores registrados.'}
+        </p>
+      </Show>
+
+      <DriverFormModal
+        open={modalOpen()}
+        mode={modalMode()}
+        initial={editingDriver()}
+        submitting={submitting()}
+        onClose={() => setModalOpen(false)}
+        onSubmit={handleSubmit}
+      />
     </div>
   );
 }

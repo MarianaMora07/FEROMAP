@@ -58,6 +58,7 @@ export function fetchCollectionPoints(
 function geoToCollectionPoints(geo: ContainerCollection): CollectionPoint[] {
   return geo.features.map((feature) => ({
     id: feature.properties.id,
+    numericId: feature.properties.numericId,
     label: feature.properties.id,
     address: feature.properties.sector,
     sector: feature.properties.sector,
@@ -91,7 +92,7 @@ function resolvePlanningCollectionPointId(
   properties: ContainerCollection['features'][number]['properties'],
   fallbackIndex: number,
 ): number | null {
-  const explicit = properties.pointId;
+  const explicit = properties.pointId ?? properties.numericId;
   if (typeof explicit === 'number' && Number.isFinite(explicit) && explicit > 0) {
     return explicit;
   }

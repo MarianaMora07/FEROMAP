@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createResource, onCleanup, onMount } from 'solid-js';
+import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from 'solid-js';
 import maplibregl, { type Map as MapLibreMap, type Marker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Plus, Minus, Crosshair } from 'lucide-solid';
@@ -36,6 +36,7 @@ function routeStatusLabel(status?: string) {
 export function DashboardMiniMap() {
   let mapContainer!: HTMLDivElement;
   const mapRef: { current?: MapLibreMap } = {};
+  const [mapReady, setMapReady] = createSignal(false);
   const markersById = new Map<string, Marker>();
 
   const [mapContext, { refetch }] = createResource(fetchMapContext);
@@ -68,7 +69,7 @@ export function DashboardMiniMap() {
 
   bindMapTheme(
     () => mapRef.current,
-    () => Boolean(mapRef.current?.isStyleLoaded()),
+    mapReady,
     () => syncMapLayers(),
   );
 
@@ -84,8 +85,13 @@ export function DashboardMiniMap() {
 
     map.on('load', () => {
       map.resize();
+      setMapReady(true);
       syncMapLayers();
       mapContainer.dataset.zoom = String(Math.round(map.getZoom() * 10) / 10);
+    });
+    map.on('style.load', () => {
+      if (!mapReady()) return;
+      syncMapLayers();
     });
 
     map.on('moveend', () => {

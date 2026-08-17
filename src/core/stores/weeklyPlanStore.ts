@@ -131,7 +131,7 @@ export async function initWeeklyPlanTab(): Promise<void> {
   try {
     const [history, points] = await Promise.all([
       refreshWeeklyPlanHistory(),
-      fetchCollectionPointsForPlanning(),
+      loadCollectionPointsForPlanning(),
     ]);
     setState({ collectionPoints: points });
     const plan = withCalendarDays(await pickDefaultPlan(history));

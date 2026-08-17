@@ -1,12 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import {
+  ACTIVE_ROUTE_STATUS_FILTER,
   OPERATIONAL_ROUTES_PENDING_LAYER_ID,
   OPERATIONAL_ROUTES_ACTIVE_LAYER_ID,
+  PENDING_ROUTE_STATUS_FILTER,
   enabledOperationalRouteIds,
   normalizeOperationalRoutes,
+  operationalRouteLayerIdsToFront,
+  routeDisplayKind,
   routeLayerStateKey,
   syncOperationalRouteLayerFilters,
+  toPlainRouteCollection,
 } from './operationalMapLayers';
 import type { RouteCollection } from '../types/geo';
 
@@ -65,6 +70,26 @@ describe('operationalMapLayers', () => {
     expect(normalized.features[0].properties.status).toBe('in_progress');
   });
 
+  it('preserves pending and in_progress statuses from the API', () => {
+    const normalized = normalizeOperationalRoutes(sampleRoutes);
+    expect(normalized.features[0].properties.status).toBe('in_progress');
+    expect(normalized.features[1].properties.status).toBe('pending');
+  });
+
+  it('maps routeKind to a paint kind so API routes are not filtered out', () => {
+    expect(routeDisplayKind({ routeKind: 'optimized' })).toBe('optimized');
+    expect(routeDisplayKind({ type: 'current' })).toBe('current');
+    expect(routeDisplayKind({ kind: 'current', type: 'optimized' })).toBe('current');
+    expect(routeDisplayKind({})).toBe('optimized');
+  });
+
+  it('clones route collections to plain JSON', () => {
+    const plain = toPlainRouteCollection(sampleRoutes);
+    expect(plain).toEqual(sampleRoutes);
+    expect(plain).not.toBe(sampleRoutes);
+    expect(plain.features[0]).not.toBe(sampleRoutes.features[0]);
+  });
+
   it('builds stable layer state keys per routeId', () => {
     expect(routeLayerStateKey(12)).toBe('route-12');
   });
@@ -106,12 +131,28 @@ describe('operationalMapLayers', () => {
 
     expect(setFilter).toHaveBeenCalledWith(
       OPERATIONAL_ROUTES_PENDING_LAYER_ID,
-      ['==', ['get', 'status'], 'pending'],
+      PENDING_ROUTE_STATUS_FILTER,
     );
     expect(setFilter).toHaveBeenCalledWith(
       OPERATIONAL_ROUTES_ACTIVE_LAYER_ID,
-      ['any', ['==', ['get', 'status'], 'in_progress'], ['!', ['has', 'status']]],
+      ACTIVE_ROUTE_STATUS_FILTER,
     );
+  });
+
+  it('moves route layers to the top of the style', () => {
+    const moveLayer = vi.fn();
+    const map = {
+      getLayer: (id: string) =>
+        id === OPERATIONAL_ROUTES_PENDING_LAYER_ID || id === OPERATIONAL_ROUTES_ACTIVE_LAYER_ID
+          ? { id }
+          : undefined,
+      moveLayer,
+    } as unknown as MapLibreMap;
+
+    operationalRouteLayerIdsToFront(map, 'operational-routes');
+
+    expect(moveLayer).toHaveBeenCalledWith(OPERATIONAL_ROUTES_PENDING_LAYER_ID);
+    expect(moveLayer).toHaveBeenCalledWith(OPERATIONAL_ROUTES_ACTIVE_LAYER_ID);
   });
 
   it('hides both route layers when routesVisible is false', () => {

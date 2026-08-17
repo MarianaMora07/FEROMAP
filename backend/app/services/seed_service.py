@@ -249,9 +249,14 @@ def seed_into_session(session: Session) -> dict[str, Any]:
         collection_points.append(point)
     session.flush()
 
-    active_route_points = collection_points[:12]
-    for vehicle in vehicle_by_code.values():
-        if vehicle.status != "in_route" or vehicle.default_driver_id is None:
+    in_route_vehicles = [
+        vehicle
+        for vehicle in vehicle_by_code.values()
+        if vehicle.status == "in_route" and vehicle.default_driver_id is not None
+    ]
+    for index, vehicle in enumerate(in_route_vehicles):
+        route_points = collection_points[index * 3 : index * 3 + 3]
+        if len(route_points) < 2:
             continue
         route = OptimizedRoute(
             vehicle_id=vehicle.id,
@@ -264,7 +269,7 @@ def seed_into_session(session: Session) -> dict[str, Any]:
         session.add(route)
         session.flush()
 
-        for sequence, point in enumerate(active_route_points[:3], start=1):
+        for sequence, point in enumerate(route_points, start=1):
             session.add(
                 RouteWaypoint(
                     route_id=route.id,

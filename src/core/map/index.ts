@@ -20,6 +20,9 @@ export {
   syncOperationalRouteLayerFilters,
   enabledOperationalRouteIds,
   routeLayerStateKey,
+  toPlainRouteCollection,
+  routeDisplayKind,
+  operationalRouteLayerIdsToFront,
   OPERATIONAL_ROUTES_ACTIVE_LAYER_ID,
   OPERATIONAL_ROUTES_PENDING_LAYER_ID,
 } from './operationalMapLayers';

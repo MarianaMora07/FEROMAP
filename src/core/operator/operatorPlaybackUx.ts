@@ -21,14 +21,13 @@ export function filterOperatorPlaybackRoute(
     (route) =>
       route.vehicleLabel.toUpperCase() === key || String(route.vehicleId) === vehicleId,
   );
-  if (byVehicle.length > 0) return byVehicle.slice(0, 1);
+  if (byVehicle.length > 0) return byVehicle;
 
   if (routeId != null) {
-    const byRoute = routes.filter((route) => route.routeId === routeId);
-    if (byRoute.length > 0) return byRoute.slice(0, 1);
+    return routes.filter((route) => route.routeId === routeId);
   }
 
-  return routes.slice(0, 1);
+  return [];
 }
 
 export function deriveOperatorPlaybackSync(
