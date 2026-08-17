@@ -14,6 +14,7 @@ import {
   FileText,
   AlertTriangle,
   ClipboardList,
+  CalendarDays,
 } from 'lucide-solid';
 import { authUser } from '../../core/stores/authStore';
 import { navItemsForRole, isOperationalSupervisor } from '../../core/auth/permissions';
@@ -28,6 +29,7 @@ const NAV_ICONS: Record<string, typeof LayoutDashboard> = {
   '/operator': ClipboardList,
   '/optimization': Map,
   '/planning': LayoutDashboard,
+  '/planning/weekly': CalendarDays,
   '/planning/history': History,
   '/map': MapPin,
   '/vehicles': Truck,

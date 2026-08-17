@@ -15,6 +15,7 @@ from app.services.optimization_service import (
     _build_engine_metrics,
     _coalesce_optimized_solution,
     _critical_coverage_pct,
+    _distance_matrix_implausible,
     _evaluate_solution,
     _format_computation_log_message,
     _haversine_m,
@@ -42,6 +43,16 @@ def test_haversine_m_positive_distance():
     d = _haversine_m(-62.715, 8.295, -62.720, 8.300)
     assert d > 0
     assert d < 2000
+
+
+def test_distance_matrix_implausible_detects_inflated_legs():
+    dist, time = vrp_matrix(3, base=90_000.0)
+    assert _distance_matrix_implausible(3, dist, time) is True
+
+
+def test_distance_matrix_implausible_accepts_local_matrix():
+    dist, time = vrp_matrix(3, base=800.0)
+    assert _distance_matrix_implausible(3, dist, time) is False
 
 
 def test_route_cost_empty_route():

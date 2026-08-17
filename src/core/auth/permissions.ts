@@ -6,6 +6,7 @@ export const ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
   '/operator/plan': ['administrador', 'planificador', 'conductor'],
   '/optimization': ['administrador', 'planificador'],
   '/planning': ['administrador', 'planificador'],
+  '/planning/weekly': ['administrador', 'planificador'],
   '/planning/history': ['administrador', 'planificador'],
   '/map': ['administrador', 'planificador', 'conductor', 'residente'],
   '/vehicles': ['administrador', 'planificador'],
@@ -78,6 +79,12 @@ export const MAIN_NAV_ITEMS: NavItemDef[] = [
     label: 'Monitoreo en Tiempo Real',
     description: 'Monitoreo en caliente',
     roles: ['administrador', 'planificador', 'conductor'],
+  },
+  {
+    href: '/planning/weekly',
+    label: 'Plan semanal',
+    description: 'Directivo — aprobar la semana',
+    roles: ['administrador', 'planificador'],
   },
   {
     href: '/planning',

@@ -589,7 +589,7 @@ export function SimulationMapPanel(props: SimulationMapPanelProps) {
     if (props.squareLayout) {
       return 'mx-auto aspect-square w-full max-w-3xl';
     }
-    return 'h-72 lg:h-85';
+    return 'h-72 lg:h-96';
   };
 
   const mapTitle = () => {

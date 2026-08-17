@@ -223,13 +223,29 @@ def nearest_node_in_component(
     return ox.distance.nearest_nodes(subgraph, lon, lat)
 
 
+def shortest_path_nodes_by_length(graph: nx.MultiDiGraph, orig: int, dest: int) -> list[int]:
+    """Camino mínimo por distancia (length en metros), no por tiempo ponderado."""
+    if orig == dest:
+        return [orig]
+    try:
+        return nx.shortest_path(graph, orig, dest, weight="length")
+    except (nx.NetworkXNoPath, nx.NodeNotFound):
+        pass
+    try:
+        undirected = graph.to_undirected()
+        return nx.shortest_path(undirected, orig, dest, weight="length")
+    except (nx.NetworkXNoPath, nx.NodeNotFound, nx.NetworkXError):
+        logger.debug("Sin camino vial (length) entre nodos %s → %s", orig, dest)
+        return [orig]
+
+
 def path_metrics_between_nodes(
     graph: nx.MultiDiGraph,
     orig: int,
     dest: int,
 ) -> tuple[float, float]:
     """Distancia (m) y tiempo (s) por camino mínimo en el grafo vial."""
-    path = shortest_path_nodes(graph, orig, dest)
+    path = shortest_path_nodes_by_length(graph, orig, dest)
     if len(path) < 2 or path == [orig]:
         if orig == dest:
             return 0.0, 0.0

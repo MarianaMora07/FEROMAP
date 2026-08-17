@@ -2,7 +2,9 @@ import type { SimulationCrewParameters, VehicleCrewFields } from '../../data/typ
 import type { RouteCollection } from '../../data/types/geo';
 import type { KpiMetrics, ScenarioId, SimulationLogEntry, AcoConvergencePoint } from '../../data/types/simulation';
 import type { ExecutionPhaseId } from '../../features/simulation/executionPhases';
-import { apiGet, apiPost } from './client';
+import { apiGet, apiPost, useMocks } from './client';
+import { kpiByScenario } from '../../data/mock/kpis';
+import { getScenarioRoutes } from '../../data/mock/routes';
 import type { SimulationRunParameters } from './simulation';
 
 export type { SimulationCrewParameters, VehicleCrewFields };
@@ -53,6 +55,26 @@ export function startSimulationOptimizeJob(
 }
 
 export function fetchSimulationOptimizeJob(jobId: string): Promise<SimulationOptimizationJob> {
+  if (useMocks || jobId === 'mock-job') {
+    const kpis = kpiByScenario['normal']!;
+    const routes = getScenarioRoutes('normal');
+    return Promise.resolve({
+      jobId,
+      status: 'completed',
+      phase: null,
+      progress: 100,
+      logs: [],
+      result: {
+        simulationId: 42,
+        scenarioId: 'normal',
+        kpis,
+        routes: { current: routes, optimized: routes },
+        logs: [],
+        servedPointCodes: [],
+      },
+      error: null,
+    });
+  }
   return apiGet<SimulationOptimizationJob>(`/api/v1/simulations/jobs/${jobId}`);
 }
 

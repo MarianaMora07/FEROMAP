@@ -43,18 +43,42 @@ class ResolvedOperationalFacilities:
         }
 
 
+def _normalize_lon_lat(
+    lon: float | None,
+    lat: float | None,
+    *,
+    default_lon: float,
+    default_lat: float,
+) -> tuple[float, float]:
+    """Devuelve (lon, lat). Corrige settings legacy con campos intercambiados en Unare."""
+    resolved_lon = default_lon if lon is None else float(lon)
+    resolved_lat = default_lat if lat is None else float(lat)
+    if abs(resolved_lon) < 20 and abs(resolved_lat) > 20:
+        resolved_lon, resolved_lat = resolved_lat, resolved_lon
+    return resolved_lon, resolved_lat
+
+
 def resolve_operational_facilities(db: Session) -> ResolvedOperationalFacilities:
     """Lee settings de BD con fallback a constantes de contrato (ADR-004)."""
     settings = get_operational_settings(db)
     work_start = settings.work_start or DEFAULT_WORK_START
     work_end = settings.work_end or DEFAULT_WORK_END
     unload_minutes = settings.landfill_unload_minutes or DEFAULT_LANDFILL_UNLOAD_MINUTES
+    depot_lon, depot_lat = _normalize_lon_lat(
+        settings.depot_lon,
+        settings.depot_lat,
+        default_lon=DEFAULT_DEPOT_LON,
+        default_lat=DEFAULT_DEPOT_LAT,
+    )
+    landfill_lon, landfill_lat = _normalize_lon_lat(
+        settings.landfill_lon,
+        settings.landfill_lat,
+        default_lon=DEFAULT_LANDFILL_LON,
+        default_lat=DEFAULT_LANDFILL_LAT,
+    )
     return ResolvedOperationalFacilities(
-        depot=(settings.depot_lon or DEFAULT_DEPOT_LON, settings.depot_lat or DEFAULT_DEPOT_LAT),
-        landfill=(
-            settings.landfill_lon or DEFAULT_LANDFILL_LON,
-            settings.landfill_lat or DEFAULT_LANDFILL_LAT,
-        ),
+        depot=(depot_lon, depot_lat),
+        landfill=(landfill_lon, landfill_lat),
         unload_seconds=landfill_unload_seconds(unload_minutes),
         shift_budget_seconds=shift_budget_seconds(work_start, work_end),
         work_start=work_start,

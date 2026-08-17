@@ -30,8 +30,7 @@ def clear_route_geometry_cache() -> None:
 def _waypoint_lon_lat(waypoint: Any) -> tuple[float, float] | None:
     waypoint_type = getattr(waypoint, "waypoint_type", None) or "collection"
     if waypoint_type == "landfill":
-        # Constantes de contrato: landfill_lat ≈ lon geográfico, landfill_lon ≈ lat.
-        return DEFAULT_LANDFILL_LAT, DEFAULT_LANDFILL_LON
+        return DEFAULT_LANDFILL_LON, DEFAULT_LANDFILL_LAT
     point = getattr(waypoint, "collection_point", None)
     if point is None:
         return None

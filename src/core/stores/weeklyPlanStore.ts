@@ -13,6 +13,7 @@ import {
   downloadWeeklyPlanPdf,
   isPastWeek,
   mondayIso,
+  sanitizeWeeklyPlanDays,
   updateWeeklyPlan,
   validateWeeklyPlan,
   type PlanVersion,
@@ -20,7 +21,17 @@ import {
   type WeeklyPlanDay,
 } from '../api/planning';
 import type { ScenarioId } from '../../data/types/simulation';
+import { deriveWeeklyPlanFlowStep as resolveWeeklyPlanFlowStep, weeklyPlanScheduledPointCount } from '../planning/weeklyPlanUx';
+import type { WeeklyPlanValidationSummary } from '../planning/weeklyPlanUx';
+import {
+  addDaysToIso,
+  compactWeeklyPlanDaysForSave,
+  mergeWeekCalendarDays,
+  summarizeWeeklyPlanAssignment,
+} from '../planning/weeklyPlanCalendar';
+import { fetchActiveVisitSchedules, type VisitSchedule } from '../api/visitSchedules';
 import { fetchSimulationOptimizeJob } from '../api/simulationJobs';
+import { fetchCollectionPointsForPlanning } from '../api/collectionPoints';
 
 interface WeeklyPlanState {
   plan: WeeklyPlan | null;
@@ -37,6 +48,9 @@ interface WeeklyPlanState {
   isCreatingWeek: boolean;
   validationJobId: string | null;
   validationCompleted: boolean;
+  validationProgress: number;
+  validationSummary: WeeklyPlanValidationSummary | null;
+  visitSchedules: VisitSchedule[];
   error: string | null;
   notice: string | null;
 }
@@ -56,18 +70,33 @@ const [state, setState] = createStore<WeeklyPlanState>({
   isCreatingWeek: false,
   validationJobId: null,
   validationCompleted: false,
+  validationProgress: 0,
+  validationSummary: null,
+  visitSchedules: [],
   error: null,
   notice: null,
 });
 
-async function fetchCollectionPointsForPlanning() {
-  const { fetchCollectionPointsList } = await import('../api/collectionPoints');
-  const points = await fetchCollectionPointsList();
-  return points.map((point) => ({
-    id: Number(point.id),
-    code: point.code,
-    sectorName: point.sector,
-  }));
+async function refreshVisitSchedules(reference?: string): Promise<VisitSchedule[]> {
+  const items = await fetchActiveVisitSchedules(reference);
+  setState({ visitSchedules: items });
+  return items;
+}
+
+function withCalendarDays(plan: WeeklyPlan | null): WeeklyPlan | null {
+  if (!plan) return null;
+  return {
+    ...plan,
+    days: mergeWeekCalendarDays(plan.weekStartDate, plan.days ?? []),
+  };
+}
+
+export function getCollectionPointRef(pointId: number) {
+  return state.collectionPoints.find((point) => point.id === pointId);
+}
+
+async function loadCollectionPointsForPlanning() {
+  return fetchCollectionPointsForPlanning();
 }
 
 async function refreshWeeklyPlanHistory(): Promise<WeeklyPlan[]> {
@@ -105,12 +134,17 @@ export async function initWeeklyPlanTab(): Promise<void> {
       fetchCollectionPointsForPlanning(),
     ]);
     setState({ collectionPoints: points });
-    const plan = await pickDefaultPlan(history);
+    const plan = withCalendarDays(await pickDefaultPlan(history));
     setState({
       plan,
       selectedPlanId: plan?.id ?? null,
       validationCompleted: false,
+      validationSummary: null,
+      validationProgress: 0,
     });
+    if (plan?.weekStartDate) {
+      await refreshVisitSchedules(plan.weekStartDate);
+    }
   } catch (error) {
     setState({
       error: error instanceof Error ? error.message : 'No se pudo cargar el plan semanal',
@@ -121,20 +155,12 @@ export async function initWeeklyPlanTab(): Promise<void> {
 }
 
 export function buildDefaultWeekDays(weekStart: string, pointIds: number[]): WeeklyPlanDay[] {
-  const days: WeeklyPlanDay[] = [];
+  const workdays = mergeWeekCalendarDays(weekStart, []).slice(0, 5);
   const chunk = Math.max(1, Math.ceil(pointIds.length / 5));
-  for (let offset = 0; offset < 5; offset += 1) {
-    const date = new Date(weekStart);
-    date.setDate(date.getDate() + offset);
-    const slice = pointIds.slice(offset * chunk, (offset + 1) * chunk);
-    days.push({
-      operationDate: date.toISOString().slice(0, 10),
-      weekday: date.getDay() === 0 ? 6 : date.getDay() - 1,
-      sectorIds: [],
-      collectionPointIds: slice,
-    });
-  }
-  return days;
+  return workdays.map((day, offset) => ({
+    ...day,
+    collectionPointIds: pointIds.slice(offset * chunk, (offset + 1) * chunk),
+  }));
 }
 
 export function nextWeekMonday(): string {
@@ -157,12 +183,11 @@ export function canArchivePlan(plan: WeeklyPlan | null | undefined): boolean {
 }
 
 export function deriveWeeklyFlowStep(): number {
-  const plan = state.plan;
-  if (!plan) return 1;
-  if (plan.status === 'approved' || plan.status === 'archived') return 4;
-  if (state.isValidating) return 2;
-  if (state.validationCompleted) return 3;
-  return 1;
+  return resolveWeeklyPlanFlowStep({
+    plan: state.plan,
+    isValidating: state.isValidating,
+    validationCompleted: state.validationCompleted,
+  });
 }
 
 export function isWeeklyPlanEditable(): boolean {
@@ -175,13 +200,18 @@ export async function selectWeeklyPlan(
 ): Promise<void> {
   setState({ isLoading: true, error: null, versionDiff: [], versions: [] });
   try {
-    const plan = await resolvePlanFromHistory(planId);
+    const plan = withCalendarDays(await resolvePlanFromHistory(planId));
     setState({
       plan,
       selectedPlanId: planId,
       validationCompleted: false,
       notice: null,
+      validationSummary: null,
+      validationProgress: 0,
     });
+    if (plan?.weekStartDate) {
+      await refreshVisitSchedules(plan.weekStartDate);
+    }
     if (options?.compareLatestVersions) {
       await loadWeeklyPlanVersions();
       await compareLatestWeeklyVersions();
@@ -220,24 +250,34 @@ export async function createWeekDraft(weekStartDate: string): Promise<void> {
     const points =
       state.collectionPoints.length > 0
         ? state.collectionPoints
-        : await fetchCollectionPointsForPlanning();
-    const pointIds = points.map((point) => point.id);
+        : await loadCollectionPointsForPlanning();
+    const pointIds = points.map((point) => point.id).filter((id) => Number.isFinite(id) && id > 0);
+    if (pointIds.length === 0) {
+      throw new Error('No hay puntos de recolección válidos para armar el plan semanal.');
+    }
     const days = buildDefaultWeekDays(weekStartDate, pointIds);
-    const plan = await createWeeklyPlan({
-      weekStartDate,
-      scenarioId: 'normal',
-      days: days.map((day) => ({
-        operationDate: day.operationDate,
-        collectionPointIds: day.collectionPointIds,
-      })),
-    });
+    const plan = withCalendarDays(
+      await createWeeklyPlan({
+        weekStartDate,
+        scenarioId: 'normal',
+        days: compactWeeklyPlanDaysForSave(weekStartDate, days).map((day) => ({
+          operationDate: day.operationDate,
+          collectionPointIds: day.collectionPointIds,
+        })),
+      }),
+    );
     await refreshWeeklyPlanHistory();
     setState({
       plan,
-      selectedPlanId: plan.id,
+      selectedPlanId: plan?.id ?? null,
       validationCompleted: false,
+      validationSummary: null,
+      validationProgress: 0,
       notice: `Borrador creado para la semana del ${weekStartDate}.`,
     });
+    if (plan?.weekStartDate) {
+      await refreshVisitSchedules(plan.weekStartDate);
+    }
   } catch (error) {
     setState({
       error: error instanceof Error ? error.message : 'No se pudo crear el borrador semanal',
@@ -263,7 +303,7 @@ export async function archiveSelectedWeeklyPlan(): Promise<void> {
   }
   setState({ isArchiving: true, error: null, notice: null });
   try {
-    const plan = await archiveWeeklyPlan(state.plan.id);
+    const plan = withCalendarDays(await archiveWeeklyPlan(state.plan.id));
     await refreshWeeklyPlanHistory();
     setState({ plan, notice: 'Plan semanal archivado.' });
   } catch (error) {
@@ -280,23 +320,32 @@ export async function saveWeeklyPlanDraft(scenarioId: ScenarioId, days: WeeklyPl
   setState({ isSaving: true, error: null, notice: null });
   try {
     const weekStart = state.plan?.weekStartDate ?? mondayIso();
+    const calendarDays = mergeWeekCalendarDays(weekStart, days);
+    const sanitizedDays = sanitizeWeeklyPlanDays(compactWeeklyPlanDaysForSave(weekStart, calendarDays));
     const payload = {
       weekStartDate: weekStart,
       scenarioId,
-      days: days.map((day) => ({
+      days: sanitizedDays.map((day) => ({
         operationDate: day.operationDate,
         collectionPointIds: day.collectionPointIds,
       })),
     };
-    const plan =
+    const plan = withCalendarDays(
       state.plan?.status === 'draft' && state.plan.id
         ? await updateWeeklyPlan(state.plan.id, {
             scenarioId,
-            days,
+            days: sanitizedDays,
           })
-        : await createWeeklyPlan(payload);
+        : await createWeeklyPlan(payload),
+    );
     await refreshWeeklyPlanHistory();
-    setState({ plan, selectedPlanId: plan.id, notice: 'Plan semanal guardado en borrador.' });
+    setState({
+      plan,
+      selectedPlanId: plan?.id ?? null,
+      notice: 'Plan semanal guardado en borrador.',
+      validationCompleted: false,
+      validationSummary: null,
+    });
   } catch (error) {
     setState({
       error: error instanceof Error ? error.message : 'No se pudo guardar el plan semanal',
@@ -311,16 +360,28 @@ export async function runWeeklyValidation(): Promise<void> {
   if (!state.plan?.id) {
     throw new Error('Primero guarda un borrador del plan semanal');
   }
-  setState({ isValidating: true, error: null, notice: null, validationCompleted: false });
+  setState({ isValidating: true, error: null, notice: null, validationCompleted: false, validationSummary: null, validationProgress: 0 });
   try {
     const { jobId } = await validateWeeklyPlan(state.plan.id);
     setState({ validationJobId: jobId });
     while (true) {
       const snapshot = await fetchSimulationOptimizeJob(jobId);
+      setState({ validationProgress: snapshot.progress ?? 0 });
       if (snapshot.status === 'completed' && snapshot.result) {
+        const kpis = snapshot.result.kpis;
         setState({
-          notice: `Validación completada — ${snapshot.result.kpis.distanceKm.optimized.toFixed(1)} km estimados.`,
+          notice: `Validación completada — ${kpis.distanceKm.optimized.toFixed(1)} km estimados.`,
           validationCompleted: true,
+          validationSummary: {
+            distanceKm: kpis.distanceKm.optimized,
+            durationHours: kpis.durationHours.optimized,
+            scheduledPoints: weeklyPlanScheduledPointCount(state.plan),
+            coveredPoints: kpis.containersServed ?? weeklyPlanScheduledPointCount(state.plan),
+            uncoveredPoints: kpis.uncoveredPoints ?? kpis.uncoveredPointCodes?.length ?? 0,
+            exceedsWorkday: kpis.exceedsWorkday?.optimized ?? false,
+            workdayHours: kpis.workdayHours ?? 12,
+            simulationId: snapshot.result.simulationId ?? null,
+          },
         });
         break;
       }
@@ -348,7 +409,7 @@ export async function approveCurrentWeeklyPlan(referenceSimulationId?: number): 
   }
   setState({ isApproving: true, error: null, notice: null });
   try {
-    const plan = await approveWeeklyPlan(state.plan.id, { referenceSimulationId });
+    const plan = withCalendarDays(await approveWeeklyPlan(state.plan.id, { referenceSimulationId }));
     await refreshWeeklyPlanHistory();
     setState({ plan, notice: 'Plan semanal aprobado.' });
   } catch (error) {
@@ -363,17 +424,28 @@ export async function approveCurrentWeeklyPlan(referenceSimulationId?: number): 
 
 export function setWeeklyPlanDays(days: WeeklyPlanDay[]): void {
   if (!state.plan) {
+    const weekStart = mondayIso();
     setState('plan', {
       id: 0,
-      weekStartDate: mondayIso(),
-      weekEndDate: days[days.length - 1]?.operationDate ?? mondayIso(),
+      weekStartDate: weekStart,
+      weekEndDate: addDaysToIso(weekStart, 6),
       status: 'draft',
       scenarioId: 'normal',
-      days,
+      days: mergeWeekCalendarDays(weekStart, days),
     });
     return;
   }
-  setState('plan', 'days', days);
+  setState('plan', 'days', mergeWeekCalendarDays(state.plan.weekStartDate, days));
+  setState({ validationCompleted: false, validationSummary: null });
+}
+
+export function updateWeeklyPlanDay(weekdayIndex: number, patch: Partial<WeeklyPlanDay>): void {
+  if (!state.plan) return;
+  const days = mergeWeekCalendarDays(state.plan.weekStartDate, state.plan.days);
+  const current = days[weekdayIndex];
+  if (!current) return;
+  days[weekdayIndex] = { ...current, ...patch };
+  setWeeklyPlanDays(days);
 }
 
 export function setWeeklyScenario(scenarioId: ScenarioId): void {
@@ -395,11 +467,20 @@ export async function autofillWeeklyFromSchedules(): Promise<void> {
   if (!state.plan?.id) {
     throw new Error('Guarda un borrador antes de autocompletar');
   }
+  const before = summarizeWeeklyPlanAssignment(
+    mergeWeekCalendarDays(state.plan.weekStartDate, state.plan.days ?? []),
+  );
   setState({ isSaving: true, error: null, notice: null });
   try {
-    const plan = await autofillWeeklyPlanFromSchedules(state.plan.id);
+    const plan = withCalendarDays(await autofillWeeklyPlanFromSchedules(state.plan.id));
     await refreshWeeklyPlanHistory();
-    setState({ plan, notice: 'Semana autogenerada desde frecuencias de puntos.' });
+    const after = summarizeWeeklyPlanAssignment(plan?.days ?? []);
+    setState({
+      plan,
+      validationCompleted: false,
+      validationSummary: null,
+      notice: `Se asignaron ${after.pointCount} puntos en ${after.activeDays} días (antes: ${before.pointCount} puntos en ${before.activeDays} días).`,
+    });
   } catch (error) {
     setState({
       error: error instanceof Error ? error.message : 'No se pudo autocompletar la semana',

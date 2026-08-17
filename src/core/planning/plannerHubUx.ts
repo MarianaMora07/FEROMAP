@@ -6,6 +6,7 @@ import {
 } from './operationalLinks';
 import { optimizationDateHref, todayIso } from './planningUx';
 import { planningHistoryHref } from './planningHistoryLinks';
+import { weeklyPlanHref as planningWeeklyPath } from './weeklyPlanLinks';
 
 export interface PlannerNextAction {
   message: string;
@@ -16,7 +17,7 @@ export interface PlannerNextAction {
 }
 
 export const PLANNER_QUICK_ACTIONS = [
-  { id: 'weekly', label: 'Plan semanal', href: '/simulation?view=weekly', description: 'Directivo' },
+  { id: 'weekly', label: 'Plan semanal', href: planningWeeklyPath, description: 'Directivo' },
   { id: 'today', label: 'Plan de hoy', href: optimizationDateHref(todayIso()), description: 'Administrativo' },
   { id: 'pending', label: 'Pendientes', href: `${optimizationDateHref(todayIso())}#pendientes`, description: 'Carry-over' },
   { id: 'history', label: 'Historial', href: '/planning/history', description: 'Buscar' },
@@ -34,7 +35,7 @@ export function deriveNextPlannerAction(snapshot: PlanningDashboardSnapshot): Pl
     return {
       message: 'Semana sin plan',
       detail: 'Crea y aprueba el plan semanal antes de operar el día.',
-      href: '/simulation?view=weekly',
+      href: planningWeeklyPath,
       label: 'Ir al plan semanal',
       tone: 'warning',
     };
@@ -44,7 +45,7 @@ export function deriveNextPlannerAction(snapshot: PlanningDashboardSnapshot): Pl
     return {
       message: 'Semana sin aprobar',
       detail: `Borrador ${weekly.weekStartDate} — valida y aprueba antes de despachar.`,
-      href: '/simulation?view=weekly',
+      href: planningWeeklyPath,
       label: 'Aprobar semana',
       tone: 'warning',
     };

@@ -10,7 +10,6 @@ import {
   optimizationState,
 } from '../../core/stores/optimizationStore';
 import { PlanningStatusBadge } from '../planning/PlanningStatusBadge';
-import { ThesisVsOperationsNotice } from '../planning/ThesisVsOperationsNotice';
 
 interface OptimizationHistoryPanelProps {
   onViewDay: (operationDate: string) => void;
@@ -66,7 +65,6 @@ export function OptimizationHistoryPanel(props: OptimizationHistoryPanelProps) {
           </A>
         }
       />
-      <ThesisVsOperationsNotice variant="operations" class="mb-4" />
       <Show when={error()}>
         <p class="mb-3 text-sm text-red-500">{error()}</p>
       </Show>

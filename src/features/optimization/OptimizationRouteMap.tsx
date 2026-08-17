@@ -127,7 +127,7 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
   };
 
   onMount(() => {
-    if (!useMocks()) {
+    if (!useMocks) {
       void fetchAdminSettings().then((settings) => {
         setFacilities({
           depotLat: settings.depotLat,
@@ -180,7 +180,7 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
         </div>
       </div>
 
-      <div class="relative h-85 bg-app lg:h-95">
+      <div class="relative h-[min(55vh,420px)] min-h-[320px] bg-app lg:min-h-[380px]">
         <OperationalMap
           onMapReady={handleMapReady}
           onStyleRestored={() => syncRoutes()}

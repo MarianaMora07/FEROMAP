@@ -1,6 +1,7 @@
 import type { PlanningDashboardSnapshot } from '../api/planningAnalytics';
 import { monitoringHref, optimizationHref, optimizationPlaybackHref } from './operationalLinks';
 import { todayIso } from './planningUx';
+import { weeklyPlanHref } from './weeklyPlanLinks';
 
 export type OperationalJourneyStepId =
   | 'configure_week'
@@ -91,7 +92,7 @@ export function buildOperationalJourneySteps(input: OperationalJourneyInput): Op
       id: 'configure_week',
       label: 'Configurar semana',
       shortLabel: 'Semana',
-      href: '/simulation?view=weekly',
+      href: weeklyPlanHref,
       status: statusFor('configure_week'),
     },
     {

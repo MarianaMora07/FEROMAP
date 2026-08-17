@@ -241,7 +241,7 @@ def test_route_geometry_service_includes_landfill_waypoint(monkeypatch):
     collection_wp.waypoint_type = "collection"
     coords = build_route_linestring([collection_wp, landfill_wp], include_depot=True)
     assert len(coords) >= 3
-    assert [DEFAULT_LANDFILL_LAT, DEFAULT_LANDFILL_LON] in coords
+    assert [DEFAULT_LANDFILL_LON, DEFAULT_LANDFILL_LAT] in coords
 
 
 def test_playback_route_with_landfill_stop():

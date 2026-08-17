@@ -29,6 +29,22 @@ export interface OptimizationResultsTotals {
 
 const VEHICLE_TONES: VehicleTone[] = ['blue', 'green', 'purple'];
 
+/** Umbrales operativos diarios — evita mostrar KPIs de validación semanal estratégica u otras corridas incoherentes. */
+export function isPlausibleDailyOptimizationKpis(
+  kpis: KpiMetrics,
+  pointCount: number,
+): boolean {
+  const safePoints = Math.max(1, pointCount);
+  const maxKm = Math.max(120, safePoints * 15);
+  const maxHours = Math.max(12, safePoints * 0.6 + 2);
+  return (
+    Number.isFinite(kpis.distanceKm.optimized) &&
+    Number.isFinite(kpis.durationHours.optimized) &&
+    kpis.distanceKm.optimized <= maxKm &&
+    kpis.durationHours.optimized <= maxHours
+  );
+}
+
 export function formatDurationHours(hours: number): string {
   const totalMin = Math.round(hours * 60);
   const h = Math.floor(totalMin / 60);

@@ -7,6 +7,7 @@ import {
   type DailyTimelineStepId,
 } from '../../core/planning/dailyPlanningUx';
 import { optimizationState } from '../../core/stores/optimizationStore';
+import { weeklyPlanHref } from '../../core/planning/weeklyPlanLinks';
 
 const WEEKLY_PLAN_TOOLTIP = 'Falta aprobar plan semanal';
 
@@ -94,7 +95,7 @@ export function DailyPlanTimeline() {
       <Show when={!optimizationState.weeklyPlanApproved}>
         <p class="mt-2 text-xs text-amber-700 dark:text-amber-400" role="status" aria-live="polite">
           {WEEKLY_PLAN_TOOLTIP}. Ve a{' '}
-          <a href="/simulation?view=weekly" class="font-medium underline">
+          <a href={weeklyPlanHref} class="font-medium underline">
             Plan semanal
           </a>
           .

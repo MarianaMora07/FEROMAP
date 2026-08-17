@@ -43,8 +43,18 @@ from app.services.operator_service import operator_route_snapshot_or_403
 from app.services.planning_analytics_service import planning_analytics_summary, planning_dashboard_snapshot
 from app.services.planning_reports_service import export_daily_plan_pdf, export_weekly_plan_pdf
 from app.services.route_playback_service import build_daily_route_playback
+from app.services.visit_schedule_service import list_active_visit_schedules
 
 router = APIRouter(prefix="/planning", tags=["planning"])
+
+
+@router.get("/visit-schedules")
+def list_visit_schedules(
+    db: DbSession,
+    _: PlannerOrAdmin,
+    reference: date | None = None,
+):
+    return {"items": list_active_visit_schedules(db, reference=reference)}
 
 
 @router.get("/weekly")

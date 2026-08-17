@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
-import { A, useSearchParams } from '@solidjs/router';
+import { A, useNavigate, useSearchParams } from '@solidjs/router';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -60,9 +60,8 @@ import type { ScenarioId } from '../../data/types/simulation';
 import { ConfigurationSummaryPanel } from './ConfigurationSummaryPanel';
 import { ExecutionPanel } from './ExecutionPanel';
 import { SimulationHistoryPanel } from './SimulationHistoryPanel';
-import { WeeklyPlanTab } from './WeeklyPlanTab';
-import { PlanningGlossaryStrip } from '../planning/PlanningGlossaryStrip';
 import { ThesisVsOperationsNotice } from '../planning/ThesisVsOperationsNotice';
+import { weeklyPlanHref } from '../../core/planning/weeklyPlanLinks';
 import { WizardStepNav } from './WizardStepNav';
 import { SimulationResultsStep } from './SimulationResultsStep';
 import {
@@ -96,11 +95,10 @@ import {
   type ConditionId,
 } from './simulationConfig';
 
-type SimulationPageTab = 'flow' | 'history' | 'weekly';
+type SimulationPageTab = 'flow' | 'history';
 
 const simulationPageTabs: { id: SimulationPageTab; label: string; hint: string }[] = [
   { id: 'flow', label: 'Evaluar escenarios', hint: 'Comparar condiciones con el motor ACO (sin despacho)' },
-  { id: 'weekly', label: 'Plan semanal', hint: 'Directivo — aprobar la semana' },
   { id: 'history', label: 'Historial de simulaciones', hint: 'Escenarios ejecutados para análisis' },
 ];
 
@@ -180,6 +178,7 @@ async function fetchReadiness() {
 
 export default function SimulationPage() {
   const [params] = useSearchParams();
+  const navigate = useNavigate();
   const criticalFromPoints = () => {
     const value = params.critical;
     const raw = Array.isArray(value) ? value[0] : value;
@@ -198,7 +197,7 @@ export default function SimulationPage() {
 
   const [step, setStep] = createSignal(1);
   const [pageTab, setPageTab] = createSignal<SimulationPageTab>(
-    params.view === 'history' ? 'history' : params.view === 'weekly' ? 'weekly' : 'flow',
+    params.view === 'history' ? 'history' : 'flow',
   );
   const [conditions, setConditions] = createSignal(defaultConditions());
   const [rainIntensity, setRainIntensity] = createSignal('alta');
@@ -231,6 +230,12 @@ export default function SimulationPage() {
       setLoadingReadiness(false);
     }
   };
+
+  createEffect(() => {
+    if (params.view === 'weekly') {
+      navigate(weeklyPlanHref, { replace: true });
+    }
+  });
 
   const derivedScenario = createMemo(() =>
     describeDerivedScenario(conditions(), simulationState.scenarios),
@@ -495,12 +500,21 @@ export default function SimulationPage() {
           )}
         </For>
       </div>
-      <Show when={pageTab() === 'weekly'}>
-        <PlanningGlossaryStrip />
-        <p class="text-xs text-text-muted">
-          {simulationPageTabs.find((item) => item.id === 'weekly')?.hint}
+      <div
+        class="flex flex-col gap-2 rounded-lg border border-default bg-surface/60 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+        data-testid="simulation-weekly-link"
+      >
+        <p class="text-sm text-text-secondary">
+          La planificación semanal (directivo) vive en operación, no en simulación de tesis.
         </p>
-      </Show>
+        <A
+          href={weeklyPlanHref}
+          class="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-fero-blue hover:underline"
+        >
+          Ir al plan semanal
+          <ArrowRight size={14} aria-hidden="true" />
+        </A>
+      </div>
       <Show when={pageTab() === 'history'}>
         <p class="text-xs text-text-muted">
           {simulationPageTabs.find((item) => item.id === 'history')?.hint}
@@ -869,12 +883,8 @@ export default function SimulationPage() {
       </div>
       </Show>
 
-      <Show when={pageTab() === 'weekly'}>
-        <WeeklyPlanTab />
-      </Show>
-
       <Show when={pageTab() === 'history'}>
-        <ThesisVsOperationsNotice variant="thesis" class="mb-4" />
+        <ThesisVsOperationsNotice class="mb-4" />
         <SimulationHistoryPanel
           error={historyError()}
           isLoading={isSimulationBusy()}

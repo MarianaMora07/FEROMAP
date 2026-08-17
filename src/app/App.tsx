@@ -43,6 +43,7 @@ const ProfilePage = lazyPage(() => import('../features/profile'));
 const OperatorPage = lazyPage(() => import('../features/operator'));
 const OperatorDailyPlanPage = lazyPage(() => import('../features/operator/OperatorDailyPlanPage'));
 const PlanningHubPage = lazyPage(() => import('../features/planning/hub'));
+const PlanningWeeklyPage = lazyPage(() => import('../features/planning/weekly'));
 const PlanningHistoryPage = lazyPage(() => import('../features/planning/history'));
 const LoginPage = lazyPage(() => import('../features/auth'));
 
@@ -73,6 +74,7 @@ export default function App() {
         <Route path="/operator" component={OperatorPage} />
         <Route path="/operator/plan" component={OperatorDailyPlanPage} />
         <Route path="/planning" component={PlanningHubPage} />
+        <Route path="/planning/weekly" component={PlanningWeeklyPage} />
         <Route path="/planning/history" component={PlanningHistoryPage} />
         <Route path="/map" component={MapPage} />
         <Route path="/vehicles" component={VehiclesPage} />

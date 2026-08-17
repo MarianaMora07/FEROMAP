@@ -3,10 +3,10 @@
  * @see docs/fase-9/adr-vertedero-multi-viaje.md
  */
 
-export const DEFAULT_DEPOT_LAT = -62.715;
-export const DEFAULT_DEPOT_LON = 8.295;
-export const DEFAULT_LANDFILL_LAT = -62.69;
-export const DEFAULT_LANDFILL_LON = 8.28;
+export const DEFAULT_DEPOT_LAT = 8.295;
+export const DEFAULT_DEPOT_LON = -62.715;
+export const DEFAULT_LANDFILL_LAT = 8.28;
+export const DEFAULT_LANDFILL_LON = -62.69;
 export const DEFAULT_LANDFILL_UNLOAD_MINUTES = 15;
 export const DEFAULT_LANDFILL_UNLOAD_SECONDS = DEFAULT_LANDFILL_UNLOAD_MINUTES * 60;
 export const DEFAULT_WORK_START = '06:00';

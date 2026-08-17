@@ -7,6 +7,8 @@ export type ContainerPriority = 'baja' | 'media' | 'alta' | 'critica';
 
 export interface ContainerProperties {
   id: string;
+  /** ID numérico en PostgreSQL — requerido para planificación semanal. */
+  pointId?: number;
   sector: SectorName;
   fillLevel: number;
   priority: ContainerPriority;

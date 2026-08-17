@@ -1,5 +1,6 @@
 import type { JSX } from 'solid-js';
 import { CalendarDays, ClipboardList, History, Search, Truck } from 'lucide-solid';
+import { weeklyPlanHref } from './weeklyPlanLinks';
 
 export interface PlanningEmptyPreset {
   title: string;
@@ -17,7 +18,7 @@ export const PLANNING_EMPTY_PRESETS = {
     description:
       'Aprueba primero qué puntos visitar cada día. Sin plan directivo no puedes optimizar ni despachar rutas.',
     actionLabel: 'Ir al plan semanal',
-    actionHref: '/simulation?view=weekly',
+    actionHref: weeklyPlanHref,
     icon: <CalendarDays size={22} />,
   },
   noWeeklyApproved: {
@@ -26,7 +27,7 @@ export const PLANNING_EMPTY_PRESETS = {
     description:
       'El plan semanal debe estar aprobado antes de generar rutas del día. Configura días, valida con ACO y aprueba.',
     actionLabel: 'Completar plan semanal',
-    actionHref: '/simulation?view=weekly',
+    actionHref: weeklyPlanHref,
     icon: <CalendarDays size={22} />,
   },
   noDailyPlan: {
