@@ -35,7 +35,7 @@ export function notifyMockFallback(label: string, error: unknown, reason: 'force
 }
 
 export function logMockModeEnabled(): void {
-  if (!import.meta.env.DEV || !import.meta.env.VITE_USE_MOCKS) return;
+  if (!import.meta.env.DEV || import.meta.env.VITE_USE_MOCKS !== 'true') return;
 
   console.info(
     '[FEROMAP] VITE_USE_MOCKS=true — las vistas con withMockFallback usarán datos locales.',

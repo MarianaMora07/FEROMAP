@@ -24,3 +24,4 @@ class Driver(Base):
 
     routes: Mapped[list["OptimizedRoute"]] = relationship(back_populates="driver")
     user: Mapped["User"] = relationship(back_populates="driver_profile")
+    sectors: Mapped[list["Sector"]] = relationship(back_populates="driver")

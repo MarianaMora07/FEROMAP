@@ -22,7 +22,7 @@ from app.services.route_playback_service import (
 )
 
 ROUTE_COLORS = ("#34D634", "#1143F3", "#7c3aed", "#f59e0b", "#ef4444", "#06b6d4")
-PLANNED_ROUTE_STATUSES = ("pending", "in_progress")
+PLANNED_ROUTE_STATUSES = ("pending", "in_progress", "completed")
 
 
 def _parse_bbox(bbox: str | None) -> tuple[float, float, float, float] | None:

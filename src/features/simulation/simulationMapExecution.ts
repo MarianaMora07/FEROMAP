@@ -1,4 +1,5 @@
 import type { ContainerCollection, RouteCollection } from '../../data/types/geo';
+import { routeDisplayKind } from '../../core/map/operationalMapLayers';
 import type { ExecutionPhaseId } from './executionPhases';
 import {
   getExecutionPhase,
@@ -87,8 +88,8 @@ export function buildExploreRouteFeatures(
   routes: RouteCollection,
   variant: number,
 ): GeoJSON.FeatureCollection {
-  const optimized = routes.features.find((feature) => feature.properties.type === 'optimized');
-  const current = routes.features.find((feature) => feature.properties.type === 'current');
+  const optimized = routes.features.find((feature) => routeDisplayKind(feature.properties) === 'optimized');
+  const current = routes.features.find((feature) => routeDisplayKind(feature.properties) === 'current');
   const base = optimized?.geometry.coordinates ?? current?.geometry.coordinates ?? [];
 
   if (base.length < 2) {
@@ -131,8 +132,8 @@ export function routeFeaturesForExecution(
   globalPercent: number,
   exploreVariant: number,
 ): GeoJSON.Feature[] {
-  const current = routes.features.find((feature) => feature.properties.type === 'current');
-  const optimized = routes.features.find((feature) => feature.properties.type === 'optimized');
+  const current = routes.features.find((feature) => routeDisplayKind(feature.properties) === 'current');
+  const optimized = routes.features.find((feature) => routeDisplayKind(feature.properties) === 'optimized');
   const currentCoords = (current?.geometry.coordinates ?? []) as [number, number][];
   const optimizedCoords = (optimized?.geometry.coordinates ?? []) as [number, number][];
   const local = executionPhaseLocalProgress(phaseId, globalPercent);

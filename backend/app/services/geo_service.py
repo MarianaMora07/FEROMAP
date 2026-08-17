@@ -106,6 +106,7 @@ def collection_points_geojson(
                 "properties": {
                     "id": point.code,
                     "pointId": point.id,
+                    "numericId": point.id,
                     "sector": sector_name,
                     "fillLevel": pct,
                     "priority": meta.get("priority") or priority_from_fill(pct),

@@ -32,6 +32,7 @@ services:
       - ./backend:/app
       - ./data:/app/data:ro
       - ./data/cache:/app/data/cache
+      - ./data/uploads:/app/data/uploads
     environment:
       APP_ENV: ${APP_ENV:-local}
       DATABASE_URL: postgresql+psycopg://${DB_USERNAME:-feromap}:${DB_PASSWORD}@db:5432/${DB_DATABASE:-feromap}

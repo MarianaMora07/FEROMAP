@@ -5,6 +5,7 @@ import { Button, Card } from '../../design-system/components';
 import { appState } from '../../core/stores/appStore';
 import { OperationalMap } from '../../core/map/OperationalMap';
 import { fitMapToOperationalData, fitMapToStudyArea, studyAreaBoundsLike, STUDY_AREA_MIN_ZOOM, STUDY_AREA_SQUARE_FIT_PADDING } from '../../core/map/operationalMapConfig';
+import { routeDisplayKind, toPlainRouteCollection } from '../../core/map/operationalMapLayers';
 import { fillLevelColor } from '../../core/utils/geoUtils';
 import { buildContainerPopupHtml } from '../../core/utils/popupHtml';
 import type { RoutePlaybackModel } from '../../core/route-playback/routePlaybackTypes';
@@ -109,9 +110,9 @@ export function SimulationMapPanel(props: SimulationMapPanelProps) {
 
   const visibleRouteFeatures = () => {
     if (props.hasResults) {
-      return appState.routes.features.map((feature) => ({
+      return toPlainRouteCollection(appState.routes).features.map((feature) => ({
         ...feature,
-        properties: { ...feature.properties, kind: feature.properties.type },
+        properties: { ...feature.properties, kind: routeDisplayKind(feature.properties) },
       }));
     }
     if (props.showBaselineRoute) {

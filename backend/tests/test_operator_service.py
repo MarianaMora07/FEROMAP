@@ -78,7 +78,7 @@ def test_operator_route_snapshot_includes_line_coordinates():
 
     db.scalar.return_value = plan
     scalars_result = MagicMock()
-    scalars_result.unique.return_value.first.return_value = route
+    scalars_result.unique.return_value.all.return_value = [route]
     db.scalars.return_value = scalars_result
 
     geometry = [
@@ -111,3 +111,56 @@ def test_operator_route_snapshot_includes_line_coordinates():
     assert payload["lineCoordinates"] == geometry
     assert len(payload["lineCoordinates"]) >= 2
     assert payload["stops"][0]["stopType"] == "collection"
+
+
+def test_operator_route_snapshot_assembles_all_driver_routes():
+    db = MagicMock()
+    user = SimpleNamespace(role=UserRole.conductor, driver_profile=SimpleNamespace(id=5))
+    plan = SimpleNamespace(
+        id=7,
+        operation_date=date(2026, 8, 14),
+        status="dispatched",
+        closed_at=None,
+    )
+    first = optimized_route(21, status="in_progress", vehicle_code="TR-08", waypoints=_make_waypoints(2))
+    second = optimized_route(22, status="pending", vehicle_code="TR-08", waypoints=_make_waypoints(2))
+    for route in (first, second):
+        route.daily_plan = plan
+        route.daily_plan_id = 7
+        route.estimated_duration_seconds = 1800
+        route.total_distance_meters = 10000
+        route.vehicle.id = 8
+
+    db.scalar.return_value = plan
+    scalars_result = MagicMock()
+    scalars_result.unique.return_value.all.return_value = [first, second]
+    db.scalars.return_value = scalars_result
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(
+            operator_service,
+            "resolve_operational_facilities",
+            lambda db: SimpleNamespace(
+                landfill=(-62.69, 8.28),
+                landfill_unload_minutes=15,
+                shift_budget_seconds=12 * 3600,
+            ),
+        )
+        patch.setattr(operator_service, "seed_meta_by_code", lambda: {})
+        patch.setattr(operator_service, "fill_level_pct", lambda point: 50)
+        patch.setattr(
+            operator_service,
+            "build_route_linestring_cached",
+            lambda route, wps, include_depot=True: [
+                [-62.715, 8.295],
+                [-62.712, 8.297],
+                [-62.715, 8.295],
+            ],
+        )
+        payload = operator_route_snapshot(db, user, operation_date=date(2026, 8, 14))
+
+    assert payload["routeId"] == 21
+    assert payload["stopsTotal"] == 4
+    assert payload["totalDistanceKm"] == 20.0
+    assert payload["routeLabel"] == "Ruta TR-08 · 2 tramos"
+    assert [stop["sequenceOrder"] for stop in payload["stops"]] == [1, 2, 3, 4]

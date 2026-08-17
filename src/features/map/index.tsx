@@ -76,7 +76,11 @@ import {
   syncFleetMarkers,
   vehicleStatusKey,
   enabledOperationalRouteIds,
+  ensureOperationalRouteLayer,
+  operationalRouteLayerIdsToFront,
   routeLayerStateKey,
+  syncOperationalRouteLayerFilters,
+  OPERATIONAL_ROUTES_SOURCE_ID,
   type OperationalRouteFeatureProps,
 } from '../../core/map/operationalMapLayers';
 import {
@@ -398,7 +402,7 @@ export default function MapPage() {
   });
 
   useOperationalRoutesLayer({
-    map: getMap,
+    map: mapInstance,
     mapReady,
     routes: supervisorOperationalRoutes,
     sourceId: 'operational-routes',
@@ -559,6 +563,22 @@ export default function MapPage() {
       state.routes ||
       (operatorMode() && (routeSnapshot()?.stops.length ?? 0) > 0) ||
       (residentMode() && operationalRoutes().features.length > 0);
+
+    if (!residentMode() && !operatorMode()) {
+      try {
+        ensureOperationalRouteLayer(map, operationalRoutes(), OPERATIONAL_ROUTES_SOURCE_ID, {
+          splitByStatus: true,
+        });
+        syncOperationalRouteLayerFilters(map, OPERATIONAL_ROUTES_SOURCE_ID, {
+          routesVisible,
+          enabledRouteIds: enabledOperationalRouteIds(operationalRoutes(), state),
+          splitByStatus: true,
+        });
+        operationalRouteLayerIdsToFront(map, OPERATIONAL_ROUTES_SOURCE_ID);
+      } catch (error) {
+        console.warn('[FEROMAP] No se pudieron pintar las rutas operativas', error);
+      }
+    }
 
     setVis(OPERATOR_ROUTE_LAYER_ID, routesVisible && operatorMode());
     setVis(OPERATOR_ROUTE_GLOW_LAYER_ID, routesVisible && operatorMode());

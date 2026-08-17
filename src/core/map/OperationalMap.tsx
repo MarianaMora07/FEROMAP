@@ -2,7 +2,7 @@ import { Show, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import maplibregl, { type Map as MapLibreMap } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { appState } from '../stores/appStore';
-import { bindMapTheme, mapStyleForTheme } from '../utils/mapStyle';
+import { bindMapTheme, resolveMapStyle } from '../utils/mapStyle';
 import { createOperationalMapOptions } from './operationalMapConfig';
 import { OperationalMapContext, type OperationalMapContextValue } from './operationalMapContext';
 
@@ -35,29 +35,36 @@ export function OperationalMap(props: OperationalMapProps) {
   }
 
   onMount(() => {
-    const map = new maplibregl.Map(
-      createOperationalMapOptions({
-        container: mapContainer,
-        style: mapStyleForTheme(appState.darkMode),
-        minZoom: props.minZoom,
-        maxBounds: props.maxBounds,
-      }),
-    );
-    mapRef.current = map;
-    setMapInstance(map);
-    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
+    let cancelled = false;
+    let ro: ResizeObserver | undefined;
 
-    map.on('load', () => {
-      map.resize();
-      setMapReady(true);
-      props.onMapReady?.(map);
+    void resolveMapStyle(appState.darkMode).then((style) => {
+      if (cancelled) return;
+      const map = new maplibregl.Map(
+        createOperationalMapOptions({
+          container: mapContainer,
+          style,
+          minZoom: props.minZoom,
+          maxBounds: props.maxBounds,
+        }),
+      );
+      mapRef.current = map;
+      setMapInstance(map);
+      map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
+
+      map.on('load', () => {
+        map.resize();
+        setMapReady(true);
+        props.onMapReady?.(map);
+      });
+
+      ro = new ResizeObserver(() => mapRef.current?.resize());
+      ro.observe(mapContainer);
     });
 
-    const ro = new ResizeObserver(() => mapRef.current?.resize());
-    ro.observe(mapContainer);
-
     onCleanup(() => {
-      ro.disconnect();
+      cancelled = true;
+      ro?.disconnect();
       mapRef.current?.remove();
       mapRef.current = undefined;
       setMapInstance(undefined);

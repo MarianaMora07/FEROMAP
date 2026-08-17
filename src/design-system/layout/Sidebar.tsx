@@ -17,10 +17,10 @@ import {
   CalendarDays,
 } from 'lucide-solid';
 import { authUser } from '../../core/stores/authStore';
-import { navItemsForRole, isOperationalSupervisor } from '../../core/auth/permissions';
+import { navItemsForRole, isOperationalSupervisor, type NavItemDef } from '../../core/auth/permissions';
 import { SidebarHeader } from './sidebar/SidebarHeader';
 import { SidebarNavLink } from './sidebar/SidebarNavLink';
-import { SidebarSectionLabel } from './sidebar/SidebarSectionLabel';
+import { SidebarCollapsibleGroup } from './sidebar/SidebarCollapsibleGroup';
 import { SidebarOperatorsWidget } from './sidebar/SidebarOperatorsWidget';
 import { isNavItemActive, navHrefPath } from './sidebar/navUtils';
 
@@ -43,6 +43,14 @@ const NAV_ICONS: Record<string, typeof LayoutDashboard> = {
   '/alerts': AlertTriangle,
 };
 
+const SECTION_GROUPS: Record<string, string[]> = {
+  'Análisis': ['/simulation', '/demostracion'],
+  'Operación': ['/planning', '/optimization', '/planning/history'],
+  'Resultados': ['/reports', '/analytics'],
+};
+
+const TOP_LEVEL_HREFS = new Set(['/', '/map', '/alerts', '/operator']);
+
 interface SidebarProps {
   open: boolean;
 }
@@ -50,6 +58,20 @@ interface SidebarProps {
 export function Sidebar(props: SidebarProps) {
   const location = useLocation();
   const nav = createMemo(() => navItemsForRole(authUser()?.role));
+
+  const topLevel = createMemo(() =>
+    nav().main.filter((item) => TOP_LEVEL_HREFS.has(item.href)),
+  );
+
+  const groupedSections = createMemo(() => {
+    const items = nav().main;
+    return Object.entries(SECTION_GROUPS)
+      .map(([label, hrefs]) => ({
+        label,
+        items: items.filter((item) => hrefs.includes(item.href)),
+      }))
+      .filter((section) => section.items.length > 0);
+  });
 
   return (
     <aside
@@ -62,29 +84,32 @@ export function Sidebar(props: SidebarProps) {
       <SidebarHeader />
 
       <nav class="sidebar-nav-scroll flex-1 space-y-1 overflow-y-auto px-3 py-3" aria-label="Módulos">
-        <For each={nav().main}>
+        <For each={topLevel()}>
           {(item) => {
             const Icon = NAV_ICONS[navHrefPath(item.href)] ?? LayoutDashboard;
             const active = () => isNavItemActive(item.href, location.pathname);
-
             return (
-              <>
-                <Show when={item.sectionBefore}>
-                  <SidebarSectionLabel>{item.sectionBefore!}</SidebarSectionLabel>
-                </Show>
-                <Show when={item.href === '/alerts' && !item.sectionBefore}>
-                  <div class="my-3 border-t border-sidebar-divider" />
-                </Show>
-                <SidebarNavLink
-                  href={item.href}
-                  active={active()}
-                  icon={<Icon size={18} class="shrink-0" />}
-                  label={item.label}
-                  description={item.description}
-                />
-              </>
+              <SidebarNavLink
+                href={item.href}
+                active={active()}
+                icon={<Icon size={18} class="shrink-0" />}
+                label={item.label}
+                description={item.description}
+              />
             );
           }}
+        </For>
+
+        <div class="my-2 border-t border-sidebar-divider" />
+
+        <For each={groupedSections()}>
+          {(section) => (
+            <SidebarCollapsibleGroup
+              label={section.label}
+              items={section.items}
+              iconMap={NAV_ICONS}
+            />
+          )}
         </For>
       </nav>
 
