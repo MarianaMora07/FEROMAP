@@ -124,7 +124,9 @@ export function runOptimization(payload: OptimizationRunPayload & { dailyPlanId?
 
 async function optimizeDailyPlanAndWait(dailyPlanId: number): Promise<OptimizeResponse> {
   const { jobId } = await optimizeDailyPlan(dailyPlanId);
-  while (true) {
+  const MAX_WAIT_MS = 60 * 60 * 1000;
+  const start = Date.now();
+  while (Date.now() - start < MAX_WAIT_MS) {
     const snapshot = await fetchSimulationOptimizeJob(jobId);
     if (snapshot.status === 'completed' && snapshot.result) {
       return snapshot.result;
@@ -135,8 +137,9 @@ async function optimizeDailyPlanAndWait(dailyPlanId: number): Promise<OptimizeRe
     if (snapshot.status === 'cancelled') {
       throw new Error('Optimización cancelada');
     }
-    await new Promise((resolve) => setTimeout(resolve, 450));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
   }
+  throw new Error('La optimización tardó más de 60 minutos');
 }
 
 export function loadDailyPlanForDate(operationDate: string): Promise<DailyPlan> {

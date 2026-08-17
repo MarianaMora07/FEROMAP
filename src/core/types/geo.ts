@@ -7,6 +7,7 @@ export type ContainerPriority = 'baja' | 'media' | 'alta' | 'critica';
 
 export interface ContainerProperties {
   id: string;
+  numericId?: number;
   sector: SectorName;
   fillLevel: number;
   priority: ContainerPriority;

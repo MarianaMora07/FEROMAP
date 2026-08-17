@@ -285,6 +285,8 @@ def _run_job_worker(job_id: str) -> None:
         with job.lock:
             job.status = "cancelled"
     except Exception as exc:  # noqa: BLE001
+        import traceback as _tb
+        print(f"[optimization_job] Job {job_id} FAILED: {exc}\n{_tb.format_exc()}", flush=True)
         db.rollback()
         with job.lock:
             job.status = "failed"

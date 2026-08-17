@@ -58,6 +58,7 @@ export function fetchCollectionPoints(
 function geoToCollectionPoints(geo: ContainerCollection): CollectionPoint[] {
   return geo.features.map((feature) => ({
     id: feature.properties.id,
+    numericId: feature.properties.numericId,
     label: feature.properties.id,
     address: feature.properties.sector,
     sector: feature.properties.sector,

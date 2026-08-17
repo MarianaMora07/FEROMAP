@@ -63,11 +63,13 @@ const [state, setState] = createStore<WeeklyPlanState>({
 async function fetchCollectionPointsForPlanning() {
   const { fetchCollectionPointsList } = await import('../api/collectionPoints');
   const points = await fetchCollectionPointsList();
-  return points.map((point) => ({
-    id: Number(point.id),
-    code: point.code,
-    sectorName: point.sector,
-  }));
+  return points
+    .map((point) => ({
+      id: Number(point.numericId ?? point.id),
+      code: point.id,
+      sectorName: point.sector,
+    }))
+    .filter((point) => Number.isInteger(point.id) && point.id > 0);
 }
 
 async function refreshWeeklyPlanHistory(): Promise<WeeklyPlan[]> {

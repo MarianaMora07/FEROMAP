@@ -3,6 +3,8 @@ from fastapi import APIRouter
 from app.api.deps import DbSession, PlannerOrAdmin
 from app.schemas.driver import Driver, DriverCreate, DriverUpdate
 from app.services.driver_service import create_driver, list_drivers, update_driver
+from app.services.sector_assignment_service import reassign_sectors, get_sector_driver_summary
+from app.services.collection_point_seed_service import generate_missing_collection_points
 
 router = APIRouter(prefix="/drivers", tags=["drivers"])
 
@@ -29,3 +31,22 @@ def patch_driver(
     driver = update_driver(db, driver_id, body)
     db.commit()
     return driver
+
+
+@router.post("/reassign-sectors")
+def post_reassign_sectors(db: DbSession, _user: PlannerOrAdmin):
+    result = reassign_sectors(db)
+    db.commit()
+    return result
+
+
+@router.get("/sector-summary")
+def get_sectors_summary(db: DbSession, _user: PlannerOrAdmin):
+    return get_sector_driver_summary(db)
+
+
+@router.post("/seed-collection-points")
+def post_seed_collection_points(db: DbSession, _user: PlannerOrAdmin):
+    result = generate_missing_collection_points(db)
+    db.commit()
+    return result
