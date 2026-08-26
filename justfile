@@ -1,4 +1,3 @@
-set shell := ["C:\\Program Files\\Git\\bin\\sh.exe", "-c"]
 set windows-shell := ["C:\\Program Files\\Git\\bin\\sh.exe", "-c"]
 # FEROMAP — FastAPI + SolidJS + PostGIS (COMPOSE_ENV en .env: dev | prod)
 set dotenv-load := true
@@ -131,6 +130,14 @@ up-prod:
     COMPOSE_ENV=prod {{compose}} up -d
     @echo "🌐 UI (Nginx) en http://localhost:{{env_var_or_default('FRONTEND_PORT', '8080')}}"
     @echo "🔌 API directa en http://localhost:{{api_port}}/health"
+
+# Actualiza producción tras cambios en el repo: pull + rebuild + migrate + health (sin seed).
+deploy:
+    git pull --ff-only
+    COMPOSE_ENV=prod just rebuild-prod
+    COMPOSE_ENV=prod just migrate
+    COMPOSE_ENV=prod just health
+    @echo "✅ Deploy listo — http://localhost:{{env_var_or_default('FRONTEND_PORT', '8080')}}"
 
 # Primera vez en producción: rebuild + migrate + seed + health + verificación.
 setup-prod:
