@@ -1,37 +1,20 @@
-# Fase 3 — Honestidad funcional de variables
+# Fase 3 — Honestidad funcional + rigor algorítmico
 
-**Estado:** completado  
-**Fecha:** 2026-08-08
+| Documento | Descripción |
+|-----------|-------------|
+| [README-rigor.md](./README-rigor.md) | **Fase 3 rigor algorítmico (2026-08-27)** — benchmark, sensibilidad, límites |
+| [limites-solver.md](./limites-solver.md) | Qué resuelve y qué no el motor ACO |
+| [evidencia-aco.md](./evidencia-aco.md) | Tablas benchmark + sensibilidad (auto-generado) |
+| [README-variables.md](./README-variables.md) | Honestidad de variables UI (2026-08-08) |
 
-## Decisiones por variable
+**Estado rigor:** completado (2026-08-27)  
+**Estado variables:** completado (2026-08-08)
 
-| Variable | Acción | Detalle |
-|----------|--------|---------|
-| Toggles de condiciones | **Conectada** | → `scenarioId` vía `deriveScenarioId()` |
-| Intensidad de lluvia | **Conectada** | API `rainIntensity`; escala tiempos si `scenarioId=rain` |
-| Nivel de desechos (%) | **Conectada** | API `wasteLevelPct`; suma a `fillLevelBoost` si `scenarioId=saturated` |
-| Duración estimada | **Informativa** | API `estimatedDurationHours`; se persiste, no afecta VRP |
-| Algoritmo (Optimización UI) | **Etiquetado** | Solo ACO; selector GA/SA eliminado |
-| Objetivo (Optimización UI) | **Próximamente** | Bloque informativo |
-| Fecha operación | **Informativa** | Solo `localStorage` |
-| Restricciones `avoid_traffic` / `critical_first` | **Conectada** | Inferencia de escenario en módulo operativo |
-| Restricciones `fill_level` / `time_window` | **Próximamente** | Deshabilitadas en UI |
-
-## Matriz actualizada
-
-Ver [matriz-variables-motor.md](../fase-0/matriz-variables-motor.md) (sección Fase 3 al final del archivo).
-
-## Archivos clave
-
-- `backend/app/services/scenario_parameters.py` — lógica de modificadores
-- `backend/app/schemas/simulation.py` — contrato `OptimizeRequest`
-- `backend/tests/test_scenario_parameters.py` — tests de contrato
-- `src/core/utils/simulationWizard.ts` — payload UI → API
-- `src/features/optimization/index.tsx` — UI operativa honesta
-
-## Tests
+## Comandos rápidos
 
 ```bash
-just test
-# o: cd backend && python -m pytest tests/test_scenario_parameters.py -v
+just benchmark-aco
+just phase3-sensitivity
+just phase3-report
+just defense-verify
 ```

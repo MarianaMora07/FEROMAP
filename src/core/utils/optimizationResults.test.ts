@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { KpiMetrics } from '../../data/types/simulation';
 import {
+  buildBaselineAcoComparisonRows,
   buildComparisonRows,
   buildDurationBreakdownDisplay,
+  formatSavingPct,
   isPlausibleDailyOptimizationKpis,
 } from './optimizationResults';
 
@@ -67,6 +69,34 @@ describe('buildDurationBreakdownDisplay', () => {
     const display = buildDurationBreakdownDisplay(kpis);
     expect(display.optimized.unload).toBe('30 min');
     expect(display.optimized.landfillTrips).toBe('2');
+  });
+});
+
+describe('buildBaselineAcoComparisonRows', () => {
+  it('returns four baseline vs ACO rows with savings', () => {
+    const kpis: KpiMetrics = {
+      distanceKm: { current: 30, optimized: 22 },
+      durationHours: { current: 3, optimized: 2.5 },
+      fuelLiters: { current: 10, optimized: 7 },
+      co2KgAvoided: 6.9,
+      criticalCoveragePct: { current: 80, optimized: 95 },
+      containersServed: 18,
+      uncoveredPoints: 2,
+    };
+
+    const rows = buildBaselineAcoComparisonRows(kpis);
+    expect(rows).toHaveLength(4);
+    expect(rows.map((row) => row.metric)).toEqual([
+      'Distancia',
+      'Tiempo',
+      'Puntos cubiertos',
+      'CO₂ estimado',
+    ]);
+    expect(rows[0]?.savingPct).toBe(27);
+    expect(rows[2]?.baseline).toBe('20');
+    expect(rows[2]?.aco).toBe('18');
+    expect(formatSavingPct(12)).toBe('−12%');
+    expect(formatSavingPct(-5)).toBe('+5%');
   });
 });
 

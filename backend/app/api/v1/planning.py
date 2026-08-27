@@ -3,10 +3,12 @@ from datetime import date
 from fastapi import APIRouter, HTTPException, Query, Response
 
 from app.api.deps import CurrentUser, DbSession, PlannerOrAdmin
+from app.schemas.route_constraints import DailyOptimizeRequest
 from app.schemas.planning import (
     DailyPlanPointsUpdate,
     PendingCancelRequest,
     PendingIncorporateRequest,
+    DeferUncoveredRequest,
     WeeklyPlanApprove,
     WeeklyPlanCreate,
     WeeklyPlanUpdate,
@@ -20,7 +22,7 @@ from app.services.planning_service import (
     cancel_pending_visit,
     close_daily_plan,
     compare_plan_versions,
-    consolidate_daily_points,
+    defer_uncovered_points_from_daily_plan,
     create_weekly_plan_draft,
     get_current_weekly_plan,
     get_daily_plan_by_date,
@@ -252,7 +254,12 @@ def patch_daily_points(daily_plan_id: int, body: DailyPlanPointsUpdate, db: DbSe
 
 
 @router.post("/daily/{daily_plan_id}/optimize")
-def optimize_daily(daily_plan_id: int, db: DbSession, _: PlannerOrAdmin):
+def optimize_daily(
+    daily_plan_id: int,
+    body: DailyOptimizeRequest,
+    db: DbSession,
+    _: PlannerOrAdmin,
+):
     from app.db.models import DailyPlan
 
     plan = db.get(DailyPlan, daily_plan_id)
@@ -270,6 +277,9 @@ def optimize_daily(daily_plan_id: int, db: DbSession, _: PlannerOrAdmin):
         planning_level="administrative",
         auto_dispatch=False,
         fleet_limit=exec_ctx.get("fleetLimit"),
+        priority_fill_level=body.priority_fill_level,
+        time_window_enabled=body.time_window_enabled,
+        kpi_view=body.kpi_view,
     )
     return {"jobId": job.id, "dailyPlanId": daily_plan_id, "pointCount": len(point_ids)}
 
@@ -281,6 +291,22 @@ def dispatch_daily(daily_plan_id: int, db: DbSession, _: PlannerOrAdmin):
     result = dispatch_optimized_routes(db, daily_plan_id=daily_plan_id)
     mark_daily_plan_dispatched(db, daily_plan_id)
     result["notifications"] = notify_routes_dispatched(db, result.get("dispatchedRouteIds") or [])
+    db.commit()
+    return result
+
+
+@router.post("/daily/{daily_plan_id}/defer-uncovered")
+def defer_uncovered_daily(
+    daily_plan_id: int,
+    body: DeferUncoveredRequest,
+    db: DbSession,
+    _: PlannerOrAdmin,
+):
+    result = defer_uncovered_points_from_daily_plan(
+        db,
+        daily_plan_id,
+        target_operation_date=body.target_operation_date,
+    )
     db.commit()
     return result
 

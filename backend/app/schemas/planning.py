@@ -44,6 +44,10 @@ class PendingIncorporateRequest(CamelModel):
     target_operation_date: date
 
 
+class DeferUncoveredRequest(CamelModel):
+    target_operation_date: date | None = None
+
+
 class PendingCancelRequest(CamelModel):
     reason: str | None = None
 

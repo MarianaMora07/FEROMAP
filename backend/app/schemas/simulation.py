@@ -45,6 +45,18 @@ class OptimizeRequest(CamelModel):
         le=60,
         description="Iteraciones del ACO. Si se omite, usa ACO_ITERATIONS del servidor.",
     )
+    priority_fill_level: bool | None = Field(
+        default=None,
+        description="Priorizar contenedores con llenado ≥80% en heurística ACO.",
+    )
+    time_window_enabled: bool | None = Field(
+        default=None,
+        description="Ventanas amplias por sector (mañana/tarde) en construcción de ruta.",
+    )
+    kpi_view: Literal["distance", "time", "co2"] | None = Field(
+        default=None,
+        description="Métrica principal para narrativa de KPIs (no altera el fitness del solver).",
+    )
     planning_level: Literal["strategic", "administrative", "operational", "simulation"] | None = None
     operation_date: date | None = None
     collection_point_ids: list[int] | None = None

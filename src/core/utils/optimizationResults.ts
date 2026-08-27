@@ -128,6 +128,56 @@ function savingsPct(current: number, optimized: number): number {
   return Math.round((1 - optimized / current) * 100);
 }
 
+export interface BaselineAcoComparisonRow {
+  metric: string;
+  baseline: string;
+  aco: string;
+  savingPct: number;
+}
+
+const CO2_KG_PER_LITER = 2.31;
+
+export function buildBaselineAcoComparisonRows(kpis: KpiMetrics): BaselineAcoComparisonRow[] {
+  const totalPoints = kpis.containersServed + (kpis.uncoveredPoints ?? 0);
+  const baselinePoints = totalPoints;
+  const acoPoints = kpis.containersServed;
+  const baselineCo2 = kpis.fuelLiters.current * CO2_KG_PER_LITER;
+  const acoCo2 = kpis.fuelLiters.optimized * CO2_KG_PER_LITER;
+
+  return [
+    {
+      metric: 'Distancia',
+      baseline: `${kpis.distanceKm.current.toFixed(1)} km`,
+      aco: `${kpis.distanceKm.optimized.toFixed(1)} km`,
+      savingPct: savingsPct(kpis.distanceKm.current, kpis.distanceKm.optimized),
+    },
+    {
+      metric: 'Tiempo',
+      baseline: formatDurationHours(kpis.durationHours.current),
+      aco: formatDurationHours(kpis.durationHours.optimized),
+      savingPct: savingsPct(kpis.durationHours.current, kpis.durationHours.optimized),
+    },
+    {
+      metric: 'Puntos cubiertos',
+      baseline: String(baselinePoints),
+      aco: String(acoPoints),
+      savingPct: savingsPct(baselinePoints, acoPoints),
+    },
+    {
+      metric: 'CO₂ estimado',
+      baseline: `${baselineCo2.toFixed(1)} kg`,
+      aco: `${acoCo2.toFixed(1)} kg`,
+      savingPct: savingsPct(baselineCo2, acoCo2),
+    },
+  ];
+}
+
+export function formatSavingPct(value: number): string {
+  if (value > 0) return `−${value}%`;
+  if (value < 0) return `+${Math.abs(value)}%`;
+  return '0%';
+}
+
 export function buildComparisonRows(kpis: KpiMetrics): OptimizationComparisonRow[] {
   return [
     {

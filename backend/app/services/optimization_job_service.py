@@ -53,6 +53,9 @@ class OptimizationJob:
     operators_shortage: int | None = None
     aco_ants: int | None = None
     aco_iterations: int | None = None
+    priority_fill_level: bool | None = None
+    time_window_enabled: bool | None = None
+    kpi_view: str | None = None
     collection_point_ids: list[int] | None = None
     auto_dispatch: bool = False
     operation_date: date | None = None
@@ -152,6 +155,9 @@ def create_optimization_job(
     operators_shortage: int | None = None,
     aco_ants: int | None = None,
     aco_iterations: int | None = None,
+    priority_fill_level: bool | None = None,
+    time_window_enabled: bool | None = None,
+    kpi_view: str | None = None,
     collection_point_ids: list[int] | None = None,
     auto_dispatch: bool | None = None,
     operation_date: date | None = None,
@@ -173,6 +179,9 @@ def create_optimization_job(
         operators_shortage=operators_shortage,
         aco_ants=aco_ants,
         aco_iterations=aco_iterations,
+        priority_fill_level=priority_fill_level,
+        time_window_enabled=time_window_enabled,
+        kpi_view=kpi_view,
         collection_point_ids=collection_point_ids,
         auto_dispatch=resolved_auto_dispatch,
         operation_date=operation_date,
@@ -261,6 +270,9 @@ def _run_job_worker(job_id: str) -> None:
             operators_shortage=job.operators_shortage,
             aco_ants=job.aco_ants,
             aco_iterations=job.aco_iterations,
+            priority_fill_level=job.priority_fill_level,
+            time_window_enabled=job.time_window_enabled,
+            kpi_view=job.kpi_view,
             collection_point_ids=job.collection_point_ids,
             auto_dispatch=job.auto_dispatch,
             operation_date=job.operation_date,

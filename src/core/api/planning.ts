@@ -1,4 +1,5 @@
 import { apiGet, apiPatch, apiPost, useMocks } from './client';
+import { tomorrowIso } from '../planning/planningUx';
 import type { ScenarioId } from '../../data/types/simulation';
 
 export interface WeeklyPlanDay {
@@ -381,14 +382,48 @@ export function openDailyPlan(operationDate: string): Promise<DailyPlan> {
   return apiPost(`/api/v1/planning/daily/${operationDate}/open`, {});
 }
 
-export function optimizeDailyPlan(dailyPlanId: number): Promise<{ jobId: string; dailyPlanId: number; pointCount: number }> {
+export interface DailyOptimizeOptions {
+  priorityFillLevel?: boolean;
+  timeWindowEnabled?: boolean;
+  kpiView?: 'distance' | 'time' | 'co2';
+}
+
+export function optimizeDailyPlan(
+  dailyPlanId: number,
+  options?: DailyOptimizeOptions,
+): Promise<{ jobId: string; dailyPlanId: number; pointCount: number }> {
   if (useMocks) return Promise.resolve({ jobId: 'mock-job', dailyPlanId, pointCount: 3 });
-  return apiPost(`/api/v1/planning/daily/${dailyPlanId}/optimize`, {});
+  return apiPost(`/api/v1/planning/daily/${dailyPlanId}/optimize`, options ?? {});
 }
 
 export function dispatchDailyPlan(dailyPlanId: number): Promise<{ dispatchedRouteIds: number[]; count: number }> {
   if (useMocks) return Promise.resolve({ dispatchedRouteIds: [1, 2], count: 2 });
   return apiPost(`/api/v1/planning/daily/${dailyPlanId}/dispatch`, {});
+}
+
+export interface DeferUncoveredResult {
+  created: number;
+  targetOperationDate: string | null;
+  codes: string[];
+  missingCodes?: string[];
+  message: string;
+}
+
+export function deferUncoveredPoints(
+  dailyPlanId: number,
+  targetOperationDate?: string,
+): Promise<DeferUncoveredResult> {
+  if (useMocks) {
+    return Promise.resolve({
+      created: 2,
+      targetOperationDate: targetOperationDate ?? tomorrowIso(),
+      codes: ['CNT-001', 'CNT-002'],
+      message: '2 pendiente(s) creado(s) para mañana',
+    });
+  }
+  return apiPost(`/api/v1/planning/daily/${dailyPlanId}/defer-uncovered`, {
+    targetOperationDate: targetOperationDate ?? null,
+  });
 }
 
 export function closeDailyPlan(dailyPlanId: number): Promise<DailyCloseResult> {

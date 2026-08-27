@@ -60,10 +60,10 @@ Fuente: `data/seeds/scenarios.json`, `optimization_service.run_optimization_engi
 | Escenario explícito | Selector / tarjetas | **Conectada** | `scenarioId` → API | Mismo endpoint que Simulación |
 | Evitar vías con tráfico alto | Restricción | **Derivada** | `inferScenarioId()` → `peak_traffic` | Solo si no hay escenario explícito |
 | Priorizar contenedores críticos | Restricción | **Derivada** | → `saturated` | |
-| Considerar nivel de llenado | Restricción | **Próximamente** | Deshabilitada en UI | Motor ya usa llenado de BD |
-| Ventana de tiempo | Restricción | **Próximamente** | Deshabilitada en UI | No implementada en motor |
+| Considerar nivel de llenado | Restricción | **Conectada** | Toggle UI → `priorityFillLevel` en ACO | Motor ya usa llenado de BD en demanda |
+| Ventana de tiempo | Restricción | **Conectada** | Toggle UI → ventanas mañana/tarde por sector | VRPTW light |
 | Algoritmo | Panel informativo | **Etiquetado** | Backend siempre ACO | 12 hormigas × 20 iteraciones |
-| Objetivo principal | Panel informativo | **Próximamente** | Sin efecto en motor | |
+| Objetivo principal (KPI view) | Selector UI | **Conectada** | `kpiView` — narrativa; solver minimiza distancia | |
 | Fecha de operación | Formulario | **Informativa** | Solo `localStorage` | No llega al API |
 | Vehículos disponibles (lista) | Formulario | **Informativa** | Motor toma vehículos asignables de BD | |
 | Despachar rutas | Post-resultado | **Conectada** | API de despacho | |
@@ -95,8 +95,24 @@ Fuente: `data/seeds/scenarios.json`, `optimization_service.run_optimization_engi
 | `containersServed` | **Conectada** | Puntos en instancia VRP |
 | `savingPercentage` | **Conectada** | `(1 - opt_dist / base_dist) × 100` |
 | Indicadores de rendimiento (gauge, barras) | **Derivada** | Calculados en frontend desde KPIs |
-| Tiempo de ejecución del algoritmo | **Pendiente** | No instrumentado |
-| Curva de convergencia ACO | **Pendiente** | No instrumentado |
+| Tiempo de ejecución del algoritmo | **Conectada** | `engineMetrics.computationSeconds` en KPIs |
+| Curva de convergencia ACO | **Conectada** | `engineMetrics.acoConvergence` + gráfico en UI |
+| Puntos no cubiertos — acciones UI | **Conectada** | Replanificar, mover a mañana, revisar flota |
+| Benchmark ACO reproducible | **Conectada** | `just benchmark-aco` + panel en simulación |
+| Sensibilidad parámetros ACO | **Conectada** | `just phase3-sensitivity` + panel en optimización |
+
+---
+
+## Actualización Fase 3 rigor algorítmico (2026-08-27)
+
+| Elemento | Estado |
+|----------|--------|
+| Documentación límites solver | [limites-solver.md](../fase-3/limites-solver.md) |
+| Benchmark 5 escenarios × 3 perfiles | `GET/POST /benchmarks/aco` |
+| Sensibilidad hormigas/iteraciones | `GET/POST /benchmarks/aco/sensitivity` |
+| Defer uncovered → pendientes | `POST /planning/daily/{id}/defer-uncovered` |
+| `defense-verify` ampliado | KPIs plausibles + dispatch |
+| Perfil estándar 12×20 | Justificado en [evidencia-aco.md](../fase-3/evidencia-aco.md) |
 
 ---
 
@@ -108,8 +124,8 @@ Fuente: `data/seeds/scenarios.json`, `optimization_service.run_optimization_engi
 | Nivel de desechos (%) | **Conectada** — `wasteLevelPct` en API; suma a `fillLevelBoost` si `scenarioId=saturated` |
 | Duración estimada | **Informativa** — `estimatedDurationHours` persistido; sin efecto en VRP |
 | Algoritmo (UI Optimización) | **Etiquetado** — solo ACO expuesto |
-| Objetivo (UI Optimización) | **Próximamente** |
-| Restricciones fill_level / time_window | **Próximamente** — deshabilitadas en UI |
+| Objetivo (UI Optimización) | **Conectada** | `kpiView` — distancia/tiempo/CO₂ (solo KPIs) |
+| Restricciones fill_level / time_window | **Conectada** | Ver [fase-4/README.md](../fase-4/README.md) |
 
 ---
 
@@ -119,3 +135,17 @@ Fuente: `data/seeds/scenarios.json`, `optimization_service.run_optimization_engi
 | **Fase 3** | Conectar o etiquetar: intensidad lluvia, % desechos, duración, algoritmo, objetivo, restricciones |
 | **Fase 3** | Ocultar selectores de algoritmo/objetivo hasta que el backend los soporte |
 | **Futuro** | Exponer parámetros ACO y tiempo de ejecución para evaluación de tesis |
+
+---
+
+## Backlog post-grado (no implementar pre-defensa)
+
+Ver [post-grado/README.md](../post-grado/README.md).
+
+| Ítem | Estado | Motivo de diferir |
+|------|--------|-------------------|
+| OR-Tools baseline exacto | **Backlog** | Integración pesada; comparación académica post-tesis |
+| WebSocket/SSE progreso | **Backlog** | Polling de jobs suficiente para defensa |
+| Tráfico en vivo (OSRM) | **Backlog** | Infraestructura externa |
+| Multi-objetivo en solver | **Backlog** | Cambio profundo del fitness ACO |
+| Toolbar GIS completo | **Backlog** | Valor operativo, no central en tesis |

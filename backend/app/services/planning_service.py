@@ -644,6 +644,76 @@ def incorporate_pending_visit(db: Session, pending_id: int, target_date: date) -
     return _serialize_pending(db, visit)
 
 
+def defer_uncovered_points_from_daily_plan(
+    db: Session,
+    daily_plan_id: int,
+    *,
+    target_operation_date: date | None = None,
+) -> dict[str, Any]:
+    """Crea pendientes abiertos para contenedores no cubiertos en la última optimización del día."""
+    plan = db.get(DailyPlan, daily_plan_id)
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan del día no encontrado")
+    if plan.simulation_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No hay optimización asociada al plan del día",
+        )
+
+    simulation = db.get(Simulation, plan.simulation_id)
+    if simulation is None or not simulation.parameters_json:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se encontraron KPIs de la optimización",
+        )
+
+    params = json.loads(simulation.parameters_json)
+    kpis = params.get("kpis") or {}
+    codes: list[str] = list(kpis.get("uncoveredPointCodes") or [])
+    if not codes:
+        return {
+            "created": 0,
+            "targetOperationDate": None,
+            "codes": [],
+            "message": "No hay puntos no cubiertos en la última optimización",
+        }
+
+    target_date = target_operation_date or (plan.operation_date + timedelta(days=1))
+    points = db.scalars(
+        select(CollectionPoint).where(
+            CollectionPoint.code.in_(codes),
+            CollectionPoint.deleted_at.is_(None),
+        )
+    ).all()
+    point_by_code = {point.code: point for point in points}
+
+    created = 0
+    missing_codes: list[str] = []
+    for code in codes:
+        point = point_by_code.get(code)
+        if point is None:
+            missing_codes.append(code)
+            continue
+        create_pending_visit(
+            db,
+            collection_point_id=point.id,
+            origin_operation_date=plan.operation_date,
+            target_operation_date=target_date,
+            reason="uncovered_optimization",
+            priority=120,
+        )
+        created += 1
+
+    db.flush()
+    return {
+        "created": created,
+        "targetOperationDate": target_date.isoformat(),
+        "codes": codes,
+        "missingCodes": missing_codes,
+        "message": f"{created} pendiente(s) creado(s) para {target_date.isoformat()}",
+    }
+
+
 def create_pending_visit(
     db: Session,
     *,
@@ -1086,6 +1156,7 @@ def list_operational_history(db: Session, *, limit: int = 25) -> list[dict[str, 
                 "datetime": simulation.executed_at.isoformat() if simulation.executed_at else None,
                 "efficiency": float(simulation.kpi_saving_percentage or 0),
                 "scenarioId": parsed.get("scenarioId", "normal"),
+                "scenarioName": parsed.get("scenarioName"),
                 "contingency": parsed.get("contingency", False),
             }
         )

@@ -17,9 +17,9 @@ export const algorithms = [
 ];
 
 export const objectives = [
-  { id: 'distance_time', label: 'Minimizar distancia y tiempo' },
-  { id: 'fuel', label: 'Minimizar consumo de combustible' },
-  { id: 'coverage', label: 'Maximizar cobertura crítica' },
+  { id: 'distance', label: 'Distancia (km)' },
+  { id: 'time', label: 'Tiempo de ruta' },
+  { id: 'co2', label: 'CO₂ estimado' },
 ];
 
 export const availableVehicles = [

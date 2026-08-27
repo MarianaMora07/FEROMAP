@@ -49,9 +49,12 @@ export interface EngineMetrics {
   vehicles: number;
 }
 
+export type KpiView = 'distance' | 'time' | 'co2';
+
 export interface KpiMetrics {
   distanceKm: { current: number; optimized: number };
   durationHours: { current: number; optimized: number };
+  kpiView?: KpiView;
   durationBreakdown?: {
     current: DurationBreakdown;
     optimized: DurationBreakdown;

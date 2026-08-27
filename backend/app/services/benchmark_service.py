@@ -30,9 +30,10 @@ ACO_BENCHMARK_PROFILES: list[dict[str, Any]] = [
 ]
 
 
-def _benchmark_dir() -> Path:
+def _benchmark_dir(*, ensure: bool = False) -> Path:
     path = Path(settings.data_dir) / "cache" / "benchmarks"
-    path.mkdir(parents=True, exist_ok=True)
+    if ensure:
+        path.mkdir(parents=True, exist_ok=True)
     return path
 
 
@@ -53,6 +54,7 @@ def load_aco_benchmark() -> dict[str, Any] | None:
 
 def save_aco_benchmark(payload: dict[str, Any]) -> Path:
     path = benchmark_cache_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
 

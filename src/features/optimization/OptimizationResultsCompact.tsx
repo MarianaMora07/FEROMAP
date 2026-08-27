@@ -17,9 +17,13 @@ export function OptimizationResultsCompact(props: OptimizationResultsCompactProp
     >
       <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 class="text-sm font-semibold text-text-primary">Resultados</h3>
-        <Badge variant="success" class="gap-1">
+        <Badge
+          variant="success"
+          class="gap-1"
+          title="Solución heurística; no garantiza optimalidad global"
+        >
           <CheckCircle2 size={12} />
-          Ruta óptima encontrada
+          Mejor ruta encontrada (ACO)
         </Badge>
       </div>
 

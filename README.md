@@ -143,6 +143,17 @@ COMPOSE_ENV=prod just rebuild-prod
 COMPOSE_ENV=prod just up-prod
 ```
 
+### EC2 (stop/start automático AWS)
+
+Para que el stack suba solo tras encender la instancia (sin SSH manual), instala la unidad systemd:
+
+```bash
+sudo bash deploy/systemd/install-auto-start.sh
+sudo systemctl start feroomap
+```
+
+Guía completa, pruebas y troubleshooting: **[docs/auto-start.md](docs/auto-start.md)**.
+
 ---
 
 ## Credenciales demo (autenticación)

@@ -15,6 +15,7 @@ import {
   runOptimization,
   saveOptimizationPreset,
   dispatchOptimizationRoutes,
+  OptimizationCancelledError,
   type DailyPlan,
   type OptimizationPageContext,
   type OptimizationPreset,
@@ -33,20 +34,31 @@ import {
 } from '../planning/dailyPlanningUx';
 import { mergeRouteCollections } from '../api/routes';
 import { fetchSimulationDetail } from '../api/simulationOperations';
-import type { KpiMetrics, ScenarioId } from '../../data/types/simulation';
+import type { KpiMetrics, ScenarioId, AcoConvergencePoint } from '../../data/types/simulation';
 import { optimizationLogMessages } from '../../data/mock/kpis';
 import { getScenarioRoutes } from '../../data/mock/routes';
 import { kpiByScenario } from '../../data/mock/kpis';
-import { isPlausibleDailyOptimizationKpis, formatDurationHours } from '../utils/optimizationResults';
-import { loadRoutesOnMap, loadRoutesWithRoadSnapping, showOptimizedRoute } from './appStore';
+import { isPlausibleDailyOptimizationKpis, formatDurationHours, buildRouteResults } from '../utils/optimizationResults';
+import { loadRoutesOnMap, loadRoutesWithRoadSnapping, showOptimizedRoute, appState } from './appStore';
 import { loadDashboardData } from './dashboardStore';
 import { writeLastOptimizedCodes } from '../utils/collectionPointsOptimization';
 import { recordOperationalRun } from '../utils/operationalHistory';
+import { globalToast } from './toastStore';
+import type { ExecutionPhaseId } from '../../features/simulation/executionPhases';
+import { resolvePhaseFromLogMessage } from '../../features/simulation/executionPhases';
+import { routeDisplayKind } from '../map/operationalMapLayers';
 
 interface WeekCalendarDay {
   operationDate: string;
   status: DailyCalendarStatus;
   pendingCount: number;
+}
+
+interface OptimizationDispatchNotice {
+  count: number;
+  routeIds: number[];
+  vehicleCodes: string[];
+  dismissed: boolean;
 }
 
 interface OptimizationState {
@@ -65,9 +77,13 @@ interface OptimizationState {
   isOptimizing: boolean;
   isDispatching: boolean;
   optimizationProgress: number;
+  optimizationPhase: ExecutionPhaseId | null;
+  activeOptimizationJobId: string | null;
+  acoConvergence: AcoConvergencePoint[];
+  cancelOptimizationRequested: boolean;
   logs: OptimizeResponse['logs'];
   history: Awaited<ReturnType<typeof fetchOptimizationHistory>>;
-  lastDispatch: { count: number; routeIds: number[] } | null;
+  lastDispatch: OptimizationDispatchNotice | null;
   playbackOpen: boolean;
   error: string | null;
 }
@@ -88,6 +104,10 @@ const [state, setState] = createStore<OptimizationState>({
   isOptimizing: false,
   isDispatching: false,
   optimizationProgress: 0,
+  optimizationPhase: null,
+  activeOptimizationJobId: null,
+  acoConvergence: [],
+  cancelOptimizationRequested: false,
   logs: [],
   history: [],
   lastDispatch: null,
@@ -95,7 +115,42 @@ const [state, setState] = createStore<OptimizationState>({
   error: null,
 });
 
-let contextLoaded = false;
+function resolveVehicleCodesFromState(): string[] {
+  if (!optimizationState.kpis) return [];
+  const optimized =
+    optimizationState.lastResult?.routes.optimized ?? {
+      type: 'FeatureCollection' as const,
+      features: appState.routes.features.filter(
+        (feature) => routeDisplayKind(feature.properties) === 'optimized',
+      ),
+    };
+  return buildRouteResults(optimized, optimizationState.kpis).map((route) => route.id);
+}
+
+function applyOptimizationProgress(
+  progress: number,
+  phase: ExecutionPhaseId | null,
+  logs: OptimizeResponse['logs'],
+  extras?: { jobId?: string; acoConvergence?: AcoConvergencePoint[] },
+): void {
+  setState({
+    optimizationProgress: progress,
+    optimizationPhase: phase,
+    logs,
+    ...(extras?.jobId ? { activeOptimizationJobId: extras.jobId } : {}),
+    ...(extras?.acoConvergence ? { acoConvergence: extras.acoConvergence } : {}),
+  });
+}
+
+export async function cancelOptimization(): Promise<void> {
+  if (!optimizationState.isOptimizing) return;
+  setState({ cancelOptimizationRequested: true });
+}
+
+export function dismissDispatchNotice(): void {
+  if (!optimizationState.lastDispatch) return;
+  setState('lastDispatch', { ...optimizationState.lastDispatch, dismissed: true });
+}
 
 async function resolveWeeklyPlanApproved(operationDate: string): Promise<boolean> {
   try {
@@ -105,6 +160,8 @@ async function resolveWeeklyPlanApproved(operationDate: string): Promise<boolean
     return false;
   }
 }
+
+let contextLoaded = false;
 
 export async function refreshWeekCalendar(weekStart?: string): Promise<void> {
   const start = weekStart ?? mondayOfDate(state.preset.operationDate);
@@ -170,6 +227,7 @@ async function hydrateOptimizationFromDailyPlan(dailyPlan: DailyPlan): Promise<v
       kpis: detail.kpis,
       lastSimulationId: detail.id,
       preset: { ...state.preset, scenarioId: detail.scenarioId },
+      acoConvergence: detail.kpis.engineMetrics?.acoConvergence ?? [],
     });
     showOptimizedRoute(true);
   } catch {
@@ -286,18 +344,47 @@ export async function executeOptimization(): Promise<void> {
   setState({
     isOptimizing: true,
     optimizationProgress: 0,
+    optimizationPhase: null,
+    activeOptimizationJobId: null,
+    acoConvergence: [],
+    cancelOptimizationRequested: false,
     logs: [],
     error: null,
     lastDispatch: null,
     playbackOpen: false,
   });
 
+  const isCancelled = () => optimizationState.cancelOptimizationRequested;
+
   try {
     if (useMocks) {
       for (let i = 0; i < optimizationLogMessages.length; i++) {
+        if (isCancelled()) {
+          throw new OptimizationCancelledError();
+        }
         const entry = optimizationLogMessages[i];
         await delay(350);
-        setState('optimizationProgress', Math.round(((i + 1) / optimizationLogMessages.length) * 100));
+        const progress = Math.round(((i + 1) / optimizationLogMessages.length) * 100);
+        const phase = resolvePhaseFromLogMessage(entry.message);
+        setState('optimizationProgress', progress);
+        if (phase) {
+          setState('optimizationPhase', phase);
+          if (phase === 'aco') {
+            const points: AcoConvergencePoint[] = [];
+            let bestKm = 32.8;
+            for (let iteration = 1; iteration <= 8; iteration++) {
+              if (isCancelled()) throw new OptimizationCancelledError();
+              bestKm = Math.max(20.1, bestKm - 0.4);
+              points.push({
+                iteration,
+                bestDistanceKm: Number(bestKm.toFixed(2)),
+                iterationBestDistanceKm: Number((bestKm + 0.5).toFixed(2)),
+              });
+              setState('acoConvergence', [...points]);
+              await delay(80);
+            }
+          }
+        }
         setState('logs', (logs) => [
           ...logs,
           {
@@ -350,17 +437,19 @@ export async function executeOptimization(): Promise<void> {
         throw new Error('No hay plan del día cargado');
       }
       await refreshDailyPlan();
-      const result = await runOptimization({
-        scenarioId: state.preset.scenarioId,
-        preset: state.preset,
-        dailyPlanId,
-      });
-
-      for (let i = 0; i < result.logs.length; i++) {
-        await delay(300);
-        setState('optimizationProgress', Math.round(((i + 1) / result.logs.length) * 100));
-        setState('logs', (logs) => [...logs, result.logs[i]]);
-      }
+      const result = await runOptimization(
+        {
+          scenarioId: state.preset.scenarioId,
+          preset: state.preset,
+          dailyPlanId,
+        },
+        (update) =>
+          applyOptimizationProgress(update.progress, update.phase, update.logs, {
+            jobId: update.jobId,
+            acoConvergence: update.acoConvergence,
+          }),
+        { isCancelled },
+      );
 
       const pointCount = Math.max(
         state.dailyPlan?.finalPointIds?.length ?? 0,
@@ -374,6 +463,11 @@ export async function executeOptimization(): Promise<void> {
         kpis: result.kpis,
         lastResult: result,
         lastSimulationId: result.simulationId,
+        logs: result.logs,
+        optimizationProgress: 100,
+        optimizationPhase: 'listo',
+        acoConvergence:
+          result.kpis.engineMetrics?.acoConvergence ?? optimizationState.acoConvergence,
         dailyPlan: state.dailyPlan
           ? { ...state.dailyPlan, status: 'optimized', simulationId: result.simulationId }
           : null,
@@ -393,12 +487,30 @@ export async function executeOptimization(): Promise<void> {
     await refreshOptimizationHistory();
     await refreshWeekCalendar();
   } catch (error) {
+    if (error instanceof OptimizationCancelledError) {
+      setState({
+        logs: [
+          ...state.logs,
+          {
+            id: `log-cancel-${Date.now()}`,
+            timestamp: new Date().toLocaleTimeString('es-VE'),
+            message: 'Optimización cancelada por el planificador',
+            type: 'warning',
+          },
+        ],
+      });
+      return;
+    }
     setState({
       error: error instanceof Error ? error.message : 'No se pudo ejecutar la optimización',
     });
     throw error;
   } finally {
-    setState({ isOptimizing: false });
+    setState({
+      isOptimizing: false,
+      activeOptimizationJobId: null,
+      cancelOptimizationRequested: false,
+    });
   }
 }
 
@@ -414,6 +526,7 @@ export async function loadOptimizationFromHistory(simulationId: number): Promise
       kpis: detail.kpis,
       lastSimulationId: detail.id,
       preset: { ...state.preset, scenarioId: detail.scenarioId },
+      acoConvergence: detail.kpis.engineMetrics?.acoConvergence ?? [],
       logs: [
         {
           id: `log-history-${detail.id}`,
@@ -449,10 +562,18 @@ export async function dispatchOptimizationResult(): Promise<void> {
         ? await dispatchDailyPlanRoutes(state.dailyPlan.id)
         : await dispatchOptimizationRoutes();
 
+    const vehicleCodes = resolveVehicleCodesFromState();
+    const fallbackCodes =
+      vehicleCodes.length > 0
+        ? vehicleCodes
+        : (state.context?.assignableVehicles ?? []).slice(0, result.count).map((vehicle) => vehicle.id);
+
     setState({
       lastDispatch: {
         count: result.count,
         routeIds: result.dispatchedRouteIds,
+        vehicleCodes: fallbackCodes,
+        dismissed: false,
       },
       dailyPlan: state.dailyPlan ? { ...state.dailyPlan, status: 'dispatched' } : null,
       logs: [
@@ -465,6 +586,13 @@ export async function dispatchOptimizationResult(): Promise<void> {
         },
       ],
     });
+
+    const vehicleLabel =
+      fallbackCodes.length > 0 ? fallbackCodes.join(', ') : `${result.count} vehículo(s)`;
+    globalToast.addToast(
+      `${result.count} ruta${result.count === 1 ? '' : 's'} despachada${result.count === 1 ? '' : 's'} · ${vehicleLabel}`,
+      'success',
+    );
 
     if (!useMocks) {
       await loadDashboardData();

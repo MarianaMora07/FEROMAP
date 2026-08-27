@@ -3,12 +3,8 @@ import { A, useNavigate, useSearchParams } from '@solidjs/router';
 import { type Map as MapLibreMap, type Marker } from 'maplibre-gl';
 import {
   Menu,
-  Search,
-  Filter,
   Layers,
   BookOpen,
-  Ruler,
-  Printer,
   Bell,
   Maximize2,
   LogOut,
@@ -929,18 +925,14 @@ export default function MapPage() {
               </p>
             }
           >
-            <Search size={16} class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-            <input
-              type="search"
-              placeholder="Buscar dirección o lugar"
-              class="w-full rounded-md border border-default bg-elevated py-2 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-fero-blue focus:outline-none focus:ring-2 focus:ring-fero-blue/20"
-            />
+            <p class="truncate py-2 pl-1 text-sm font-medium text-text-secondary">
+              Mapa operativo — Unare
+            </p>
           </Show>
         </div>
 
         <div class="flex flex-wrap items-center gap-1.5">
           <Show when={!residentMode()}>
-            <ToolBtn icon={<Filter size={16} />} label="Filtros" />
             <Show when={canOpenPlayback() && !playbackOpen()}>
               <ToolBtn
                 icon={<Play size={16} />}
@@ -961,10 +953,6 @@ export default function MapPage() {
             active={legendOpen()}
             onClick={() => setLegendOpen((v) => !v)}
           />
-          <Show when={!residentMode()}>
-            <ToolBtn icon={<Ruler size={16} />} label="Medir" class="hidden sm:inline-flex" />
-            <ToolBtn icon={<Printer size={16} />} label="Imprimir" class="hidden md:inline-flex" />
-          </Show>
         </div>
 
         <div class="ml-auto flex items-center gap-1.5">
@@ -1169,12 +1157,6 @@ export default function MapPage() {
               )}
             </For>
           </ul>
-          <Show when={!residentMode()}>
-            <button type="button" class="mt-3 inline-flex items-center gap-1 text-sm font-medium text-fero-blue hover:underline">
-              <Plus size={14} />
-              Agregar capa
-            </button>
-          </Show>
         </aside>
       </Show>
 

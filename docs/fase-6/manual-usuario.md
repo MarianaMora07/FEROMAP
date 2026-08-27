@@ -79,10 +79,11 @@
 2. Lea el banner: para evaluar escenarios, use Simulación.
 3. Configure **fecha de operación** (persistida en el servidor).
 4. Revise el panel **Plan del día**: puntos programados + pendientes de días anteriores.
-5. Pulse **Generar ruta operativa** (optimización sin despacho automático).
-6. Pulse **Despachar rutas** en un paso separado.
-7. Al finalizar la jornada, use **Cerrar día** para generar pendientes del día siguiente.
-8. El **Historial operativo** solo lista corridas iniciadas desde esta pantalla.
+5. Pulse **Generar ruta operativa** (optimización sin despacho automático). Durante el cálculo verá la **fase actual del motor** y el progreso en tiempo real.
+6. Revise el mensaje **«Mejor ruta encontrada (ACO)»** — es una solución heurística de alta calidad, no una garantía de optimalidad global.
+7. Pulse **Despachar rutas** en un paso separado. Aparecerá un aviso con los vehículos despachados y un enlace a **Monitoreo**.
+8. Al finalizar la jornada, use **Cerrar día** para generar pendientes del día siguiente.
+9. El **Historial operativo** solo lista corridas iniciadas desde esta pantalla.
 
 ### 4.1 Plan semanal (nivel directivo)
 
