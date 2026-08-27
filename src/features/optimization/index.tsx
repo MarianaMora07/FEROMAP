@@ -11,7 +11,6 @@ import {
   Button,
   Card,
   CardHeader,
-  ProgressBar,
 } from '../../design-system/components';
 import { appState } from '../../core/stores/appStore';
 import { routeDisplayKind } from '../../core/map/operationalMapLayers';
@@ -51,8 +50,14 @@ import { OptimizationParametersForm } from './OptimizationParametersForm';
 import { OptimizationResultsCompact } from './OptimizationResultsCompact';
 import { DurationBreakdownPanel } from '../simulation/DurationBreakdownPanel';
 import { LandfillKpiStrip } from '../landfill/LandfillKpiStrip';
-import { UncoveredPointsAlert } from '../landfill/UncoveredPointsAlert';
+import { UncoveredPointsActionsPanel } from '../landfill/UncoveredPointsActionsPanel';
 import { OptimizationParametersSheet } from './OptimizationParametersSheet';
+import { OptimizationProgressPanel } from './OptimizationProgressPanel';
+import { OptimizationDispatchBanner } from './OptimizationDispatchBanner';
+import { OptimizationComparisonPanel } from './OptimizationComparisonPanel';
+import { OptimizationConvergencePanel } from './OptimizationConvergencePanel';
+import { OptimizationWeeklyPlanGateBanner } from './OptimizationWeeklyPlanGateBanner';
+import { OptimizationAcoSensitivityPanel } from './OptimizationAcoSensitivityPanel';
 import { useGenerateButtonVisibility } from './useGenerateButtonVisibility';
 import { resolveOptimizationContextualMessage } from './optimizationLayoutUx';
 import { fetchDailyRoutePlayback } from '../../core/api/routePlayback';
@@ -258,21 +263,7 @@ export default function OptimizationPage() {
         generateAnchorRef={setGenerateAnchorRef}
       />
       <ScenarioInfoCard />
-      <Show when={optimizationState.isOptimizing}>
-        <Card>
-          <CardHeader title="Progreso del motor" />
-          <ProgressBar value={optimizationState.optimizationProgress} color="green" />
-          <ul class="mt-3 max-h-40 space-y-1 overflow-y-auto text-xs text-text-muted">
-            <For each={optimizationState.logs}>
-              {(log) => (
-                <li>
-                  <span class="text-text-secondary">{log.timestamp}</span> — {log.message}
-                </li>
-              )}
-            </For>
-          </ul>
-        </Card>
-      </Show>
+      <OptimizationProgressPanel />
     </>
   );
 
@@ -282,6 +273,9 @@ export default function OptimizationPage() {
         <OptimizationHeaderBar />
       </AppShellSubheader>
       <OptimizationMainTabs tab={tab()} onTabChange={setTab} />
+
+      <OptimizationWeeklyPlanGateBanner />
+      <OptimizationDispatchBanner />
 
       <Show when={tab() === 'nueva'}>
         <Show when={contextualMessage()}>
@@ -362,7 +356,14 @@ export default function OptimizationPage() {
             </OptimizationParametersSheet>
 
             <Show when={hasResults()}>
-              <UncoveredPointsAlert kpis={kpis()!} />
+              <UncoveredPointsActionsPanel
+                kpis={kpis()!}
+                dailyPlanId={dailyPlan()?.id}
+                operationDate={selectedDate()}
+                onDeferred={() => void refreshDailyPlan()}
+              />
+              <OptimizationComparisonPanel kpis={kpis()!} kpiView={optimizationState.preset.kpiView} />
+              <OptimizationConvergencePanel points={optimizationState.acoConvergence} />
               <LandfillKpiStrip kpis={kpis()} routes={appState.routes} />
               <DurationBreakdownPanel kpis={kpis()!} />
               <div class="flex flex-wrap items-center justify-end gap-2">
@@ -377,6 +378,7 @@ export default function OptimizationPage() {
                 totals={totals()!}
                 driverByVehicleId={driverByVehicleId()}
               />
+              <OptimizationAcoSensitivityPanel />
             </Show>
           </div>
         </div>

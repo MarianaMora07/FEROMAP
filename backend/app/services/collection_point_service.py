@@ -587,16 +587,18 @@ def _last_optimization_point_codes(db: Session) -> tuple[set[str], datetime | No
     if latest_calculated is None:
         return set(), None
 
-    routes = db.scalars(
-        select(OptimizedRoute)
-        .where(
-            OptimizedRoute.route_kind == "optimized",
-            OptimizedRoute.calculated_at == latest_calculated,
-        )
-        .options(
-            joinedload(OptimizedRoute.waypoints).joinedload(RouteWaypoint.collection_point),
-        )
-    ).all()
+    routes = list(
+        db.scalars(
+            select(OptimizedRoute)
+            .where(
+                OptimizedRoute.route_kind == "optimized",
+                OptimizedRoute.calculated_at == latest_calculated,
+            )
+            .options(
+                joinedload(OptimizedRoute.waypoints).joinedload(RouteWaypoint.collection_point),
+            )
+        ).unique().all()
+    )
 
     codes: set[str] = set()
     for route in routes:

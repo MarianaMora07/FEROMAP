@@ -30,6 +30,11 @@ from app.domain.landfill_service_time import (
     route_operational_elapsed_seconds,
 )
 from app.services.operational_facilities_service import resolve_operational_facilities
+from app.services.route_constraints import (
+    build_applied_route_constraints,
+    build_customer_time_windows,
+    build_fill_level_heuristic_matrix,
+)
 from app.services.scenario_parameters import (
     apply_simulation_parameter_modifiers,
     build_applied_crew_modifiers,
@@ -102,6 +107,7 @@ class CustomerNode:
     fill_pct: int
     lon: float
     lat: float
+    sector_id: int | None = None
 
 
 @dataclass
@@ -503,6 +509,11 @@ def _aco_cvrp(
     seed: int = 42,
     cancel_check: Callable[[], bool] | None = None,
     on_iteration: Callable[[int, int, float, float], None] | None = None,
+    heuristic_matrix: list[list[float]] | None = None,
+    window_starts: list[float] | None = None,
+    window_ends: list[float] | None = None,
+    fill_pcts: list[int] | None = None,
+    priority_fill_level: bool = False,
 ) -> RouteSolution:
     """Ant Colony Optimization para CVRP multi-viaje con vertedero y jornada."""
     parallel_workers = resolve_aco_parallel_workers(aco_ants)
@@ -513,7 +524,8 @@ def _aco_cvrp(
         process_pool = ProcessPoolExecutor(max_workers=parallel_workers)
 
     n_nodes = landfill_idx + 1
-    pheromone = [[1.0 / max(dist_matrix[i][j], 1.0) for j in range(n_nodes)] for i in range(n_nodes)]
+    pick_matrix = heuristic_matrix if heuristic_matrix is not None else dist_matrix
+    pheromone = [[1.0 / max(pick_matrix[i][j], 1.0) for j in range(n_nodes)] for i in range(n_nodes)]
 
     best_routes: list[list[int]] = []
     best_cost = float("inf")
@@ -551,6 +563,11 @@ def _aco_cvrp(
                 shift_budget_sec=shift_budget_sec,
                 unload_sec=unload_sec,
                 service_secs=service_secs,
+                heuristic_matrix=heuristic_matrix,
+                window_starts=window_starts,
+                window_ends=window_ends,
+                fill_pcts=fill_pcts,
+                priority_fill_level=priority_fill_level,
             )
             for routes, cost, _dur, uncovered in ant_results:
                 if cost < iteration_cost or (cost == iteration_cost and len(uncovered) < len(iteration_uncovered)):
@@ -1175,6 +1192,9 @@ def run_optimization_engine(
     operators_shortage: int | None = None,
     aco_ants: int | None = None,
     aco_iterations: int | None = None,
+    priority_fill_level: bool | None = None,
+    time_window_enabled: bool | None = None,
+    kpi_view: str | None = None,
     collection_point_ids: list[int] | None = None,
     exclude_vehicle_ids: list[int] | None = None,
     contingency_meta: dict[str, Any] | None = None,
@@ -1220,6 +1240,9 @@ def run_optimization_engine(
     shortage = normalize_operators_shortage(operators_shortage)
     resolved_aco_ants = normalize_aco_ants(aco_ants)
     resolved_aco_iterations = normalize_aco_iterations(aco_iterations)
+    resolved_priority_fill_level = bool(priority_fill_level) if priority_fill_level is not None else False
+    resolved_time_window_enabled = bool(time_window_enabled) if time_window_enabled is not None else False
+    resolved_kpi_view = kpi_view if kpi_view in {"distance", "time", "co2"} else "distance"
     traffic_mult, fill_boost, applied_modifiers = apply_simulation_parameter_modifiers(
         normalized,
         traffic_mult,
@@ -1237,7 +1260,25 @@ def run_optimization_engine(
         "acoIterations": resolved_aco_iterations,
         "appliedModifiers": applied_modifiers,
         "appliedCrewModifiers": applied_crew_modifiers,
+        "appliedRouteConstraints": build_applied_route_constraints(
+            priority_fill_level=resolved_priority_fill_level,
+            time_window_enabled=resolved_time_window_enabled,
+            kpi_view=resolved_kpi_view,
+        ),
     }
+
+    if resolved_priority_fill_level:
+        report(
+            "preparando",
+            "Prioridad por llenado activa — contenedores ≥80% más atractivos para el ACO",
+            "info",
+        )
+    if resolved_time_window_enabled:
+        report(
+            "preparando",
+            "Ventanas horarias por sector activas (mañana 06–12 h / tarde 12–18 h)",
+            "info",
+        )
 
     if shortage:
         report(
@@ -1296,6 +1337,7 @@ def run_optimization_engine(
                 fill_pct=boosted_pct,
                 lon=float(point.longitude),
                 lat=float(point.latitude),
+                sector_id=point.sector_id,
             )
         )
 
@@ -1399,6 +1441,17 @@ def run_optimization_engine(
         )
     graph_seconds = time.perf_counter() - graph_started
 
+    fill_pcts = [customer.fill_pct for customer in customers]
+    heuristic_matrix = build_fill_level_heuristic_matrix(
+        dist_matrix,
+        fill_pcts,
+        enabled=resolved_priority_fill_level,
+    )
+    window_starts, window_ends = build_customer_time_windows(
+        [customer.sector_id for customer in customers],
+        enabled=resolved_time_window_enabled,
+    )
+
     report(
         "instancia_vrp",
         f"Instancia VRP: {len(vehicles)} vehículos, demanda = nivel de llenado",
@@ -1435,6 +1488,11 @@ def run_optimization_engine(
         aco_patience=ACO_PATIENCE,
         cancel_check=cancelled,
         on_iteration=aco_progress,
+        heuristic_matrix=heuristic_matrix,
+        window_starts=window_starts,
+        window_ends=window_ends,
+        fill_pcts=fill_pcts,
+        priority_fill_level=resolved_priority_fill_level,
     )
     if not math.isfinite(optimized_solution.distance_m) or not optimized_solution.vehicle_routes:
         report(
@@ -1473,6 +1531,7 @@ def run_optimization_engine(
         shift_budget_seconds=facilities.shift_budget_seconds,
         uncovered_point_codes=uncovered_point_codes,
     )
+    kpis["kpiView"] = resolved_kpi_view
 
     computation_seconds = time.perf_counter() - computation_started
     engine_metrics = _build_engine_metrics(

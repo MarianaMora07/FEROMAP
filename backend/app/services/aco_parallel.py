@@ -7,6 +7,7 @@ import random
 from typing import TYPE_CHECKING
 
 from app.config import settings
+from app.services.route_constraints import elapsed_after_visit, is_visit_feasible_with_window
 
 if TYPE_CHECKING:
     from concurrent.futures import ProcessPoolExecutor
@@ -88,11 +89,19 @@ def _pick_candidate(
     *,
     alpha: float,
     beta: float,
+    fill_pcts: list[int] | None = None,
+    priority_fill_level: bool = False,
 ) -> int:
     weights = []
     for c in candidates:
         tau = pheromone[current][c] ** alpha
         eta = (1.0 / max(dist_matrix[current][c], 1.0)) ** beta
+        if priority_fill_level and fill_pcts is not None and 1 <= c <= len(fill_pcts):
+            fill_pct = fill_pcts[c - 1]
+            if fill_pct >= 80:
+                eta *= 1.35
+            elif fill_pct >= 60:
+                eta *= 1.10
         weights.append(tau * eta)
     total = sum(weights)
     if total <= 0:
@@ -159,13 +168,19 @@ def build_ant_solution(
     time_matrix: list[list[float]],
     pheromone: list[list[float]],
     *,
+    heuristic_matrix: list[list[float]] | None = None,
     landfill_idx: int | None = None,
     shift_budget_sec: float | None = None,
     unload_sec: float = 0.0,
     service_secs: list[float] | None = None,
+    window_starts: list[float] | None = None,
+    window_ends: list[float] | None = None,
+    fill_pcts: list[int] | None = None,
+    priority_fill_level: bool = False,
     alpha: float = ACO_ALPHA,
     beta: float = ACO_BETA,
 ) -> AntSolution:
+    pick_matrix = heuristic_matrix if heuristic_matrix is not None else dist_matrix
     rng = random.Random(ant_seed)
     n_vehicles = len(capacities)
     landfill = landfill_idx if landfill_idx is not None else n_customers + 1
@@ -206,6 +221,21 @@ def build_ant_solution(
                     for c in candidates
                     if elapsed + time_matrix[current][c] + service_sec <= shift_budget_sec
                 ]
+            if window_starts is not None and window_ends is not None:
+                affordable = [
+                    c
+                    for c in affordable
+                    if is_visit_feasible_with_window(
+                        elapsed,
+                        current,
+                        c,
+                        service_sec,
+                        time_matrix,
+                        window_start=window_starts[c - 1],
+                        window_end=window_ends[c - 1],
+                        shift_budget_sec=shift_budget_sec,
+                    )
+                ]
             if not affordable:
                 break
 
@@ -214,13 +244,23 @@ def build_ant_solution(
                 current,
                 affordable,
                 pheromone,
-                dist_matrix,
+                pick_matrix,
                 alpha=alpha,
                 beta=beta,
+                fill_pcts=fill_pcts,
+                priority_fill_level=priority_fill_level,
             )
             travel = time_matrix[current][chosen]
             route.append(chosen)
-            elapsed += travel + service_sec
+            window_start = window_starts[chosen - 1] if window_starts is not None else None
+            elapsed = elapsed_after_visit(
+                elapsed,
+                current,
+                chosen,
+                service_sec,
+                time_matrix,
+                window_start=window_start,
+            )
             load += demands[chosen - 1]
             unvisited.remove(chosen)
             current = chosen
@@ -261,6 +301,11 @@ def _ant_task_payload(
     shift_budget_sec: float | None,
     unload_sec: float,
     service_secs: list[float],
+    heuristic_matrix: list[list[float]] | None,
+    window_starts: list[float] | None,
+    window_ends: list[float] | None,
+    fill_pcts: list[int] | None,
+    priority_fill_level: bool,
 ) -> AntSolution:
     return build_ant_solution(
         ant_seed,
@@ -270,10 +315,15 @@ def _ant_task_payload(
         dist_matrix,
         time_matrix,
         pheromone,
+        heuristic_matrix=heuristic_matrix,
         landfill_idx=landfill_idx,
         shift_budget_sec=shift_budget_sec,
         unload_sec=unload_sec,
         service_secs=service_secs,
+        window_starts=window_starts,
+        window_ends=window_ends,
+        fill_pcts=fill_pcts,
+        priority_fill_level=priority_fill_level,
     )
 
 
@@ -292,6 +342,11 @@ def run_ant_solutions(
     shift_budget_sec: float | None = None,
     unload_sec: float = 0.0,
     service_secs: list[float] | None = None,
+    heuristic_matrix: list[list[float]] | None = None,
+    window_starts: list[float] | None = None,
+    window_ends: list[float] | None = None,
+    fill_pcts: list[int] | None = None,
+    priority_fill_level: bool = False,
 ) -> list[AntSolution]:
     from concurrent.futures import ProcessPoolExecutor
 
@@ -307,10 +362,15 @@ def run_ant_solutions(
                 dist_matrix,
                 time_matrix,
                 pheromone,
+                heuristic_matrix=heuristic_matrix,
                 landfill_idx=landfill_idx,
                 shift_budget_sec=shift_budget_sec,
                 unload_sec=unload_sec,
                 service_secs=service_secs,
+                window_starts=window_starts,
+                window_ends=window_ends,
+                fill_pcts=fill_pcts,
+                priority_fill_level=priority_fill_level,
             )
             for seed in ant_seeds
         ]
@@ -332,6 +392,11 @@ def run_ant_solutions(
                 shift_budget_sec,
                 unload_sec,
                 service_secs,
+                heuristic_matrix,
+                window_starts,
+                window_ends,
+                fill_pcts,
+                priority_fill_level,
             )
             for seed in ant_seeds
         ]

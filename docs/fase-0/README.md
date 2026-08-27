@@ -4,10 +4,12 @@ Documentación de referencia para el rediseño del flujo guiado de **Simulación
 
 | Documento | Descripción |
 |-----------|-------------|
+| [alineacion-defensa.md](./alineacion-defensa.md) | **Alcance congelado, narrativa académica y KPIs de referencia** |
 | [ux-flujo-simulacion.md](./ux-flujo-simulacion.md) | Flujo objetivo, roles, mapa de pantallas |
 | [matriz-variables-motor.md](./matriz-variables-motor.md) | Variables UI vs efecto real en el motor |
 | [checklist-aceptacion-defensa.md](./checklist-aceptacion-defensa.md) | Criterios de aceptación para defensa ✅ |
 | [adr-001-simulacion-principal.md](./adr-001-simulacion-principal.md) | Decisión arquitectónica UX (ADR) |
+| [../post-grado/README.md](../post-grado/README.md) | **Backlog post-grado** (OR-Tools, SSE, tráfico live, etc.) |
 
 **Estado:** completado (Fase 0)  
 **Fecha:** 2026-08-08  

@@ -10,6 +10,7 @@ import {
   optimizationState,
 } from '../../core/stores/optimizationStore';
 import { PlanningStatusBadge } from '../planning/PlanningStatusBadge';
+import { formatOperationalSavingPct, resolveScenarioLabel } from './optimizationHistoryUx';
 
 interface OptimizationHistoryPanelProps {
   onViewDay: (operationDate: string) => void;
@@ -81,8 +82,10 @@ export function OptimizationHistoryPanel(props: OptimizationHistoryPanelProps) {
             <thead>
               <tr class="border-b border-default text-left text-[10px] uppercase tracking-wide text-text-muted">
                 <th class="pb-2 pr-3 font-semibold">Fecha</th>
+                <th class="pb-2 pr-3 font-semibold">Escenario</th>
                 <th class="pb-2 pr-3 font-semibold">Puntos</th>
                 <th class="pb-2 pr-3 font-semibold">Km</th>
+                <th class="pb-2 pr-3 font-semibold">Ahorro</th>
                 <th class="pb-2 pr-3 font-semibold">Estado</th>
                 <th class="pb-2 font-semibold">Acciones</th>
               </tr>
@@ -94,9 +97,15 @@ export function OptimizationHistoryPanel(props: OptimizationHistoryPanelProps) {
                     <td class="py-2.5 pr-3 font-medium text-text-primary">
                       {row.operationDate ?? row.datetime?.slice(0, 10) ?? '—'}
                     </td>
+                    <td class="py-2.5 pr-3 text-text-secondary">
+                      {resolveScenarioLabel(row.scenarioId, row.scenarioName)}
+                    </td>
                     <td class="py-2.5 pr-3 text-text-secondary">{row.pointCount ?? '—'}</td>
                     <td class="py-2.5 pr-3 text-text-secondary">
                       {row.distanceKm != null ? `${row.distanceKm.toFixed(1)} km` : '—'}
+                    </td>
+                    <td class="py-2.5 pr-3 font-medium text-fero-green-dark">
+                      {formatOperationalSavingPct(row.efficiency)}
                     </td>
                     <td class="py-2.5 pr-3">
                       <PlanningStatusBadge status={row.status ?? 'draft'} />

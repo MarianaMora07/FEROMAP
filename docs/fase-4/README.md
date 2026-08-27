@@ -1,53 +1,58 @@
-# Fase 4 — Cierre del recorrido post-simulación
+# Fase 4 — Restricciones pendientes
 
 **Estado:** completado  
-**Fecha:** 2026-08-08
+**Fecha:** 2026-08-27
 
-## Objetivo
-
-Tras ejecutar una simulación, el usuario continúa el análisis sin preguntar “¿y ahora a dónde voy?”.
+Cierre de brechas funcionales para preguntas del jurado sobre llenado y ventanas horarias.
 
 ## Entregables
 
-| Entregable | Implementación |
-|------------|----------------|
-| Barra de acciones post-resultado | `PostSimulationActions.tsx` en paso 3 |
-| Historial en `/simulation` | Pestaña **Historial** (`?view=history`) |
-| Enlaces cruzados Simulación ↔ Analítica ↔ Reportes | `simulationLinks.ts` + deep links `?simulationId=` |
-| Dashboard con última simulación | Tarjeta con enlaces a resultados, analítica y reportes |
+| ID | Entregable | Estado |
+|----|------------|--------|
+| 4.1 | Prioridad por llenado (`fill_level`) | **Conectada** — heurística ACO + feromonas |
+| 4.2 | Ventanas horarias simplificadas (`time_window`) | **Conectada** — mañana/tarde por sector |
+| 4.3 | Objetivo secundario en KPIs (`kpiView`) | **Conectada** — narrativa UI, solver sin cambio |
 
-## Deep links
+## Comportamiento
 
-| Ruta | Parámetro | Comportamiento |
-|------|-----------|----------------|
-| `/simulation?simulationId={id}` | Carga historial y abre paso 3 |
-| `/simulation?view=history` | Abre pestaña Historial |
-| `/analytics?simulationId={id}` | Banner de contexto + enlace de vuelta |
-| `/reports?simulationId={id}` | Banner de contexto + enlace de vuelta |
+### Prioridad por llenado
+- Toggle **Considerar nivel de llenado** en `/optimization`.
+- Contenedores ≥80% reciben factor 0.70 en matriz heurística y bonus η en selección de hormiga.
+- El fitness del ACO sigue siendo **distancia total**.
+
+### Ventanas horarias (VRPTW light)
+- Toggle **Ventana de tiempo** activa ventanas amplias por sector:
+  - Sectores pares → 06:00–12:00
+  - Sectores impares → 12:00–18:00
+- Validación en construcción de ruta del ant (`build_ant_solution`).
+
+### KPI view
+- Selector **Mostrar resultados por**: distancia | tiempo | CO₂.
+- Resalta la fila correspondiente en el panel Baseline vs ACO.
+- No modifica el objetivo del solver.
+
+## API
+
+```http
+POST /api/v1/planning/daily/{id}/optimize
+{
+  "priorityFillLevel": true,
+  "timeWindowEnabled": false,
+  "kpiView": "distance"
+}
+```
+
+Campos equivalentes en `POST /api/v1/simulations/optimize`.
+
+## Tests
+
+```bash
+cd backend && python -m pytest tests/test_route_constraints.py -v
+```
 
 ## Archivos clave
 
-- `src/core/utils/simulationLinks.ts` — helpers de URL
-- `src/features/simulation/PostSimulationActions.tsx` — barra de acciones (mapa, analítica, reportes, CSV/PDF, nueva simulación, despacho)
-- `src/features/simulation/SimulationHistoryPanel.tsx` — tabla de historial de tesis
-- `src/features/simulation/SimulationContextBanner.tsx` — banner en analítica/reportes
-- `src/features/simulation/index.tsx` — pestañas Flujo / Historial
-- `src/features/dashboard/index.tsx` — tarjeta “Última simulación”
-- `src/features/optimization/index.tsx` — nota: historial operativo ≠ historial de escenarios
-
-## Criterio de cierre
-
-1. Ejecutar simulación → paso 3 muestra barra “¿Qué quieres hacer ahora?”
-2. Cada acción lleva a mapa, analítica, reportes o descarga
-3. Dashboard enlaza la última simulación con `simulationId`
-4. Planificación operativa mantiene su historial sin duplicar escenarios de tesis
-
-## Verificación manual
-
-```text
-1. /simulation → ejecutar → paso 3 → probar cada botón de PostSimulationActions
-2. /simulation?view=history → ver tabla y abrir una simulación
-3. /simulation?simulationId=1 → debe abrir resultados directamente
-4. /analytics?simulationId=1 → banner + volver a resultados
-5. Dashboard → “Última simulación” → Ver resultados / Analítica / Reportes
-```
+- `backend/app/services/route_constraints.py`
+- `backend/app/services/aco_parallel.py`
+- `backend/app/services/optimization_service.py`
+- `src/features/optimization/OptimizationParametersForm.tsx`

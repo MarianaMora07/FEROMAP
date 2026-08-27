@@ -78,6 +78,23 @@ test-local:
 benchmark-aco: _check
     {{compose}} exec api python -m scripts.benchmark_aco
 
+# Sensibilidad ACO (6 corridas: hormigas 8/12/20 + iteraciones 10/20/40)
+phase3-sensitivity: _check
+    {{compose}} exec api python -m scripts.aco_sensitivity
+
+# Reporte markdown Fase 3 (benchmark + sensibilidad) → docs/fase-3/evidencia-aco.md
+phase3-report: _check
+    {{compose}} exec api python -m scripts.generate_phase3_report
+
+# Backlog post-grado (OR-Tools, SSE, tráfico live…) — solo documentación, no implementar pre-defensa
+roadmap:
+    @echo "═══ FEROMAP — backlog post-grado ═══"
+    @sed -n '1,80p' docs/post-grado/README.md
+
+# Fase 0: 3 escenarios (normal, lluvia, saturado) → data/cache/phase0-baseline-metrics.json
+phase0-baseline: _check
+    {{compose}} exec api python -m scripts.phase0_baseline_metrics
+
 # Tests frontend: vitest + playwright (API en :8000, VITE_USE_MOCKS=true).
 test-frontend:
     npm test

@@ -25,6 +25,20 @@ import { buildContainerPopupHtml } from '../../core/utils/popupHtml';
 import { fetchAdminSettings } from '../../core/api/admin';
 import { useMocks } from '../../core/api/client';
 
+type RouteLayerView = 'both' | 'current' | 'optimized';
+
+function routeLayerButtonLabel(view: RouteLayerView): string {
+  if (view === 'both') return 'Ambas rutas';
+  if (view === 'current') return 'Solo actual';
+  return 'Solo optimizada';
+}
+
+function nextRouteLayerView(view: RouteLayerView): RouteLayerView {
+  if (view === 'both') return 'current';
+  if (view === 'current') return 'optimized';
+  return 'both';
+}
+
 function containerPin(color: string) {
   const el = document.createElement('div');
   el.style.cssText =
@@ -51,6 +65,7 @@ interface OptimizationRouteMapProps {
 export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
   const mapRef: { current?: MapLibreMap } = {};
   const [mapInstance, setMapInstance] = createSignal<MapLibreMap | undefined>();
+  const [routeLayerView, setRouteLayerView] = createSignal<RouteLayerView>('both');
   const landfillMarkerHolder: { marker?: maplibregl.Marker } = {};
   const routeLandfillMarkers: maplibregl.Marker[] = [];
   const containerMarkers: maplibregl.Marker[] = [];
@@ -73,6 +88,9 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
     const playbackActive = Boolean(props.playbackActive);
     const lineOpacity = playbackActive ? 0.2 : 0.95;
     const currentOpacity = playbackActive ? 0.15 : 0.9;
+    const view = routeLayerView();
+    const showCurrent = view !== 'optimized';
+    const showOptimized = view !== 'current';
 
     if (!map.getSource('opt-routes')) {
       map.addSource('opt-routes', {
@@ -109,9 +127,11 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
         features,
       });
       if (map.getLayer('opt-current')) {
+        map.setLayoutProperty('opt-current', 'visibility', showCurrent ? 'visible' : 'none');
         map.setPaintProperty('opt-current', 'line-opacity', currentOpacity);
       }
       if (map.getLayer('opt-optimized')) {
+        map.setLayoutProperty('opt-optimized', 'visibility', showOptimized ? 'visible' : 'none');
         map.setPaintProperty('opt-optimized', 'line-opacity', lineOpacity);
       }
       if (features.length > 0 && !playbackActive) {
@@ -173,6 +193,7 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
   createEffect(() => {
     props.hasResults;
     props.playbackActive;
+    routeLayerView();
     appState.routes;
     appState.containers;
     facilities();
@@ -183,7 +204,7 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
     <Card padding={false} class="overflow-hidden">
       <div class="flex items-center justify-between gap-3 border-b border-default px-4 py-3">
         <h3 class="font-heading font-semibold text-text-primary">
-          {props.playbackActive ? 'Simulación de recorrido' : 'Vista de la ruta óptima'}
+          {props.playbackActive ? 'Simulación de recorrido' : 'Vista de la mejor ruta (ACO)'}
         </h3>
         <div class="flex items-center gap-2">
           <Show when={props.playbackActive}>
@@ -191,13 +212,18 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
               En reproducción
             </span>
           </Show>
-          <button
-            type="button"
-            class="hidden items-center gap-1.5 rounded-md border border-default px-2.5 py-1.5 text-xs text-text-secondary sm:inline-flex"
-          >
-            <Layers size={14} />
-            Rutas actual / optimizada
-          </button>
+          <Show when={props.hasResults && !props.playbackActive}>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1.5 rounded-md border border-default px-2.5 py-1.5 text-xs text-text-secondary hover:bg-app"
+              aria-label="Alternar capas de ruta actual y optimizada"
+              data-testid="optimization-route-layer-toggle"
+              onClick={() => setRouteLayerView((view) => nextRouteLayerView(view))}
+            >
+              <Layers size={14} />
+              {routeLayerButtonLabel(routeLayerView())}
+            </button>
+          </Show>
           <button
             type="button"
             class="flex h-8 w-8 items-center justify-center rounded-md border border-default text-text-secondary"

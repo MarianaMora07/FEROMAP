@@ -9,8 +9,8 @@ import {
   setOptimizationScenario,
   updateOptimizationPreset,
 } from '../../core/stores/optimizationStore';
-import { constraints as constraintDefs } from '../../data/mock/optimization';
-import type { OptimizationConstraints } from '../../core/api/optimization';
+import { constraints as constraintDefs, objectives as objectiveOptions } from '../../data/mock/optimization';
+import type { KpiView, OptimizationConstraints } from '../../core/api/optimization';
 import type { ScenarioId } from '../../data/types/simulation';
 import { shouldFleetAccordionStartOpen } from './optimizationLayoutUx';
 
@@ -87,6 +87,19 @@ export function OptimizationParametersForm(props: OptimizationParametersFormProp
               {(scenario) => <option value={scenario.id}>{scenario.label}</option>}
             </For>
           </SelectField>
+          <SelectField
+            label="Mostrar resultados por"
+            name="kpiView"
+            value={preset().kpiView}
+            onChange={(e) => updateOptimizationPreset({ kpiView: e.currentTarget.value as KpiView })}
+          >
+            <For each={objectiveOptions}>
+              {(objective) => <option value={objective.id}>{objective.label}</option>}
+            </For>
+          </SelectField>
+          <p class="text-xs text-text-muted">
+            El motor ACO sigue minimizando distancia; esta opción solo cambia la narrativa de KPIs.
+          </p>
           <p class="text-xs text-text-muted">
             Para comparar condiciones (lluvia, saturación, impacto en KPIs), usa{' '}
             <A href="/simulation" class="font-medium text-fero-blue hover:underline">
@@ -103,7 +116,21 @@ export function OptimizationParametersForm(props: OptimizationParametersFormProp
           <ul class="space-y-2.5">
             <For each={constraintDefs}>
               {(item) => {
-                const connected = item.id === 'avoid_traffic' || item.id === 'critical_first';
+                const scenarioHints = item.id === 'avoid_traffic' || item.id === 'critical_first';
+                const engineConnected = item.id === 'fill_level' || item.id === 'time_window';
+                const connected = scenarioHints || engineConnected;
+                const hint = () => {
+                  if (item.id === 'fill_level') {
+                    return 'Prioriza contenedores ≥80% en la heurística ACO.';
+                  }
+                  if (item.id === 'time_window') {
+                    return 'Ventanas amplias por sector (mañana 06–12 h / tarde 12–18 h).';
+                  }
+                  if (scenarioHints) {
+                    return 'Influye en el escenario inferido si no eliges uno explícito.';
+                  }
+                  return 'Próximamente — no modifica el motor actual.';
+                };
                 return (
                   <li>
                     <label
@@ -122,11 +149,7 @@ export function OptimizationParametersForm(props: OptimizationParametersFormProp
                       />
                       <span>
                         {item.label}
-                        <span class="mt-0.5 block text-[11px] text-text-muted">
-                          {connected
-                            ? 'Influye en el escenario inferido si no eliges uno explícito.'
-                            : 'Próximamente — no modifica el motor actual.'}
-                        </span>
+                        <span class="mt-0.5 block text-[11px] text-text-muted">{hint()}</span>
                       </span>
                     </label>
                   </li>

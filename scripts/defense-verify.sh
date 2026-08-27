@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verificación pre-defensa: health, autenticación, optimización y (prod) proxy Nginx.
+# Verificación pre-defensa: health, autenticación, optimización, KPIs, playback, dispatch.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -27,11 +27,11 @@ echo " Entorno: ${COMPOSE_ENV}  API:${API_PORT}  UI:${FRONTEND_PORT}"
 echo "═══════════════════════════════════════════"
 
 echo ""
-echo "▶ 1/7 Health check (just health)…"
+echo "▶ 1/9 Health check (just health)…"
 just health
 
 echo ""
-echo "▶ 2/7 Autenticación (${DEMO_EMAIL})…"
+echo "▶ 2/9 Autenticación (${DEMO_EMAIL})…"
 login_json="$(curl -sf -X POST "${API_BASE}/api/v1/auth/login" \
   -H 'Content-Type: application/json' \
   -d "{\"email\":\"${DEMO_EMAIL}\",\"password\":\"${DEMO_PASSWORD}\"}")"
@@ -40,7 +40,7 @@ ROLE="$(echo "${login_json}" | python -c "import sys,json; print(json.load(sys.s
 echo "   ✅ Login OK (rol: ${ROLE})"
 
 echo ""
-echo "▶ 3/7 Datos GIS (sectores y contenedores)…"
+echo "▶ 3/9 Datos GIS (sectores y contenedores)…"
 sectors_count="$(curl -sf "${API_BASE}/api/v1/sectors" | python -c "import sys,json; print(len(json.load(sys.stdin).get('features',[])))")"
 points_count="$(curl -sf "${API_BASE}/api/v1/collection-points" | python -c "import sys,json; print(len(json.load(sys.stdin).get('features',[])))")"
 if [[ "${sectors_count}" -lt 1 || "${points_count}" -lt 1 ]]; then
@@ -50,7 +50,7 @@ fi
 echo "   ✅ ${sectors_count} sectores, ${points_count} contenedores"
 
 echo ""
-echo "▶ 4/7 Optimización ACO (POST /simulations/optimize → job)…"
+echo "▶ 4/9 Optimización ACO (POST /simulations/optimize → job)…"
 job_json="$(curl -sf -X POST "${API_BASE}/api/v1/simulations/optimize" \
   -H "Authorization: Bearer ${TOKEN}" \
   -H 'Content-Type: application/json' \
@@ -95,7 +95,40 @@ fi
 echo "   ✅ simulationId=${sim_id}  ahorro≈${saving}%"
 
 echo ""
-echo "▶ 5/7 Rutas, dashboard y playback del plan del día…"
+echo "▶ 5/9 KPIs plausibles (distancia, CPU, rutas)…"
+kpi_check="$(echo "${optimize_json}" | python -c "
+import sys, json
+d = json.load(sys.stdin)
+result = d.get('result') or {}
+kpis = result.get('kpis') or {}
+dist = kpis.get('distanceKm') or {}
+metrics = kpis.get('engineMetrics') or {}
+current = float(dist.get('current') or 0)
+optimized = float(dist.get('optimized') or 0)
+cpu = float(metrics.get('computationSeconds') or 0)
+routes = int(kpis.get('routesCount') or result.get('routesCount') or 0)
+errors = []
+if current <= 0:
+    errors.append('baseline_km')
+if optimized <= 0:
+    errors.append('optimized_km')
+if cpu <= 0:
+    errors.append('cpu_seconds')
+if routes < 1:
+    errors.append('routes_count')
+if errors:
+    print('FAIL:' + ','.join(errors))
+else:
+    print(f'OK:{optimized:.1f}km/{current:.1f}km cpu={cpu:.1f}s routes={routes}')
+")"
+if [[ "${kpi_check}" == FAIL:* ]]; then
+  echo "❌ KPIs no plausibles (${kpi_check#FAIL:})" >&2
+  exit 1
+fi
+echo "   ✅ ${kpi_check#OK:}"
+
+echo ""
+echo "▶ 6/9 Rutas, dashboard y playback del plan del día…"
 curl -sf -H "Authorization: Bearer ${TOKEN}" "${API_BASE}/api/v1/routes/optimized" >/dev/null
 curl -sf "${API_BASE}/api/v1/dashboard/summary" >/dev/null
 curl -sf -H "Authorization: Bearer ${TOKEN}" "${API_BASE}/api/v1/reports/summary" >/dev/null
@@ -115,13 +148,25 @@ fi
 echo "   ✅ Rutas optimizadas, dashboard, reportes y playback (${routes_count} ruta(s))"
 
 echo ""
-echo "▶ 6/7 Detalle de simulación #${sim_id}…"
+echo "▶ 7/9 Despacho operativo (POST /planning/daily/{id}/dispatch)…"
+dispatch_json="$(curl -sf -X POST "${API_BASE}/api/v1/planning/daily/${daily_id}/dispatch" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H 'Content-Type: application/json')"
+dispatch_count="$(echo "${dispatch_json}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('count',0))")"
+if [[ "${dispatch_count}" -lt 1 ]]; then
+  echo "❌ Dispatch sin rutas despachadas (dailyPlanId=${daily_id})" >&2
+  exit 1
+fi
+echo "   ✅ ${dispatch_count} ruta(s) despachada(s)"
+
+echo ""
+echo "▶ 8/9 Detalle de simulación #${sim_id}…"
 curl -sf -H "Authorization: Bearer ${TOKEN}" "${API_BASE}/api/v1/simulations/${sim_id}" >/dev/null
 echo "   ✅ GET /simulations/${sim_id}"
 
 if [[ "${COMPOSE_ENV}" == "prod" ]]; then
   echo ""
-  echo "▶ 7/7 Proxy Nginx (SPA + /api)…"
+  echo "▶ 9/9 Proxy Nginx (SPA + /api)…"
   curl -sf "${FRONT_BASE}/" >/dev/null
   curl -sf "${FRONT_BASE}/health" >/dev/null
   nginx_opt="$(curl -sf -X POST "${FRONT_BASE}/api/v1/auth/login" \
@@ -134,13 +179,14 @@ if [[ "${COMPOSE_ENV}" == "prod" ]]; then
   echo "   ✅ UI en ${FRONT_BASE} y proxy /api operativo"
 else
   echo ""
-  echo "▶ 7/7 Modo dev — omitiendo proxy Nginx (usa COMPOSE_ENV=prod para probarlo)"
+  echo "▶ 9/9 Modo dev — omitiendo proxy Nginx (usa COMPOSE_ENV=prod para probarlo)"
 fi
 
 echo ""
 echo "═══════════════════════════════════════════"
 echo " ✅ Verificación pre-defensa completada"
+echo "   Flujo: optimize → KPIs → playback → dispatch"
 echo "   UI:  ${FRONT_BASE}"
 echo "   API: ${API_BASE}/health"
-echo "   Demo: / → Nueva simulación → /simulation → Ejecutar → Analítica/Reportes"
+echo "   Demo: /optimization → Ejecutar → Analítica/Reportes"
 echo "═══════════════════════════════════════════"

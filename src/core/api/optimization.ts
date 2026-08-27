@@ -1,4 +1,6 @@
-import type { Scenario, ScenarioId } from '../../data/types/simulation';
+import type { Scenario, ScenarioId, SimulationLogEntry } from '../../data/types/simulation';
+import type { ExecutionPhaseId } from '../../features/simulation/executionPhases';
+import { isExecutionPhaseId } from '../../features/simulation/executionPhases';
 import type { Vehicle } from '../types/vehicle';
 import type { CollectionPointOptimizationContext } from './collectionPoints';
 import { fetchCollectionPointsOptimizationContext, fetchCollectionPointsSummary } from './collectionPoints';
@@ -18,6 +20,98 @@ import { fetchVehicles, fetchVehiclesOptimizationContext, isAssignableVehicle } 
 
 export const OPTIMIZATION_PRESET_KEY = 'feromap:optimization-preset';
 
+export interface DailyOptimizationProgress {
+  progress: number;
+  phase: ExecutionPhaseId | null;
+  logs: SimulationLogEntry[];
+  jobId?: string;
+  acoConvergence?: import('../../data/types/simulation').AcoConvergencePoint[];
+}
+
+export class OptimizationCancelledError extends Error {
+  constructor(message = 'Optimización cancelada') {
+    super(message);
+    this.name = 'OptimizationCancelledError';
+  }
+}
+
+let activeDailyOptimizationJobId: string | null = null;
+
+export function getActiveDailyOptimizationJobId(): string | null {
+  return activeDailyOptimizationJobId;
+}
+
+export async function cancelActiveDailyOptimizationJob(): Promise<void> {
+  if (!activeDailyOptimizationJobId) return;
+  const { cancelSimulationOptimizeJob } = await import('./simulationJobs');
+  await cancelSimulationOptimizeJob(activeDailyOptimizationJobId).catch(() => undefined);
+}
+
+const JOB_POLL_MS = 450;
+const JOB_MAX_WAIT_MS = 60 * 60 * 1000;
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function resolveJobPhase(phase: string | null | undefined): ExecutionPhaseId | null {
+  if (!phase || !isExecutionPhaseId(phase)) return null;
+  return phase;
+}
+
+async function optimizeDailyPlanAndWait(
+  dailyPlanId: number,
+  preset: OptimizationPreset,
+  onProgress?: (update: DailyOptimizationProgress) => void,
+  options?: { isCancelled?: () => boolean },
+): Promise<OptimizeResponse> {
+  const { jobId } = await optimizeDailyPlan(dailyPlanId, {
+    priorityFillLevel: preset.constraints.fill_level,
+    timeWindowEnabled: preset.constraints.time_window,
+    kpiView: preset.kpiView,
+  });
+  activeDailyOptimizationJobId = jobId;
+  const startedAt = Date.now();
+
+  try {
+    while (Date.now() - startedAt < JOB_MAX_WAIT_MS) {
+      if (options?.isCancelled?.()) {
+        await cancelActiveDailyOptimizationJob();
+        throw new OptimizationCancelledError();
+      }
+
+      const snapshot = await fetchSimulationOptimizeJob(jobId);
+      onProgress?.({
+        progress: snapshot.progress,
+        phase: resolveJobPhase(snapshot.phase),
+        logs: snapshot.logs,
+        jobId,
+        acoConvergence: snapshot.acoConvergence,
+      });
+
+      if (snapshot.status === 'completed' && snapshot.result) {
+        return snapshot.result;
+      }
+      if (snapshot.status === 'failed') {
+        throw new Error(snapshot.error ?? 'La optimización del día falló');
+      }
+      if (snapshot.status === 'cancelled') {
+        throw new OptimizationCancelledError();
+      }
+
+      await delay(JOB_POLL_MS);
+    }
+
+    throw new Error('La optimización tardó más de 60 minutos');
+  } finally {
+    if (activeDailyOptimizationJobId === jobId) {
+      activeDailyOptimizationJobId = null;
+    }
+  }
+}
+
+export type KpiView = 'distance' | 'time' | 'co2';
+
 export interface OptimizationConstraints {
   avoid_traffic: boolean;
   fill_level: boolean;
@@ -30,6 +124,7 @@ export interface OptimizationPreset {
   scenarioId: ScenarioId;
   algorithm: string;
   objective: string;
+  kpiView: KpiView;
   constraints: OptimizationConstraints;
 }
 
@@ -52,6 +147,7 @@ const DEFAULT_PRESET: OptimizationPreset = {
   scenarioId: 'normal',
   algorithm: 'aco',
   objective: 'distance_time',
+  kpiView: 'distance',
   constraints: {
     avoid_traffic: true,
     fill_level: true,
@@ -68,6 +164,7 @@ export function loadOptimizationPreset(): OptimizationPreset {
     return {
       ...DEFAULT_PRESET,
       ...parsed,
+      kpiView: parsed.kpiView ?? DEFAULT_PRESET.kpiView,
       constraints: { ...DEFAULT_PRESET.constraints, ...parsed.constraints },
     };
   } catch {
@@ -111,35 +208,29 @@ export async function fetchOptimizationPageContext(): Promise<OptimizationPageCo
   };
 }
 
-export function runOptimization(payload: OptimizationRunPayload & { dailyPlanId?: number }): Promise<OptimizeResponse> {
+export function runOptimization(
+  payload: OptimizationRunPayload & { dailyPlanId?: number },
+  onProgress?: (update: DailyOptimizationProgress) => void,
+  options?: { isCancelled?: () => boolean },
+): Promise<OptimizeResponse> {
   const scenarioId = payload.scenarioId ?? inferScenarioId(loadOptimizationPreset());
   if (payload.preset) {
     saveOptimizationPreset({ ...loadOptimizationPreset(), ...payload.preset, scenarioId });
   }
   if (payload.dailyPlanId) {
-    return optimizeDailyPlanAndWait(payload.dailyPlanId);
+    const preset = payload.preset
+      ? { ...loadOptimizationPreset(), ...payload.preset, scenarioId }
+      : { ...loadOptimizationPreset(), scenarioId };
+    return optimizeDailyPlanAndWait(payload.dailyPlanId, preset, onProgress, options);
   }
   return runSimulationOptimize(scenarioId, { planningLevel: 'simulation', autoDispatch: false });
 }
 
-async function optimizeDailyPlanAndWait(dailyPlanId: number): Promise<OptimizeResponse> {
-  const { jobId } = await optimizeDailyPlan(dailyPlanId);
-  const MAX_WAIT_MS = 60 * 60 * 1000;
-  const start = Date.now();
-  while (Date.now() - start < MAX_WAIT_MS) {
-    const snapshot = await fetchSimulationOptimizeJob(jobId);
-    if (snapshot.status === 'completed' && snapshot.result) {
-      return snapshot.result;
-    }
-    if (snapshot.status === 'failed') {
-      throw new Error(snapshot.error ?? 'La optimización del día falló');
-    }
-    if (snapshot.status === 'cancelled') {
-      throw new Error('Optimización cancelada');
-    }
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-  }
-  throw new Error('La optimización tardó más de 60 minutos');
+export function runDailyOptimizationJob(
+  dailyPlanId: number,
+  onProgress?: (update: DailyOptimizationProgress) => void,
+): Promise<OptimizeResponse> {
+  return optimizeDailyPlanAndWait(dailyPlanId, loadOptimizationPreset(), onProgress);
 }
 
 export function loadDailyPlanForDate(operationDate: string): Promise<DailyPlan> {

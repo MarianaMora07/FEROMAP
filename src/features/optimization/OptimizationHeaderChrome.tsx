@@ -11,6 +11,7 @@ import {
   optimizationState,
   refreshWeekCalendar,
   selectOperationDate,
+  cancelOptimization,
 } from '../../core/stores/optimizationStore';
 import { shiftWeek } from '../../core/planning/dailyPlanningUx';
 import { monitoringHref, optimizationHref } from '../../core/planning/operationalLinks';
@@ -108,6 +109,16 @@ export function OptimizationHeaderBar() {
           {stepChipLabel()}
         </button>
         <div class="flex items-center gap-1.5">
+          <Show when={optimizationState.isOptimizing}>
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid="optimization-cancel-toolbar"
+              onClick={() => void cancelOptimization()}
+            >
+              Cancelar
+            </Button>
+          </Show>
           <Button
             variant="gradient"
             size="sm"

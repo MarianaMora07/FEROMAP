@@ -1,0 +1,34 @@
+[Unit]
+Description=FEROMAP — stack Podman/Docker Compose al arranque (EC2 stop/start)
+Documentation=file://__FEROMAP_ROOT__/docs/auto-start.md
+After=network-online.target
+Wants=network-online.target
+# Podman rootful (Debian/Ubuntu con socket de sistema)
+After=podman.service podman.socket
+Wants=podman.service
+# Docker (si se usa en lugar de Podman, descomenta la línea siguiente)
+# After=docker.service
+# Wants=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Sustituido por install-auto-start.sh con el usuario de deploy real
+User=__FEROMAP_USER__
+Group=__FEROMAP_GROUP__
+WorkingDirectory=__FEROMAP_ROOT__
+Environment=COMPOSE_ENV=prod
+EnvironmentFile=-/etc/default/feromap
+# Rootless Podman: ruta del socket del usuario (install script rellena %U)
+Environment=XDG_RUNTIME_DIR=/run/user/__FEROMAP_UID__
+ExecStart=__FEROMAP_ROOT__/scripts/boot-stack.sh start
+ExecStop=__FEROMAP_ROOT__/scripts/boot-stack.sh stop
+TimeoutStartSec=900
+# Reintentos acotados si falla el arranque (no bucle infinito)
+Restart=on-failure
+RestartSec=45
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Install]
+WantedBy=multi-user.target

@@ -36,3 +36,7 @@ Queda claro cuándo usar Simulación (evaluar escenarios / defensa) y cuándo Op
 2. Ejecutar desde Optimización → aparece en historial operativo; enlace a Simulación para escenarios de tesis.
 3. Banners cruzados visibles en ambas pantallas.
 4. Despachar solo disponible en Optimización tras generar ruta.
+
+---
+
+> **Nota de numeración:** el roadmap **post-grado / producción** (OR-Tools, SSE, tráfico live, etc.) está en [../post-grado/README.md](../post-grado/README.md), no en esta carpeta `fase-5`.

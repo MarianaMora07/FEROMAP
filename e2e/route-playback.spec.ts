@@ -16,7 +16,7 @@ test.describe('Route playback — optimización', () => {
     await expect(generateButton).toBeVisible();
     await generateButton.click();
 
-    await expect(page.getByText('Ruta óptima encontrada')).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByText('Mejor ruta encontrada (ACO)')).toBeVisible({ timeout: 45_000 });
 
     const simulateButton = page.getByTestId('optimization-simulate-route');
     await expect(simulateButton).toBeVisible({ timeout: 15_000 });
@@ -41,7 +41,7 @@ test.describe('Route playback — optimización', () => {
       timeout: 45_000,
     });
     await page.getByRole('button', { name: 'Generar ruta operativa' }).click();
-    await expect(page.getByText('Ruta óptima encontrada')).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByText('Mejor ruta encontrada (ACO)')).toBeVisible({ timeout: 45_000 });
 
     await page.goto('/optimization?playback=1', { waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('optimization-playback-panel')).toBeVisible({ timeout: 20_000 });
