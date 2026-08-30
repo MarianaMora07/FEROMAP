@@ -6,6 +6,7 @@ import {
   Map,
   MapPin,
   Truck,
+  Users,
   Trash2,
   Brain,
   Beaker,
@@ -17,7 +18,7 @@ import {
   CalendarDays,
 } from 'lucide-solid';
 import { authUser } from '../../core/stores/authStore';
-import { navItemsForRole, isOperationalSupervisor, type NavItemDef } from '../../core/auth/permissions';
+import { isOperationalSupervisor, sidebarNavLayout } from '../../core/auth/permissions';
 import { SidebarHeader } from './sidebar/SidebarHeader';
 import { SidebarNavLink } from './sidebar/SidebarNavLink';
 import { SidebarCollapsibleGroup } from './sidebar/SidebarCollapsibleGroup';
@@ -33,6 +34,7 @@ const NAV_ICONS: Record<string, typeof LayoutDashboard> = {
   '/planning/history': History,
   '/map': MapPin,
   '/vehicles': Truck,
+  '/drivers': Users,
   '/collection-points': Trash2,
   '/simulation': Brain,
   '/demostracion': Beaker,
@@ -43,35 +45,13 @@ const NAV_ICONS: Record<string, typeof LayoutDashboard> = {
   '/alerts': AlertTriangle,
 };
 
-const SECTION_GROUPS: Record<string, string[]> = {
-  'Análisis': ['/simulation', '/demostracion'],
-  'Operación': ['/planning', '/optimization', '/planning/history'],
-  'Resultados': ['/reports', '/analytics'],
-};
-
-const TOP_LEVEL_HREFS = new Set(['/', '/map', '/alerts', '/operator']);
-
 interface SidebarProps {
   open: boolean;
 }
 
 export function Sidebar(props: SidebarProps) {
   const location = useLocation();
-  const nav = createMemo(() => navItemsForRole(authUser()?.role));
-
-  const topLevel = createMemo(() =>
-    nav().main.filter((item) => TOP_LEVEL_HREFS.has(item.href)),
-  );
-
-  const groupedSections = createMemo(() => {
-    const items = nav().main;
-    return Object.entries(SECTION_GROUPS)
-      .map(([label, hrefs]) => ({
-        label,
-        items: items.filter((item) => hrefs.includes(item.href)),
-      }))
-      .filter((section) => section.items.length > 0);
-  });
+  const layout = createMemo(() => sidebarNavLayout(authUser()?.role));
 
   return (
     <aside
@@ -84,7 +64,7 @@ export function Sidebar(props: SidebarProps) {
       <SidebarHeader />
 
       <nav class="sidebar-nav-scroll flex-1 space-y-1 overflow-y-auto px-3 py-3" aria-label="Módulos">
-        <For each={topLevel()}>
+        <For each={layout().primary}>
           {(item) => {
             const Icon = NAV_ICONS[navHrefPath(item.href)] ?? LayoutDashboard;
             const active = () => isNavItemActive(item.href, location.pathname);
@@ -102,7 +82,7 @@ export function Sidebar(props: SidebarProps) {
 
         <div class="my-2 border-t border-sidebar-divider" />
 
-        <For each={groupedSections()}>
+        <For each={layout().sections}>
           {(section) => (
             <SidebarCollapsibleGroup
               label={section.label}
