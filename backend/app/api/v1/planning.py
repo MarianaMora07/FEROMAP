@@ -22,6 +22,7 @@ from app.services.planning_service import (
     cancel_pending_visit,
     close_daily_plan,
     compare_plan_versions,
+    consolidate_daily_points,
     defer_uncovered_points_from_daily_plan,
     create_weekly_plan_draft,
     get_current_weekly_plan,

@@ -49,10 +49,40 @@ export interface NavItemDef {
   description?: string;
   /** Muestra un encabezado de sección antes de este ítem */
   sectionBefore?: string;
+  /** Enlace visible siempre en la parte superior del sidebar */
+  sidebarPrimary?: boolean;
+}
+
+export const SIDEBAR_SECTION_GROUPS: Record<string, readonly string[]> = {
+  Análisis: ['/simulation', '/demostracion'],
+  Operación: ['/planning', '/optimization', '/planning/history'],
+  Resultados: ['/reports', '/analytics'],
+};
+
+export interface SidebarNavSection {
+  label: string;
+  items: NavItemDef[];
+}
+
+export function sidebarNavLayout(role: UserRole | undefined): {
+  primary: NavItemDef[];
+  sections: SidebarNavSection[];
+} {
+  const { main } = navItemsForRole(role);
+
+  return {
+    primary: main.filter((item) => item.sidebarPrimary),
+    sections: Object.entries(SIDEBAR_SECTION_GROUPS)
+      .map(([label, hrefs]) => ({
+        label,
+        items: main.filter((item) => hrefs.includes(item.href)),
+      }))
+      .filter((section) => section.items.length > 0),
+  };
 }
 
 export const MAIN_NAV_ITEMS: NavItemDef[] = [
-  { href: '/', label: 'Dashboard', roles: ['administrador', 'planificador', 'conductor'] },
+  { href: '/', label: 'Dashboard', sidebarPrimary: true, roles: ['administrador', 'planificador', 'conductor'] },
   {
     href: '/simulation',
     label: 'Simulación de escenarios',
@@ -66,9 +96,9 @@ export const MAIN_NAV_ITEMS: NavItemDef[] = [
     description: 'Cómo funciona el algoritmo ACO',
     roles: ['administrador', 'planificador'],
   },
-  { href: '/map', label: 'Mapa GIS', roles: ['administrador', 'planificador', 'conductor'] },
-  { href: '/vehicles', label: 'Vehículos', roles: ['administrador', 'planificador'] },
-  { href: '/drivers', label: 'Conductores', roles: ['administrador', 'planificador'] },
+  { href: '/map', label: 'Mapa GIS', sidebarPrimary: true, roles: ['administrador', 'planificador', 'conductor'] },
+  { href: '/vehicles', label: 'Vehículos', sidebarPrimary: true, roles: ['administrador', 'planificador'] },
+  { href: '/drivers', label: 'Conductores', sidebarPrimary: true, roles: ['administrador', 'planificador'] },
   {
     href: '/collection-points',
     label: 'Puntos de Recolección',
@@ -112,7 +142,7 @@ export const MAIN_NAV_ITEMS: NavItemDef[] = [
     roles: ['administrador', 'planificador'],
   },
   { href: '/analytics', label: 'Analítica', roles: ['administrador', 'planificador'] },
-  { href: '/alerts', label: 'Alertas', roles: ['administrador', 'planificador', 'conductor'] },
+  { href: '/alerts', label: 'Alertas', sidebarPrimary: true, roles: ['administrador', 'planificador', 'conductor'] },
 ];
 
 /** Nav lateral reducida para residentes (vista ciudadano). */
@@ -122,40 +152,45 @@ export const RESIDENT_MAIN_NAV_ITEMS: NavItemDef[] = [
     label: 'Mi Recolección',
     description: 'Horario y estado en tu sector',
     sectionBefore: 'Mi zona',
+    sidebarPrimary: true,
     roles: ['residente'],
   },
   {
     href: '/map?scope=sector',
     label: 'Mapa mi sector',
     description: 'Camión y contenedores',
+    sidebarPrimary: true,
     roles: ['residente'],
   },
   {
     href: '/collection-points',
     label: 'Puntos de recolección',
     description: 'Contenedores de tu barrio',
+    sidebarPrimary: true,
     roles: ['residente'],
   },
   {
     href: '/alerts?scope=sector',
     label: 'Alertas',
     description: 'Avisos de tu sector',
+    sidebarPrimary: true,
     roles: ['residente'],
   },
 ];
 
 /** Nav lateral reducida para conductores en campo. */
 export const OPERATOR_MAIN_NAV_ITEMS: NavItemDef[] = [
-  { href: '/', label: 'Dashboard', roles: ['conductor'] },
+  { href: '/', label: 'Dashboard', sidebarPrimary: true, roles: ['conductor'] },
   {
     href: '/operator',
     label: 'Mi operación',
     description: 'Tu ruta en campo',
     sectionBefore: 'Campo',
+    sidebarPrimary: true,
     roles: ['conductor'],
   },
-  { href: '/map', label: 'Mapa GIS', roles: ['conductor'] },
-  { href: '/alerts', label: 'Alertas', roles: ['conductor'] },
+  { href: '/map', label: 'Mapa GIS', sidebarPrimary: true, roles: ['conductor'] },
+  { href: '/alerts', label: 'Alertas', sidebarPrimary: true, roles: ['conductor'] },
 ];
 
 export const BOTTOM_NAV_ITEMS: NavItemDef[] = [

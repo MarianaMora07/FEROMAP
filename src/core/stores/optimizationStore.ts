@@ -88,7 +88,7 @@ interface OptimizationState {
   error: string | null;
 }
 
-const [state, setState] = createStore<OptimizationState>({
+const [optimizationState, setState] = createStore<OptimizationState>({
   context: null,
   preset: loadOptimizationPreset(),
   dailyPlan: null,
@@ -114,6 +114,21 @@ const [state, setState] = createStore<OptimizationState>({
   playbackOpen: false,
   error: null,
 });
+
+/** Flag de cancelación legible desde callbacks pasados a otros módulos (p. ej. polling). */
+let optimizationCancelRequested = false;
+
+function resetOptimizationCancelFlag(): void {
+  optimizationCancelRequested = false;
+}
+
+function requestOptimizationCancel(): void {
+  optimizationCancelRequested = true;
+}
+
+function isOptimizationRunCancelled(): boolean {
+  return optimizationCancelRequested;
+}
 
 function resolveVehicleCodesFromState(): string[] {
   if (!optimizationState.kpis) return [];
@@ -144,6 +159,7 @@ function applyOptimizationProgress(
 
 export async function cancelOptimization(): Promise<void> {
   if (!optimizationState.isOptimizing) return;
+  requestOptimizationCancel();
   setState({ cancelOptimizationRequested: true });
 }
 
@@ -164,7 +180,7 @@ async function resolveWeeklyPlanApproved(operationDate: string): Promise<boolean
 let contextLoaded = false;
 
 export async function refreshWeekCalendar(weekStart?: string): Promise<void> {
-  const start = weekStart ?? mondayOfDate(state.preset.operationDate);
+  const start = weekStart ?? mondayOfDate(optimizationState.preset.operationDate);
   const days = weekDaysFromMonday(start);
   const end = days[6]!;
   setState({ isLoadingCalendar: true, weekStartDate: start });
@@ -178,7 +194,7 @@ export async function refreshWeekCalendar(weekStart?: string): Promise<void> {
     );
     const pendingByDate = new Map<string, number>();
     for (const visit of pending.items) {
-      const target = visit.targetOperationDate ?? state.preset.operationDate;
+      const target = visit.targetOperationDate ?? optimizationState.preset.operationDate;
       pendingByDate.set(target, (pendingByDate.get(target) ?? 0) + 1);
     }
     setState({
@@ -226,7 +242,7 @@ async function hydrateOptimizationFromDailyPlan(dailyPlan: DailyPlan): Promise<v
     setState({
       kpis: detail.kpis,
       lastSimulationId: detail.id,
-      preset: { ...state.preset, scenarioId: detail.scenarioId },
+      preset: { ...optimizationState.preset, scenarioId: detail.scenarioId },
       acoConvergence: detail.kpis.engineMetrics?.acoConvergence ?? [],
     });
     showOptimizedRoute(true);
@@ -244,8 +260,8 @@ function assertPlausibleOptimizationResult(kpis: KpiMetrics, pointCount: number)
 }
 
 export async function initOptimizationPage(operationDate?: string): Promise<void> {
-  const dateValue = operationDate ?? state.preset.operationDate;
-  if (contextLoaded && state.context && state.dailyPlan?.operationDate === dateValue) return;
+  const dateValue = operationDate ?? optimizationState.preset.operationDate;
+  if (contextLoaded && optimizationState.context && optimizationState.dailyPlan?.operationDate === dateValue) return;
   setState({ isLoadingContext: true, isLoadingDailyPlan: true, error: null });
   try {
     const [context, history, dailyPlan, weeklyPlanApproved] = await Promise.all([
@@ -260,11 +276,11 @@ export async function initOptimizationPage(operationDate?: string): Promise<void
       dailyPlan,
       weeklyPlanApproved,
       preset: {
-        ...state.preset,
+        ...optimizationState.preset,
         operationDate: dateValue,
-        scenarioId: dailyPlan.scenarioId ?? state.preset.scenarioId,
+        scenarioId: dailyPlan.scenarioId ?? optimizationState.preset.scenarioId,
       },
-      lastSimulationId: dailyPlan.simulationId ?? state.lastSimulationId,
+      lastSimulationId: dailyPlan.simulationId ?? optimizationState.lastSimulationId,
       kpis: null,
     });
     if (dailyPlan.status === 'draft') {
@@ -272,7 +288,7 @@ export async function initOptimizationPage(operationDate?: string): Promise<void
     } else if (dailyPlan.simulationId) {
       await hydrateOptimizationFromDailyPlan(dailyPlan);
     }
-    saveOptimizationPreset(state.preset);
+    saveOptimizationPreset(optimizationState.preset);
     await refreshWeekCalendar(mondayOfDate(dateValue));
     contextLoaded = true;
   } catch (error) {
@@ -285,7 +301,7 @@ export async function initOptimizationPage(operationDate?: string): Promise<void
 }
 
 export function selectOperationDate(operationDate: string): void {
-  if (operationDate === state.preset.operationDate) return;
+  if (operationDate === optimizationState.preset.operationDate) return;
   contextLoaded = false;
   setState({
     lastResult: null,
@@ -306,7 +322,7 @@ export function closeOptimizationPlayback(): void {
 }
 
 export async function refreshDailyPlan(): Promise<void> {
-  const dateValue = state.preset.operationDate;
+  const dateValue = optimizationState.preset.operationDate;
   setState({ isLoadingDailyPlan: true, error: null });
   try {
     const dailyPlan = await openDailyPlanForDate(dateValue);
@@ -322,9 +338,9 @@ export async function refreshDailyPlan(): Promise<void> {
 }
 
 export function updateOptimizationPreset(patch: Partial<OptimizationPreset>): void {
-  const next = { ...state.preset, ...patch };
+  const next = { ...optimizationState.preset, ...patch };
   if (patch.constraints) {
-    next.constraints = { ...state.preset.constraints, ...patch.constraints };
+    next.constraints = { ...optimizationState.preset.constraints, ...patch.constraints };
   }
   setState('preset', next);
   saveOptimizationPreset(next);
@@ -339,8 +355,9 @@ export function setOptimizationScenario(scenarioId: ScenarioId): void {
 }
 
 export async function executeOptimization(): Promise<void> {
-  if (state.isOptimizing) return;
+  if (optimizationState.isOptimizing) return;
 
+  resetOptimizationCancelFlag();
   setState({
     isOptimizing: true,
     optimizationProgress: 0,
@@ -354,7 +371,7 @@ export async function executeOptimization(): Promise<void> {
     playbackOpen: false,
   });
 
-  const isCancelled = () => optimizationState.cancelOptimizationRequested;
+  const isCancelled = isOptimizationRunCancelled;
 
   try {
     if (useMocks) {
@@ -395,23 +412,23 @@ export async function executeOptimization(): Promise<void> {
           },
         ]);
       }
-      const routes = getScenarioRoutes(state.preset.scenarioId);
+      const routes = getScenarioRoutes(optimizationState.preset.scenarioId);
       await loadRoutesOnMap(routes);
-      const kpis = kpiByScenario[state.preset.scenarioId];
-      const pointCount = state.dailyPlan?.finalPointIds?.length ?? state.context?.pointsToVisit ?? 0;
+      const kpis = kpiByScenario[optimizationState.preset.scenarioId];
+      const pointCount = optimizationState.dailyPlan?.finalPointIds?.length ?? optimizationState.context?.pointsToVisit ?? 0;
       assertPlausibleOptimizationResult(kpis, pointCount);
       setState({
         kpis,
         lastSimulationId: 1,
-        dailyPlan: state.dailyPlan
-          ? { ...state.dailyPlan, status: 'optimized', simulationId: 1 }
+        dailyPlan: optimizationState.dailyPlan
+          ? { ...optimizationState.dailyPlan, status: 'optimized', simulationId: 1 }
           : null,
         lastResult: {
           simulationId: 1,
-          scenarioId: state.preset.scenarioId,
-          scenario: state.context?.scenarios.find((s) => s.id === state.preset.scenarioId) ?? {
-            id: state.preset.scenarioId,
-            label: state.preset.scenarioId,
+          scenarioId: optimizationState.preset.scenarioId,
+          scenario: optimizationState.context?.scenarios.find((s) => s.id === optimizationState.preset.scenarioId) ?? {
+            id: optimizationState.preset.scenarioId,
+            label: optimizationState.preset.scenarioId,
             description: '',
             trafficMultiplier: 1,
             fillLevelBoost: 0,
@@ -427,20 +444,20 @@ export async function executeOptimization(): Promise<void> {
               features: routes.features.filter((feature) => feature.properties.type === 'optimized'),
             },
           },
-          logs: state.logs,
+          logs: optimizationState.logs,
         },
       });
       await loadDashboardData();
     } else {
-      const dailyPlanId = state.dailyPlan?.id;
+      const dailyPlanId = optimizationState.dailyPlan?.id;
       if (!dailyPlanId) {
         throw new Error('No hay plan del día cargado');
       }
       await refreshDailyPlan();
       const result = await runOptimization(
         {
-          scenarioId: state.preset.scenarioId,
-          preset: state.preset,
+          scenarioId: optimizationState.preset.scenarioId,
+          preset: optimizationState.preset,
           dailyPlanId,
         },
         (update) =>
@@ -452,7 +469,7 @@ export async function executeOptimization(): Promise<void> {
       );
 
       const pointCount = Math.max(
-        state.dailyPlan?.finalPointIds?.length ?? 0,
+        optimizationState.dailyPlan?.finalPointIds?.length ?? 0,
         result.kpis.containersServed ?? 0,
         result.servedPointCodes?.length ?? 0,
       );
@@ -468,8 +485,8 @@ export async function executeOptimization(): Promise<void> {
         optimizationPhase: 'listo',
         acoConvergence:
           result.kpis.engineMetrics?.acoConvergence ?? optimizationState.acoConvergence,
-        dailyPlan: state.dailyPlan
-          ? { ...state.dailyPlan, status: 'optimized', simulationId: result.simulationId }
+        dailyPlan: optimizationState.dailyPlan
+          ? { ...optimizationState.dailyPlan, status: 'optimized', simulationId: result.simulationId }
           : null,
       });
 
@@ -481,8 +498,8 @@ export async function executeOptimization(): Promise<void> {
 
     showOptimizedRoute(true);
     setState({ optimizationProgress: 100 });
-    if (state.lastSimulationId != null) {
-      recordOperationalRun(state.lastSimulationId);
+    if (optimizationState.lastSimulationId != null) {
+      recordOperationalRun(optimizationState.lastSimulationId);
     }
     await refreshOptimizationHistory();
     await refreshWeekCalendar();
@@ -490,7 +507,7 @@ export async function executeOptimization(): Promise<void> {
     if (error instanceof OptimizationCancelledError) {
       setState({
         logs: [
-          ...state.logs,
+          ...optimizationState.logs,
           {
             id: `log-cancel-${Date.now()}`,
             timestamp: new Date().toLocaleTimeString('es-VE'),
@@ -506,6 +523,7 @@ export async function executeOptimization(): Promise<void> {
     });
     throw error;
   } finally {
+    resetOptimizationCancelFlag();
     setState({
       isOptimizing: false,
       activeOptimizationJobId: null,
@@ -515,7 +533,7 @@ export async function executeOptimization(): Promise<void> {
 }
 
 export async function loadOptimizationFromHistory(simulationId: number): Promise<void> {
-  if (state.isOptimizing) return;
+  if (optimizationState.isOptimizing) return;
 
   setState({ isOptimizing: true, optimizationProgress: 0, logs: [], error: null });
   try {
@@ -525,7 +543,7 @@ export async function loadOptimizationFromHistory(simulationId: number): Promise
     setState({
       kpis: detail.kpis,
       lastSimulationId: detail.id,
-      preset: { ...state.preset, scenarioId: detail.scenarioId },
+      preset: { ...optimizationState.preset, scenarioId: detail.scenarioId },
       acoConvergence: detail.kpis.engineMetrics?.acoConvergence ?? [],
       logs: [
         {
@@ -549,8 +567,8 @@ export async function loadOptimizationFromHistory(simulationId: number): Promise
 }
 
 export async function dispatchOptimizationResult(): Promise<void> {
-  if (state.isDispatching) return;
-  if (state.lastSimulationId == null && !state.dailyPlan?.id) {
+  if (optimizationState.isDispatching) return;
+  if (optimizationState.lastSimulationId == null && !optimizationState.dailyPlan?.id) {
     throw new Error('No hay rutas optimizadas para despachar');
   }
 
@@ -558,15 +576,15 @@ export async function dispatchOptimizationResult(): Promise<void> {
   try {
     const result = useMocks
       ? { dispatchedRouteIds: [1, 2], count: 2 }
-      : state.dailyPlan?.id
-        ? await dispatchDailyPlanRoutes(state.dailyPlan.id)
+      : optimizationState.dailyPlan?.id
+        ? await dispatchDailyPlanRoutes(optimizationState.dailyPlan.id)
         : await dispatchOptimizationRoutes();
 
     const vehicleCodes = resolveVehicleCodesFromState();
     const fallbackCodes =
       vehicleCodes.length > 0
         ? vehicleCodes
-        : (state.context?.assignableVehicles ?? []).slice(0, result.count).map((vehicle) => vehicle.id);
+        : (optimizationState.context?.assignableVehicles ?? []).slice(0, result.count).map((vehicle) => vehicle.id);
 
     setState({
       lastDispatch: {
@@ -575,9 +593,9 @@ export async function dispatchOptimizationResult(): Promise<void> {
         vehicleCodes: fallbackCodes,
         dismissed: false,
       },
-      dailyPlan: state.dailyPlan ? { ...state.dailyPlan, status: 'dispatched' } : null,
+      dailyPlan: optimizationState.dailyPlan ? { ...optimizationState.dailyPlan, status: 'dispatched' } : null,
       logs: [
-        ...state.logs,
+        ...optimizationState.logs,
         {
           id: `log-dispatch-${Date.now()}`,
           timestamp: new Date().toLocaleTimeString('es-VE'),
@@ -613,16 +631,16 @@ function delay(ms: number) {
 }
 
 export async function closeOptimizationDay(): Promise<void> {
-  if (!state.dailyPlan?.id) {
+  if (!optimizationState.dailyPlan?.id) {
     throw new Error('No hay plan del día para cerrar');
   }
-  const result = await closeDailyPlanForId(state.dailyPlan.id);
+  const result = await closeDailyPlanForId(optimizationState.dailyPlan.id);
   setState({
-    dailyPlan: state.dailyPlan
-      ? { ...state.dailyPlan, status: result.status, closedAt: result.closedAt }
+    dailyPlan: optimizationState.dailyPlan
+      ? { ...optimizationState.dailyPlan, status: result.status, closedAt: result.closedAt }
       : null,
     logs: [
-      ...state.logs,
+      ...optimizationState.logs,
       {
         id: `log-close-${Date.now()}`,
         timestamp: new Date().toLocaleTimeString('es-VE'),
@@ -634,4 +652,4 @@ export async function closeOptimizationDay(): Promise<void> {
   await refreshWeekCalendar();
 }
 
-export { state as optimizationState };
+export { optimizationState };

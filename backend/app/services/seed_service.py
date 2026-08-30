@@ -80,24 +80,19 @@ def nearest_collection_point_id(
 
 
 def clear_tables(session: Session) -> None:
-    session.execute(delete(PlanVersion))
-    session.execute(delete(PendingVisit))
-    session.execute(delete(DailyPlan))
-    session.execute(delete(WeeklyPlanDay))
-    session.execute(delete(WeeklyPlan))
-    session.execute(delete(VisitSchedule))
-    session.execute(delete(AlertActivity))
-    session.execute(delete(SystemAlert))
-    session.execute(delete(RouteWaypoint))
-    session.execute(delete(VehicleIncident))
-    session.execute(delete(OptimizedRoute))
-    session.execute(delete(Simulation))
-    session.execute(delete(CollectionPoint))
-    session.execute(delete(Vehicle))
-    session.execute(delete(Driver))
-    session.execute(delete(User))
-    session.execute(delete(Sector))
-    session.execute(delete(Parish))
+    from sqlalchemy import text
+    session.execute(text("UPDATE users SET sector_id = NULL"))
+    for tbl in [
+        "driver_notifications", "user_preferences", "user_sessions",
+        "plan_versions", "alert_activities", "system_alerts",
+        "pending_visits", "vehicle_incidents", "route_waypoints",
+        "visit_schedules", "optimized_routes", "daily_plans",
+        "weekly_plan_days", "weekly_plans", "simulations",
+        "collection_points", "vehicles",
+        "sectors",
+        "drivers", "parishes", "users",
+    ]:
+        session.execute(text(f"DELETE FROM {tbl}"))
     session.commit()
 
 
