@@ -50,6 +50,7 @@ export function weeklyPlanStepTitle(step: number): string {
 }
 
 export function weeklyPlanHasScheduledPoints(plan: WeeklyPlan | null | undefined): boolean {
+  if (plan?.caseStudyId) return true;
   return Boolean(plan?.days?.some((day) => day.collectionPointIds.length > 0));
 }
 

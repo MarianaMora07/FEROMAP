@@ -92,7 +92,7 @@ def test_inserts_landfill_when_capacity_full():
         landfill_idx=landfill_idx,
         shift_budget_sec=SHIFT_BUDGET_12H,
         unload_sec=UNLOAD_SEC,
-        service_secs=[300.0],
+        service_secs=[1200.0],
     )
 
     assert routes

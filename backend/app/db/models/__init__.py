@@ -1,3 +1,4 @@
+from app.db.models.case_study import CaseStudy, CaseStudyPoint
 from app.db.models.collection_point import CollectionPoint
 from app.db.models.driver_notification import DriverNotification
 from app.db.models.daily_plan import DailyPlan
@@ -23,6 +24,8 @@ from app.db.models.weekly_plan import WeeklyPlan, WeeklyPlanDay
 __all__ = [
     "Parish",
     "Sector",
+    "CaseStudy",
+    "CaseStudyPoint",
     "RoadNode",
     "RoadSegment",
     "CollectionPoint",

@@ -1,11 +1,14 @@
-import { For, Show } from 'solid-js';
+import { For, Show, createEffect, createResource, createSignal } from 'solid-js';
 import { A } from '@solidjs/router';
 import { ArrowRight, BarChart3, Download, Eye, FileText } from 'lucide-solid';
-import { Card, CardHeader } from '../../design-system/components';
+import { Card, CardHeader, SelectField, Badge } from '../../design-system/components';
 import { downloadReport } from '../../core/api/reports';
-import { simulationState } from '../../core/stores/simulationStore';
+import { fetchCaseStudies } from '../../core/api/caseStudies';
+import { refreshSimulationHistory, simulationState } from '../../core/stores/simulationStore';
 import { analyticsHref, reportsHref } from '../../core/utils/simulationLinks';
 import { PlanningStatusBadge } from '../planning/PlanningStatusBadge';
+
+export type SimulationHistoryFilter = 'all' | 'legacy' | number;
 
 interface SimulationHistoryPanelProps {
   error: string | null;
@@ -13,25 +16,72 @@ interface SimulationHistoryPanelProps {
   onView: (simulationId: number) => void;
 }
 
+function resolveFilterParams(filter: SimulationHistoryFilter): {
+  caseStudyId?: number;
+  legacyOnly?: boolean;
+} {
+  if (filter === 'legacy') return { legacyOnly: true };
+  if (typeof filter === 'number') return { caseStudyId: filter };
+  return {};
+}
+
 export function SimulationHistoryPanel(props: SimulationHistoryPanelProps) {
+  const [filter, setFilter] = createSignal<SimulationHistoryFilter>('all');
+  const [cases] = createResource(() => fetchCaseStudies({ limit: 100 }).then((response) => response.items));
+
+  createEffect(() => {
+    void refreshSimulationHistory(resolveFilterParams(filter()));
+  });
+
+  const handleFilterChange = (event: Event) => {
+    const raw = (event.currentTarget as HTMLSelectElement).value;
+    if (raw === 'all') setFilter('all');
+    else if (raw === 'legacy') setFilter('legacy');
+    else setFilter(Number(raw));
+  };
+
+  const filterSelectValue = () => {
+    const current = filter();
+    if (current === 'all') return 'all';
+    if (current === 'legacy') return 'legacy';
+    return String(current);
+  };
+
   return (
     <Card>
       <CardHeader
         title="Historial de simulaciones"
         subtitle="Escenarios de simulación ejecutados — no incluye planes operativos del día"
       />
+      <div class="mb-4 flex flex-wrap items-end gap-3">
+        <div class="min-w-[240px] flex-1">
+          <SelectField label="Filtrar por caso" value={filterSelectValue()} onChange={handleFilterChange}>
+            <option value="all">Todos los registros</option>
+            <option value="legacy">Solo modo legacy (sin caso)</option>
+            <For each={cases() ?? []}>
+              {(item) => <option value={item.id}>{item.code}</option>}
+            </For>
+          </SelectField>
+        </div>
+        <p class="pb-3 text-xs text-text-muted">{simulationState.history.length} resultado(s)</p>
+      </div>
       <Show when={props.error}>
         <p class="mb-3 text-sm text-red-600">{props.error}</p>
       </Show>
       <Show
         when={simulationState.history.length > 0}
-        fallback={<p class="py-8 text-center text-sm text-text-muted">Aún no hay simulaciones registradas.</p>}
+        fallback={
+          <p class="py-8 text-center text-sm text-text-muted">
+            No hay simulaciones para el filtro seleccionado.
+          </p>
+        }
       >
         <div class="overflow-x-auto">
           <table class="w-full min-w-140 text-sm">
             <thead>
               <tr class="border-b border-border text-left text-[10px] uppercase tracking-wide text-text-muted dark:border-dark-border">
                 <th class="pb-2 pr-3 font-semibold">Escenario</th>
+                <th class="pb-2 pr-3 font-semibold">Caso</th>
                 <th class="pb-2 pr-3 font-semibold">Fecha</th>
                 <th class="pb-2 pr-3 font-semibold">Tipo</th>
                 <th class="pb-2 pr-3 font-semibold">Resultado</th>
@@ -44,6 +94,18 @@ export function SimulationHistoryPanel(props: SimulationHistoryPanelProps) {
                 {(row) => (
                   <tr>
                     <td class="py-2.5 pr-3 font-medium text-text-primary dark:text-white">{row.name}</td>
+                    <td class="py-2.5 pr-3">
+                      <Show
+                        when={row.caseStudyCode}
+                        fallback={<Badge variant="default">Legacy</Badge>}
+                      >
+                        {(code) => (
+                          <Badge variant="success" title={row.caseStudyName ?? undefined}>
+                            Caso: {code()}
+                          </Badge>
+                        )}
+                      </Show>
+                    </td>
                     <td class="py-2.5 pr-3 text-xs text-text-muted">{row.datetime}</td>
                     <td class="py-2.5 pr-3 text-xs text-text-secondary">
                       {row.contingency ? 'Contingencia' : 'Simulación'}
@@ -60,7 +122,7 @@ export function SimulationHistoryPanel(props: SimulationHistoryPanelProps) {
                           type="button"
                           class="flex h-7 w-7 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover hover:text-fero-blue disabled:opacity-50"
                           aria-label={`Ver simulación #${row.id}`}
-                          title="Ver resultados"
+                          title="Ver resultados y playback"
                           disabled={props.isLoading}
                           onClick={() => props.onView(row.id)}
                         >

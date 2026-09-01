@@ -26,5 +26,9 @@
   {
     "message": "Ruta optimizada: -29% distancia, -31% tiempo estimado",
     "type": "success"
+  },
+  {
+    "message": "Cálculo completado en 8.4 s (ACO: 2.1 s · 12×20)",
+    "type": "success"
   }
 ]

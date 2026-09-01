@@ -33,20 +33,20 @@ def test_shift_budget_rejects_invalid_window():
 
 
 def test_route_operational_elapsed_includes_all_components():
-    # viaje 7200 + 5×300 paradas + 2×900 vertedero = 7200+1500+1800 = 10500
+    # viaje 7200 + 5×1200 paradas + 2×900 vertedero = 7200+6000+1800 = 15000
     elapsed = route_operational_elapsed_seconds(
         travel_seconds=7200,
         collection_stop_count=5,
-        service_seconds_per_stop=300,
+        service_seconds_per_stop=1200,
         landfill_visit_count=2,
     )
-    assert elapsed == 10500
+    assert elapsed == 15000
 
 
 def test_can_fit_stop_in_shift():
     budget = shift_budget_seconds()
-    assert can_fit_stop_in_shift(40000, 1200, 300, budget) is True
-    assert can_fit_stop_in_shift(43000, 500, 300, budget) is False
+    assert can_fit_stop_in_shift(40000, 1200, 1200, budget) is True
+    assert can_fit_stop_in_shift(43000, 500, 1200, budget) is False
 
 
 def test_shift_utilization_pct_caps_at_100():
@@ -59,11 +59,11 @@ def test_breakdown_includes_landfill_and_shift():
     breakdown = build_landfill_route_breakdown(
         travel_seconds=7200,
         collection_stop_count=5,
-        service_seconds_per_stop=300,
+        service_seconds_per_stop=1200,
         landfill_visit_count=2,
     )
     data = breakdown.to_dict()
     assert data["landfillVisitCount"] == 2
     assert data["unloadSecondsTotal"] == 1800
     assert data["shiftBudgetSeconds"] == 43200
-    assert data["elapsedSeconds"] == 10500
+    assert data["elapsedSeconds"] == 15000

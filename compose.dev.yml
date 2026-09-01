@@ -30,6 +30,7 @@ services:
       - "127.0.0.1:${API_PORT:-8000}:8000"
     volumes:
       - ./backend:/app
+      - ./docs:/app/docs
       - ./data:/app/data:ro
       - ./data/cache:/app/data/cache
       - ./data/uploads:/app/data/uploads

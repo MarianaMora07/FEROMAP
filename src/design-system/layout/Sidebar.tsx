@@ -2,6 +2,7 @@ import { For, Show, createMemo } from 'solid-js';
 import { useLocation } from '@solidjs/router';
 import {
   History,
+  Layers,
   LayoutDashboard,
   Map,
   MapPin,
@@ -37,6 +38,7 @@ const NAV_ICONS: Record<string, typeof LayoutDashboard> = {
   '/drivers': Users,
   '/collection-points': Trash2,
   '/simulation': Brain,
+  '/case-studies': Layers,
   '/demostracion': Beaker,
   '/monitoring': Radio,
   '/reports': FileText,

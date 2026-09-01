@@ -3,7 +3,12 @@ import { Button, SelectField } from '../../design-system/components';
 import { mergeWeekCalendarDays } from '../../core/planning/weeklyPlanCalendar';
 import type { WeeklyPlan } from '../../core/api/planning';
 import type { ScenarioId } from '../../data/types/simulation';
-import { updateWeeklyPlanDay, weeklyPlanState } from '../../core/stores/weeklyPlanStore';
+import {
+  applyWeeklyCaseStudy,
+  updateWeeklyPlanDay,
+  weeklyPlanState,
+} from '../../core/stores/weeklyPlanStore';
+import { CaseStudySelector } from './CaseStudySelector';
 import {
   WeeklyPlanDayEditorDrawer,
   WeeklyPlanMissingPointsAlert,
@@ -25,6 +30,7 @@ export function WeeklyPlanConfigurePanel(props: WeeklyPlanConfigurePanelProps) {
 
   const calendarDays = createMemo(() => mergeWeekCalendarDays(props.plan.weekStartDate, props.plan.days ?? []));
   const selectedDay = createMemo(() => calendarDays().find((day) => day.weekday === selectedWeekday()) ?? null);
+  const caseStudyLinked = () => Boolean(props.plan.caseStudyId);
 
   const openDay = (weekday: number) => {
     setSelectedWeekday(weekday);
@@ -33,6 +39,21 @@ export function WeeklyPlanConfigurePanel(props: WeeklyPlanConfigurePanelProps) {
 
   return (
     <div class="space-y-4" data-testid="weekly-plan-step-1">
+      <CaseStudySelector
+        value={weeklyPlanState.draftCaseStudy}
+        disabled={!props.editable}
+        onChange={(detail) => {
+          void applyWeeklyCaseStudy(detail);
+        }}
+      />
+      <Show when={caseStudyLinked()}>
+        <p class="text-xs text-text-muted">
+          Los días laborables heredan los puntos activos del caso
+          {props.plan.caseStudyCode ? ` ${props.plan.caseStudyCode}` : ''}. Los overrides del caso se aplican al
+          validar y al optimizar cada día.
+        </p>
+      </Show>
+
       <div>
         <SelectField
           label="Condición de la semana"
@@ -45,7 +66,9 @@ export function WeeklyPlanConfigurePanel(props: WeeklyPlanConfigurePanelProps) {
         <p class="mt-1 text-xs text-text-muted">Se usa al validar y al abrir cada día en operación.</p>
       </div>
 
-      <WeeklyPlanMissingPointsAlert days={calendarDays()} />
+      <Show when={!caseStudyLinked()}>
+        <WeeklyPlanMissingPointsAlert days={calendarDays()} />
+      </Show>
 
       <WeeklyPlanWeekCalendar
         days={calendarDays()}
@@ -58,6 +81,7 @@ export function WeeklyPlanConfigurePanel(props: WeeklyPlanConfigurePanelProps) {
         open={drawerOpen()}
         day={selectedDay()}
         editable={props.editable}
+        caseStudyLinked={caseStudyLinked()}
         catalog={weeklyPlanState.collectionPoints}
         scenarios={props.scenarios}
         onClose={() => setDrawerOpen(false)}
@@ -76,7 +100,7 @@ export function WeeklyPlanConfigurePanel(props: WeeklyPlanConfigurePanelProps) {
             onClick={() => props.onAutofill()}
             data-testid="weekly-plan-primary-cta"
           >
-            Autocompletar desde frecuencias
+            {caseStudyLinked() ? 'Aplicar puntos del caso' : 'Autocompletar desde frecuencias'}
           </Button>
           <Button variant="outline" loading={weeklyPlanState.isSaving} onClick={() => props.onSaveDraft()}>
             Guardar borrador

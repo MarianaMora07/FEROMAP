@@ -96,8 +96,20 @@ phase0-baseline: _check
     {{compose}} exec api python -m scripts.phase0_baseline_metrics
 
 # Optimización real + tabla de planes por conductor (BD con seed, sin UI)
-optimization-driver-report scenario="normal":
-    bash scripts/optimization-driver-report.sh {{scenario}}
+optimization-driver-report *args:
+    bash scripts/optimization-driver-report.sh {{args}}
+
+# Reporte ACO acotado a un caso de estudio (Fase 12.7)
+case-study-report case_study_code *args:
+    bash scripts/case-study-report.sh {{case_study_code}} {{args}}
+
+# Evidencia comparativa casos demo → docs/fase-12/evidencia-casos-estudio.md
+phase12-evidence: _check
+    bash scripts/phase12-evidence.sh
+
+# Tests de aislamiento casos de estudio (Fase 12.7)
+test-case-study-isolation: _check
+    {{compose}} exec -T api pytest tests/test_case_study_isolation.py -v
 
 # Tests frontend: vitest + playwright (API en :8000, VITE_USE_MOCKS=true).
 test-frontend:

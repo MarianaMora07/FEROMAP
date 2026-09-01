@@ -9,6 +9,7 @@
 //   - Grafo vial (nodos de intersección y aristas/calles con soporte de bloqueo)
 //   - Catálogos de recolección (contenedores de basura, camiones y operadores)
 //   - Simulación y datos dinámicos (llenado, tráfico, vías bloqueadas)
+//   - Casos de estudio aislados (experimentos reproducibles, Fase 12)
 //   - Resultados del algoritmo de Inteligencia Artificial (rutas y waypoints)
 //   - Historial de simulaciones y KPIs comparativos
 //
@@ -113,6 +114,45 @@ Table collection_points {
   deleted_at timestamp [null]
 }
 
+// --- CASOS DE ESTUDIO (Fase 12 — ADR-005) ---
+
+// Experimento reproducible: subconjunto de puntos + defaults de simulación.
+// Distinto de scenario_id (clima/tráfico: normal, rain, saturated…).
+Table case_studies {
+  id integer [primary key, increment]
+  code varchar(64) [not null, unique] // Ej: CE-UNARE-NORTE, CE-MULTI-VIAJE
+  name varchar(255) [not null]
+  description text [null]
+  default_scenario_id varchar(50) [not null, default: "normal"]
+  default_parameters_json text [null] // operatorsShortage, acoAnts, … (camelCase)
+  status varchar(20) [not null, default: "draft"] // draft, active, archived
+  created_at timestamp [null]
+  updated_at timestamp [null]
+  deleted_at timestamp [null]
+
+  indexes {
+    status
+  }
+}
+
+// Membresía M:N: un punto puede estar en N casos con overrides distintos.
+Table case_study_points {
+  case_study_id integer [not null]
+  collection_point_id integer [not null]
+  active_in_study boolean [not null, default: true]
+  fill_level_kg_override decimal(8,2) [null] // Solo para corridas del caso
+  demand_kg_override decimal(8,2) [null]
+  notes text [null]
+  sort_order integer [null]
+  created_at timestamp [null]
+  updated_at timestamp [null]
+
+  indexes {
+    (case_study_id, collection_point_id) [pk]
+    collection_point_id
+  }
+}
+
 // Flota de vehículos de recolección
 Table vehicles {
   id integer [primary key, increment]
@@ -210,6 +250,7 @@ Table simulations {
   kpi_total_distance_historical decimal(10,2) [null] // Distancia en ruta estática tradicional
   kpi_total_distance_optimized decimal(10,2) [null] // Distancia lograda por el algoritmo de IA
   kpi_saving_percentage decimal(5,2) [null] // Porcentaje de optimización obtenido
+  case_study_id integer [null] // FK opcional — null = corrida legacy (todos los puntos active)
   created_at timestamp [null]
 }
 
@@ -229,6 +270,11 @@ Ref: road_segments.target_node_id > road_nodes.id
 // Contenedores de Desechos
 Ref: collection_points.sector_id > sectors.id
 Ref: collection_points.road_node_id > road_nodes.id
+
+// Casos de estudio (Fase 12)
+Ref: case_study_points.case_study_id > case_studies.id
+Ref: case_study_points.collection_point_id > collection_points.id
+Ref: simulations.case_study_id > case_studies.id
 
 // Rutas Optimizadas
 Ref: optimized_routes.vehicle_id > vehicles.id
@@ -263,5 +309,10 @@ Ref: vehicle_incidents.route_id > optimized_routes.id
 // 7. vehicle_incidents: Historial de averías. Al reportar un incidente con
 //    affects_active_route=true, la aplicación marca la ruta como interrupted,
 //    las paradas pending pasan a skipped y se dispara un nuevo VRP con la flota restante.
+// 8. case_studies + case_study_points (Fase 12, ADR-005):
+//    - case_study: experimento con subconjunto de puntos; scenario_id sigue siendo clima/tráfico.
+//    - Overrides de llenado/demanda en case_study_points NO mutan collection_points.
+//    - Prioridad al optimizar: case_study_points → collectionPointIds (request) → todos active.
+//    - simulations.case_study_id nullable para compatibilidad con corridas sin caso.
 
 // https://dbdiagram.io/d/6a49988936d348d1206ae0f1

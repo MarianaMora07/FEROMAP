@@ -598,7 +598,7 @@ Interpretación para la defensa: más hormigas/iteraciones no siempre son propor
 
 ### Fórmula de tiempo de servicio (ADR-003)
 
-Constantes: `BASE_SERVICE_SECONDS = 300` (5 min/punto con dotación completa), penalización `30` s por operario de campo faltante.
+Constantes: `BASE_SERVICE_SECONDS = 1200` (20 min/punto con dotación completa), penalización `180` s (3 min) por operario de campo faltante.
 
 ```
 assignedEfectivo = max(1, assignedVehículo − operatorsShortage)
@@ -606,7 +606,7 @@ fieldIdeal       = idealOperators − 1
 fieldAssigned    = max(0, assignedEfectivo − 1)
 missingField     = max(0, fieldIdeal − fieldAssigned)
 
-serviceTimeSec   = 300 + missingField × 30
+serviceTimeSec   = 1200 + missingField × 180
 durationSec      = travelSec + stopCount × serviceTimeSec
 ```
 
@@ -614,9 +614,9 @@ durationSec      = travelSec + stopCount × serviceTimeSec
 
 | operatorsShortage | assignedEfectivo | s/punto | min/punto |
 |-------------------|------------------|---------|-----------|
-| 0 | 6 | 300 | 5:00 |
-| 1 | 5 | 330 | 5:30 |
-| 2 | 4 | 360 | 6:00 |
+| 0 | 6 | 1200 | 20:00 |
+| 1 | 5 | 1380 | 23:00 |
+| 2 | 4 | 1560 | 26:00 |
 
 El conductor **no** se resta con `operatorsShortage`. Código: `backend/app/domain/crew_service_time.py`. ADR: [docs/fase-8/adr-dotacion-tiempo-servicio.md](../../docs/fase-8/adr-dotacion-tiempo-servicio.md).
 

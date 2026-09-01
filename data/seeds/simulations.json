@@ -46,5 +46,17 @@
     "kpiTotalDistanceHistorical": 28.4,
     "kpiTotalDistanceOptimized": 17.7,
     "kpiSavingPercentage": 37.68
+  },
+  {
+    "scenarioId": "broken_vehicle",
+    "scenarioName": "Vehículo averiado",
+    "parameters": {
+      "trafficMultiplier": 1.1,
+      "fillLevelBoost": 5,
+      "description": "Recálculo de ruta tras avería en campo."
+    },
+    "kpiTotalDistanceHistorical": 12.5,
+    "kpiTotalDistanceOptimized": 8.2,
+    "kpiSavingPercentage": 34.4
   }
 ]

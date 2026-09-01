@@ -47,6 +47,7 @@ def optimize_simulation(body: OptimizeRequest, _: PlannerOrAdmin):
             time_window_enabled=body.time_window_enabled,
             kpi_view=body.kpi_view,
             collection_point_ids=body.collection_point_ids,
+            case_study_id=body.case_study_id,
             auto_dispatch=body.auto_dispatch,
             operation_date=body.operation_date,
             daily_plan_id=body.daily_plan_id,
@@ -75,8 +76,20 @@ def cancel_simulation_job(job_id: str, _: PlannerOrAdmin):
 
 
 @router.get("/simulations")
-def get_simulations(db: DbSession, limit: int = Query(default=25, ge=1, le=100), offset: int = Query(default=0, ge=0)):
-    return list_simulations(db, limit=limit, offset=offset)
+def get_simulations(
+    db: DbSession,
+    limit: int = Query(default=25, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    case_study_id: int | None = Query(default=None, alias="caseStudyId"),
+    legacy_only: bool = Query(default=False, alias="legacyOnly"),
+):
+    return list_simulations(
+        db,
+        limit=limit,
+        offset=offset,
+        case_study_id=case_study_id,
+        legacy_only=legacy_only,
+    )
 
 
 @router.get("/simulations/{simulation_id}")

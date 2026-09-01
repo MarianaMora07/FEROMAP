@@ -45,6 +45,13 @@ from app.services.scenario_parameters import (
     normalize_waste_level_pct,
 )
 from app.services.aco_parallel import resolve_aco_parallel_workers, run_ant_solutions
+from app.services.case_study_optimization import (
+    case_study_simulation_payload,
+    load_optimization_collection_points,
+    prepare_case_study_engine_context,
+    resolve_customer_demand,
+    resolve_engine_parameters,
+)
 from app.services.distance_matrix_cache import resolve_distance_matrix
 from app.services.graph_service import (
     DEPOT_LAT,
@@ -1184,7 +1191,7 @@ def _persist_routes(
 
 def run_optimization_engine(
     db: Session,
-    scenario_id: str,
+    scenario_id: str | None = None,
     *,
     rain_intensity: str | None = None,
     waste_level_pct: int | None = None,
@@ -1196,6 +1203,7 @@ def run_optimization_engine(
     time_window_enabled: bool | None = None,
     kpi_view: str | None = None,
     collection_point_ids: list[int] | None = None,
+    case_study_id: int | None = None,
     exclude_vehicle_ids: list[int] | None = None,
     contingency_meta: dict[str, Any] | None = None,
     auto_dispatch: bool = False,
@@ -1220,28 +1228,64 @@ def run_optimization_engine(
         return reporter.cancelled() if reporter is not None else False
 
     report("preparando", "Preparando escenario y parámetros de simulación")
-    normalized = normalize_scenario_id(scenario_id)
+
+    case_context = None
+    if case_study_id is not None:
+        case_context = prepare_case_study_engine_context(
+            db,
+            case_study_id=case_study_id,
+            collection_point_ids=collection_point_ids,
+        )
+        report(
+            "preparando",
+            f"Caso de estudio «{case_context.study.code}» — {len(case_context.resolved_point_ids)} puntos",
+        )
+
+    resolved_params = resolve_engine_parameters(
+        case_context.study if case_context else None,
+        scenario_id=scenario_id,
+        operators_shortage=operators_shortage,
+        aco_ants=aco_ants,
+        aco_iterations=aco_iterations,
+        priority_fill_level=priority_fill_level,
+        time_window_enabled=time_window_enabled,
+        estimated_duration_hours=estimated_duration_hours,
+        rain_intensity=rain_intensity,
+        waste_level_pct=waste_level_pct,
+    )
+
+    normalized = normalize_scenario_id(resolved_params.scenario_id)
     scenarios = {row["id"]: row for row in load_seed("scenarios.json")}
     if normalized not in scenarios:
-        raise ValueError(f"Escenario desconocido: {scenario_id}")
+        raise ValueError(f"Escenario desconocido: {resolved_params.scenario_id}")
 
     scenario = scenarios[normalized]
     scenario_label = scenario["label"]
+    if case_context is not None:
+        scenario_label = f"{case_context.study.name} — {scenario_label}"
     if contingency_meta:
         scenario_label = f"{scenario_label} — recálculo por avería"
 
-    report("preparando", f"Iniciando optimización — escenario «{scenario_label}»")
+    report("preparando", f"Iniciando optimización — escenario «{scenario['label']}»")
     traffic_mult = float(scenario.get("trafficMultiplier", 1))
     fill_boost = float(scenario.get("fillLevelBoost", 0))
 
-    rain = normalize_rain_intensity(rain_intensity)
-    waste = normalize_waste_level_pct(waste_level_pct)
-    duration_h = normalize_duration_hours(estimated_duration_hours)
-    shortage = normalize_operators_shortage(operators_shortage)
-    resolved_aco_ants = normalize_aco_ants(aco_ants)
-    resolved_aco_iterations = normalize_aco_iterations(aco_iterations)
-    resolved_priority_fill_level = bool(priority_fill_level) if priority_fill_level is not None else False
-    resolved_time_window_enabled = bool(time_window_enabled) if time_window_enabled is not None else False
+    rain = normalize_rain_intensity(resolved_params.rain_intensity)
+    waste = normalize_waste_level_pct(resolved_params.waste_level_pct)
+    duration_h = normalize_duration_hours(resolved_params.estimated_duration_hours)
+    shortage = normalize_operators_shortage(resolved_params.operators_shortage)
+    resolved_aco_ants = normalize_aco_ants(resolved_params.aco_ants)
+    resolved_aco_iterations = normalize_aco_iterations(resolved_params.aco_iterations)
+    resolved_priority_fill_level = (
+        bool(resolved_params.priority_fill_level)
+        if resolved_params.priority_fill_level is not None
+        else False
+    )
+    resolved_time_window_enabled = (
+        bool(resolved_params.time_window_enabled)
+        if resolved_params.time_window_enabled is not None
+        else False
+    )
     resolved_kpi_view = kpi_view if kpi_view in {"distance", "time", "co2"} else "distance"
     traffic_mult, fill_boost, applied_modifiers = apply_simulation_parameter_modifiers(
         normalized,
@@ -1266,6 +1310,8 @@ def run_optimization_engine(
             kpi_view=resolved_kpi_view,
         ),
     }
+    if case_context is not None:
+        simulation_parameters["caseStudy"] = case_study_simulation_payload(case_context)
 
     if resolved_priority_fill_level:
         report(
@@ -1300,18 +1346,17 @@ def run_optimization_engine(
         scenario_id=normalized,
     )
 
-    points = db.scalars(
-        select(CollectionPoint)
-        .where(CollectionPoint.deleted_at.is_(None), CollectionPoint.status == "active")
-        .options(joinedload(CollectionPoint.sector))
-        .order_by(CollectionPoint.code)
-    ).all()
+    if case_context is not None:
+        allowed_ids = case_context.resolved_point_ids
+        memberships = case_context.memberships_by_point_id
+    elif collection_point_ids is not None:
+        allowed_ids = sorted(set(collection_point_ids))
+        memberships = {}
+    else:
+        allowed_ids = None
+        memberships = {}
 
-    if collection_point_ids is not None:
-        allowed = set(collection_point_ids)
-        points = [p for p in points if p.id in allowed]
-        if not points:
-            raise ValueError("No hay puntos de recolección pendientes para reoptimizar")
+    points = load_optimization_collection_points(db, allowed_ids=allowed_ids)
 
     report(
         "grafo_vial",
@@ -1320,14 +1365,12 @@ def run_optimization_engine(
 
     customers: list[CustomerNode] = []
     for point in points:
-        pct = fill_level_pct(point)
-        boosted_pct = min(100, pct + int(fill_boost))
-        demand = float(point.current_fill_level_kg) * (1 + fill_boost / 100)
-        if bool(getattr(point, "priority_boost", False)):
-            boosted_pct = min(100, boosted_pct + 25)
-            demand = max(demand, float(point.max_capacity_kg) * 0.85)
-        if demand <= 0:
-            demand = float(point.max_capacity_kg) * boosted_pct / 100
+        membership = memberships.get(point.id)
+        demand, boosted_pct = resolve_customer_demand(
+            point,
+            membership,
+            fill_boost=fill_boost,
+        )
         customers.append(
             CustomerNode(
                 point_id=point.id,
@@ -1651,6 +1694,7 @@ def run_optimization_engine(
 
     simulation = Simulation(
         scenario_name=scenario_label,
+        case_study_id=case_study_id,
         parameters_json=json.dumps(
             {
                 "scenarioId": normalized,
@@ -1729,6 +1773,7 @@ def run_optimization_engine(
     return {
         "simulationId": simulation.id,
         "scenarioId": normalized,
+        "caseStudyId": case_study_id,
         "scenario": scenario,
         "kpis": kpis,
         "routes": routes_payload,

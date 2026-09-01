@@ -8,7 +8,10 @@ export function navHrefPath(href: string) {
 }
 
 export function isNavItemActive(href: string, pathname: string) {
-  return pathname === navHrefPath(href);
+  const base = navHrefPath(href);
+  if (pathname === base) return true;
+  if (base !== '/' && pathname.startsWith(`${base}/`)) return true;
+  return false;
 }
 
 export function sidebarNavLinkClass(active: boolean) {

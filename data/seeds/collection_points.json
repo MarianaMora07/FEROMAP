@@ -198,5 +198,605 @@
     "fillLevelPct": 86,
     "priority": "critica",
     "lastCollection": "2026-06-05T08:00:00Z"
+  },
+  {
+    "code": "CNT-021",
+    "sectorName": "Unare I",
+    "latitude": 8.272,
+    "longitude": -62.762,
+    "maxCapacityKg": 800,
+    "fillLevelPct": 41,
+    "priority": "media",
+    "lastCollection": "2026-06-04T07:30:00Z"
+  },
+  {
+    "code": "CNT-022",
+    "sectorName": "Unare II",
+    "latitude": 8.27225,
+    "longitude": -62.7634,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 54,
+    "priority": "alta",
+    "lastCollection": "2026-06-05T08:30:00Z"
+  },
+  {
+    "code": "CNT-023",
+    "sectorName": "Uchire",
+    "latitude": 8.2725,
+    "longitude": -62.7648,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 67,
+    "priority": "critica",
+    "lastCollection": "2026-06-06T09:30:00Z"
+  },
+  {
+    "code": "CNT-024",
+    "sectorName": "Rio Caura",
+    "latitude": 8.272,
+    "longitude": -62.7662,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 80,
+    "priority": "baja",
+    "lastCollection": "2026-06-07T06:30:00Z"
+  },
+  {
+    "code": "CNT-025",
+    "sectorName": "Ventuari",
+    "latitude": 8.27225,
+    "longitude": -62.7676,
+    "maxCapacityKg": 1000,
+    "fillLevelPct": 28,
+    "priority": "media",
+    "lastCollection": "2026-06-08T07:30:00Z"
+  },
+  {
+    "code": "CNT-026",
+    "sectorName": "Curagua B",
+    "latitude": 8.2725,
+    "longitude": -62.769,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 41,
+    "priority": "alta",
+    "lastCollection": "2026-06-09T08:30:00Z"
+  },
+  {
+    "code": "CNT-027",
+    "sectorName": "El caimito 1-2-3-4",
+    "latitude": 8.272,
+    "longitude": -62.7704,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 54,
+    "priority": "critica",
+    "lastCollection": "2026-06-01T09:30:00Z"
+  },
+  {
+    "code": "CNT-028",
+    "sectorName": "Villa Ikabaru",
+    "latitude": 8.27225,
+    "longitude": -62.7718,
+    "maxCapacityKg": 800,
+    "fillLevelPct": 67,
+    "priority": "baja",
+    "lastCollection": "2026-06-02T06:30:00Z"
+  },
+  {
+    "code": "CNT-029",
+    "sectorName": "Terrazas del caroni A-B-C",
+    "latitude": 8.2725,
+    "longitude": -62.7732,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 80,
+    "priority": "media",
+    "lastCollection": "2026-06-03T07:30:00Z"
+  },
+  {
+    "code": "CNT-030",
+    "sectorName": "Las Garzas",
+    "latitude": 8.272,
+    "longitude": -62.7746,
+    "maxCapacityKg": 1000,
+    "fillLevelPct": 28,
+    "priority": "alta",
+    "lastCollection": "2026-06-04T08:30:00Z"
+  },
+  {
+    "code": "CNT-031",
+    "sectorName": "Las Peonias",
+    "latitude": 8.2704,
+    "longitude": -62.7744,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 41,
+    "priority": "critica",
+    "lastCollection": "2026-06-05T09:30:00Z"
+  },
+  {
+    "code": "CNT-032",
+    "sectorName": "Paratepuy",
+    "latitude": 8.27065,
+    "longitude": -62.773,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 54,
+    "priority": "baja",
+    "lastCollection": "2026-06-06T06:30:00Z"
+  },
+  {
+    "code": "CNT-033",
+    "sectorName": "Villa Caroni",
+    "latitude": 8.2709,
+    "longitude": -62.7716,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 67,
+    "priority": "media",
+    "lastCollection": "2026-06-07T07:30:00Z"
+  },
+  {
+    "code": "CNT-034",
+    "sectorName": "Rio Aro",
+    "latitude": 8.2704,
+    "longitude": -62.7702,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 80,
+    "priority": "alta",
+    "lastCollection": "2026-06-08T08:30:00Z"
+  },
+  {
+    "code": "CNT-035",
+    "sectorName": "Los Bucares",
+    "latitude": 8.27065,
+    "longitude": -62.7688,
+    "maxCapacityKg": 800,
+    "fillLevelPct": 28,
+    "priority": "critica",
+    "lastCollection": "2026-06-09T09:30:00Z"
+  },
+  {
+    "code": "CNT-036",
+    "sectorName": "Unare I",
+    "latitude": 8.2709,
+    "longitude": -62.7674,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 41,
+    "priority": "baja",
+    "lastCollection": "2026-06-01T06:30:00Z"
+  },
+  {
+    "code": "CNT-037",
+    "sectorName": "Unare II",
+    "latitude": 8.2704,
+    "longitude": -62.766,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 54,
+    "priority": "media",
+    "lastCollection": "2026-06-02T07:30:00Z"
+  },
+  {
+    "code": "CNT-038",
+    "sectorName": "Uchire",
+    "latitude": 8.27065,
+    "longitude": -62.7646,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 67,
+    "priority": "alta",
+    "lastCollection": "2026-06-03T08:30:00Z"
+  },
+  {
+    "code": "CNT-039",
+    "sectorName": "Rio Caura",
+    "latitude": 8.2709,
+    "longitude": -62.7632,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 80,
+    "priority": "critica",
+    "lastCollection": "2026-06-04T09:30:00Z"
+  },
+  {
+    "code": "CNT-040",
+    "sectorName": "Ventuari",
+    "latitude": 8.2704,
+    "longitude": -62.7618,
+    "maxCapacityKg": 1000,
+    "fillLevelPct": 28,
+    "priority": "baja",
+    "lastCollection": "2026-06-05T06:30:00Z"
+  },
+  {
+    "code": "CNT-041",
+    "sectorName": "Curagua B",
+    "latitude": 8.2688,
+    "longitude": -62.7616,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 41,
+    "priority": "media",
+    "lastCollection": "2026-06-06T07:30:00Z"
+  },
+  {
+    "code": "CNT-042",
+    "sectorName": "El caimito 1-2-3-4",
+    "latitude": 8.26905,
+    "longitude": -62.763,
+    "maxCapacityKg": 800,
+    "fillLevelPct": 54,
+    "priority": "alta",
+    "lastCollection": "2026-06-07T08:30:00Z"
+  },
+  {
+    "code": "CNT-043",
+    "sectorName": "Villa Ikabaru",
+    "latitude": 8.2693,
+    "longitude": -62.7644,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 67,
+    "priority": "critica",
+    "lastCollection": "2026-06-08T09:30:00Z"
+  },
+  {
+    "code": "CNT-044",
+    "sectorName": "Terrazas del caroni A-B-C",
+    "latitude": 8.2688,
+    "longitude": -62.7658,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 80,
+    "priority": "baja",
+    "lastCollection": "2026-06-09T06:30:00Z"
+  },
+  {
+    "code": "CNT-045",
+    "sectorName": "Las Garzas",
+    "latitude": 8.26905,
+    "longitude": -62.7672,
+    "maxCapacityKg": 1000,
+    "fillLevelPct": 28,
+    "priority": "media",
+    "lastCollection": "2026-06-01T07:30:00Z"
+  },
+  {
+    "code": "CNT-046",
+    "sectorName": "Las Peonias",
+    "latitude": 8.2693,
+    "longitude": -62.7686,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 41,
+    "priority": "alta",
+    "lastCollection": "2026-06-02T08:30:00Z"
+  },
+  {
+    "code": "CNT-047",
+    "sectorName": "Paratepuy",
+    "latitude": 8.2688,
+    "longitude": -62.77,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 54,
+    "priority": "critica",
+    "lastCollection": "2026-06-03T09:30:00Z"
+  },
+  {
+    "code": "CNT-048",
+    "sectorName": "Villa Caroni",
+    "latitude": 8.26905,
+    "longitude": -62.7714,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 67,
+    "priority": "baja",
+    "lastCollection": "2026-06-04T06:30:00Z"
+  },
+  {
+    "code": "CNT-049",
+    "sectorName": "Rio Aro",
+    "latitude": 8.2693,
+    "longitude": -62.7728,
+    "maxCapacityKg": 800,
+    "fillLevelPct": 80,
+    "priority": "media",
+    "lastCollection": "2026-06-05T07:30:00Z"
+  },
+  {
+    "code": "CNT-050",
+    "sectorName": "Los Bucares",
+    "latitude": 8.2688,
+    "longitude": -62.7742,
+    "maxCapacityKg": 1000,
+    "fillLevelPct": 28,
+    "priority": "alta",
+    "lastCollection": "2026-06-06T08:30:00Z"
+  },
+  {
+    "code": "CNT-051",
+    "sectorName": "Unare I",
+    "latitude": 8.2672,
+    "longitude": -62.7746,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 41,
+    "priority": "critica",
+    "lastCollection": "2026-06-07T09:30:00Z"
+  },
+  {
+    "code": "CNT-052",
+    "sectorName": "Unare II",
+    "latitude": 8.26745,
+    "longitude": -62.7732,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 54,
+    "priority": "baja",
+    "lastCollection": "2026-06-08T06:30:00Z"
+  },
+  {
+    "code": "CNT-053",
+    "sectorName": "Uchire",
+    "latitude": 8.2677,
+    "longitude": -62.7718,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 67,
+    "priority": "media",
+    "lastCollection": "2026-06-09T07:30:00Z"
+  },
+  {
+    "code": "CNT-054",
+    "sectorName": "Rio Caura",
+    "latitude": 8.2672,
+    "longitude": -62.7704,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 80,
+    "priority": "alta",
+    "lastCollection": "2026-06-01T08:30:00Z"
+  },
+  {
+    "code": "CNT-055",
+    "sectorName": "Ventuari",
+    "latitude": 8.26745,
+    "longitude": -62.769,
+    "maxCapacityKg": 1000,
+    "fillLevelPct": 28,
+    "priority": "critica",
+    "lastCollection": "2026-06-02T09:30:00Z"
+  },
+  {
+    "code": "CNT-056",
+    "sectorName": "Curagua B",
+    "latitude": 8.2677,
+    "longitude": -62.7676,
+    "maxCapacityKg": 800,
+    "fillLevelPct": 41,
+    "priority": "baja",
+    "lastCollection": "2026-06-03T06:30:00Z"
+  },
+  {
+    "code": "CNT-057",
+    "sectorName": "El caimito 1-2-3-4",
+    "latitude": 8.2672,
+    "longitude": -62.7662,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 54,
+    "priority": "media",
+    "lastCollection": "2026-06-04T07:30:00Z"
+  },
+  {
+    "code": "CNT-058",
+    "sectorName": "Villa Ikabaru",
+    "latitude": 8.26745,
+    "longitude": -62.7648,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 67,
+    "priority": "alta",
+    "lastCollection": "2026-06-05T08:30:00Z"
+  },
+  {
+    "code": "CNT-059",
+    "sectorName": "Terrazas del caroni A-B-C",
+    "latitude": 8.2677,
+    "longitude": -62.7634,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 80,
+    "priority": "critica",
+    "lastCollection": "2026-06-06T09:30:00Z"
+  },
+  {
+    "code": "CNT-060",
+    "sectorName": "Las Garzas",
+    "latitude": 8.2672,
+    "longitude": -62.762,
+    "maxCapacityKg": 1000,
+    "fillLevelPct": 28,
+    "priority": "baja",
+    "lastCollection": "2026-06-07T06:30:00Z"
+  },
+  {
+    "code": "CNT-061",
+    "sectorName": "Las Peonias",
+    "latitude": 8.2656,
+    "longitude": -62.7618,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 41,
+    "priority": "media",
+    "lastCollection": "2026-06-08T07:30:00Z"
+  },
+  {
+    "code": "CNT-062",
+    "sectorName": "Paratepuy",
+    "latitude": 8.26585,
+    "longitude": -62.7632,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 54,
+    "priority": "alta",
+    "lastCollection": "2026-06-09T08:30:00Z"
+  },
+  {
+    "code": "CNT-063",
+    "sectorName": "Villa Caroni",
+    "latitude": 8.2661,
+    "longitude": -62.7646,
+    "maxCapacityKg": 800,
+    "fillLevelPct": 67,
+    "priority": "critica",
+    "lastCollection": "2026-06-01T09:30:00Z"
+  },
+  {
+    "code": "CNT-064",
+    "sectorName": "Rio Aro",
+    "latitude": 8.2656,
+    "longitude": -62.766,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 80,
+    "priority": "baja",
+    "lastCollection": "2026-06-02T06:30:00Z"
+  },
+  {
+    "code": "CNT-065",
+    "sectorName": "Los Bucares",
+    "latitude": 8.26585,
+    "longitude": -62.7674,
+    "maxCapacityKg": 1000,
+    "fillLevelPct": 28,
+    "priority": "media",
+    "lastCollection": "2026-06-03T07:30:00Z"
+  },
+  {
+    "code": "CNT-066",
+    "sectorName": "Unare I",
+    "latitude": 8.2661,
+    "longitude": -62.7688,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 41,
+    "priority": "alta",
+    "lastCollection": "2026-06-04T08:30:00Z"
+  },
+  {
+    "code": "CNT-067",
+    "sectorName": "Unare II",
+    "latitude": 8.2656,
+    "longitude": -62.7702,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 54,
+    "priority": "critica",
+    "lastCollection": "2026-06-05T09:30:00Z"
+  },
+  {
+    "code": "CNT-068",
+    "sectorName": "Uchire",
+    "latitude": 8.26585,
+    "longitude": -62.7716,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 67,
+    "priority": "baja",
+    "lastCollection": "2026-06-06T06:30:00Z"
+  },
+  {
+    "code": "CNT-069",
+    "sectorName": "Rio Caura",
+    "latitude": 8.2661,
+    "longitude": -62.773,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 80,
+    "priority": "media",
+    "lastCollection": "2026-06-07T07:30:00Z"
+  },
+  {
+    "code": "CNT-070",
+    "sectorName": "Ventuari",
+    "latitude": 8.2656,
+    "longitude": -62.7744,
+    "maxCapacityKg": 800,
+    "fillLevelPct": 28,
+    "priority": "alta",
+    "lastCollection": "2026-06-08T08:30:00Z"
+  },
+  {
+    "code": "CNT-071",
+    "sectorName": "Curagua B",
+    "latitude": 8.264,
+    "longitude": -62.7742,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 41,
+    "priority": "critica",
+    "lastCollection": "2026-06-09T09:30:00Z"
+  },
+  {
+    "code": "CNT-072",
+    "sectorName": "El caimito 1-2-3-4",
+    "latitude": 8.26425,
+    "longitude": -62.7728,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 54,
+    "priority": "baja",
+    "lastCollection": "2026-06-01T06:30:00Z"
+  },
+  {
+    "code": "CNT-073",
+    "sectorName": "Villa Ikabaru",
+    "latitude": 8.2645,
+    "longitude": -62.7714,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 67,
+    "priority": "media",
+    "lastCollection": "2026-06-02T07:30:00Z"
+  },
+  {
+    "code": "CNT-074",
+    "sectorName": "Terrazas del caroni A-B-C",
+    "latitude": 8.264,
+    "longitude": -62.77,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 80,
+    "priority": "alta",
+    "lastCollection": "2026-06-03T08:30:00Z"
+  },
+  {
+    "code": "CNT-075",
+    "sectorName": "Las Garzas",
+    "latitude": 8.26425,
+    "longitude": -62.7686,
+    "maxCapacityKg": 1000,
+    "fillLevelPct": 28,
+    "priority": "critica",
+    "lastCollection": "2026-06-04T09:30:00Z"
+  },
+  {
+    "code": "CNT-076",
+    "sectorName": "Las Peonias",
+    "latitude": 8.2645,
+    "longitude": -62.7672,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 41,
+    "priority": "baja",
+    "lastCollection": "2026-06-05T06:30:00Z"
+  },
+  {
+    "code": "CNT-077",
+    "sectorName": "Paratepuy",
+    "latitude": 8.264,
+    "longitude": -62.7658,
+    "maxCapacityKg": 800,
+    "fillLevelPct": 54,
+    "priority": "media",
+    "lastCollection": "2026-06-06T07:30:00Z"
+  },
+  {
+    "code": "CNT-078",
+    "sectorName": "Villa Caroni",
+    "latitude": 8.26425,
+    "longitude": -62.7644,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 67,
+    "priority": "alta",
+    "lastCollection": "2026-06-07T08:30:00Z"
+  },
+  {
+    "code": "CNT-079",
+    "sectorName": "Rio Aro",
+    "latitude": 8.2645,
+    "longitude": -62.763,
+    "maxCapacityKg": 1200,
+    "fillLevelPct": 80,
+    "priority": "critica",
+    "lastCollection": "2026-06-08T09:30:00Z"
+  },
+  {
+    "code": "CNT-080",
+    "sectorName": "Los Bucares",
+    "latitude": 8.264,
+    "longitude": -62.7616,
+    "maxCapacityKg": 1000,
+    "fillLevelPct": 28,
+    "priority": "baja",
+    "lastCollection": "2026-06-09T06:30:00Z"
   }
 ]

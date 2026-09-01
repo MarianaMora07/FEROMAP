@@ -73,7 +73,7 @@ async function resolveCompletedJob(
 }
 
 export async function runJobBasedExecution(
-  scenarioId: ScenarioId,
+  scenarioId: ScenarioId | undefined,
   parameters: SimulationRunParameters | undefined,
   handlers: ExecutionUpdateHandlers,
 ): Promise<OptimizeJobResult> {

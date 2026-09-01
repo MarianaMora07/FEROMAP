@@ -1,5 +1,5 @@
 import { For, Show } from 'solid-js';
-import { Card, CardHeader } from '../../design-system/components';
+import { Card, CardHeader, Badge } from '../../design-system/components';
 import type { Scenario } from '../../data/types/simulation';
 import { DEFAULT_SHIFT_REFERENCE_HOURS, type ConditionId } from './simulationConfig';
 import {
@@ -16,6 +16,7 @@ interface ConfigurationSummaryPanelProps {
   loadingReadiness?: boolean;
   fleetAssignableCount?: number;
   criticalPointCount?: number;
+  caseStudyCode?: string | null;
   rainIntensity?: string;
   wasteLevel?: string;
   durationHours?: string;
@@ -47,6 +48,18 @@ export function ConfigurationSummaryPanel(props: ConfigurationSummaryPanelProps)
     <Card class="self-start" data-testid="simulation-config-summary">
       <CardHeader title="Resumen en vivo" subtitle="Se actualiza al cambiar condiciones" />
       <div class="space-y-4">
+        <Show when={props.caseStudyCode}>
+          {(code) => (
+            <Badge variant="success" class="w-full justify-center">
+              Caso: {code()}
+            </Badge>
+          )}
+        </Show>
+        <Show when={!props.caseStudyCode}>
+          <Badge variant="default" class="w-full justify-center">
+            Modo legacy
+          </Badge>
+        </Show>
         <div class="rounded-lg border border-default bg-surface/80 px-3 py-2.5">
           <p class="text-[10px] font-semibold uppercase tracking-wide text-text-muted">Escenario derivado</p>
           <p class="mt-1 text-sm font-semibold text-text-primary dark:text-white">{derived().label}</p>

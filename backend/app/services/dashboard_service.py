@@ -36,6 +36,7 @@ def _latest_optimization(db: Session) -> dict[str, Any] | None:
         "savingPercentage": float(simulation.kpi_saving_percentage or 0),
         "executedAt": simulation.executed_at.isoformat() if simulation.executed_at else None,
         "kpis": kpis,
+        **_case_study_fields(simulation, params),
     }
 
 
@@ -239,14 +240,27 @@ def run_optimization(
     )
 
 
-def list_simulations(db: Session, *, limit: int = 25, offset: int = 0) -> dict[str, Any]:
+def list_simulations(
+    db: Session,
+    *,
+    limit: int = 25,
+    offset: int = 0,
+    case_study_id: int | None = None,
+    legacy_only: bool = False,
+) -> dict[str, Any]:
+    stmt = select(Simulation)
+    count_stmt = select(func.count()).select_from(Simulation)
+    if legacy_only:
+        stmt = stmt.where(Simulation.case_study_id.is_(None))
+        count_stmt = count_stmt.where(Simulation.case_study_id.is_(None))
+    elif case_study_id is not None:
+        stmt = stmt.where(Simulation.case_study_id == case_study_id)
+        count_stmt = count_stmt.where(Simulation.case_study_id == case_study_id)
+
     simulations = db.scalars(
-        select(Simulation)
-        .order_by(Simulation.executed_at.desc())
-        .offset(offset)
-        .limit(limit)
+        stmt.order_by(Simulation.executed_at.desc()).offset(offset).limit(limit)
     ).all()
-    total = db.scalar(select(func.count()).select_from(Simulation)) or 0
+    total = db.scalar(count_stmt) or 0
     items = []
     for simulation in simulations:
         parsed = parse_simulation(simulation)
@@ -258,6 +272,9 @@ def list_simulations(db: Session, *, limit: int = 25, offset: int = 0) -> dict[s
                 "scenarioId": parsed["scenarioId"],
                 "savingPercentage": parsed["savingPercentage"],
                 "contingency": parsed["contingency"],
+                "caseStudyId": parsed.get("caseStudyId"),
+                "caseStudyCode": parsed.get("caseStudyCode"),
+                "caseStudyName": parsed.get("caseStudyName"),
             }
         )
     return {"items": items, "total": total, "limit": limit, "offset": offset}
@@ -288,5 +305,8 @@ def simulation_detail(db: Session, simulation_id: int) -> dict[str, Any]:
         "kpiTotalDistanceHistorical": float(simulation.kpi_total_distance_historical or 0),
         "kpiTotalDistanceOptimized": float(simulation.kpi_total_distance_optimized or 0),
         "kpiSavingPercentage": float(simulation.kpi_saving_percentage or 0),
+        "caseStudyId": simulation.case_study_id,
+        "caseStudyCode": (params.get("simulationParameters") or {}).get("caseStudy", {}).get("caseStudyCode"),
+        "caseStudyName": (params.get("simulationParameters") or {}).get("caseStudy", {}).get("caseStudyName"),
         "routes": routes,
     }

@@ -16,6 +16,7 @@ import type { ScenarioId } from '../../data/types/simulation';
 import {
   approveCurrentWeeklyPlan,
   archiveSelectedWeeklyPlan,
+  autofillWeeklyFromCaseStudy,
   autofillWeeklyFromSchedules,
   canArchivePlan,
   compareWeeklyVersions,
@@ -94,7 +95,11 @@ export function WeeklyPlanTab(props: WeeklyPlanTabProps) {
     if (!weeklyPlanState.plan?.id) {
       await saveWeeklyPlanDraft(plan()?.scenarioId ?? 'normal', plan()?.days ?? []);
     }
-    await autofillWeeklyFromSchedules();
+    if (plan()?.caseStudyId) {
+      await autofillWeeklyFromCaseStudy(plan()?.caseStudyId);
+    } else {
+      await autofillWeeklyFromSchedules();
+    }
   };
 
   const handleSaveDraft = () =>

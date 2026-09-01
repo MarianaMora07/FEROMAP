@@ -7,7 +7,10 @@ from app.schemas.common import CamelModel
 
 
 class OptimizeRequest(CamelModel):
-    scenario_id: str = "normal"
+    scenario_id: str | None = Field(
+        default=None,
+        description="Escenario operativo (normal, rain, …). Si se omite y hay caseStudyId, usa el default del caso.",
+    )
     rain_intensity: str | None = Field(
         default=None,
         description="Intensidad de lluvia (baja|media|alta). Solo aplica si scenarioId=rain.",
@@ -60,6 +63,10 @@ class OptimizeRequest(CamelModel):
     planning_level: Literal["strategic", "administrative", "operational", "simulation"] | None = None
     operation_date: date | None = None
     collection_point_ids: list[int] | None = None
+    case_study_id: int | None = Field(
+        default=None,
+        description="Caso de estudio: acota puntos y aplica overrides solo en memoria.",
+    )
     daily_plan_id: int | None = None
     weekly_plan_id: int | None = None
     auto_dispatch: bool | None = None

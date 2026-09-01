@@ -3,6 +3,7 @@ import {
   addWeeksToMonday,
   approveWeeklyPlan,
   archiveWeeklyPlan,
+  autofillWeeklyPlanFromCaseStudy,
   autofillWeeklyPlanFromSchedules,
   compareWeeklyPlanVersions,
   createWeeklyPlan,
@@ -32,6 +33,7 @@ import {
 import { fetchActiveVisitSchedules, type VisitSchedule } from '../api/visitSchedules';
 import { fetchSimulationOptimizeJob } from '../api/simulationJobs';
 import { fetchCollectionPointsForPlanning } from '../api/collectionPoints';
+import { fetchCaseStudies, fetchCaseStudyDetail, type CaseStudyDetail } from '../api/caseStudies';
 
 interface WeeklyPlanState {
   plan: WeeklyPlan | null;
@@ -51,6 +53,7 @@ interface WeeklyPlanState {
   validationProgress: number;
   validationSummary: WeeklyPlanValidationSummary | null;
   visitSchedules: VisitSchedule[];
+  draftCaseStudy: CaseStudyDetail | null;
   error: string | null;
   notice: string | null;
 }
@@ -73,6 +76,7 @@ const [state, setState] = createStore<WeeklyPlanState>({
   validationProgress: 0,
   validationSummary: null,
   visitSchedules: [],
+  draftCaseStudy: null,
   error: null,
   notice: null,
 });
@@ -154,6 +158,14 @@ export async function initWeeklyPlanTab(): Promise<void> {
   }
 }
 
+export function buildWorkdayShells(weekStart: string): WeeklyPlanDay[] {
+  return mergeWeekCalendarDays(weekStart, []).slice(0, 5).map((day) => ({
+    ...day,
+    collectionPointIds: [],
+    pointSource: 'case_study',
+  }));
+}
+
 export function buildDefaultWeekDays(weekStart: string, pointIds: number[]): WeeklyPlanDay[] {
   const workdays = mergeWeekCalendarDays(weekStart, []).slice(0, 5);
   const chunk = Math.max(1, Math.ceil(pointIds.length / 5));
@@ -209,6 +221,7 @@ export async function selectWeeklyPlan(
       validationSummary: null,
       validationProgress: 0,
     });
+    await syncDraftCaseStudyFromPlan(plan);
     if (plan?.weekStartDate) {
       await refreshVisitSchedules(plan.weekStartDate);
     }
@@ -234,6 +247,52 @@ async function compareLatestWeeklyVersions(): Promise<void> {
   setState({ versionDiff: diff.changes });
 }
 
+async function resolveDefaultDraftCaseStudy(): Promise<CaseStudyDetail | null> {
+  if (state.draftCaseStudy) return state.draftCaseStudy;
+  const response = await fetchCaseStudies({ limit: 1 });
+  const first = response.items[0];
+  if (!first) return null;
+  const detail = await fetchCaseStudyDetail(first.id);
+  setState({ draftCaseStudy: detail });
+  return detail;
+}
+
+async function syncDraftCaseStudyFromPlan(plan: WeeklyPlan | null): Promise<void> {
+  if (!plan?.caseStudyId) {
+    return;
+  }
+  if (state.draftCaseStudy?.id === plan.caseStudyId) {
+    return;
+  }
+  try {
+    setState({ draftCaseStudy: await fetchCaseStudyDetail(plan.caseStudyId) });
+  } catch {
+    setState({ draftCaseStudy: null });
+  }
+}
+
+export function setDraftCaseStudy(detail: CaseStudyDetail | null): void {
+  setState({ draftCaseStudy: detail });
+}
+
+export async function applyWeeklyCaseStudy(detail: CaseStudyDetail | null): Promise<void> {
+  setState({ draftCaseStudy: detail });
+  if (!state.plan) return;
+  const scenarioId = detail?.defaultScenarioId ?? state.plan.scenarioId;
+  setState('plan', {
+    caseStudyId: detail?.id ?? null,
+    caseStudyCode: detail?.code ?? null,
+    caseStudyName: detail?.name ?? null,
+    scenarioId,
+  });
+  if (!state.plan.id) return;
+  if (detail) {
+    await autofillWeeklyFromCaseStudy(detail.id);
+    return;
+  }
+  await saveWeeklyPlanDraft(scenarioId, state.plan.days ?? []);
+}
+
 export async function createWeekDraft(weekStartDate: string): Promise<void> {
   const existing = state.history.find((row) => row.weekStartDate === weekStartDate);
   if (existing) {
@@ -247,33 +306,34 @@ export async function createWeekDraft(weekStartDate: string): Promise<void> {
 
   setState({ isCreatingWeek: true, error: null, notice: null });
   try {
-    const points =
-      state.collectionPoints.length > 0
-        ? state.collectionPoints
-        : await loadCollectionPointsForPlanning();
-    const pointIds = points.map((point) => point.id).filter((id) => Number.isFinite(id) && id > 0);
-    if (pointIds.length === 0) {
-      throw new Error('No hay puntos de recolección válidos para armar el plan semanal.');
+    const caseStudy = await resolveDefaultDraftCaseStudy();
+    if (!caseStudy) {
+      throw new Error('No hay casos de estudio disponibles. Crea uno en Análisis → Casos de estudio.');
     }
-    const days = buildDefaultWeekDays(weekStartDate, pointIds);
-    const plan = withCalendarDays(
+    const days = buildWorkdayShells(weekStartDate);
+    let plan = withCalendarDays(
       await createWeeklyPlan({
         weekStartDate,
-        scenarioId: 'normal',
+        scenarioId: caseStudy.defaultScenarioId ?? 'normal',
+        caseStudyId: caseStudy.id,
         days: compactWeeklyPlanDaysForSave(weekStartDate, days).map((day) => ({
           operationDate: day.operationDate,
           collectionPointIds: day.collectionPointIds,
         })),
       }),
     );
+    if (plan?.id) {
+      plan = withCalendarDays(await autofillWeeklyPlanFromCaseStudy(plan.id, caseStudy.id));
+    }
     await refreshWeeklyPlanHistory();
     setState({
       plan,
       selectedPlanId: plan?.id ?? null,
+      draftCaseStudy: caseStudy,
       validationCompleted: false,
       validationSummary: null,
       validationProgress: 0,
-      notice: `Borrador creado para la semana del ${weekStartDate}.`,
+      notice: `Borrador creado para la semana del ${weekStartDate} con caso ${caseStudy.code}.`,
     });
     if (plan?.weekStartDate) {
       await refreshVisitSchedules(plan.weekStartDate);
@@ -325,6 +385,7 @@ export async function saveWeeklyPlanDraft(scenarioId: ScenarioId, days: WeeklyPl
     const payload = {
       weekStartDate: weekStart,
       scenarioId,
+      caseStudyId: state.plan?.caseStudyId ?? state.draftCaseStudy?.id ?? null,
       days: sanitizedDays.map((day) => ({
         operationDate: day.operationDate,
         collectionPointIds: day.collectionPointIds,
@@ -334,6 +395,7 @@ export async function saveWeeklyPlanDraft(scenarioId: ScenarioId, days: WeeklyPl
       state.plan?.status === 'draft' && state.plan.id
         ? await updateWeeklyPlan(state.plan.id, {
             scenarioId,
+            caseStudyId: payload.caseStudyId,
             days: sanitizedDays,
           })
         : await createWeeklyPlan(payload),
@@ -461,6 +523,34 @@ export function setWeeklyScenario(scenarioId: ScenarioId): void {
     return;
   }
   setState('plan', 'scenarioId', scenarioId);
+}
+
+export async function autofillWeeklyFromCaseStudy(caseStudyId?: number | null): Promise<void> {
+  if (!state.plan?.id) {
+    throw new Error('Guarda un borrador antes de autocompletar');
+  }
+  const resolvedCaseId = caseStudyId ?? state.plan.caseStudyId ?? state.draftCaseStudy?.id;
+  if (resolvedCaseId == null) {
+    throw new Error('Selecciona un caso de estudio para autocompletar');
+  }
+  setState({ isSaving: true, error: null, notice: null });
+  try {
+    const plan = withCalendarDays(await autofillWeeklyPlanFromCaseStudy(state.plan.id, resolvedCaseId));
+    await refreshWeeklyPlanHistory();
+    setState({
+      plan,
+      validationCompleted: false,
+      validationSummary: null,
+      notice: `Días laborables configurados desde el caso ${plan?.caseStudyCode ?? ''}.`.trim(),
+    });
+  } catch (error) {
+    setState({
+      error: error instanceof Error ? error.message : 'No se pudo autocompletar desde el caso',
+    });
+    throw error;
+  } finally {
+    setState({ isSaving: false });
+  }
 }
 
 export async function autofillWeeklyFromSchedules(): Promise<void> {

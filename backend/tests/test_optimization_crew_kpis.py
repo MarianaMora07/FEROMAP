@@ -32,7 +32,7 @@ def test_compute_service_time_sec_full_and_reduced_crew():
     full = _vehicle(6)
     reduced = _vehicle(4)
     assert compute_service_time_sec(full) == BASE_SERVICE_SECONDS
-    assert compute_service_time_sec(reduced) == BASE_SERVICE_SECONDS + 2 * 30
+    assert compute_service_time_sec(reduced) == BASE_SERVICE_SECONDS + 2 * 180
 
 
 def test_route_operational_duration_adds_service_per_stop():

@@ -104,6 +104,26 @@ export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export async function apiPut<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(resolveUrl(path), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    credentials: 'include',
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let message = await res.text();
+    try {
+      const json = JSON.parse(message) as { detail?: string };
+      if (typeof json.detail === 'string') message = json.detail;
+    } catch {
+      // keep raw text
+    }
+    throw new ApiError(message, res.status);
+  }
+  return res.json() as Promise<T>;
+}
+
 export async function apiDelete<T>(path: string): Promise<T> {
   const res = await fetch(resolveUrl(path), {
     method: 'DELETE',

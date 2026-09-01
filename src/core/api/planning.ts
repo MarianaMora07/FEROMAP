@@ -2,12 +2,17 @@ import { apiGet, apiPatch, apiPost, useMocks } from './client';
 import { tomorrowIso } from '../planning/planningUx';
 import type { ScenarioId } from '../../data/types/simulation';
 
+export type WeeklyPlanPointSource = 'case_study' | 'manual';
+
 export interface WeeklyPlanDay {
   id?: number;
   operationDate: string;
   weekday: number;
   sectorIds: number[];
   collectionPointIds: number[];
+  pointSource?: WeeklyPlanPointSource;
+  caseStudyId?: number | null;
+  caseStudyCode?: string | null;
   expectedVehicleCount?: number | null;
   scenarioIdOverride?: string | null;
   status?: string;
@@ -35,6 +40,9 @@ export interface WeeklyPlan {
   weekEndDate: string;
   status: string;
   scenarioId: ScenarioId;
+  caseStudyId?: number | null;
+  caseStudyCode?: string | null;
+  caseStudyName?: string | null;
   referenceSimulationId?: number | null;
   expectedKpis?: Record<string, unknown> | null;
   notes?: string | null;
@@ -302,6 +310,7 @@ export function fetchDailyPlansInRange(
 export function createWeeklyPlan(payload: {
   weekStartDate: string;
   scenarioId: ScenarioId;
+  caseStudyId?: number | null;
   days: Array<{ operationDate: string; collectionPointIds: number[] }>;
   notes?: string;
 }): Promise<WeeklyPlan> {
@@ -337,7 +346,7 @@ export function createWeeklyPlan(payload: {
 
 export function updateWeeklyPlan(
   planId: number,
-  payload: { scenarioId?: ScenarioId; days?: WeeklyPlanDay[]; notes?: string },
+  payload: { scenarioId?: ScenarioId; caseStudyId?: number | null; days?: WeeklyPlanDay[]; notes?: string },
 ): Promise<WeeklyPlan> {
   const sanitizedPayload = payload.days
     ? { ...payload, days: sanitizeWeeklyPlanDays(payload.days) }
@@ -462,6 +471,30 @@ export function autofillWeeklyPlanFromSchedules(planId: number): Promise<WeeklyP
     return Promise.resolve(plan);
   }
   return apiPost(`/api/v1/planning/weekly/${planId}/autofill-from-schedules`, {});
+}
+
+export function autofillWeeklyPlanFromCaseStudy(
+  planId: number,
+  caseStudyId?: number | null,
+): Promise<WeeklyPlan> {
+  if (useMocks) {
+    const existing = findMockWeeklyPlan(planId) ?? { ...mockWeeklyPlan(), id: planId, status: 'draft' };
+    const pointIds = [1, 2, 3, 4, 5];
+    const plan = upsertMockWeeklyPlan({
+      ...existing,
+      status: 'draft',
+      caseStudyId: caseStudyId ?? existing.caseStudyId ?? 1,
+      caseStudyCode: 'CE-MOCK',
+      days: buildMockAutofillDays(existing.weekStartDate).map((day) => ({
+        ...day,
+        collectionPointIds: pointIds,
+        pointSource: 'case_study' as const,
+      })),
+    });
+    return Promise.resolve(plan);
+  }
+  const query = caseStudyId != null ? `?caseStudyId=${caseStudyId}` : '';
+  return apiPost(`/api/v1/planning/weekly/${planId}/autofill-from-case-study${query}`, {});
 }
 
 export function fetchWeeklyPlanVersions(planId: number): Promise<{ items: PlanVersion[] }> {

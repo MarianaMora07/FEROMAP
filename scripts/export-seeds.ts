@@ -17,6 +17,7 @@ import { liveFleet, monitoringKpis } from '../src/data/mock/monitoring.ts';
 import { routesMock } from '../src/data/mock/routes.ts';
 import { sectorsData } from '../src/data/mock/sectors.ts';
 import { vehiclesList } from '../src/data/mock/vehicles.ts';
+import { generateStressCollectionPoints } from './generate-stress-points.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = join(root, 'data', 'seeds');
@@ -33,16 +34,19 @@ const sectors = sectorsData.features.map((feature) => ({
   geometry: feature.geometry,
 }));
 
-const collectionPoints = containersData.features.map((feature) => ({
-  code: feature.properties.id,
-  sectorName: feature.properties.sector,
-  latitude: feature.geometry.coordinates[1],
-  longitude: feature.geometry.coordinates[0],
-  maxCapacityKg: feature.properties.capacityKg,
-  fillLevelPct: feature.properties.fillLevel,
-  priority: feature.properties.priority,
-  lastCollection: feature.properties.lastCollection,
-}));
+const collectionPoints = [
+  ...containersData.features.map((feature) => ({
+    code: feature.properties.id,
+    sectorName: feature.properties.sector,
+    latitude: feature.geometry.coordinates[1],
+    longitude: feature.geometry.coordinates[0],
+    maxCapacityKg: feature.properties.capacityKg,
+    fillLevelPct: feature.properties.fillLevel,
+    priority: feature.properties.priority,
+    lastCollection: feature.properties.lastCollection,
+  })),
+  ...generateStressCollectionPoints(),
+];
 
 const vehicleStatusMap: Record<string, string> = {
   'en-ruta': 'in_route',

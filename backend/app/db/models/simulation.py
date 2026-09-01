@@ -1,8 +1,8 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, Numeric, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
@@ -17,4 +17,7 @@ class Simulation(Base):
     kpi_total_distance_historical: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     kpi_total_distance_optimized: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     kpi_saving_percentage: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    case_study_id: Mapped[int | None] = mapped_column(ForeignKey("case_studies.id"), nullable=True, index=True)
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    case_study: Mapped["CaseStudy | None"] = relationship(back_populates="simulations")

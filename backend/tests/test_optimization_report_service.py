@@ -90,5 +90,6 @@ def test_build_optimization_report_markdown_table():
     assert len(rows) == 1
     assert rows[0].vehicle_code == "TR-01"
     assert "Plan del día por conductor" in report.markdown
+    assert "Duración max ruta" in report.markdown
     assert "TR-01" in report.markdown
     assert "Juan Pérez" in report.markdown

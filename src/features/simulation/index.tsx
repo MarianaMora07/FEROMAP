@@ -54,7 +54,10 @@ import {
   describeDerivedScenario,
   type SimulationReadiness,
 } from '../../core/utils/simulationWizard';
-import { parseSimulationIdParam } from '../../core/utils/simulationLinks';
+import { parseSimulationIdParam, parseCaseStudyIdParam } from '../../core/utils/simulationLinks';
+import { fetchCaseStudyDetail, type CaseStudyDetail } from '../../core/api/caseStudies';
+import { applyCaseStudyToWizard } from '../../core/utils/caseStudySimulation';
+import { CaseStudySelector } from './CaseStudySelector';
 import { ContingencyResultBanner } from '../contingency/BreakdownReporter';
 import type { ScenarioId } from '../../data/types/simulation';
 import { ConfigurationSummaryPanel } from './ConfigurationSummaryPanel';
@@ -220,6 +223,7 @@ export default function SimulationPage() {
   );
   const [readiness, setReadiness] = createSignal<SimulationReadiness | undefined>();
   const [loadingReadiness, setLoadingReadiness] = createSignal(true);
+  const [activeCaseStudy, setActiveCaseStudy] = createSignal<CaseStudyDetail | null>(null);
   const loadReadiness = async () => {
     setLoadingReadiness(true);
     try {
@@ -277,8 +281,8 @@ export default function SimulationPage() {
     setPlaybackOpen(false);
   };
 
-  const simulationParams = () =>
-    buildSimulationRunParameters({
+  const simulationParams = () => ({
+    ...buildSimulationRunParameters({
       rainIntensity: rainIntensity(),
       wasteLevel: wasteLevel(),
       durationHours: duration(),
@@ -289,7 +293,9 @@ export default function SimulationPage() {
       acoPreset: acoPreset(),
       acoAnts: acoAnts(),
       acoIterations: acoIterations(),
-    });
+    }),
+    caseStudyId: activeCaseStudy()?.id,
+  });
 
   const panelParams = () => ({
     rainIntensity: rainIntensity(),
@@ -412,6 +418,26 @@ export default function SimulationPage() {
     requestCancelExecution();
   };
 
+  const applyCaseStudyDefaults = (detail: CaseStudyDetail) => {
+    applyCaseStudyToWizard(detail, {
+      applyScenario: applySimulationScenario,
+      setConditions,
+      setDuration,
+      setCrewShortageEnabled,
+      setOperatorsShortage,
+      setWasteLevel,
+      setAcoAnts,
+      setAcoIterations,
+    });
+  };
+
+  const handleCaseStudyChange = (detail: CaseStudyDetail | null) => {
+    setActiveCaseStudy(detail);
+    if (detail) {
+      applyCaseStudyDefaults(detail);
+    }
+  };
+
   const handleNewSimulation = () => {
     setPageTab('flow');
     setStep(1);
@@ -419,6 +445,7 @@ export default function SimulationPage() {
     setPlaybackOpen(false);
     setResultsTab(DEFAULT_SIMULATION_RESULTS_TAB);
     setRunError(null);
+    setActiveCaseStudy(null);
     setConditions(defaultConditions());
     applySimulationScenario('normal');
   };
@@ -426,8 +453,25 @@ export default function SimulationPage() {
   const handleViewHistory = async (simulationId: number) => {
     setHistoryError(null);
     try {
-      await loadSimulationFromHistory(simulationId);
+      const detail = await loadSimulationFromHistory(simulationId);
       setConditions(conditionsForScenario(simulationState.scenarioId));
+      if (detail.caseStudyId) {
+        setActiveCaseStudy(
+          await fetchCaseStudyDetail(detail.caseStudyId).catch(() => ({
+            id: detail.caseStudyId!,
+            code: detail.caseStudyCode ?? `CASO-${detail.caseStudyId}`,
+            name: detail.caseStudyName ?? detail.caseStudyCode ?? 'Caso de estudio',
+            defaultScenarioId: detail.scenarioId,
+            defaultParameters: {},
+            status: 'active' as const,
+            activePointCount: 0,
+            pointCount: 0,
+            points: [],
+          })),
+        );
+      } else {
+        setActiveCaseStudy(null);
+      }
       setHasResults(true);
       setPageTab('flow');
       setStep(3);
@@ -445,6 +489,15 @@ export default function SimulationPage() {
       if (simulationId) {
         void handleViewHistory(simulationId);
         return;
+      }
+      const caseStudyId = parseCaseStudyIdParam(params.caseStudyId);
+      if (caseStudyId) {
+        void fetchCaseStudyDetail(caseStudyId)
+          .then((detail) => {
+            setActiveCaseStudy(detail);
+            applyCaseStudyDefaults(detail);
+          })
+          .catch(() => setRunError('No se pudo cargar el caso de estudio solicitado'));
       }
       if (params.view === 'history') {
         setPageTab('history');
@@ -482,6 +535,29 @@ export default function SimulationPage() {
         </Card>
       </Show>
       <ContingencyResultBanner />
+
+      <Show when={activeCaseStudy()}>
+        {(study) => (
+          <Card class="border-emerald-200 bg-emerald-50/80 dark:border-emerald-900/40 dark:bg-emerald-950/20">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p class="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+                  Caso de estudio: {study().code}
+                </p>
+                <p class="text-xs text-emerald-800 dark:text-emerald-200">
+                  {study().name} · {study().activePointCount} puntos activos · escenario default{' '}
+                  {study().defaultScenarioId}
+                </p>
+              </div>
+              <A href={`/case-studies/${study().id}`}>
+                <Button type="button" size="sm" variant="outline">
+                  Editar caso
+                </Button>
+              </A>
+            </div>
+          </Card>
+        )}
+      </Show>
 
       <div class="flex gap-1 overflow-x-auto border-b border-border dark:border-dark-border">
         <For each={simulationPageTabs}>
@@ -563,12 +639,18 @@ export default function SimulationPage() {
       {/* Paso 1 — Configuración */}
       <Show when={step() === 1}>
         <div class="grid items-start gap-4 xl:grid-cols-12">
-          <div class="xl:col-span-3">
+          <div class="xl:col-span-3 space-y-4">
+            <CaseStudySelector
+              value={activeCaseStudy()}
+              onChange={handleCaseStudyChange}
+              disabled={isSimulationBusy()}
+            />
             <ConfigurationSummaryPanel
               conditions={conditions()}
               scenarios={simulationState.scenarios}
               readiness={readiness()}
               loadingReadiness={loadingReadiness()}
+              caseStudyCode={activeCaseStudy()?.code ?? null}
               {...panelParams()}
             />
           </div>
@@ -722,6 +804,7 @@ export default function SimulationPage() {
               scenarios={simulationState.scenarios}
               readiness={readiness()}
               loadingReadiness={loadingReadiness()}
+              caseStudyCode={activeCaseStudy()?.code ?? null}
               {...panelParams()}
             />
             <Card>
@@ -849,6 +932,7 @@ export default function SimulationPage() {
           operationDate={todayIso()}
           scenarioId={derivedScenario().scenarioId}
           scenarioLabel={derivedScenario().label}
+          caseStudyCode={activeCaseStudy()?.code ?? null}
           playbackOpen={playbackOpen()}
           playbackRoutes={playbackRoutes()}
           playback={playback}

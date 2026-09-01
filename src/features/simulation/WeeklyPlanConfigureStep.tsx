@@ -124,6 +124,7 @@ interface WeeklyPlanDayEditorDrawerProps {
   open: boolean;
   day: WeeklyPlanDay | null;
   editable: boolean;
+  caseStudyLinked?: boolean;
   catalog: PlanningCollectionPointRef[];
   scenarios: Array<{ id: ScenarioId; label: string }>;
   onClose: () => void;
@@ -201,6 +202,12 @@ export function WeeklyPlanDayEditorDrawer(props: WeeklyPlanDayEditorDrawerProps)
           <div class="space-y-5" data-testid="weekly-plan-day-editor">
             <div>
               <p class="text-sm font-semibold text-text-primary dark:text-white">Puntos asignados</p>
+              <Show when={props.caseStudyLinked}>
+                <p class="mt-1 text-xs text-text-muted">
+                  Heredados del caso de estudio ({day().caseStudyCode ?? weeklyPlanState.draftCaseStudy?.code ?? '—'}).
+                  No se editan manualmente en este modo.
+                </p>
+              </Show>
               <Show
                 when={assignedPoints().length > 0}
                 fallback={<p class="mt-2 text-sm text-text-muted">Sin puntos en este día.</p>}
@@ -213,7 +220,7 @@ export function WeeklyPlanDayEditorDrawer(props: WeeklyPlanDayEditorDrawerProps)
                           <p class="text-sm font-medium text-text-primary dark:text-white">{point.code}</p>
                           <p class="text-xs text-text-muted">{point.sectorName ?? 'Sin sector'}</p>
                         </div>
-                        <Show when={props.editable}>
+                        <Show when={props.editable && !props.caseStudyLinked}>
                           <Button size="sm" variant="outline" onClick={() => togglePoint(point.id)}>
                             Quitar
                           </Button>
@@ -225,7 +232,7 @@ export function WeeklyPlanDayEditorDrawer(props: WeeklyPlanDayEditorDrawerProps)
               </Show>
             </div>
 
-            <Show when={props.editable}>
+            <Show when={props.editable && !props.caseStudyLinked}>
               <div class="space-y-3">
                 <TextField
                   label="Buscar en catálogo"
@@ -254,7 +261,9 @@ export function WeeklyPlanDayEditorDrawer(props: WeeklyPlanDayEditorDrawerProps)
                   </For>
                 </div>
               </div>
+            </Show>
 
+            <Show when={props.editable}>
               <div class="grid gap-3 sm:grid-cols-2">
                 <TextField
                   label="Flota esperada (opcional)"

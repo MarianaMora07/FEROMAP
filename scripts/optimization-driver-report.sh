@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Atajo: optimización real contra PostgreSQL + tabla de planes por conductor.
 # Uso: ./scripts/optimization-driver-report.sh [escenario]
-#      just optimization-driver-report [escenario]
+#      ./scripts/optimization-driver-report.sh --case-study CE-UNARE-NORTE
+#      just optimization-driver-report normal
+#      just optimization-driver-report --case-study CE-UNARE-NORTE
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SCENARIO="${1:-normal}"
 
 if [[ -f "$ROOT/.env" ]]; then
   set -a
@@ -34,4 +35,4 @@ if [[ ! -x "$PYTHON" ]]; then
 fi
 
 cd "$ROOT/backend"
-exec "$PYTHON" -m scripts.optimization_driver_plan_report "$SCENARIO"
+exec "$PYTHON" -m scripts.optimization_driver_plan_report "$@"
