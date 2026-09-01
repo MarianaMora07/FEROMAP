@@ -95,6 +95,10 @@ roadmap:
 phase0-baseline: _check
     {{compose}} exec api python -m scripts.phase0_baseline_metrics
 
+# Optimización real + tabla de planes por conductor (BD con seed, sin UI)
+optimization-driver-report scenario="normal":
+    bash scripts/optimization-driver-report.sh {{scenario}}
+
 # Tests frontend: vitest + playwright (API en :8000, VITE_USE_MOCKS=true).
 test-frontend:
     npm test
