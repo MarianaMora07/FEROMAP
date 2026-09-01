@@ -30,7 +30,7 @@
   {
     "id": "broken_vehicle",
     "label": "Vehículo averiado",
-    "description": "Recálculo de ruta tras avería en campo: flota restante y puntos pendientes.",
+    "description": "Recálculo de ruta tras avería en campo.",
     "trafficMultiplier": 1.1,
     "fillLevelBoost": 5
   }

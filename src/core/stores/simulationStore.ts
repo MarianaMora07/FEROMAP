@@ -10,6 +10,7 @@ import {
   dispatchOptimizedRoutes,
   fetchSimulationDetail,
   fetchSimulationHistory,
+  type SimulationDetail,
   type SimulationHistoryRow,
 } from '../api/simulationOperations';
 import { loadDashboardData } from './dashboardStore';
@@ -91,8 +92,11 @@ export async function initSimulationData(): Promise<void> {
   scenariosLoaded = true;
 }
 
-export async function refreshSimulationHistory(): Promise<void> {
-  const history = await fetchSimulationHistory();
+export async function refreshSimulationHistory(options?: {
+  caseStudyId?: number;
+  legacyOnly?: boolean;
+}): Promise<void> {
+  const history = await fetchSimulationHistory(options);
   setState('history', history);
 }
 
@@ -359,8 +363,10 @@ export async function runOptimization(parameters?: SimulationRunParameters): Pro
   }
 }
 
-export async function loadSimulationFromHistory(simulationId: number): Promise<void> {
-  if (state.isOptimizing || state.isLoadingDetail) return;
+export async function loadSimulationFromHistory(simulationId: number): Promise<SimulationDetail> {
+  if (state.isOptimizing || state.isLoadingDetail) {
+    throw new Error('Hay una operación en curso');
+  }
 
   setState({ isLoadingDetail: true, optimizationProgress: 0, logs: [] });
 
@@ -384,6 +390,7 @@ export async function loadSimulationFromHistory(simulationId: number): Promise<v
       ],
     });
     applyOptimizationRoutes(detail.routes);
+    return detail;
   } catch (error) {
     setState({ isLoadingDetail: false, optimizationProgress: 0 });
     throw error;

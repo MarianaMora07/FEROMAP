@@ -23,5 +23,5 @@ def aco_multi_trip_kwargs(n_customers: int, n_vehicles: int) -> dict:
         "landfill_idx": n_customers + 1,
         "shift_budget_sec": 43_200.0,
         "unload_sec": 900.0,
-        "service_secs": [300.0] * max(1, n_vehicles),
+        "service_secs": [1200.0] * max(1, n_vehicles),
     }

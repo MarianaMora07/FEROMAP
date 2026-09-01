@@ -172,6 +172,20 @@ def build_optimization_report(
     current_km = float(kpis["distanceKm"]["current"])
     optimized_km = float(kpis["distanceKm"]["optimized"])
     saving_pct = round((1 - optimized_km / current_km) * 100, 1) if current_km > 0 else 0.0
+    driver_rows = build_driver_plan_rows(routes)
+    max_route_h = max((row.duration_h for row in driver_rows), default=0.0)
+    opt_h = float(kpis["durationHours"]["optimized"])
+    workday_h = float(kpis.get("workdayHours") or 12)
+    exceeds_route = max_route_h > workday_h
+
+    improvement = convergence.get("improvement_pct")
+    improvement_str = f"{improvement:+.1f}%" if improvement is not None else "—"
+    first_km = convergence.get("first_km")
+    last_km = convergence.get("last_km")
+    if first_km is not None and last_km is not None:
+        convergence_label = f"{first_km} → {last_km} km ({improvement_str})"
+    else:
+        convergence_label = "—"
 
     summary_rows = [
         ("Escenario", str(result.get("scenarioId", "—"))),
@@ -181,15 +195,17 @@ def build_optimization_report(
         ("Distancia baseline", f"{current_km:.1f} km"),
         ("Distancia ACO", f"{optimized_km:.1f} km"),
         ("Ahorro distancia", f"{saving_pct:+.1f}%"),
-        ("Duración ACO", f"{float(kpis['durationHours']['optimized']):.2f} h"),
+        ("Duración max ruta", f"{max_route_h:.2f} h"),
+        ("Duración suma flota", f"{opt_h:.2f} h"),
+        ("Jornada referencia", f"{workday_h:.0f} h"),
+        ("Excede jornada (alguna ruta)", "sí" if exceeds_route else "no"),
         ("CO₂ evitado", f"{float(kpis.get('co2KgAvoided', 0)):.1f} kg"),
-        ("Convergencia ACO", f"{convergence.get('first_km')} → {convergence.get('last_km')} km ({convergence.get('improvement_pct'):+.1f}%)"),
+        ("Convergencia ACO", convergence_label),
         ("Iteraciones ACO", str(metrics.get("acoIterationsRun", "—"))),
         ("Parada temprana", "sí" if metrics.get("acoStoppedEarly") else "no"),
         ("KPIs plausibles (día)", "sí" if is_plausible_daily_optimization_kpis(kpis, total_points) else "no"),
     ]
 
-    driver_rows = build_driver_plan_rows(routes)
     convergence_rows = [
         (
             int(point["iteration"]),

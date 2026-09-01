@@ -11,8 +11,8 @@ from typing import Any
 # --- Constantes de contrato (Fase 0) ---
 DEFAULT_IDEAL_OPERATORS = 6
 FIELD_OPERATORS_PER_VEHICLE = 5  # además del conductor
-BASE_SERVICE_SECONDS = 300  # 5 min por punto con dotación completa
-PENALTY_PER_MISSING_FIELD_OPERATOR_SEC = 30
+BASE_SERVICE_SECONDS = 1200  # 20 min por punto con dotación completa
+PENALTY_PER_MISSING_FIELD_OPERATOR_SEC = 180  # 3 min por operario de campo faltante
 MIN_ASSIGNED_OPERATORS = 1
 MAX_OPERATORS_SHORTAGE = FIELD_OPERATORS_PER_VEHICLE
 

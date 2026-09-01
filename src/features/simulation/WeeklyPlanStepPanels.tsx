@@ -57,6 +57,10 @@ export function WeeklyPlanStepPanels(props: WeeklyPlanStepPanelsProps) {
             <p class="mt-1 text-3xl font-bold text-fero-green-dark">{totalPoints()}</p>
             <p class="mt-1 text-xs text-text-muted">
               Condición: {props.scenarios.find((row) => row.id === props.plan.scenarioId)?.label ?? props.plan.scenarioId}
+              <Show when={props.plan.caseStudyCode}>
+                {' '}
+                · Caso: {props.plan.caseStudyCode}
+              </Show>
             </p>
           </div>
 

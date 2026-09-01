@@ -1,3 +1,14 @@
+export function parseCaseStudyIdParam(value: string | string[] | undefined): number | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (!raw) return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+export function simulationCaseStudyHref(caseStudyId: number): string {
+  return `/simulation?caseStudyId=${caseStudyId}`;
+}
+
 export function parseSimulationIdParam(value: string | string[] | undefined): number | null {
   const raw = Array.isArray(value) ? value[0] : value;
   if (!raw) return null;

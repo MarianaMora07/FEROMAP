@@ -36,7 +36,7 @@ export interface OptimizeJobResult {
 }
 
 export function startSimulationOptimizeJob(
-  scenarioId: ScenarioId,
+  scenarioId: ScenarioId | undefined,
   parameters?: SimulationRunParameters & {
     planningLevel?: string;
     autoDispatch?: boolean;
@@ -44,10 +44,11 @@ export function startSimulationOptimizeJob(
     dailyPlanId?: number;
     weeklyPlanId?: number;
     operationDate?: string;
+    caseStudyId?: number;
   },
 ): Promise<{ jobId: string }> {
   return apiPost<{ jobId: string }>('/api/v1/simulations/optimize', {
-    scenarioId,
+    ...(scenarioId ? { scenarioId } : {}),
     planningLevel: parameters?.planningLevel ?? 'simulation',
     autoDispatch: parameters?.autoDispatch ?? false,
     ...parameters,

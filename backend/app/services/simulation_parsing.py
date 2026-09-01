@@ -6,6 +6,16 @@ from typing import Any
 from app.db.models import Simulation
 
 
+def _case_study_fields(sim: Simulation, params: dict[str, Any]) -> dict[str, Any]:
+    case_payload = (params.get("simulationParameters") or {}).get("caseStudy") or {}
+    case_study_id = sim.case_study_id
+    return {
+        "caseStudyId": case_study_id,
+        "caseStudyCode": case_payload.get("caseStudyCode"),
+        "caseStudyName": case_payload.get("caseStudyName"),
+    }
+
+
 def parse_simulation(sim: Simulation) -> dict[str, Any]:
     params: dict[str, Any] = {}
     if sim.parameters_json:
@@ -22,4 +32,5 @@ def parse_simulation(sim: Simulation) -> dict[str, Any]:
         "containersServed": kpis.get("containersServed", 0),
         "fuelLitersOptimized": (kpis.get("fuelLiters") or {}).get("optimized", 0),
         "contingency": bool(params.get("contingency")),
+        **_case_study_fields(sim, params),
     }

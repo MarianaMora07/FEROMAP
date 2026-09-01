@@ -46,7 +46,7 @@ def reset_optimization_slot_for_tests(max_workers: int | None = None) -> None:
 class OptimizationJob:
     id: str
     status: str
-    scenario_id: str
+    scenario_id: str | None
     rain_intensity: str | None
     waste_level_pct: int | None
     estimated_duration_hours: int | None
@@ -57,6 +57,7 @@ class OptimizationJob:
     time_window_enabled: bool | None = None
     kpi_view: str | None = None
     collection_point_ids: list[int] | None = None
+    case_study_id: int | None = None
     auto_dispatch: bool = False
     operation_date: date | None = None
     daily_plan_id: int | None = None
@@ -148,7 +149,7 @@ def _serialize_job(job: OptimizationJob) -> dict[str, Any]:
 
 def create_optimization_job(
     *,
-    scenario_id: str,
+    scenario_id: str | None = None,
     rain_intensity: str | None = None,
     waste_level_pct: int | None = None,
     estimated_duration_hours: int | None = None,
@@ -159,6 +160,7 @@ def create_optimization_job(
     time_window_enabled: bool | None = None,
     kpi_view: str | None = None,
     collection_point_ids: list[int] | None = None,
+    case_study_id: int | None = None,
     auto_dispatch: bool | None = None,
     operation_date: date | None = None,
     daily_plan_id: int | None = None,
@@ -183,6 +185,7 @@ def create_optimization_job(
         time_window_enabled=time_window_enabled,
         kpi_view=kpi_view,
         collection_point_ids=collection_point_ids,
+        case_study_id=case_study_id,
         auto_dispatch=resolved_auto_dispatch,
         operation_date=operation_date,
         daily_plan_id=daily_plan_id,
@@ -274,6 +277,7 @@ def _run_job_worker(job_id: str) -> None:
             time_window_enabled=job.time_window_enabled,
             kpi_view=job.kpi_view,
             collection_point_ids=job.collection_point_ids,
+            case_study_id=job.case_study_id,
             auto_dispatch=job.auto_dispatch,
             operation_date=job.operation_date,
             daily_plan_id=job.daily_plan_id,

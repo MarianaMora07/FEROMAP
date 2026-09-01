@@ -19,6 +19,7 @@ from app.services.planning_service import (
     approve_weekly_plan,
     archive_weekly_plan,
     autofill_weekly_plan_from_schedules,
+    autofill_weekly_plan_from_case_study,
     cancel_pending_visit,
     close_daily_plan,
     compare_plan_versions,
@@ -86,11 +87,13 @@ def create_weekly(body: WeeklyPlanCreate, db: DbSession, _: PlannerOrAdmin):
         db,
         week_start_date=body.week_start_date,
         scenario_id=body.scenario_id,
+        case_study_id=body.case_study_id,
         days=[
             {
                 "operation_date": day.operation_date,
                 "sector_ids": day.sector_ids,
                 "collection_point_ids": day.collection_point_ids,
+                "case_study_id": day.case_study_id,
                 "expected_vehicle_count": day.expected_vehicle_count,
                 "scenario_id_override": day.scenario_id_override,
             }
@@ -109,14 +112,13 @@ def get_weekly(plan_id: int, db: DbSession):
 
 @router.patch("/weekly/{plan_id}")
 def patch_weekly(plan_id: int, body: WeeklyPlanUpdate, db: DbSession, _: PlannerOrAdmin):
-    result = update_weekly_plan(
-        db,
-        plan_id,
-        days=[
+    update_kwargs: dict = {
+        "days": [
             {
                 "operation_date": day.operation_date,
                 "sector_ids": day.sector_ids,
                 "collection_point_ids": day.collection_point_ids,
+                "case_study_id": day.case_study_id,
                 "expected_vehicle_count": day.expected_vehicle_count,
                 "scenario_id_override": day.scenario_id_override,
             }
@@ -124,9 +126,12 @@ def patch_weekly(plan_id: int, body: WeeklyPlanUpdate, db: DbSession, _: Planner
         ]
         if body.days is not None
         else None,
-        scenario_id=body.scenario_id,
-        notes=body.notes,
-    )
+        "scenario_id": body.scenario_id,
+        "notes": body.notes,
+    }
+    if "case_study_id" in body.model_fields_set:
+        update_kwargs["case_study_id"] = body.case_study_id
+    result = update_weekly_plan(db, plan_id, **update_kwargs)
     db.commit()
     return result
 
@@ -143,6 +148,7 @@ def validate_weekly(plan_id: int, db: DbSession, _: PlannerOrAdmin):
     job = create_optimization_job(
         scenario_id=plan["scenarioId"],
         collection_point_ids=point_ids,
+        case_study_id=plan.get("caseStudyId"),
         weekly_plan_id=plan_id,
         planning_level="strategic",
         auto_dispatch=False,
@@ -166,6 +172,18 @@ def approve_weekly(plan_id: int, body: WeeklyPlanApprove, db: DbSession, user: C
 @router.post("/weekly/{plan_id}/autofill-from-schedules")
 def autofill_weekly(plan_id: int, db: DbSession, _: PlannerOrAdmin):
     result = autofill_weekly_plan_from_schedules(db, plan_id)
+    db.commit()
+    return result
+
+
+@router.post("/weekly/{plan_id}/autofill-from-case-study")
+def autofill_weekly_from_case_study(
+    plan_id: int,
+    db: DbSession,
+    _: PlannerOrAdmin,
+    case_study_id: int | None = Query(default=None, alias="caseStudyId"),
+):
+    result = autofill_weekly_plan_from_case_study(db, plan_id, case_study_id=case_study_id)
     db.commit()
     return result
 
@@ -272,6 +290,7 @@ def optimize_daily(
     job = create_optimization_job(
         scenario_id=exec_ctx["scenarioId"],
         collection_point_ids=point_ids,
+        case_study_id=exec_ctx.get("caseStudyId"),
         operation_date=plan.operation_date,
         daily_plan_id=daily_plan_id,
         weekly_plan_id=plan.weekly_plan_id,

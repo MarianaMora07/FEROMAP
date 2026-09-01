@@ -77,6 +77,9 @@ export interface DashboardSummary {
     savingPercentage: number;
     executedAt: string | null;
     kpis: KpiMetrics;
+    caseStudyId?: number | null;
+    caseStudyCode?: string | null;
+    caseStudyName?: string | null;
   } | null;
   residentSchedule?: {
     sectorName: string;

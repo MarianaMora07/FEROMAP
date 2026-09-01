@@ -1,0 +1,192 @@
+[
+  {
+    "code": "CE-UNARE-NORTE",
+    "name": "Unare Norte — subconjunto compacto",
+    "description": "15 puntos en sectores norte (Unare I/II, Uchire, Rio Caura, Ventuari, Curagua B).",
+    "defaultScenarioId": "normal",
+    "defaultParameters": {
+      "operatorsShortage": 0,
+      "acoAnts": 12,
+      "acoIterations": 20
+    },
+    "status": "active",
+    "points": [
+      { "collectionPointCode": "CNT-001", "sortOrder": 1 },
+      { "collectionPointCode": "CNT-002", "sortOrder": 2 },
+      { "collectionPointCode": "CNT-003", "sortOrder": 3 },
+      { "collectionPointCode": "CNT-004", "sortOrder": 4 },
+      { "collectionPointCode": "CNT-005", "sortOrder": 5 },
+      { "collectionPointCode": "CNT-006", "sortOrder": 6 },
+      { "collectionPointCode": "CNT-007", "sortOrder": 7 },
+      { "collectionPointCode": "CNT-008", "sortOrder": 8 },
+      { "collectionPointCode": "CNT-009", "sortOrder": 9 },
+      { "collectionPointCode": "CNT-010", "sortOrder": 10 },
+      { "collectionPointCode": "CNT-011", "sortOrder": 11 },
+      { "collectionPointCode": "CNT-012", "sortOrder": 12 },
+      { "collectionPointCode": "CNT-013", "sortOrder": 13 },
+      { "collectionPointCode": "CNT-014", "sortOrder": 14 },
+      { "collectionPointCode": "CNT-015", "sortOrder": 15 }
+    ]
+  },
+  {
+    "code": "CE-UNARE-SUR",
+    "name": "Unare Sur — subconjunto occidental",
+    "description": "15 puntos en sectores sur/occidente (solapamiento parcial con Norte para demo M:N).",
+    "defaultScenarioId": "normal",
+    "defaultParameters": {
+      "operatorsShortage": 0,
+      "acoAnts": 12,
+      "acoIterations": 20
+    },
+    "status": "active",
+    "points": [
+      { "collectionPointCode": "CNT-006", "sortOrder": 1 },
+      { "collectionPointCode": "CNT-007", "sortOrder": 2 },
+      { "collectionPointCode": "CNT-008", "sortOrder": 3 },
+      { "collectionPointCode": "CNT-009", "sortOrder": 4 },
+      { "collectionPointCode": "CNT-010", "sortOrder": 5 },
+      { "collectionPointCode": "CNT-011", "sortOrder": 6 },
+      { "collectionPointCode": "CNT-012", "sortOrder": 7 },
+      { "collectionPointCode": "CNT-013", "sortOrder": 8 },
+      { "collectionPointCode": "CNT-014", "sortOrder": 9 },
+      { "collectionPointCode": "CNT-015", "sortOrder": 10 },
+      { "collectionPointCode": "CNT-016", "sortOrder": 11 },
+      { "collectionPointCode": "CNT-017", "sortOrder": 12 },
+      { "collectionPointCode": "CNT-018", "sortOrder": 13 },
+      { "collectionPointCode": "CNT-019", "sortOrder": 14 },
+      { "collectionPointCode": "CNT-020", "sortOrder": 15 }
+    ]
+  },
+  {
+    "code": "CE-MULTI-VIAJE",
+    "name": "Multi-viaje — demanda alta",
+    "description": "12 puntos con overrides de llenado/demanda elevados para forzar visitas al vertedero.",
+    "defaultScenarioId": "saturated",
+    "defaultParameters": {
+      "operatorsShortage": 0,
+      "acoAnts": 16,
+      "acoIterations": 25,
+      "wasteLevelPct": 30
+    },
+    "status": "active",
+    "points": [
+      {
+        "collectionPointCode": "CNT-003",
+        "sortOrder": 1,
+        "fillLevelKgOverride": 1140,
+        "demandKgOverride": 1140,
+        "notes": "95% capacidad — critico"
+      },
+      {
+        "collectionPointCode": "CNT-005",
+        "sortOrder": 2,
+        "fillLevelKgOverride": 1140,
+        "demandKgOverride": 1140
+      },
+      {
+        "collectionPointCode": "CNT-009",
+        "sortOrder": 3,
+        "fillLevelKgOverride": 950,
+        "demandKgOverride": 950
+      },
+      {
+        "collectionPointCode": "CNT-014",
+        "sortOrder": 4,
+        "fillLevelKgOverride": 760,
+        "demandKgOverride": 760
+      },
+      {
+        "collectionPointCode": "CNT-016",
+        "sortOrder": 5,
+        "fillLevelKgOverride": 950,
+        "demandKgOverride": 950
+      },
+      {
+        "collectionPointCode": "CNT-020",
+        "sortOrder": 6,
+        "fillLevelKgOverride": 1140,
+        "demandKgOverride": 1140
+      },
+      {
+        "collectionPointCode": "CNT-001",
+        "sortOrder": 7,
+        "fillLevelKgOverride": 1080,
+        "demandKgOverride": 1080
+      },
+      {
+        "collectionPointCode": "CNT-002",
+        "sortOrder": 8,
+        "fillLevelKgOverride": 1080,
+        "demandKgOverride": 1080
+      },
+      {
+        "collectionPointCode": "CNT-004",
+        "sortOrder": 9,
+        "fillLevelKgOverride": 1080,
+        "demandKgOverride": 1080
+      },
+      {
+        "collectionPointCode": "CNT-007",
+        "sortOrder": 10,
+        "fillLevelKgOverride": 1080,
+        "demandKgOverride": 1080
+      },
+      {
+        "collectionPointCode": "CNT-011",
+        "sortOrder": 11,
+        "fillLevelKgOverride": 950,
+        "demandKgOverride": 950
+      },
+      {
+        "collectionPointCode": "CNT-017",
+        "sortOrder": 12,
+        "fillLevelKgOverride": 1140,
+        "demandKgOverride": 1140
+      }
+    ]
+  },
+  {
+    "code": "CE-COMBINATORIO",
+    "name": "Infierno combinatorio — 80 puntos Unare",
+    "description": "Catálogo completo demo (80 contenedores): escenario saturado, ventanas horarias, ausentismo y parámetros ACO al máximo. Stress test VRP multi-vehículo.",
+    "defaultScenarioId": "saturated",
+    "defaultParameters": {
+      "operatorsShortage": 1,
+      "acoAnts": 20,
+      "acoIterations": 40,
+      "wasteLevelPct": 35,
+      "priorityFillLevel": true,
+      "timeWindowEnabled": true
+    },
+    "status": "active",
+    "includeAllPoints": true,
+    "points": [
+      {
+        "collectionPointCode": "CNT-003",
+        "fillLevelKgOverride": 1140,
+        "demandKgOverride": 1140,
+        "notes": "Crítico forzado"
+      },
+      {
+        "collectionPointCode": "CNT-016",
+        "fillLevelKgOverride": 950,
+        "demandKgOverride": 950
+      },
+      {
+        "collectionPointCode": "CNT-040",
+        "fillLevelKgOverride": 1080,
+        "demandKgOverride": 1080
+      },
+      {
+        "collectionPointCode": "CNT-055",
+        "fillLevelKgOverride": 1140,
+        "demandKgOverride": 1140
+      },
+      {
+        "collectionPointCode": "CNT-072",
+        "fillLevelKgOverride": 960,
+        "demandKgOverride": 960
+      }
+    ]
+  }
+]

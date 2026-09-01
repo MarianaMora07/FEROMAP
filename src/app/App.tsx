@@ -31,6 +31,8 @@ const MapPage = lazyPage(() => import('../features/map'));
 const VehiclesPage = lazyPage(() => import('../features/vehicles'));
 const DriversPage = lazyPage(() => import('../features/drivers'));
 const CollectionPointsPage = lazyPage(() => import('../features/collection-points'));
+const CaseStudiesListPage = lazyPage(() => import('../features/case-studies'));
+const CaseStudyEditorPage = lazyPage(() => import('../features/case-studies/CaseStudyEditorPage'));
 const SimulationPage = lazyPage(() => import('../features/simulation'));
 const DemostracionPage = lazyPage(() => import('../features/demostracion'));
 const MonitoringPage = lazyPage(() => import('../features/monitoring'));
@@ -80,6 +82,8 @@ export default function App() {
         <Route path="/vehicles" component={VehiclesPage} />
         <Route path="/drivers" component={DriversPage} />
         <Route path="/collection-points" component={CollectionPointsPage} />
+        <Route path="/case-studies" component={CaseStudiesListPage} />
+        <Route path="/case-studies/:id" component={CaseStudyEditorPage} />
         <Route path="/simulation" component={SimulationPage} />
         <Route path="/demostracion" component={DemostracionPage} />
         <Route path="/monitoring" component={MonitoringPage} />

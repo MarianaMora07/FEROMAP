@@ -29,3 +29,6 @@ class CollectionPoint(Base):
 
     sector: Mapped["Sector"] = relationship(back_populates="collection_points")
     waypoints: Mapped[list["RouteWaypoint"]] = relationship(back_populates="collection_point")
+    case_study_memberships: Mapped[list["CaseStudyPoint"]] = relationship(
+        back_populates="collection_point",
+    )

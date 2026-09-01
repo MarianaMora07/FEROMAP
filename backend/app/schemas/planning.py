@@ -10,6 +10,7 @@ class WeeklyPlanDayInput(CamelModel):
     operation_date: date
     sector_ids: list[int] = Field(default_factory=list)
     collection_point_ids: list[int] = Field(default_factory=list)
+    case_study_id: int | None = None
     expected_vehicle_count: int | None = None
     scenario_id_override: str | None = None
 
@@ -17,12 +18,14 @@ class WeeklyPlanDayInput(CamelModel):
 class WeeklyPlanCreate(CamelModel):
     week_start_date: date
     scenario_id: str = "normal"
+    case_study_id: int | None = None
     days: list[WeeklyPlanDayInput]
     notes: str | None = None
 
 
 class WeeklyPlanUpdate(CamelModel):
     scenario_id: str | None = None
+    case_study_id: int | None = None
     days: list[WeeklyPlanDayInput] | None = None
     notes: str | None = None
 

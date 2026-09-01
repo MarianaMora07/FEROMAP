@@ -61,8 +61,8 @@ Constantes (contrato):
 |-----------|-------|
 | `DEFAULT_IDEAL_OPERATORS` | 6 |
 | `FIELD_OPERATORS_PER_VEHICLE` | 5 |
-| `BASE_SERVICE_SECONDS` | 300 (5 min por punto, dotación completa) |
-| `PENALTY_PER_MISSING_FIELD_OPERATOR_SEC` | 30 |
+| `BASE_SERVICE_SECONDS` | 1200 (20 min por punto, dotación completa) |
+| `PENALTY_PER_MISSING_FIELD_OPERATOR_SEC` | 180 (3 min por operario de campo faltante) |
 
 Por vehículo:
 
@@ -86,10 +86,10 @@ Supuesto: ruta con **5 paradas**, **tiempo de viaje = 40 min** (2 400 s), dota
 
 | Caso | assigned | shortage | Operarios campo | Faltantes | s/punto | Tiempo paradas | **Total** |
 |------|----------|----------|-----------------|-----------|---------|----------------|-----------|
-| Turno completo | 6 | 0 | 5 | 0 | 300 | 25 min | **65 min** |
-| Falta 1 operario en camión | 5 | 0 | 4 | 1 | 330 | 27,5 min | **67,5 min** |
-| Ausentismo turno (−2 campo) | 6 | 2 | 3 | 2 | 360 | 30 min | **70 min** |
-| Solo conductor | 1 | 0 | 0 | 5 | 450 | 37,5 min | **77,5 min** |
+| Turno completo | 6 | 0 | 5 | 0 | 1200 | 100 min | **140 min** |
+| Falta 1 operario en camión | 5 | 0 | 4 | 1 | 1380 | 115 min | **155 min** |
+| Ausentismo turno (−2 campo) | 6 | 2 | 3 | 2 | 1560 | 130 min | **170 min** |
+| Solo conductor | 1 | 0 | 0 | 5 | 2100 | 175 min | **215 min** |
 
 **Misma distancia en los cuatro casos** (misma secuencia ACO); **duración distinta** en KPIs.
 

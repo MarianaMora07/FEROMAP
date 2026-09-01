@@ -25,6 +25,7 @@ REQUIRED_SEED_FILES = [
     "alerts.json",
     "monitoring.json",
     "simulations.json",
+    "case_studies.json",
     "optimization_logs.json",
 ]
 

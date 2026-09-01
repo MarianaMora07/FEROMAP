@@ -19,6 +19,7 @@ from app.api.v1 import (
     sectors,
     simulations,
     benchmarks,
+    case_studies,
     map_tiles,
 )
 
@@ -37,6 +38,7 @@ api_router.include_router(dashboard.router)
 api_router.include_router(simulations.router)
 api_router.include_router(planning.router)
 api_router.include_router(benchmarks.router)
+api_router.include_router(case_studies.router)
 api_router.include_router(catalog.router)
 api_router.include_router(reports.router)
 api_router.include_router(analytics.router)

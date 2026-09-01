@@ -12,6 +12,9 @@ def seed() -> None:
     print(f"   parishes: {summary['parishes']}")
     print(f"   sectors: {summary['sectors']}")
     print(f"   collection_points: {summary['collectionPoints']}")
+    print(f"   case_studies: {summary.get('caseStudies', 0)}")
+    if summary.get("caseStudyCodes"):
+        print(f"   case_study_codes: {', '.join(summary['caseStudyCodes'])}")
     print(f"   vehicles: {summary['vehicles']}")
     print(f"   drivers: {summary['drivers']}")
     print(f"   users: {summary['users']}")

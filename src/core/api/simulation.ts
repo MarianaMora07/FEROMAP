@@ -83,6 +83,8 @@ export interface SimulationRunParameters {
   acoAnts?: number;
   /** Iteraciones del ACO (5–60). */
   acoIterations?: number;
+  /** Caso de estudio acotado (Fase 12.3). */
+  caseStudyId?: number;
 }
 
 export async function runSimulationOptimize(

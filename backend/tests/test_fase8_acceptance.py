@@ -3,7 +3,7 @@
 Matriz de verificación:
 | Test | Verifica |
 |------|----------|
-| service_time | 6→300s, 5→330s, 1→450s (conductor + 5 operarios) |
+| service_time | 6→1200s, 5→1380s, 1→2100s (conductor + 5 operarios) |
 | KPI duración | Distancia igual, duración sube al bajar assigned |
 | operatorsShortage | Modifier global reduce dotación efectiva |
 | ACO | Fitness no cambia al variar solo dotación (misma semilla → misma ruta) |
@@ -54,9 +54,9 @@ class TestServiceTimeFormula:
     @pytest.mark.parametrize(
         ("assigned", "expected_seconds"),
         [
-            (6, 300),
-            (5, 330),
-            (1, 450),
+            (6, 1200),
+            (5, 1380),
+            (1, 2100),
         ],
         ids=["full-crew-6", "missing-one-field-5", "driver-only-1"],
     )
@@ -64,14 +64,14 @@ class TestServiceTimeFormula:
         assert service_time_seconds_per_stop(assigned) == expected_seconds
 
     def test_contract_constants(self) -> None:
-        assert BASE_SERVICE_SECONDS == 300
+        assert BASE_SERVICE_SECONDS == 1200
         assert FIELD_OPERATORS_PER_VEHICLE == 5
-        assert PENALTY_PER_MISSING_FIELD_OPERATOR_SEC == 30
+        assert PENALTY_PER_MISSING_FIELD_OPERATOR_SEC == 180
 
     def test_compute_service_time_sec_on_vehicle_unit(self) -> None:
-        assert compute_service_time_sec(_vehicle(6)) == 300
-        assert compute_service_time_sec(_vehicle(5)) == 330
-        assert compute_service_time_sec(_vehicle(1)) == 450
+        assert compute_service_time_sec(_vehicle(6)) == 1200
+        assert compute_service_time_sec(_vehicle(5)) == 1380
+        assert compute_service_time_sec(_vehicle(1)) == 2100
 
 
 class TestKpiDurationWithCrew:
@@ -128,7 +128,7 @@ class TestOperatorsShortageGlobalModifier:
         modifiers = build_applied_crew_modifiers(2)
         assert modifiers["operatorsShortage"] == 2
         assert modifiers["effectiveAssignedOperators"] == 4
-        assert modifiers["serviceSecondsPerStop"] == 360
+        assert modifiers["serviceSecondsPerStop"] == 1560
         assert "conductor" in modifiers["narrative"].lower()
 
     def test_shortage_increases_kpi_duration_with_same_aco_solution(self) -> None:

@@ -1,6 +1,6 @@
 import { For, Show } from 'solid-js';
 import { AlertTriangle, Leaf, Map } from 'lucide-solid';
-import { Button, Card, CardHeader } from '../../design-system/components';
+import { Button, Card, CardHeader, Badge } from '../../design-system/components';
 import { optimizationHref } from '../../core/planning/operationalLinks';
 import type { RoutePlaybackController } from '../../core/route-playback/useRoutePlayback';
 import type { RoutePlaybackModel } from '../../core/route-playback/routePlaybackTypes';
@@ -53,6 +53,7 @@ interface SimulationResultsStepProps {
   operationDate: string;
   scenarioId: ScenarioId;
   scenarioLabel: string;
+  caseStudyCode?: string | null;
   playbackOpen: boolean;
   playbackRoutes: RoutePlaybackModel[];
   playback: RoutePlaybackController;
@@ -134,6 +135,23 @@ export function SimulationResultsStep(props: SimulationResultsStepProps) {
       }
     >
       <div class="space-y-4">
+        <Show when={props.caseStudyCode || props.simulationId}>
+          <div class="flex flex-wrap items-center gap-2">
+            <Show when={props.caseStudyCode}>
+              {(code) => <Badge variant="success">Caso: {code()}</Badge>}
+            </Show>
+            <Show when={!props.caseStudyCode}>
+              <Badge variant="default">Modo legacy</Badge>
+            </Show>
+            <Show when={props.simulationId}>
+              {(id) => (
+                <span class="text-xs text-text-muted">
+                  Simulación #{id()} · playback acotado a esta corrida
+                </span>
+              )}
+            </Show>
+          </div>
+        </Show>
         <Show when={props.workdayWarning}>
           {(message) => (
             <div class="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">

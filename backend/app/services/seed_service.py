@@ -38,6 +38,7 @@ from app.db.models import (
 from app.db.session import SessionLocal
 from app.services.admin_service import ensure_default_settings
 from app.services.alert_service import seed_alerts_from_json
+from app.services.case_study_seed_service import case_study_seed_summary, seed_case_studies
 from app.services.planning_service import (
     seed_daily_plan_demo,
     seed_optimized_daily_playback_demo,
@@ -88,6 +89,7 @@ def clear_tables(session: Session) -> None:
         "pending_visits", "vehicle_incidents", "route_waypoints",
         "visit_schedules", "optimized_routes", "daily_plans",
         "weekly_plan_days", "weekly_plans", "simulations",
+        "case_study_points", "case_studies",
         "collection_points", "vehicles",
         "sectors",
         "drivers", "parishes", "users",
@@ -243,6 +245,9 @@ def seed_into_session(session: Session) -> dict[str, Any]:
         session.add(point)
         collection_points.append(point)
     session.flush()
+
+    studies_by_code = seed_case_studies(session, collection_points=collection_points)
+    case_study_stats = case_study_seed_summary(studies_by_code)
 
     in_route_vehicles = [
         vehicle
@@ -439,6 +444,7 @@ def seed_into_session(session: Session) -> dict[str, Any]:
         "simulations": len(simulations_data),
         "systemAlerts": alerts_count,
         "demoPassword": DEMO_PASSWORD,
+        **case_study_stats,
     }
 
 

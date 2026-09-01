@@ -12,6 +12,7 @@ export const ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
   '/vehicles': ['administrador', 'planificador'],
   '/drivers': ['administrador', 'planificador'],
   '/collection-points': ['administrador', 'planificador', 'residente'],
+  '/case-studies': ['administrador', 'planificador'],
   '/simulation': ['administrador', 'planificador'],
   '/demostracion': ['administrador', 'planificador'],
   '/monitoring': ['administrador', 'planificador', 'conductor'],
@@ -32,9 +33,15 @@ export const DEFAULT_HOME_BY_ROLE: Record<UserRole, string> = {
 
 export function canAccessRoute(role: UserRole | undefined, path: string): boolean {
   if (!role) return false;
-  const allowed = ROUTE_PERMISSIONS[path];
-  if (!allowed) return true;
-  return allowed.includes(role);
+  const normalized = path.split('?')[0] ?? path;
+  const allowed = ROUTE_PERMISSIONS[normalized];
+  if (allowed) return allowed.includes(role);
+  for (const [route, roles] of Object.entries(ROUTE_PERMISSIONS)) {
+    if (route !== '/' && normalized.startsWith(`${route}/`)) {
+      return roles.includes(role);
+    }
+  }
+  return true;
 }
 
 export function homePathForRole(role: UserRole): string {
@@ -54,7 +61,7 @@ export interface NavItemDef {
 }
 
 export const SIDEBAR_SECTION_GROUPS: Record<string, readonly string[]> = {
-  Análisis: ['/simulation', '/demostracion'],
+  Análisis: ['/simulation', '/case-studies', '/demostracion'],
   Operación: ['/planning', '/optimization', '/planning/history'],
   Resultados: ['/reports', '/analytics'],
 };
@@ -88,6 +95,12 @@ export const MAIN_NAV_ITEMS: NavItemDef[] = [
     label: 'Simulación de escenarios',
     description: 'Evaluar condiciones e impacto del algoritmo',
     sectionBefore: 'Análisis',
+    roles: ['administrador', 'planificador'],
+  },
+  {
+    href: '/case-studies',
+    label: 'Casos de estudio',
+    description: 'Subconjuntos aislados para la tesis',
     roles: ['administrador', 'planificador'],
   },
   {

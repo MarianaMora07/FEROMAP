@@ -13,6 +13,9 @@ export interface SimulationHistoryRow {
   efficiency: number;
   scenarioId: ScenarioId;
   contingency: boolean;
+  caseStudyId?: number | null;
+  caseStudyCode?: string | null;
+  caseStudyName?: string | null;
 }
 
 export interface SimulationPlanningContext {
@@ -30,6 +33,9 @@ export interface SimulationDetail {
   kpis: KpiMetrics;
   kpiSavingPercentage: number;
   planningContext?: SimulationPlanningContext | null;
+  caseStudyId?: number | null;
+  caseStudyCode?: string | null;
+  caseStudyName?: string | null;
   routes: {
     current: RouteCollection;
     optimized: RouteCollection;
@@ -76,18 +82,35 @@ function mockSimulationDetail(id: number): SimulationDetail {
   };
 }
 
-export async function fetchSimulationHistory(): Promise<SimulationHistoryRow[]> {
+export async function fetchSimulationHistory(options?: {
+  caseStudyId?: number;
+  legacyOnly?: boolean;
+  limit?: number;
+}): Promise<SimulationHistoryRow[]> {
   if (useMocks) {
-    return simulationHistory.map((row, index) => ({
+    const rows = simulationHistory.map((row, index) => ({
       id: index + 1,
       name: row.name,
       datetime: row.datetime,
       efficiency: row.efficiency,
       scenarioId:
-        index === 0 ? 'rain' : index === 1 ? 'saturated' : index === 2 ? 'peak_traffic' : 'normal',
+        (index === 0 ? 'rain' : index === 1 ? 'saturated' : index === 2 ? 'peak_traffic' : 'normal') as ScenarioId,
       contingency: index === 3,
-    }));
+      caseStudyId: index === 0 ? 1 : index === 1 ? 2 : null,
+      caseStudyCode: index === 0 ? 'CE-UNARE-NORTE' : index === 1 ? 'CE-UNARE-SUR' : null,
+      caseStudyName: index === 0 ? 'Unare Norte' : index === 1 ? 'Unare Sur' : null,
+    })) as SimulationHistoryRow[];
+    if (options?.legacyOnly) return rows.filter((row) => !row.caseStudyId);
+    if (options?.caseStudyId != null) {
+      return rows.filter((row) => row.caseStudyId === options.caseStudyId);
+    }
+    return rows;
   }
+
+  const params = new URLSearchParams();
+  params.set('limit', String(options?.limit ?? 25));
+  if (options?.caseStudyId != null) params.set('caseStudyId', String(options.caseStudyId));
+  if (options?.legacyOnly) params.set('legacyOnly', 'true');
 
   const response = await apiGet<{
     items: Array<{
@@ -97,8 +120,11 @@ export async function fetchSimulationHistory(): Promise<SimulationHistoryRow[]> 
       scenarioId: ScenarioId;
       savingPercentage: number;
       contingency: boolean;
+      caseStudyId?: number | null;
+      caseStudyCode?: string | null;
+      caseStudyName?: string | null;
     }>;
-  }>('/api/v1/simulations?limit=25');
+  }>(`/api/v1/simulations?${params.toString()}`);
 
   return response.items.map((row) => ({
     id: row.id,
@@ -107,6 +133,9 @@ export async function fetchSimulationHistory(): Promise<SimulationHistoryRow[]> 
     efficiency: Math.round(row.savingPercentage),
     scenarioId: row.scenarioId,
     contingency: row.contingency,
+    caseStudyId: row.caseStudyId ?? null,
+    caseStudyCode: row.caseStudyCode ?? null,
+    caseStudyName: row.caseStudyName ?? null,
   }));
 }
 
@@ -120,6 +149,9 @@ export function fetchSimulationDetail(id: number): Promise<SimulationDetail> {
     scenarioName: string;
     kpis: KpiMetrics;
     kpiSavingPercentage: number;
+    caseStudyId?: number | null;
+    caseStudyCode?: string | null;
+    caseStudyName?: string | null;
     parameters?: { planningContext?: SimulationPlanningContext };
     routes: SimulationDetail['routes'];
   }>(`/api/v1/simulations/${id}`).then((detail) => ({
@@ -129,6 +161,9 @@ export function fetchSimulationDetail(id: number): Promise<SimulationDetail> {
     scenarioName: detail.scenarioName,
     kpis: detail.kpis,
     kpiSavingPercentage: detail.kpiSavingPercentage,
+    caseStudyId: detail.caseStudyId ?? null,
+    caseStudyCode: detail.caseStudyCode ?? null,
+    caseStudyName: detail.caseStudyName ?? null,
     planningContext: detail.parameters?.planningContext ?? null,
     routes: detail.routes,
   }));

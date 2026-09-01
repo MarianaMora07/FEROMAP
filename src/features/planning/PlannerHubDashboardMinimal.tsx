@@ -125,7 +125,12 @@ export function PlannerHubDashboardMinimal(props: PlannerHubDashboardMinimalProp
       </Show>
 
       <Show when={!props.loading && lastOptimization()}>
-        {(opt) => <ContinueThesisChip simulationId={opt().simulationId} />}
+        {(opt) => (
+          <ContinueThesisChip
+            simulationId={opt().simulationId}
+            caseStudyCode={opt().caseStudyCode}
+          />
+        )}
       </Show>
     </section>
   );
