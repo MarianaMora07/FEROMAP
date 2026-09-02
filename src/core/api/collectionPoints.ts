@@ -351,6 +351,7 @@ export {
   buildCollectionPointsCsv,
   buildCollectionPointsSummary,
   buildSectorFilterOptions,
+  computeCatalogKpis,
   computeCollectionPointsKpis,
   computeFillDistribution,
   detailToCollectionPoint,

@@ -43,8 +43,8 @@ echo ""
 echo "▶ 3/9 Datos GIS (sectores y contenedores)…"
 sectors_count="$(curl -sf "${API_BASE}/api/v1/sectors" | python -c "import sys,json; print(len(json.load(sys.stdin).get('features',[])))")"
 points_count="$(curl -sf "${API_BASE}/api/v1/collection-points" | python -c "import sys,json; print(len(json.load(sys.stdin).get('features',[])))")"
-if [[ "${sectors_count}" -lt 1 || "${points_count}" -lt 1 ]]; then
-  echo "❌ Datos insuficientes (sectores=${sectors_count}, puntos=${points_count}). Ejecuta: just seed" >&2
+if [[ "${sectors_count}" -lt 1 || "${points_count}" -lt 120 ]]; then
+  echo "❌ Datos insuficientes (sectores=${sectors_count}, puntos=${points_count}, esperados ≥120). Ejecuta: just seed" >&2
   exit 1
 fi
 echo "   ✅ ${sectors_count} sectores, ${points_count} contenedores"

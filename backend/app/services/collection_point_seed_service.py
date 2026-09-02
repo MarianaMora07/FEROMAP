@@ -1,14 +1,19 @@
-"""Genera collection points para sectores que no tienen."""
+"""Genera collection points para cubrir sectores y alcanzar el total demo."""
 
 from __future__ import annotations
 
 import logging
-from sqlalchemy import select, func
+from collections import Counter
+from decimal import Decimal
+
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.db.models import Sector, CollectionPoint
+from app.db.models import CollectionPoint, Sector
 
 logger = logging.getLogger(__name__)
+
+TARGET_COLLECTION_POINTS = 120
 
 # Coordenadas aproximadas por sector (zona Ciudad Guayana)
 # Basadas en los puntos existentes y distribución geográfica conocida
@@ -71,58 +76,149 @@ DEFAULT_LAT = 8.2750
 DEFAULT_LNG = -62.7500
 
 
-def generate_missing_collection_points(db: Session) -> dict[str, int]:
-    """Crea 1 collection point por sector que no tenga ninguno."""
-    sectors_without = db.scalars(
-        select(Sector)
-        .where(
-            Sector.deleted_at.is_(None),
-            ~Sector.id.in_(
-                select(CollectionPoint.sector_id).where(CollectionPoint.deleted_at.is_(None))
-            ),
-        )
-        .order_by(Sector.name)
-    ).all()
-
-    if not sectors_without:
-        return {"created": 0, "total_points": _count_points(db)}
-
-    existing_codes = set(
-        db.scalars(select(CollectionPoint.code)).all()
-    )
-    max_id = db.scalar(select(func.max(CollectionPoint.id))) or 0
+def ensure_collection_points_coverage(
+    db: Session,
+    *,
+    target_total: int = TARGET_COLLECTION_POINTS,
+) -> dict[str, int]:
+    """Garantiza al menos 1 punto por sector y un total demo de `target_total`."""
+    if target_total < 1:
+        raise ValueError("target_total debe ser >= 1")
 
     created = 0
-    for i, sector in enumerate(sectors_without):
-        lat, lng = _SECTOR_COORDS.get(sector.name, (DEFAULT_LAT, DEFAULT_LNG))
-        # Pequeña variación para evitarOverlap
-        lat += (i % 5) * 0.0003
-        lng += (i % 3) * 0.0004
+    existing_codes = set(db.scalars(select(CollectionPoint.code)).all())
+    code_serial = _max_code_serial(existing_codes)
 
-        code = f"CNT-{max_id + created + 1:03d}"
-        while code in existing_codes:
-            max_id += 1
-            code = f"CNT-{max_id + 1:03d}"
-        existing_codes.add(code)
+    sectors = db.scalars(
+        select(Sector).where(Sector.deleted_at.is_(None)).order_by(Sector.name)
+    ).all()
+    if not sectors:
+        return {"created": 0, "total_points": 0, "sectors_covered": 0}
 
-        point = CollectionPoint(
-            sector_id=sector.id,
-            code=code,
-            latitude=lat,
-            longitude=lng,
-            max_capacity_kg=1000,
-            current_fill_level_kg=0,
-            status="active",
+    counts = _sector_point_counts(db)
+
+    for sector in sectors:
+        if counts.get(sector.id, 0) > 0:
+            continue
+        point, code_serial = _build_point_for_sector(
+            sector=sector,
+            index_in_sector=0,
+            code_serial=code_serial,
+            existing_codes=existing_codes,
         )
         db.add(point)
+        counts[sector.id] = 1
         created += 1
 
-    db.flush()
-    logger.info("Created %d collection points for missing sectors", created)
-    return {"created": created, "total_points": _count_points(db)}
+    while _count_points(db) + created < target_total:
+        sector = _sector_with_fewest_points(sectors, counts)
+        index_in_sector = counts.get(sector.id, 0)
+        point, code_serial = _build_point_for_sector(
+            sector=sector,
+            index_in_sector=index_in_sector,
+            code_serial=code_serial,
+            existing_codes=existing_codes,
+        )
+        db.add(point)
+        counts[sector.id] = index_in_sector + 1
+        created += 1
+
+    if created:
+        db.flush()
+        logger.info(
+            "Created %d collection points (target=%d, total=%d, sectors=%d)",
+            created,
+            target_total,
+            _count_points(db),
+            len(sectors),
+        )
+
+    return {
+        "created": created,
+        "total_points": _count_points(db),
+        "sectors_covered": _count_sectors_with_points(db),
+        "target_total": target_total,
+    }
+
+
+def generate_missing_collection_points(db: Session) -> dict[str, int]:
+    """Compatibilidad con el endpoint demo: cubre sectores y llega a 120 puntos."""
+    return ensure_collection_points_coverage(db)
+
+
+def _build_point_for_sector(
+    *,
+    sector: Sector,
+    index_in_sector: int,
+    code_serial: int,
+    existing_codes: set[str],
+) -> tuple[CollectionPoint, int]:
+    lat, lng = _SECTOR_COORDS.get(sector.name, (DEFAULT_LAT, DEFAULT_LNG))
+    lat += (index_in_sector % 5) * 0.0003
+    lng += (index_in_sector % 3) * 0.0004
+
+    code_serial += 1
+    code = f"CNT-{code_serial:03d}"
+    while code in existing_codes:
+        code_serial += 1
+        code = f"CNT-{code_serial:03d}"
+    existing_codes.add(code)
+
+    fill_pct = Decimal(str(20 + ((code_serial * 13) % 55)))
+    max_capacity_kg = Decimal("1000")
+
+    return (
+        CollectionPoint(
+            sector_id=sector.id,
+            code=code,
+            latitude=Decimal(str(round(lat, 6))),
+            longitude=Decimal(str(round(lng, 6))),
+            max_capacity_kg=max_capacity_kg,
+            current_fill_level_kg=(max_capacity_kg * fill_pct / Decimal("100")).quantize(
+                Decimal("0.01")
+            ),
+            status="active",
+        ),
+        code_serial,
+    )
+
+
+def _sector_with_fewest_points(
+    sectors: list[Sector],
+    counts: Counter[int],
+) -> Sector:
+    return min(sectors, key=lambda sector: (counts.get(sector.id, 0), sector.name))
+
+
+def _sector_point_counts(db: Session) -> Counter[int]:
+    rows = db.execute(
+        select(CollectionPoint.sector_id, func.count(CollectionPoint.id))
+        .where(CollectionPoint.deleted_at.is_(None))
+        .group_by(CollectionPoint.sector_id)
+    ).all()
+    return Counter({sector_id: count for sector_id, count in rows})
+
+
+def _max_code_serial(existing_codes: set[str]) -> int:
+    serial = 0
+    for code in existing_codes:
+        if not code.startswith("CNT-"):
+            continue
+        suffix = code[4:]
+        if suffix.isdigit():
+            serial = max(serial, int(suffix))
+    return serial
 
 
 def _count_points(db: Session) -> int:
     return db.scalar(
         select(func.count(CollectionPoint.id)).where(CollectionPoint.deleted_at.is_(None))
+    ) or 0
+
+
+def _count_sectors_with_points(db: Session) -> int:
+    return db.scalar(
+        select(func.count(func.distinct(CollectionPoint.sector_id))).where(
+            CollectionPoint.deleted_at.is_(None)
+        )
     ) or 0

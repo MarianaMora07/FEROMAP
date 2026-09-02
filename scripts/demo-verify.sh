@@ -27,9 +27,9 @@ fi
 echo "   ✅ ${sectors_count} sectores"
 
 echo "▶ Contenedores (GeoJSON)…"
-points_count="$(curl -sf "${API_BASE}/api/v1/collection-points" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('features',[])))")"
-if [[ "${points_count}" -lt 1 ]]; then
-  echo "❌ Sin contenedores en la API" >&2
+points_count="$(curl -sf -H "Authorization: Bearer ${TOKEN}" "${API_BASE}/api/v1/collection-points" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('features',[])))")"
+if [[ "${points_count}" -lt 120 ]]; then
+  echo "❌ Se esperaban al menos 120 contenedores (hay ${points_count}). Ejecuta: just seed" >&2
   exit 1
 fi
 echo "   ✅ ${points_count} contenedores"

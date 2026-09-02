@@ -81,6 +81,16 @@ describe('operationalMapConfig', () => {
     expect(options.maxBounds).toEqual(UNARE_BOUNDS);
   });
 
+  it('allows unrestricted panning when maxBounds is null', () => {
+    const options = createOperationalMapOptions({
+      container: 'operational-map-test',
+      style: { version: 8, sources: {}, layers: [] },
+      maxBounds: null,
+    });
+
+    expect(options.maxBounds).toBeUndefined();
+  });
+
   it('merges bbox filter with optional map context filters', () => {
     expect(operationalMapContextFilters()).toEqual({ bbox: UNARE_BBOX_QUERY });
     expect(operationalMapContextFilters({ sector: 'Unare I' })).toEqual({
