@@ -10,7 +10,6 @@ export interface CollectionPointFormValues {
   latitude: number;
   longitude: number;
   maxCapacityKg: number;
-  fillLevelPct: number;
   status: 'active' | 'inactive';
 }
 
@@ -36,20 +35,17 @@ function defaultValues(
     latitude: draftCoords?.lat ?? UNARE_CENTER[1],
     longitude: draftCoords?.lng ?? UNARE_CENTER[0],
     maxCapacityKg: 1100,
-    fillLevelPct: 0,
     status: 'active',
   };
 }
 
 function valuesFromDetail(detail: CollectionPointDetail): CollectionPointFormValues {
-  const capacity = detail.capacityKg || 1;
   return {
     code: detail.code,
     sectorId: detail.sectorId,
     latitude: detail.latitude,
     longitude: detail.longitude,
     maxCapacityKg: detail.capacityKg,
-    fillLevelPct: detail.fillLevel,
     status: detail.active ? 'active' : 'inactive',
   };
 }
@@ -83,10 +79,6 @@ export function CollectionPointFormModal(props: CollectionPointFormModalProps) {
     }
     if (values.maxCapacityKg <= 0) {
       setError('La capacidad debe ser mayor que cero');
-      return;
-    }
-    if (values.fillLevelPct < 0 || values.fillLevelPct > 100) {
-      setError('El nivel de llenado debe estar entre 0 y 100 %');
       return;
     }
     setError('');
@@ -159,30 +151,17 @@ export function CollectionPointFormModal(props: CollectionPointFormModalProps) {
             onInput={(e) => patch({ maxCapacityKg: Number(e.currentTarget.value) })}
             required
           />
-          <TextField
-            label="Nivel de llenado (%)"
-            name="fillLevelPct"
-            type="number"
-            min="0"
-            max="100"
-            step="1"
-            value={String(form().fillLevelPct)}
+          <SelectField
+            label="Estado operativo"
+            name="status"
+            value={form().status}
             disabled={props.submitting}
-            onInput={(e) => patch({ fillLevelPct: Number(e.currentTarget.value) })}
-            required
-          />
+            onChange={(e) => patch({ status: e.currentTarget.value as 'active' | 'inactive' })}
+          >
+            <option value="active">Activo</option>
+            <option value="inactive">Fuera de servicio</option>
+          </SelectField>
         </div>
-
-        <SelectField
-          label="Estado operativo"
-          name="status"
-          value={form().status}
-          disabled={props.submitting}
-          onChange={(e) => patch({ status: e.currentTarget.value as 'active' | 'inactive' })}
-        >
-          <option value="active">Activo</option>
-          <option value="inactive">Fuera de servicio</option>
-        </SelectField>
 
         <Show when={props.mode === 'create' && props.draftCoords}>
           <p class="rounded-md border border-fero-blue/30 bg-fero-blue/5 px-3 py-2 text-xs text-text-secondary">

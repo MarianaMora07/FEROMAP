@@ -73,14 +73,34 @@ def test_case_study_point_counts(db: Session):
     assert norte_count == 15
     assert sur_count == 15
     assert multi_count == 12
-    assert combinatorio_count == 80
+    assert combinatorio_count == 120
 
 
-def test_collection_points_seed_has_stress_grid(db: Session):
+def test_collection_points_seed_covers_all_sectors(db: Session):
     total = db.scalar(
         select(func.count()).select_from(CollectionPoint).where(CollectionPoint.deleted_at.is_(None))
     )
-    assert total == 80
+    sectors_total = db.scalar(
+        select(func.count()).select_from(Sector).where(Sector.deleted_at.is_(None))
+    )
+    sectors_with_points = db.scalar(
+        select(func.count(func.distinct(CollectionPoint.sector_id))).where(
+            CollectionPoint.deleted_at.is_(None)
+        )
+    )
+    assert total == 120
+    assert sectors_with_points == sectors_total
+
+
+def test_collection_points_seed_has_stress_grid(db: Session):
+    original_codes = {f"CNT-{index:03d}" for index in range(1, 81)}
+    loaded_codes = set(
+        db.scalars(
+            select(CollectionPoint.code).where(CollectionPoint.deleted_at.is_(None))
+        ).all()
+    )
+    assert original_codes.issubset(loaded_codes)
+    assert db.scalar(select(CollectionPoint.code).where(CollectionPoint.code == "CNT-080")) == "CNT-080"
 
 
 def test_shared_point_in_multiple_case_studies(db: Session):

@@ -35,16 +35,6 @@ const STATUS_LABELS: Record<FillStatus, string> = {
   'fuera-de-servicio': 'Fuera de servicio',
 };
 
-const KPI_STATUS_ORDER: FillStatus[] = ['normal', 'critico', 'lleno', 'parcial', 'fuera-de-servicio'];
-
-const KPI_TONES: Record<FillStatus, CollectionPointKpiTone> = {
-  normal: 'green',
-  critico: 'amber',
-  lleno: 'red',
-  parcial: 'slate',
-  'fuera-de-servicio': 'slate',
-};
-
 function countByStatus(points: CollectionPoint[], status: FillStatus): number {
   return points.filter((p) => p.status === status).length;
 }
@@ -54,42 +44,57 @@ function relativePct(count: number, total: number): string {
   return `${Math.round((count / total) * 100)}%`;
 }
 
-export function computeCollectionPointsKpis(points: CollectionPoint[]): CollectionPointKpi[] {
+export function computeCatalogKpis(
+  points: CollectionPoint[],
+  sectorsFromSummary?: string[],
+): CollectionPointKpi[] {
   const total = points.length;
+  const active = points.filter((point) => point.active).length;
+  const inactive = total - active;
+  const sectorCount =
+    sectorsFromSummary?.length ??
+    new Set(points.map((point) => point.sector).filter(Boolean)).size;
 
   const kpis: CollectionPointKpi[] = [
     {
       id: 'total',
       title: 'Total de puntos',
       value: total,
-      unit: 'Unidades',
+      unit: 'contenedores',
+      iconTone: 'green',
+    },
+    {
+      id: 'sectors',
+      title: 'Sectores cubiertos',
+      value: sectorCount,
+      unit: sectorCount === 1 ? 'sector' : 'sectores',
+      iconTone: 'green',
+    },
+    {
+      id: 'active',
+      title: 'Puntos activos',
+      value: active,
+      unit: relativePct(active, total),
       iconTone: 'green',
     },
   ];
 
-  for (const status of KPI_STATUS_ORDER) {
-    const count = countByStatus(points, status);
-    if (status === 'fuera-de-servicio' && count === 0) continue;
-
+  if (inactive > 0) {
     kpis.push({
-      id: status,
-      title:
-        status === 'normal'
-          ? 'Puntos normales'
-          : status === 'critico'
-            ? 'Puntos críticos'
-            : status === 'lleno'
-              ? 'Puntos llenos'
-              : status === 'parcial'
-                ? 'Parcialmente llenos'
-                : 'Fuera de servicio',
-      value: count,
-      unit: relativePct(count, total),
-      iconTone: KPI_TONES[status],
+      id: 'inactive',
+      title: 'Fuera de servicio',
+      value: inactive,
+      unit: relativePct(inactive, total),
+      iconTone: 'slate',
     });
   }
 
   return kpis;
+}
+
+/** @deprecated Usar computeCatalogKpis para la franja superior de la vista. */
+export function computeCollectionPointsKpis(points: CollectionPoint[]): CollectionPointKpi[] {
+  return computeCatalogKpis(points);
 }
 
 export function computeFillDistribution(points: CollectionPoint[]): FillDistribution {
@@ -246,37 +251,51 @@ export function simulateFillHistoryForPoint(
   };
 }
 
-export function summaryKpisToCards(kpis: CollectionPointsSummaryKpis): CollectionPointKpi[] {
+export function summaryKpisToCards(
+  kpis: CollectionPointsSummaryKpis,
+  sectors: string[] = [],
+  points: CollectionPoint[] = [],
+): CollectionPointKpi[] {
+  if (points.length > 0) {
+    return computeCatalogKpis(points, sectors);
+  }
+
   const total = kpis.total;
-  const pctLabel = (count: number) => relativePct(count, total);
+  const inactive = kpis.fueraDeServicio;
+  const active = Math.max(total - inactive, 0);
+  const sectorCount = sectors.length;
 
   const cards: CollectionPointKpi[] = [
     {
       id: 'total',
       title: 'Total de puntos',
       value: total,
-      unit: 'Unidades',
+      unit: 'contenedores',
+      iconTone: 'green',
+    },
+    {
+      id: 'sectors',
+      title: 'Sectores cubiertos',
+      value: sectorCount,
+      unit: sectorCount === 1 ? 'sector' : 'sectores',
+      iconTone: 'green',
+    },
+    {
+      id: 'active',
+      title: 'Puntos activos',
+      value: active,
+      unit: relativePct(active, total),
       iconTone: 'green',
     },
   ];
 
-  const entries: Array<{ key: keyof CollectionPointsSummaryKpis; title: string; tone: CollectionPointKpiTone }> = [
-    { key: 'normal', title: 'Puntos normales', tone: 'green' },
-    { key: 'critico', title: 'Puntos críticos', tone: 'amber' },
-    { key: 'lleno', title: 'Puntos llenos', tone: 'red' },
-    { key: 'parcial', title: 'Parcialmente llenos', tone: 'slate' },
-    { key: 'fueraDeServicio', title: 'Fuera de servicio', tone: 'slate' },
-  ];
-
-  for (const entry of entries) {
-    const count = kpis[entry.key];
-    if (entry.key === 'fueraDeServicio' && count === 0) continue;
+  if (inactive > 0) {
     cards.push({
-      id: entry.key === 'fueraDeServicio' ? 'fuera-de-servicio' : entry.key,
-      title: entry.title,
-      value: count,
-      unit: pctLabel(count),
-      iconTone: entry.tone,
+      id: 'inactive',
+      title: 'Fuera de servicio',
+      value: inactive,
+      unit: relativePct(inactive, total),
+      iconTone: 'slate',
     });
   }
 

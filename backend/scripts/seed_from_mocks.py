@@ -12,6 +12,13 @@ def seed() -> None:
     print(f"   parishes: {summary['parishes']}")
     print(f"   sectors: {summary['sectors']}")
     print(f"   collection_points: {summary['collectionPoints']}")
+    if summary.get("collectionPointsAutoCreated"):
+        print(
+            "   collection_points_auto:",
+            f"+{summary['collectionPointsAutoCreated']} "
+            f"(objetivo {summary.get('collectionPointsTargetTotal', 120)}, "
+            f"{summary.get('collectionPointsSectorsCovered', '?')} sectores)",
+        )
     print(f"   case_studies: {summary.get('caseStudies', 0)}")
     if summary.get("caseStudyCodes"):
         print(f"   case_study_codes: {', '.join(summary['caseStudyCodes'])}")

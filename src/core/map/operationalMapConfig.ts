@@ -28,7 +28,8 @@ export interface CreateOperationalMapConfig {
   minZoom?: number;
   maxZoom?: number;
   zoom?: number;
-  maxBounds?: LngLatBoundsLike;
+  /** Omit for Unare bounds; pass `null` to allow free panning. */
+  maxBounds?: LngLatBoundsLike | null;
   attributionControl?: MapOptions['attributionControl'];
 }
 
@@ -49,7 +50,8 @@ export function createOperationalMapOptions(config: CreateOperationalMapConfig):
     zoom: config.zoom ?? UNARE_ZOOM,
     minZoom: config.minZoom ?? OPERATIONAL_MAP_MIN_ZOOM,
     maxZoom: config.maxZoom ?? OPERATIONAL_MAP_MAX_ZOOM,
-    maxBounds: config.maxBounds ?? UNARE_BOUNDS,
+    maxBounds:
+      config.maxBounds === null ? undefined : (config.maxBounds ?? UNARE_BOUNDS),
     attributionControl: config.attributionControl ?? false,
     interactive: config.interactive ?? true,
   };

@@ -115,6 +115,7 @@ export const MAIN_NAV_ITEMS: NavItemDef[] = [
   {
     href: '/collection-points',
     label: 'Puntos de Recolección',
+    sidebarPrimary: true,
     roles: ['administrador', 'planificador'],
   },
   {
