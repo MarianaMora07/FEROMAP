@@ -11,9 +11,9 @@ export const OPERATIONAL_MAP_MIN_ZOOM = 12;
 export const OPERATIONAL_MAP_MAX_ZOOM = 17;
 export const OPERATIONAL_MAP_FIT_PADDING = 48;
 export const OPERATIONAL_MAP_FIT_MAX_ZOOM = 15;
-/** Zoom máximo al encuadrar el área de estudio (vista general de sectores). */
-export const STUDY_AREA_FIT_MAX_ZOOM = 11.35;
-export const STUDY_AREA_MIN_ZOOM = 10.5;
+/** Zoom máximo al encuadrar el área de estudio (debe quedar ≥ minzoom tiles Unare = 12). */
+export const STUDY_AREA_FIT_MAX_ZOOM = 12.5;
+export const STUDY_AREA_MIN_ZOOM = OPERATIONAL_MAP_MIN_ZOOM;
 export const STUDY_AREA_SQUARE_FIT_PADDING: maplibregl.PaddingOptions = {
   top: 96,
   bottom: 104,

@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
-from app.db.models import CollectionPoint, OptimizedRoute, RouteWaypoint, Simulation, Vehicle
+from app.db.models import CollectionPoint, OptimizedRoute, RouteWaypoint, Sector, Simulation, Vehicle
 from app.domain.crew_service_time import (
     BASE_SERVICE_SECONDS,
     DEFAULT_IDEAL_OPERATORS,
@@ -222,6 +222,261 @@ def _coalesce_optimized_solution(optimized: RouteSolution, fallback: RouteSoluti
         aco_parallel_workers=optimized.aco_parallel_workers,
         aco_convergence=optimized.aco_convergence,
         uncovered_customer_indices=optimized.uncovered_customer_indices,
+    )
+
+
+def build_sector_driver_map(db: Session) -> dict[int, int]:
+    """Mapa sector_id → driver_id para sectores con conductor asignado."""
+    rows = db.execute(
+        select(Sector.id, Sector.driver_id).where(
+            Sector.deleted_at.is_(None),
+            Sector.driver_id.is_not(None),
+        )
+    ).all()
+    return {int(sector_id): int(driver_id) for sector_id, driver_id in rows if driver_id is not None}
+
+
+def resolve_sector_driver_map_for_optimization(
+    customers: list[CustomerNode],
+    vehicles: list[VehicleUnit],
+    sector_driver_map: dict[int, int],
+) -> dict[int, int]:
+    """Completa sectores sin conductor con round-robin sobre conductores de la flota (en memoria)."""
+    resolved = dict(sector_driver_map)
+    if not vehicles:
+        return resolved
+
+    driver_ids: list[int] = []
+    seen: set[int] = set()
+    for unit in vehicles:
+        if unit.driver_id not in seen:
+            seen.add(unit.driver_id)
+            driver_ids.append(unit.driver_id)
+    if not driver_ids:
+        return resolved
+
+    sector_ids = sorted(
+        {customer.sector_id for customer in customers if customer.sector_id is not None}
+    )
+    next_idx = 0
+    for sector_id in sector_ids:
+        if sector_id in resolved:
+            continue
+        resolved[sector_id] = driver_ids[next_idx % len(driver_ids)]
+        next_idx += 1
+    return resolved
+
+
+def partition_customers_by_vehicle_sectors(
+    customers: list[CustomerNode],
+    vehicles: list[VehicleUnit],
+    sector_driver_map: dict[int, int],
+) -> tuple[list[list[int]], list[int]]:
+    """Asigna índices 1-based de clientes a cada vehículo según sectores de su conductor.
+
+    Si varios vehículos comparten conductor, el primero (por orden de flota) recibe los puntos.
+    """
+    driver_to_vehicle: dict[int, int] = {}
+    for v_idx, vehicle in enumerate(vehicles):
+        if vehicle.driver_id not in driver_to_vehicle:
+            driver_to_vehicle[vehicle.driver_id] = v_idx
+
+    assigned: list[list[int]] = [[] for _ in vehicles]
+    unassigned: list[int] = []
+
+    for c_idx, customer in enumerate(customers):
+        global_idx = c_idx + 1
+        sector_id = customer.sector_id
+        if sector_id is None:
+            unassigned.append(global_idx)
+            continue
+        driver_id = sector_driver_map.get(sector_id)
+        if driver_id is None:
+            unassigned.append(global_idx)
+            continue
+        v_idx = driver_to_vehicle.get(driver_id)
+        if v_idx is None:
+            unassigned.append(global_idx)
+            continue
+        assigned[v_idx].append(global_idx)
+
+    return assigned, unassigned
+
+
+def _extract_node_submatrix(matrix: list[list[float]], global_nodes: list[int]) -> list[list[float]]:
+    return [[matrix[row][col] for col in global_nodes] for row in global_nodes]
+
+
+def _baseline_routes_partitioned(
+    assigned_by_vehicle: list[list[int]],
+    dist_matrix: list[list[float]],
+    time_matrix: list[list[float]],
+) -> RouteSolution:
+    """Baseline multi-vehículo: orden fijo de código dentro de los puntos de cada conductor."""
+    routes: list[list[int]] = []
+    for customer_indices in assigned_by_vehicle:
+        if not customer_indices:
+            routes.append([0, 0])
+            continue
+        routes.append([0] + customer_indices + [0])
+    distance_m, duration_s = _evaluate_solution(routes, dist_matrix, time_matrix)
+    return RouteSolution(vehicle_routes=routes, distance_m=distance_m, duration_s=duration_s)
+
+
+def _remap_local_route_to_global(
+    local_route: list[int],
+    *,
+    customer_globals: list[int],
+    local_landfill: int,
+    landfill_global: int,
+) -> list[int]:
+    remapped: list[int] = []
+    for idx in local_route:
+        if idx == 0:
+            remapped.append(0)
+        elif idx == local_landfill:
+            remapped.append(landfill_global)
+        elif 1 <= idx <= len(customer_globals):
+            remapped.append(customer_globals[idx - 1])
+    return remapped
+
+
+def _optimize_by_sector_assignment(
+    customers: list[CustomerNode],
+    vehicles: list[VehicleUnit],
+    assigned_by_vehicle: list[list[int]],
+    unassigned_indices: list[int],
+    dist_matrix: list[list[float]],
+    time_matrix: list[list[float]],
+    *,
+    shift_budget_sec: float,
+    unload_sec: float,
+    service_secs: list[float],
+    aco_ants: int,
+    aco_iterations: int,
+    cancel_check: Callable[[], bool] | None = None,
+    on_iteration: Callable[[int, int, float, float], None] | None = None,
+    priority_fill_level: bool = False,
+    time_window_enabled: bool = False,
+) -> RouteSolution:
+    """Optimiza una ruta por vehículo solo con puntos de los sectores de su conductor."""
+    n_customers = len(customers)
+    landfill_global = _landfill_idx(n_customers)
+    vehicle_routes: list[list[int]] = []
+    uncovered: list[int] = list(unassigned_indices)
+    total_distance = 0.0
+    total_duration = 0.0
+    iterations_run = 0
+    stopped_early = False
+    parallel_workers = 1
+    convergence: list[dict[str, float | int]] = []
+
+    vehicles_with_work = sum(1 for indices in assigned_by_vehicle if indices)
+    progress_slots = max(1, vehicles_with_work)
+    completed_slots = 0
+
+    for v_idx, vehicle in enumerate(vehicles):
+        customer_globals = assigned_by_vehicle[v_idx]
+        if not customer_globals:
+            vehicle_routes.append([0, 0])
+            continue
+
+        if cancel_check and cancel_check():
+            raise OptimizationCancelledError()
+
+        global_nodes = [0, *customer_globals, landfill_global]
+        local_dist = _extract_node_submatrix(dist_matrix, global_nodes)
+        local_time = _extract_node_submatrix(time_matrix, global_nodes)
+        local_n = len(customer_globals)
+        local_landfill = local_n + 1
+        local_demands = [customers[idx - 1].demand_kg for idx in customer_globals]
+        local_fill = [customers[idx - 1].fill_pct for idx in customer_globals]
+        local_heuristic = build_fill_level_heuristic_matrix(
+            local_dist,
+            local_fill,
+            enabled=priority_fill_level,
+        )
+        window_starts, window_ends = build_customer_time_windows(
+            [customers[idx - 1].sector_id for idx in customer_globals],
+            enabled=time_window_enabled,
+        )
+
+        def vehicle_progress(
+            iteration: int,
+            total: int,
+            best_cost_m: float,
+            iteration_best_m: float,
+            *,
+            _slot=completed_slots,
+        ) -> None:
+            if on_iteration is None:
+                return
+            # Escala el progreso ACO de este vehículo al progreso global de la flota.
+            scaled_iter = _slot * total + iteration
+            scaled_total = progress_slots * total
+            on_iteration(scaled_iter, scaled_total, best_cost_m, iteration_best_m)
+
+        local_solution = _aco_cvrp(
+            local_n,
+            local_demands,
+            [vehicle.capacity_kg],
+            local_dist,
+            local_time,
+            landfill_idx=local_landfill,
+            shift_budget_sec=shift_budget_sec,
+            unload_sec=unload_sec,
+            service_secs=[service_secs[min(v_idx, len(service_secs) - 1)]],
+            aco_ants=aco_ants,
+            aco_iterations=aco_iterations,
+            aco_patience=ACO_PATIENCE,
+            seed=42 + v_idx * 17,
+            cancel_check=cancel_check,
+            on_iteration=vehicle_progress if on_iteration else None,
+            heuristic_matrix=local_heuristic,
+            window_starts=window_starts,
+            window_ends=window_ends,
+            fill_pcts=local_fill,
+            priority_fill_level=priority_fill_level,
+        )
+
+        if local_solution.vehicle_routes:
+            global_route = _remap_local_route_to_global(
+                local_solution.vehicle_routes[0],
+                customer_globals=customer_globals,
+                local_landfill=local_landfill,
+                landfill_global=landfill_global,
+            )
+        else:
+            global_route = [0, 0]
+        vehicle_routes.append(global_route)
+
+        for local_uncovered in local_solution.uncovered_customer_indices:
+            if 1 <= local_uncovered <= len(customer_globals):
+                uncovered.append(customer_globals[local_uncovered - 1])
+
+        if math.isfinite(local_solution.distance_m):
+            total_distance += local_solution.distance_m
+        if math.isfinite(local_solution.duration_s):
+            total_duration += local_solution.duration_s
+        iterations_run = max(iterations_run, local_solution.aco_iterations_run)
+        stopped_early = stopped_early or local_solution.aco_stopped_early
+        parallel_workers = max(parallel_workers, local_solution.aco_parallel_workers)
+        if local_solution.aco_convergence:
+            convergence.extend(local_solution.aco_convergence)
+        completed_slots += 1
+
+    if not math.isfinite(total_distance) or total_distance <= 0:
+        total_distance, total_duration = _evaluate_solution(vehicle_routes, dist_matrix, time_matrix)
+
+    return RouteSolution(
+        vehicle_routes=vehicle_routes,
+        distance_m=total_distance,
+        duration_s=total_duration,
+        aco_iterations_run=iterations_run,
+        aco_stopped_early=stopped_early,
+        aco_parallel_workers=parallel_workers,
+        aco_convergence=convergence,
+        uncovered_customer_indices=sorted(set(uncovered)),
     )
 
 
@@ -779,7 +1034,7 @@ def _routes_to_geojson(
     n_customers = len(customers)
     features = []
     for v_idx, route_indices in enumerate(solution.vehicle_routes):
-        if len(route_indices) < 2:
+        if len(route_indices) <= 2:
             continue
         coords = _route_geometry(
             graph,
@@ -1029,11 +1284,9 @@ def build_optimization_vehicle_units(
     *,
     exclude_vehicle_ids: set[int] | None = None,
     contingency: bool = False,
-    limit: int = 4,
     fleet_limit: int | None = None,
 ) -> list[VehicleUnit]:
-    """Arma la flota del VRP usando el conductor asignado a cada vehículo."""
-    effective_limit = fleet_limit if fleet_limit is not None and fleet_limit > 0 else limit
+    """Arma la flota VRP: todos los asignables con conductor; fleet_limit es tope opcional."""
     stmt = (
         select(Vehicle)
         .where(Vehicle.status.in_(["available", "in_route"]))
@@ -1049,8 +1302,9 @@ def build_optimization_vehicle_units(
 
     active_routes = get_active_routes_by_vehicle_id(db)
     units: list[VehicleUnit] = []
+    cap = fleet_limit if fleet_limit is not None and fleet_limit > 0 else None
     for vehicle in vehicles_db:
-        if len(units) >= effective_limit:
+        if cap is not None and len(units) >= cap:
             break
         active_route = active_routes.get(vehicle.id)
         driver_id = resolve_vehicle_driver_id(vehicle, active_route=active_route)
@@ -1102,6 +1356,22 @@ def _resolve_fleet_crew(
     return resolved
 
 
+def _supersede_daily_plan_optimized_routes(db: Session, daily_plan_id: int) -> int:
+    """Marca como superseded las rutas optimizadas previas del plan (evita acumular TR duplicados)."""
+    previous = db.scalars(
+        select(OptimizedRoute).where(
+            OptimizedRoute.daily_plan_id == daily_plan_id,
+            OptimizedRoute.route_kind == "optimized",
+            OptimizedRoute.status.in_(("pending", "completed")),
+        )
+    ).all()
+    for route in previous:
+        route.status = "superseded"
+    if previous:
+        db.flush()
+    return len(previous)
+
+
 def _persist_routes(
     db: Session,
     simulation_id: int,
@@ -1119,6 +1389,15 @@ def _persist_routes(
     unload_seconds: int = 0,
 ) -> None:
     """Guarda rutas y waypoints en BD."""
+    if daily_plan_id is not None:
+        superseded = _supersede_daily_plan_optimized_routes(db, daily_plan_id)
+        if superseded:
+            logger.info(
+                "Plan diario %s: %s ruta(s) optimizada(s) previas marcadas como superseded",
+                daily_plan_id,
+                superseded,
+            )
+
     n_customers = len(customers)
     landfill_idx = _landfill_idx(n_customers)
     for kind, solution in [("current", current_solution), ("optimized", optimized_solution)]:
@@ -1346,7 +1625,6 @@ def run_optimization_engine(
         db,
         exclude_vehicle_ids=excluded_ids,
         contingency=contingency_meta is not None,
-        limit=4,
         fleet_limit=fleet_limit,
     )
     if not vehicles:
@@ -1441,22 +1719,51 @@ def run_optimization_engine(
         )
     graph_seconds = time.perf_counter() - graph_started
 
-    fill_pcts = [customer.fill_pct for customer in customers]
-    heuristic_matrix = build_fill_level_heuristic_matrix(
-        dist_matrix,
-        fill_pcts,
-        enabled=resolved_priority_fill_level,
+    sector_driver_map = resolve_sector_driver_map_for_optimization(
+        customers,
+        vehicles,
+        build_sector_driver_map(db),
     )
-    window_starts, window_ends = build_customer_time_windows(
-        [customer.sector_id for customer in customers],
-        enabled=resolved_time_window_enabled,
+    assigned_by_vehicle, sector_unassigned = partition_customers_by_vehicle_sectors(
+        customers,
+        vehicles,
+        sector_driver_map,
     )
+    assigned_point_count = sum(len(indices) for indices in assigned_by_vehicle)
+    vehicles_with_sectors = sum(1 for indices in assigned_by_vehicle if indices)
 
     report(
         "instancia_vrp",
-        f"Instancia VRP: {len(vehicles)} vehículos, demanda = nivel de llenado",
+        (
+            f"Instancia VRP por sectores: {vehicles_with_sectors}/{len(vehicles)} vehículos con puntos, "
+            f"{assigned_point_count} contenedores asignados por conductor"
+        ),
     )
-    current_solution = _baseline_route(len(customers), dist_matrix, time_matrix)
+    if sector_unassigned:
+        report(
+            "instancia_vrp",
+            (
+                f"{len(sector_unassigned)} contenedor(es) sin conductor de flota "
+                "(sector sin asignación o conductor sin vehículo activo)"
+            ),
+            "warning",
+        )
+
+    use_sector_partition = assigned_point_count > 0
+    if use_sector_partition:
+        current_solution = _baseline_routes_partitioned(
+            assigned_by_vehicle,
+            dist_matrix,
+            time_matrix,
+        )
+    else:
+        report(
+            "instancia_vrp",
+            "Sin asignación sector→conductor usable; se usa CVRP global de respaldo",
+            "warning",
+        )
+        current_solution = _baseline_route(len(customers), dist_matrix, time_matrix)
+
     report(
         "aco",
         f"Ejecutando metaheurística ACO ({resolved_aco_ants} hormigas × {resolved_aco_iterations} iteraciones)",
@@ -1473,27 +1780,56 @@ def run_optimization_engine(
                 iteration_best_m=iteration_best_m,
             )
 
-    optimized_solution = _aco_cvrp(
-        len(customers),
-        [c.demand_kg for c in customers],
-        [v.capacity_kg for v in vehicles],
-        dist_matrix,
-        time_matrix,
-        landfill_idx=landfill_idx,
-        shift_budget_sec=shift_budget_sec,
-        unload_sec=float(unload_seconds),
-        service_secs=service_secs,
-        aco_ants=resolved_aco_ants,
-        aco_iterations=resolved_aco_iterations,
-        aco_patience=ACO_PATIENCE,
-        cancel_check=cancelled,
-        on_iteration=aco_progress,
-        heuristic_matrix=heuristic_matrix,
-        window_starts=window_starts,
-        window_ends=window_ends,
-        fill_pcts=fill_pcts,
-        priority_fill_level=resolved_priority_fill_level,
-    )
+    if use_sector_partition:
+        optimized_solution = _optimize_by_sector_assignment(
+            customers,
+            vehicles,
+            assigned_by_vehicle,
+            sector_unassigned,
+            dist_matrix,
+            time_matrix,
+            shift_budget_sec=shift_budget_sec,
+            unload_sec=float(unload_seconds),
+            service_secs=service_secs,
+            aco_ants=resolved_aco_ants,
+            aco_iterations=resolved_aco_iterations,
+            cancel_check=cancelled,
+            on_iteration=aco_progress,
+            priority_fill_level=resolved_priority_fill_level,
+            time_window_enabled=resolved_time_window_enabled,
+        )
+    else:
+        fill_pcts = [customer.fill_pct for customer in customers]
+        heuristic_matrix = build_fill_level_heuristic_matrix(
+            dist_matrix,
+            fill_pcts,
+            enabled=resolved_priority_fill_level,
+        )
+        window_starts, window_ends = build_customer_time_windows(
+            [customer.sector_id for customer in customers],
+            enabled=resolved_time_window_enabled,
+        )
+        optimized_solution = _aco_cvrp(
+            len(customers),
+            [c.demand_kg for c in customers],
+            [v.capacity_kg for v in vehicles],
+            dist_matrix,
+            time_matrix,
+            landfill_idx=landfill_idx,
+            shift_budget_sec=shift_budget_sec,
+            unload_sec=float(unload_seconds),
+            service_secs=service_secs,
+            aco_ants=resolved_aco_ants,
+            aco_iterations=resolved_aco_iterations,
+            aco_patience=ACO_PATIENCE,
+            cancel_check=cancelled,
+            on_iteration=aco_progress,
+            heuristic_matrix=heuristic_matrix,
+            window_starts=window_starts,
+            window_ends=window_ends,
+            fill_pcts=fill_pcts,
+            priority_fill_level=resolved_priority_fill_level,
+        )
     if not math.isfinite(optimized_solution.distance_m) or not optimized_solution.vehicle_routes:
         report(
             "aco",
