@@ -21,7 +21,32 @@ from app.services.route_playback_service import (
     service_minutes_for_plan,
 )
 
-ROUTE_COLORS = ("#34D634", "#1143F3", "#7c3aed", "#f59e0b", "#ef4444", "#06b6d4")
+ROUTE_COLORS = (
+    "#34D634",
+    "#1143F3",
+    "#7c3aed",
+    "#f59e0b",
+    "#ef4444",
+    "#06b6d4",
+    "#0d9488",
+    "#db2777",
+    "#65a30d",
+    "#ea580c",
+    "#2563eb",
+    "#9333ea",
+    "#ca8a04",
+    "#dc2626",
+    "#0891b2",
+    "#4f46e5",
+    "#16a34a",
+    "#c026d3",
+    "#b45309",
+    "#0284c7",
+    "#7c3aed",
+    "#e11d48",
+    "#059669",
+    "#d97706",
+)
 PLANNED_ROUTE_STATUSES = ("pending", "in_progress", "completed")
 
 

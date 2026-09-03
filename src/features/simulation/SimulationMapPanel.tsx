@@ -124,14 +124,22 @@ export function SimulationMapPanel(props: SimulationMapPanelProps) {
   const fitMapView = () => {
     const map = mapRef.current;
     if (!map) return;
+    const pad = props.squareLayout ? STUDY_AREA_SQUARE_FIT_PADDING : 64;
+    if (playbackActive() && props.playbackRoutes?.length) {
+      const points = props.playbackRoutes.flatMap((route) =>
+        route.lineCoordinates.map((coord) => ({ lng: coord[0], lat: coord[1] })),
+      );
+      fitMapToOperationalData(map, { points, padding: pad });
+      return;
+    }
     if (props.studyAreaFit) {
       fitMapToStudyArea(map, {
         sectors: appState.sectors,
-        padding: props.squareLayout ? STUDY_AREA_SQUARE_FIT_PADDING : 64,
+        padding: pad,
       });
       return;
     }
-    fitMapToOperationalData(map, { routes: appState.routes });
+    fitMapToOperationalData(map, { routes: appState.routes, padding: pad });
   };
 
   const studyAreaMaxBounds = () =>
