@@ -159,6 +159,55 @@ def test_build_daily_route_playback_uses_simulation_shortage_for_service_minutes
     assert payload["routes"][0]["stops"][0]["serviceMinutes"] == 6
 
 
+def test_build_daily_route_playback_scopes_to_plan_simulation():
+    """Con simulation_id en el plan, el query de playback debe filtrar por esa simulación."""
+    db = MagicMock()
+    plan = SimpleNamespace(
+        id=8,
+        operation_date=date(2026, 8, 14),
+        status="optimized",
+        simulation_id=99,
+    )
+    simulation = SimpleNamespace(parameters_json='{"operatorsShortage": 0}')
+    route = optimized_route(
+        22,
+        status="pending",
+        vehicle_code="TR-04",
+        waypoints=_make_waypoints(1),
+    )
+    route.route_kind = "optimized"
+    route.estimated_duration_seconds = 1800
+    route.vehicle.id = 4
+
+    def get_model(model, pk):
+        if pk == 8:
+            return plan
+        if pk == 99:
+            return simulation
+        return None
+
+    db.get.side_effect = get_model
+    db.scalars.return_value.unique.return_value.all.return_value = [route]
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(
+            route_geometry_service,
+            "build_route_linestring_cached",
+            lambda route, wps, include_depot=True: [
+                [-62.715, 8.295],
+                [-62.712, 8.297],
+                [-62.715, 8.295],
+            ],
+        )
+        payload = build_daily_route_playback(db, 8)
+
+    assert payload["dailyPlanId"] == 8
+    assert len(payload["routes"]) == 1
+    stmt = db.scalars.call_args.args[0]
+    where_sql = str(stmt.whereclause)
+    assert "simulation_id" in where_sql
+
+
 def test_operators_shortage_from_simulation_parses_camel_case():
     simulation = SimpleNamespace(parameters_json='{"operatorsShortage": 1}')
     assert route_playback_service.operators_shortage_from_simulation(simulation) == 1
