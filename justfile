@@ -116,6 +116,22 @@ test-frontend:
     npm test
     npm run test:e2e
 
+# Fase A — Día 0: health, logins demo y caso CE-UNARE-NORTE.
+phase-a-smoke:
+    bash scripts/phase-a-smoke.sh
+
+# Fase A — flujo completo vía API/motor real (~2–3 min). Requiere: just up && just seed
+phase-a-flow: _check
+    {{compose}} exec -T api pytest tests/test_phase_a_operational_flow.py -v -m phase_a
+
+# Fase A — solo smoke pytest (sin ACO).
+phase-a-check: _check
+    {{compose}} exec -T api pytest tests/test_phase_a_operational_flow.py -v -m "phase_a and not slow"
+
+# Fase A — E2E smoke + UI (API real; UI sin mocks: VITE_USE_MOCKS=false recomendado).
+phase-a-e2e:
+    npm run test:e2e -- e2e/phase-a-smoke.spec.ts e2e/phase-a-operational-flow.spec.ts
+
 # Muestra COMPOSE_ENV, credenciales y URLs de los servicios.
 env-info: _check
     @echo "COMPOSE_ENV={{env_var_or_default('COMPOSE_ENV', 'dev')}}  →  compose.yml + compose.{{env_var_or_default('COMPOSE_ENV', 'dev')}}.yml"
