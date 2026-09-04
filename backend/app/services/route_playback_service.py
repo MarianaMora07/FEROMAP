@@ -178,9 +178,14 @@ def _build_route_playback_payload(
         simulation = db.get(Simulation, plan.simulation_id) if plan.simulation_id else None
         operation_date = plan.operation_date.isoformat()
         preview_mode = plan.status in {"draft", "open", "optimized"}
-        route_filter = (
-            OptimizedRoute.daily_plan_id == daily_plan_id,
-        )
+        # Preferir la simulación vigente del plan para no mezclar corridas anteriores.
+        if plan.simulation_id is not None:
+            route_filter = (
+                OptimizedRoute.daily_plan_id == daily_plan_id,
+                OptimizedRoute.simulation_id == plan.simulation_id,
+            )
+        else:
+            route_filter = (OptimizedRoute.daily_plan_id == daily_plan_id,)
         response_id: dict[str, Any] = {"dailyPlanId": daily_plan_id}
     elif simulation_id is not None:
         simulation = db.get(Simulation, simulation_id)

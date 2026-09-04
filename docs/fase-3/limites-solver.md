@@ -10,7 +10,7 @@ FEROMAP implementa un **CVRP** (Capacitated Vehicle Routing Problem) sobre la re
 | Capacidad | Detalle |
 |-----------|---------|
 | **Grafo vial** | OSMnx + NetworkX; distancias y tiempos por calles |
-| **Multi-vehículo** | Hasta 4 vehículos con conductor asignado por corrida |
+| **Multi-vehículo** | Flota asignable (`available`/`in_route` + conductor); cada vehículo optimiza solo puntos de los sectores de su conductor (`sector.driver_id`); `fleet_limit` es tope opcional |
 | **Capacidad** | Carga acumulada por vehículo; demanda según llenado del contenedor |
 | **Vertedero multi-viaje** | Descarga obligatoria cuando se supera capacidad |
 | **Jornada laboral** | Ventana operativa 06:00–18:00 (12 h) |

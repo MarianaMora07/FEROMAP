@@ -69,7 +69,7 @@ function ensurePlaybackLayers(map: MapLibreMap, routes: RoutePlaybackModel[]) {
       paint: {
         'line-color': ['get', 'color'],
         'line-width': 3,
-        'line-opacity': 0.18,
+        'line-opacity': 0.55,
         'line-dasharray': [2, 2],
       },
     });
