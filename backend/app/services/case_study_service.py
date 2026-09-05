@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import CaseStudy, CaseStudyPoint, CollectionPoint
@@ -45,6 +45,11 @@ def _parse_default_parameters(raw: str | None) -> dict[str, Any]:
         return parsed if isinstance(parsed, dict) else {}
     except json.JSONDecodeError:
         return {}
+
+
+def is_case_study_demo_visible(study: CaseStudy) -> bool:
+    params = _parse_default_parameters(study.default_parameters_json)
+    return params.get("demoVisible", True) is not False
 
 
 def _dump_default_parameters(value: dict[str, Any] | None) -> str | None:
@@ -213,6 +218,7 @@ def list_case_studies(
     db: Session,
     *,
     status_filter: str | None = None,
+    demo_only: bool = False,
     limit: int = 25,
     offset: int = 0,
 ) -> dict[str, Any]:
@@ -223,20 +229,17 @@ def list_case_studies(
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
         stmt = stmt.where(CaseStudy.status == normalized)
-        count_stmt = select(func.count()).select_from(CaseStudy).where(
-            CaseStudy.deleted_at.is_(None),
-            CaseStudy.status == normalized,
-        )
-    else:
-        count_stmt = select(func.count()).select_from(CaseStudy).where(CaseStudy.deleted_at.is_(None))
 
-    total = db.scalar(count_stmt) or 0
     studies = db.scalars(
         stmt.options(joinedload(CaseStudy.point_memberships))
         .order_by(CaseStudy.code)
-        .offset(offset)
-        .limit(limit)
     ).unique().all()
+
+    if demo_only:
+        studies = [study for study in studies if is_case_study_demo_visible(study)]
+
+    total = len(studies)
+    studies = studies[offset : offset + limit]
 
     return {
         "items": [_serialize_case_study(study, include_points=False) for study in studies],

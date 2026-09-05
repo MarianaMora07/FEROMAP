@@ -58,13 +58,13 @@ def week_range(week_start: date) -> tuple[date, date]:
 
 
 def _serialize_point(point: CollectionPoint) -> dict[str, Any]:
+    from app.domain.waste_generation import projected_fill_level_pct
+
     return {
         "id": point.id,
         "code": point.code,
         "sectorName": point.sector.name if point.sector else None,
-        "fillLevelPct": float(point.current_fill_level_kg / point.max_capacity_kg * 100)
-        if float(point.max_capacity_kg) > 0
-        else 0,
+        "fillLevelPct": projected_fill_level_pct(point),
     }
 
 
@@ -99,6 +99,12 @@ def _weekly_plan_payload(db: Session, plan: WeeklyPlan) -> dict[str, Any]:
     expected_kpis = None
     if plan.expected_kpis_json:
         expected_kpis = json.loads(plan.expected_kpis_json)
+    preflight = None
+    if plan.preflight_json:
+        try:
+            preflight = json.loads(plan.preflight_json)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            preflight = None
     plan_case = _case_study_summary(db, plan.case_study_id)
     return {
         "id": plan.id,
@@ -111,6 +117,8 @@ def _weekly_plan_payload(db: Session, plan: WeeklyPlan) -> dict[str, Any]:
         "caseStudyName": plan_case["name"] if plan_case else None,
         "referenceSimulationId": plan.reference_simulation_id,
         "expectedKpis": expected_kpis,
+        "preflight": preflight,
+        "preflightFeasible": bool(preflight and preflight.get("feasible")),
         "notes": plan.notes,
         "approvedAt": plan.approved_at.isoformat() if plan.approved_at else None,
         "days": [
@@ -407,6 +415,7 @@ def approve_weekly_plan(
     *,
     reference_simulation_id: int | None = None,
     expected_kpis: dict[str, Any] | None = None,
+    allow_warnings: bool = False,
     user_id: int | None = None,
 ) -> dict[str, Any]:
     plan = db.scalar(select(WeeklyPlan).where(WeeklyPlan.id == plan_id).options(joinedload(WeeklyPlan.days)))
@@ -416,6 +425,19 @@ def approve_weekly_plan(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Solo se pueden aprobar planes en borrador")
     if not plan.days:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El plan semanal no tiene días configurados")
+
+    # Pre-flight por día: demanda estimada vs capacidad de flota y jornada.
+    preflight = preflight_weekly_feasibility(db, plan)
+    if not preflight["feasible"] and not allow_warnings:
+        overloaded = sorted(row["operationDate"] for row in preflight["rows"] if row["overloaded"])
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Día(s) con sobrecapacidad estimada de recolección: "
+                + ", ".join(overloaded)
+                + ". Ajusta la flota esperada por día o aprueba con allowWarnings=true."
+            ),
+        )
 
     plan.status = "approved"
     plan.approved_at = datetime.now(timezone.utc)
@@ -435,6 +457,172 @@ def approve_weekly_plan(
     )
     db.flush()
     return get_weekly_plan(db, plan.id)
+
+
+def evaluate_day_load(
+    *,
+    demand_kg: float,
+    capacity_kg: float,
+    expected_vehicles: int,
+    available_vehicles: int,
+) -> dict[str, Any]:
+    """Evalúa si un día cabe en la flota esperada (heurística de pre-flight)."""
+    overloaded = capacity_kg > 0 and demand_kg > capacity_kg * 0.95
+    return {
+        "demandKg": round(demand_kg, 1),
+        "capacityKg": round(capacity_kg, 1),
+        "expectedVehicles": expected_vehicles,
+        "availableVehicles": available_vehicles,
+        "insufficientFleet": available_vehicles < expected_vehicles,
+        "overloaded": overloaded,
+    }
+
+
+def preflight_weekly_feasibility(db: Session, plan: WeeklyPlan) -> dict[str, Any]:
+    """Pre-flight por día: demanda estimada vs capacidad de la flota (Tarea 9).
+
+    Heurística aproximada (no reemplaza al motor): usa el llenado actual de cada
+    contenedor y la capacidad de la flota disponible/esperada por día. Se persiste
+    en ``preflight_json`` y se usa como guarda al aprobar.
+    """
+    from app.db.models import CollectionPoint, Vehicle
+
+    vehicles = db.scalars(
+        select(Vehicle).where(Vehicle.status.in_(("available", "in_route"))).order_by(Vehicle.id)
+    ).all()
+    vehicle_capacities = sorted((float(v.max_capacity_kg) or 0 for v in vehicles), reverse=True)
+    available_vehicles = len(vehicles)
+    rows: list[dict[str, Any]] = []
+
+    for day in sorted(plan.days, key=lambda row: row.operation_date):
+        resolved_ids, _source, _case = resolve_weekly_day_point_ids(db, plan, day)
+        entry: dict[str, Any] = {
+            "operationDate": day.operation_date.isoformat(),
+            "pointCount": len(resolved_ids),
+            "scenarioId": day.scenario_id_override or plan.scenario_id,
+            "expectedVehicles": day.expected_vehicle_count or available_vehicles,
+            "availableVehicles": available_vehicles,
+        }
+        if resolved_ids:
+            points = db.scalars(select(CollectionPoint).where(CollectionPoint.id.in_(resolved_ids))).all()
+            demand_kg = sum(float(point.current_fill_level_kg or 0) for point in points)
+            expected = day.expected_vehicle_count or available_vehicles
+            capacity_kg = sum(vehicle_capacities[:expected])
+            entry.update(
+                evaluate_day_load(
+                    demand_kg=demand_kg,
+                    capacity_kg=capacity_kg,
+                    expected_vehicles=expected,
+                    available_vehicles=available_vehicles,
+                )
+            )
+        else:
+            entry.update(
+                evaluate_day_load(
+                    demand_kg=0.0,
+                    capacity_kg=0.0,
+                    expected_vehicles=entry["expectedVehicles"],
+                    available_vehicles=available_vehicles,
+                )
+            )
+        entry["demandKg"] = entry.get("demandKg", 0.0)
+        entry["capacityKg"] = entry.get("capacityKg", 0.0)
+        rows.append(entry)
+
+    feasible = all(not row["overloaded"] and not row["insufficientFleet"] for row in rows)
+    payload = {"feasible": feasible, "rows": rows}
+    plan.preflight_json = json.dumps(payload, ensure_ascii=False)
+    return payload
+
+
+def _aggregate_weekly_day_results(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    total_km = sum(float(row.get("distanceKm") or 0) for row in rows if not row.get("error"))
+    total_hours = sum(float(row.get("durationHours") or 0) for row in rows if not row.get("error"))
+    all_feasible = all(
+        row.get("error") is None and row.get("feasible", False)
+        for row in rows
+        if not row.get("skipped")
+    )
+    return {
+        "kpis": {
+            "distanceKm": {"current": 0, "optimized": round(total_km, 1)},
+            "durationHours": {"current": 0, "optimized": round(total_hours, 2)},
+        },
+        "feasible": bool(all_feasible),
+    }
+
+
+def validate_weekly_plan_days(db: Session, *, plan_id: int) -> dict[str, Any]:
+    """Valida la semana ejecutando el motor ACO **por día** (Tarea 9).
+
+    Cada día corre su propia optimización (escenario del día y flota esperada) y se
+    persiste el resultado junto al pre-flight heurístico. Devuelve KPIs agregados de
+    la semana (compatibles con el contrato del job).
+    """
+    from app.services.optimization_service import run_optimization_engine
+
+    plan = db.scalar(select(WeeklyPlan).where(WeeklyPlan.id == plan_id).options(joinedload(WeeklyPlan.days)))
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan semanal no encontrado")
+
+    rows: list[dict[str, Any]] = []
+    for day in sorted(plan.days, key=lambda row: row.operation_date):
+        resolved_ids, _source, _case = resolve_weekly_day_point_ids(db, plan, day)
+        entry: dict[str, Any] = {"operationDate": day.operation_date.isoformat()}
+        if not resolved_ids:
+            entry["skipped"] = True
+            rows.append(entry)
+            continue
+        scenario_id = day.scenario_id_override or plan.scenario_id
+        try:
+            result = run_optimization_engine(
+                db,
+                scenario_id,
+                collection_point_ids=resolved_ids,
+                fleet_limit=day.expected_vehicle_count,
+                auto_commit=False,
+                auto_dispatch=False,
+                reporter=None,
+                planning_level="administrative",
+                weekly_plan_id=plan.id,
+                operation_date=day.operation_date,
+            )
+            kpis = result["kpis"]
+            entry.update(
+                {
+                    "scenarioId": scenario_id,
+                    "distanceKm": round(kpis["distanceKm"]["optimized"], 1),
+                    "durationHours": kpis["durationHours"]["optimized"],
+                    "coveragePct": kpis.get("coveragePct"),
+                    "uncoveredPoints": kpis.get("uncoveredPoints"),
+                    "servedPoints": len(result.get("servedPointCodes") or []),
+                    "feasible": int(kpis.get("uncoveredPoints", 0) or 0) == 0,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            entry["error"] = str(exc)
+        finally:
+            db.rollback()
+        rows.append(entry)
+
+    aggregate = _aggregate_weekly_day_results(rows)
+    preflight: dict[str, Any] = {"feasible": aggregate["feasible"], "rows": []}
+    if plan.preflight_json:
+        try:
+            preflight = json.loads(plan.preflight_json)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            preflight = {"feasible": aggregate["feasible"], "rows": []}
+    preflight["simulation"] = {"feasible": aggregate["feasible"], "rows": rows}
+    preflight["feasible"] = preflight["feasible"] and aggregate["feasible"]
+    plan.preflight_json = json.dumps(preflight, ensure_ascii=False)
+    db.commit()
+
+    return {
+        "kpis": aggregate["kpis"],
+        "perDay": rows,
+        "feasible": aggregate["feasible"],
+        "weeklyPlanId": plan.id,
+    }
 
 
 def compute_pending_priority(
@@ -458,7 +646,9 @@ def compute_pending_priority(
         max_cap = getattr(point, "max_capacity_kg", None)
         current = getattr(point, "current_fill_level_kg", None)
         if max_cap is not None and current is not None and float(max_cap) > 0:
-            fill_level = int(round(float(current) / float(max_cap) * 100))
+            from app.domain.waste_generation import projected_fill_level_pct
+
+            fill_level = projected_fill_level_pct(point)
             if fill_level >= 80:
                 priority += 30
             elif fill_level >= 60:
@@ -890,6 +1080,7 @@ def seed_visit_schedules(db: Session, rows: list[dict[str, Any]]) -> None:
                 effective_until=date.fromisoformat(row["effectiveUntil"]) if row.get("effectiveUntil") else None,
             )
         )
+    db.flush()
 
 
 def seed_weekly_plan_demo(db: Session, payload: dict[str, Any]) -> None:

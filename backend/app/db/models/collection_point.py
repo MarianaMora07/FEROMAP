@@ -18,6 +18,9 @@ class CollectionPoint(Base):
     longitude: Mapped[Decimal] = mapped_column(Numeric(11, 8), nullable=False)
     max_capacity_kg: Mapped[Decimal] = mapped_column(Numeric(8, 2), nullable=False)
     current_fill_level_kg: Mapped[Decimal] = mapped_column(Numeric(8, 2), nullable=False, server_default="0")
+    estimated_fill_hours: Mapped[Decimal] = mapped_column(
+        Numeric(6, 1), nullable=False, server_default="72"
+    )
     status: Mapped[str] = mapped_column(String(50), nullable=False, server_default="active")
     priority_boost: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     last_emptied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

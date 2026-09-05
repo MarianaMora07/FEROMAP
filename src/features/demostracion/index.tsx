@@ -3,6 +3,7 @@ import { createDemoAcoPlayback } from '../../core/demo-aco/demoAcoStore';
 import { DemoConceptPanel } from './DemoConceptPanel';
 import { DemoConvergencePanel } from './DemoConvergencePanel';
 import { DemostracionShell } from './DemostracionShell';
+import { ModuleScopeBanner } from '../../core/demo/ModuleScopeBanner';
 import { DEMOSTRACION_DEFAULT_TAB, type DemostracionTabId } from './demostracionTabs';
 import { MazeDemoPanel } from './MazeDemoPanel';
 
@@ -13,7 +14,9 @@ export default function DemostracionPage() {
   onCleanup(() => playback.dispose());
 
   return (
-    <DemostracionShell tab={tab()} onTabChange={setTab}>
+    <div class="space-y-4">
+      <ModuleScopeBanner scope="aco-demonstration" linkHref="/simulation" linkLabel="Ir a simulación de tesis" />
+      <DemostracionShell tab={tab()} onTabChange={setTab}>
       <Show when={tab() === 'concepto'}>
         <DemoConceptPanel />
       </Show>
@@ -23,6 +26,7 @@ export default function DemostracionPage() {
       <Show when={tab() === 'convergencia'}>
         <DemoConvergencePanel playback={playback} />
       </Show>
-    </DemostracionShell>
+      </DemostracionShell>
+    </div>
   );
 }

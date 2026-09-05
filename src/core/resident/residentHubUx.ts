@@ -128,7 +128,7 @@ export function deriveNextResidentAction(
     };
   }
 
-  if (context.phase === 'no_active_route' && context.schedule.isCollectionDay) {
+  if (context.phase === 'no_active_route' && context.schedule.hasWeeklyPlan && context.schedule.isCollectionDay) {
     return {
       message: 'Hoy hay recolección en tu sector',
       detail: `Ventana horaria ${context.schedule.window}. El camión puede pasar en cualquier momento dentro de ese horario.`,

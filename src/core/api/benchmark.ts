@@ -110,4 +110,82 @@ export function runAcoSensitivity(): Promise<AcoSensitivityPayload> {
   return apiPost<AcoSensitivityPayload>('/api/v1/benchmarks/aco/sensitivity', {});
 }
 
+// --- Benchmark entre familias (ACO vs Clarke-Wright vs GA) — Tarea 6 --------
+
+export interface AlgorithmsBenchmarkRun {
+  scenarioId: string;
+  scenarioLabel: string;
+  instanceSize: number;
+  seed: number;
+  family: 'aco' | 'clarke_wright' | 'genetic';
+  familyLabel: string;
+  distanceKm: number;
+  cpuSeconds: number;
+  uncoveredCount: number;
+  vehicles: number;
+}
+
+export interface AlgorithmsBenchmarkPayload {
+  generatedAt: string;
+  durationSeconds: number;
+  methodology: string;
+  scenarios: string[];
+  instanceSizes: number[];
+  seeds: number[];
+  families: string[];
+  runs: AlgorithmsBenchmarkRun[];
+}
+
+export function fetchAlgorithmsBenchmark(): Promise<AlgorithmsBenchmarkPayload> {
+  if (useMocks) return Promise.resolve(mockAlgorithmsBenchmark());
+  return apiGet<AlgorithmsBenchmarkPayload>('/api/v1/benchmarks/algorithms');
+}
+
+export function runAlgorithmsBenchmark(): Promise<AlgorithmsBenchmarkPayload> {
+  if (useMocks) return Promise.resolve(mockAlgorithmsBenchmark());
+  return apiPost<AlgorithmsBenchmarkPayload>('/api/v1/benchmarks/algorithms', {});
+}
+
+function mockAlgorithmsBenchmark(): AlgorithmsBenchmarkPayload {
+  const labels: Record<string, string> = {
+    aco: 'ACO (12×20)',
+    clarke_wright: 'Clarke-Wright',
+    genetic: 'GA (34×70)',
+  };
+  const runs: AlgorithmsBenchmarkRun[] = [];
+  const sizes = [15, 30, 60];
+  for (const size of sizes) {
+    let best = 0;
+    for (const [index, family] of ['aco', 'clarke_wright', 'genetic'].entries()) {
+      const factor = family === 'aco' ? 0.92 : family === 'genetic' ? 1.0 : 1.08;
+      const base = 90 + size * 1.7;
+      const distanceKm = Math.round(base * factor * 10) / 10;
+      if (family === 'aco') best = distanceKm;
+      runs.push({
+        scenarioId: 'normal',
+        scenarioLabel: 'Tráfico normal',
+        instanceSize: size,
+        seed: 101,
+        family: family as AlgorithmsBenchmarkRun['family'],
+        familyLabel: labels[family]!,
+        distanceKm,
+        cpuSeconds: Math.round(((family === 'aco' ? 3.2 : family === 'genetic' ? 2.1 : 0.1) + size / 40) * 100) / 100,
+        uncoveredCount: 0,
+        vehicles: index + 2,
+      });
+    }
+  }
+  return {
+    generatedAt: new Date().toISOString(),
+    durationSeconds: 0,
+    methodology:
+      'Instancias controladas del catálogo. No son rutas históricas: sirven para comparar familias sobre el mismo problema.',
+    scenarios: ['normal'],
+    instanceSizes: sizes,
+    seeds: [101],
+    families: ['aco', 'clarke_wright', 'genetic'],
+    runs,
+  };
+}
+
 export type { AcoConvergencePoint };

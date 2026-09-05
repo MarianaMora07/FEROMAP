@@ -30,6 +30,7 @@ class ResolvedOperationalFacilities:
     work_start: str
     work_end: str
     landfill_unload_minutes: int
+    default_speed_kmh: float
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -40,6 +41,7 @@ class ResolvedOperationalFacilities:
             "workStart": self.work_start,
             "workEnd": self.work_end,
             "landfillUnloadMinutes": self.landfill_unload_minutes,
+            "defaultSpeedKmh": self.default_speed_kmh,
         }
 
 
@@ -84,4 +86,5 @@ def resolve_operational_facilities(db: Session) -> ResolvedOperationalFacilities
         work_start=work_start,
         work_end=work_end,
         landfill_unload_minutes=unload_minutes,
+        default_speed_kmh=float(settings.default_speed_kmh or 25.0),
     )

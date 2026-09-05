@@ -4,6 +4,10 @@ from fastapi import APIRouter, HTTPException
 
 from app.api.deps import DbSession, PlannerOrAdmin
 from app.services.aco_sensitivity_service import load_aco_sensitivity, run_aco_sensitivity
+from app.services.algorithm_benchmark_service import (
+    load_algorithms_benchmark,
+    run_algorithms_benchmark,
+)
 from app.services.benchmark_service import load_aco_benchmark, run_aco_benchmark
 
 router = APIRouter(tags=["benchmarks"])
@@ -23,6 +27,22 @@ def get_aco_benchmark(_: PlannerOrAdmin):
 @router.post("/benchmarks/aco")
 def generate_aco_benchmark(db: DbSession, _: PlannerOrAdmin):
     return run_aco_benchmark(db)
+
+
+@router.get("/benchmarks/algorithms")
+def get_algorithms_benchmark(_: PlannerOrAdmin):
+    payload = load_algorithms_benchmark()
+    if payload is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No hay benchmark entre familias generado. Ejecuta POST /benchmarks/algorithms.",
+        )
+    return payload
+
+
+@router.post("/benchmarks/algorithms")
+def generate_algorithms_benchmark(_: PlannerOrAdmin):
+    return run_algorithms_benchmark()
 
 
 @router.get("/benchmarks/aco/sensitivity")

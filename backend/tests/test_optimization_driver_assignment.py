@@ -317,3 +317,40 @@ def test_supersede_daily_plan_optimized_routes_marks_pending_and_completed():
     assert completed.status == "superseded"
     assert in_progress.status == "in_progress"
     db.flush.assert_called_once()
+
+
+def test_ensure_demo_anchor_vehicle_route_assigns_stop_to_tr01():
+    from app.services.optimization_service import (
+        RouteSolution,
+        _ensure_demo_anchor_vehicle_route,
+        _route_collection_stop_count,
+    )
+
+    vehicles = [
+        VehicleUnit(1, 10, 12000.0, 0.35, 6, 6, "TR-01"),
+        VehicleUnit(2, 20, 12000.0, 0.35, 6, 6, "TR-02"),
+    ]
+    n_customers = 2
+    dist_matrix = [
+        [0, 100, 200, 300],
+        [100, 0, 50, 150],
+        [200, 50, 0, 120],
+        [300, 150, 120, 0],
+    ]
+    time_matrix = dist_matrix
+    solution = RouteSolution(
+        vehicle_routes=[[0, 0], [0, 1, 0]],
+        distance_m=100.0,
+        duration_s=100,
+    )
+
+    updated = _ensure_demo_anchor_vehicle_route(
+        solution,
+        vehicles,
+        n_customers,
+        dist_matrix,
+        time_matrix,
+    )
+
+    assert _route_collection_stop_count(updated.vehicle_routes[0], n_customers) == 1
+    assert _route_collection_stop_count(updated.vehicle_routes[1], n_customers) == 0

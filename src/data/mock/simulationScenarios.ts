@@ -1,6 +1,6 @@
 export const simulationPageMeta = {
-  title: 'Simulación de Escenarios',
-  subtitle: 'Simula distintas condiciones y analiza el impacto en las rutas de recolección.',
+  title: 'Simulación de tesis',
+  subtitle: 'Compara baseline vs ACO en escenario normal — evaluación del motor, sin despacho.',
 };
 
 export const simulationSteps = [

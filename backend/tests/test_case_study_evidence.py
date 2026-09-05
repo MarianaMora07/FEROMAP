@@ -20,3 +20,11 @@ def test_evidence_report_path_under_docs_fase12():
     path = evidence_report_path()
     assert path.name == "evidencia-casos-estudio.md"
     assert path.parts[-2:] == ("fase-12", "evidencia-casos-estudio.md")
+
+
+def test_defense_evidence_report_path_under_docs_fase_b():
+    from app.services.case_study_evidence_service import defense_evidence_report_path
+
+    path = defense_evidence_report_path()
+    assert path.name == "evidencia-demo-defensa.md"
+    assert path.parts[-2:] == ("fase-b", "evidencia-demo-defensa.md")

@@ -1,32 +1,47 @@
 {
-  "status": "approved",
+  "_purpose": "Referencia de estructura (D16). La demo en vivo crea el plan semanal en borrador; no se siembra plan pre-aprobado.",
+  "seedWeeklyPlan": false,
+  "referenceWeekStart": "2026-03-09",
+  "status": "draft",
   "scenarioId": "normal",
-  "notes": "Plan semanal demo para defensa de tesis",
+  "notes": "Ejemplo de estructura semanal — no usar como plan aprobado en seed",
   "days": [
     {
       "weekdayOffset": 0,
-      "collectionPointCodes": ["CNT-001", "CNT-002", "CNT-003", "CNT-004", "CNT-005"]
+      "collectionPointCodes": ["CNT-001", "CNT-004", "CNT-006", "CNT-009", "CNT-011"]
     },
     {
       "weekdayOffset": 1,
-      "collectionPointCodes": ["CNT-006", "CNT-007", "CNT-008"]
+      "collectionPointCodes": ["CNT-002", "CNT-005", "CNT-007", "CNT-010", "CNT-012"]
     },
     {
       "weekdayOffset": 2,
-      "collectionPointCodes": ["CNT-001", "CNT-003", "CNT-009", "CNT-010"]
+      "collectionPointCodes": ["CNT-001", "CNT-003", "CNT-008", "CNT-013", "CNT-015"]
     },
     {
       "weekdayOffset": 3,
-      "collectionPointCodes": ["CNT-004", "CNT-005", "CNT-011", "CNT-012"]
+      "collectionPointCodes": ["CNT-004", "CNT-005", "CNT-014", "CNT-016", "CNT-018"]
     },
     {
       "weekdayOffset": 4,
-      "collectionPointCodes": ["CNT-002", "CNT-013", "CNT-014", "CNT-015"]
+      "collectionPointCodes": ["CNT-002", "CNT-003", "CNT-017", "CNT-019", "CNT-020"]
     }
   ],
   "pendingVisits": [
-    { "pointCode": "CNT-016", "reason": "not_visited", "daysAgo": 1 },
-    { "pointCode": "CNT-017", "reason": "skipped_breakdown", "daysAgo": 1 },
-    { "pointCode": "CNT-018", "reason": "not_visited", "daysAgo": 2 }
+    {
+      "pointCode": "CNT-016",
+      "reason": "not_visited",
+      "originOperationDate": "2026-03-08"
+    },
+    {
+      "pointCode": "CNT-017",
+      "reason": "skipped_breakdown",
+      "originOperationDate": "2026-03-08"
+    },
+    {
+      "pointCode": "CNT-018",
+      "reason": "not_visited",
+      "originOperationDate": "2026-03-07"
+    }
   ]
 }

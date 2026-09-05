@@ -178,6 +178,9 @@ export function AdminOperationalSettings(props: { onFlash: (message: string) => 
                 value={String(s().defaultSpeedKmh)}
                 onInput={(e) => patch({ defaultSpeedKmh: Number(e.currentTarget.value) })}
               />
+              <p class="text-[11px] text-text-muted sm:col-span-2">
+                Se usa en el cálculo de respaldo cuando no hay red vial disponible (Haversine).
+              </p>
               <TextField
                 label="Distancia máx. asignación (km)"
                 type="number"
@@ -198,6 +201,10 @@ export function AdminOperationalSettings(props: { onFlash: (message: string) => 
               checked={s().autoRecalcRoutes}
               onChange={() => patch({ autoRecalcRoutes: !s().autoRecalcRoutes })}
             />
+            <p class="text-[11px] text-text-muted">
+              Sin efecto en el motor actual: los recálculos se disparan desde Contingencias
+              (avería de vehículo / contenedor crítico).
+            </p>
           </Card>
 
           <Card class="space-y-4 p-4">
@@ -240,6 +247,10 @@ export function AdminOperationalSettings(props: { onFlash: (message: string) => 
               >
                 <For each={fillThresholdOptions}>{(o) => <option value={o.value}>{o.label}</option>}</For>
               </SelectField>
+              <p class="text-[11px] text-text-muted sm:col-span-2">
+                Referencia de la app; el motor prioriza con umbrales propios por contenedor
+                (≥80 % crítico) en la heurística de llenado.
+              </p>
             </div>
           </Card>
 

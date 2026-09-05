@@ -132,6 +132,11 @@ def advance_route(db: Session, route_id: int) -> dict[str, Any]:
 
     point = waypoint.collection_point
     if point is not None:
+        from app.domain.waste_generation import projected_fill_level_kg
+
+        # Peso real recolectado = llenado proyectado al momento de la parada
+        # (crecimiento desde el último vaciado). Alimenta el historial real.
+        waypoint.collected_weight_kg = projected_fill_level_kg(point, at=now)
         point.current_fill_level_kg = Decimal("0")
         point.last_emptied_at = now
         from app.services.planning_service import resolve_pending_visits_for_points

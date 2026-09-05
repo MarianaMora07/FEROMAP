@@ -171,8 +171,14 @@ def apply_scenario_weights(
     *,
     traffic_multiplier: float = 1.0,
     scenario_id: str = "normal",
+    band_factor: float = 1.0,
 ) -> nx.MultiDiGraph:
-    """Aplica multiplicadores de tráfico y bloqueos por escenario."""
+    """Aplica multiplicadores de tráfico y bloqueos por escenario.
+
+    ``band_factor`` proviene de la franja horaria de congestión (Tarea 4) y se
+    multiplica sobre el tiempo de viaje base de cada arista. Con factor 1.0 el
+    resultado es idéntico al comportamiento previo.
+    """
     blocked = scenario_id == "rain"
     peak = scenario_id == "peak_traffic"
 
@@ -187,7 +193,7 @@ def apply_scenario_weights(
             continue
 
         base_tt = float(data.get("travel_time", data.get("length", 1.0) / 1000 * 60))
-        mult = traffic_multiplier
+        mult = traffic_multiplier * band_factor
         if peak and hw in PEAK_PENALTY_HIGHWAYS:
             mult *= traffic_multiplier
 
@@ -239,13 +245,41 @@ def shortest_path_nodes_by_length(graph: nx.MultiDiGraph, orig: int, dest: int) 
         return [orig]
 
 
+def shortest_path_nodes_by_time(graph: nx.MultiDiGraph, orig: int, dest: int) -> list[int]:
+    """Camino mínimo por tiempo ponderado (arista ``weight``, ya escalado)."""
+    if orig == dest:
+        return [orig]
+    try:
+        return nx.shortest_path(graph, orig, dest, weight="weight")
+    except (nx.NetworkXNoPath, nx.NodeNotFound):
+        pass
+    try:
+        undirected = graph.to_undirected()
+        return nx.shortest_path(undirected, orig, dest, weight="weight")
+    except (nx.NetworkXNoPath, nx.NodeNotFound, nx.NetworkXError):
+        logger.debug("Sin camino vial (weight) entre nodos %s → %s", orig, dest)
+        return [orig]
+
+
 def path_metrics_between_nodes(
     graph: nx.MultiDiGraph,
     orig: int,
     dest: int,
+    *,
+    by_time: bool = False,
 ) -> tuple[float, float]:
-    """Distancia (m) y tiempo (s) por camino mínimo en el grafo vial."""
-    path = shortest_path_nodes_by_length(graph, orig, dest)
+    """Distancia (m) y tiempo (s) entre nodos.
+
+    Por defecto (``by_time=False``) se elige el camino por longitud y el tiempo
+    se suma con ``travel_time`` sin escalar (comportamiento histórico). Con
+    ``by_time=True`` (tráfico activo) se elige el camino por ``weight`` — tiempo
+    ya escalado por escenario × franja horaria — y se suma ese mismo peso, de
+    modo que la congestión modifica rutas y duraciones reales.
+    """
+    if by_time:
+        path = shortest_path_nodes_by_time(graph, orig, dest)
+    else:
+        path = shortest_path_nodes_by_length(graph, orig, dest)
     if len(path) < 2 or path == [orig]:
         if orig == dest:
             return 0.0, 0.0
@@ -259,7 +293,10 @@ def path_metrics_between_nodes(
             continue
         edge = min(edge_data.values(), key=lambda d: d.get("weight", float("inf")))
         dist_m += float(edge.get("length", 0))
-        time_s += float(edge.get("travel_time", edge.get("weight", 0)))
+        if by_time:
+            time_s += float(edge.get("weight", edge.get("travel_time", 0)))
+        else:
+            time_s += float(edge.get("travel_time", edge.get("weight", 0)))
     return dist_m, time_s
 
 

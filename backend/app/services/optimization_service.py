@@ -29,6 +29,11 @@ from app.domain.landfill_service_time import (
     landfill_node_index,
     route_operational_elapsed_seconds,
 )
+from app.domain.traffic_profile import (
+    congestion_band_for_hour,
+    is_traffic_weighted,
+    normalize_departure_hour,
+)
 from app.services.operational_facilities_service import resolve_operational_facilities
 from app.services.route_constraints import (
     build_applied_route_constraints,
@@ -87,6 +92,16 @@ FUEL_L_PER_KM = 0.35
 CO2_KG_PER_LITER = 2.68
 
 
+def cap_shift_budget_seconds(budget_seconds: int, requested_hours: int | None) -> int:
+    """Presupuesto de turno efectivo: la jornada solicitada recorta el de la instalación."""
+    if not requested_hours or requested_hours <= 0:
+        return budget_seconds
+    requested = int(requested_hours * 3600)
+    if budget_seconds <= 0:
+        return requested
+    return min(budget_seconds, requested)
+
+
 class OptimizationCancelledError(Exception):
     """Optimización cancelada por solicitud del cliente."""
 
@@ -125,6 +140,7 @@ class VehicleUnit:
     fuel_rate: float
     ideal_operators: int
     assigned_operators: int
+    code: str = ""
 
 
 @dataclass
@@ -149,6 +165,64 @@ def _is_collection_idx(idx: int, n_customers: int) -> bool:
 
 def _route_collection_stop_count(route: list[int], n_customers: int) -> int:
     return sum(1 for idx in route if _is_collection_idx(idx, n_customers))
+
+
+DEMO_ANCHOR_VEHICLE_CODE = "TR-01"
+
+
+def _ensure_demo_anchor_vehicle_route(
+    solution: RouteSolution,
+    vehicles: list[VehicleUnit],
+    n_customers: int,
+    dist_matrix: list[list[float]],
+    time_matrix: list[list[float]],
+    *,
+    anchor_code: str = DEMO_ANCHOR_VEHICLE_CODE,
+) -> RouteSolution:
+    """Garantiza que el vehículo demo (TR-01) tenga al menos una parada tras optimizar."""
+    anchor_idx = next(
+        (index for index, unit in enumerate(vehicles) if unit.code == anchor_code),
+        None,
+    )
+    if anchor_idx is None or n_customers < 1:
+        return solution
+
+    routes = [route[:] for route in solution.vehicle_routes]
+    while len(routes) < len(vehicles):
+        routes.append([0, 0])
+
+    if _route_collection_stop_count(routes[anchor_idx], n_customers) > 0:
+        return solution
+
+    donor_idx = max(
+        range(len(routes)),
+        key=lambda index: (
+            _route_collection_stop_count(routes[index], n_customers) if index != anchor_idx else -1
+        ),
+    )
+    donor_stops = [idx for idx in routes[donor_idx] if _is_collection_idx(idx, n_customers)]
+    if not donor_stops:
+        return solution
+
+    stolen = donor_stops[0]
+    routes[donor_idx] = [idx for idx in routes[donor_idx] if idx != stolen]
+    anchor_route = routes[anchor_idx]
+    if anchor_route:
+        routes[anchor_idx] = anchor_route[:1] + [stolen] + anchor_route[1:]
+    else:
+        routes[anchor_idx] = [0, stolen, 0]
+
+    distance_m, duration_s = _evaluate_solution(routes, dist_matrix, time_matrix)
+    return RouteSolution(
+        vehicle_routes=routes,
+        distance_m=distance_m,
+        duration_s=duration_s,
+        aco_iterations_run=solution.aco_iterations_run,
+        aco_stopped_early=solution.aco_stopped_early,
+        aco_parallel_workers=solution.aco_parallel_workers,
+        aco_convergence=solution.aco_convergence,
+        uncovered_customer_indices=solution.uncovered_customer_indices,
+    )
 
 
 def _count_landfill_visits(route: list[int], landfill_idx: int) -> int:
@@ -499,6 +573,8 @@ def _matrix_pair_metrics(
     landfill_node: int,
     landfill_lon: float,
     landfill_lat: float,
+    traffic_weighted: bool = False,
+    fallback_speed_kmh: float = AVG_SPEED_KMH,
 ) -> tuple[float, float]:
     landfill_idx = _landfill_idx(len(customers))
     graph_nodes = [depot_node] + [c.graph_node for c in customers] + [landfill_node]
@@ -511,12 +587,18 @@ def _matrix_pair_metrics(
         customer = customers[index - 1]
         return customer.lon, customer.lat
 
-    d_m, t_s = path_metrics_between_nodes(graph, graph_nodes[i], graph_nodes[j])
+    d_m, t_s = path_metrics_between_nodes(
+        graph,
+        graph_nodes[i],
+        graph_nodes[j],
+        by_time=traffic_weighted,
+    )
     if not math.isfinite(d_m) or d_m <= 0:
         lon_i, lat_i = coords_for(i)
         lon_j, lat_j = coords_for(j)
         d_m = _haversine_m(lon_i, lat_i, lon_j, lat_j)
-        t_s = d_m / 1000 / AVG_SPEED_KMH * 3600
+        speed_kmh = fallback_speed_kmh if fallback_speed_kmh and fallback_speed_kmh > 0 else AVG_SPEED_KMH
+        t_s = d_m / 1000 / speed_kmh * 3600
     return d_m, t_s
 
 
@@ -530,8 +612,11 @@ def _build_distance_matrix(
     landfill_node: int,
     landfill_lon: float,
     landfill_lat: float,
+    traffic_weighted: bool = False,
+    fallback_speed_kmh: float = AVG_SPEED_KMH,
 ) -> tuple[list[list[float]], list[list[float]]]:
     """Matriz depósito + clientes + vertedero (N+2 nodos)."""
+    speed_kmh = fallback_speed_kmh if fallback_speed_kmh and fallback_speed_kmh > 0 else AVG_SPEED_KMH
     landfill_idx = _landfill_idx(len(customers))
     n = landfill_idx + 1
     dist = [[0.0] * n for _ in range(n)]
@@ -543,7 +628,12 @@ def _build_distance_matrix(
             for j in range(n):
                 if i == j:
                     continue
-                d_m, t_s = path_metrics_between_nodes(graph, graph_nodes[i], graph_nodes[j])
+                d_m, t_s = path_metrics_between_nodes(
+                    graph,
+                    graph_nodes[i],
+                    graph_nodes[j],
+                    by_time=traffic_weighted,
+                )
                 if not math.isfinite(d_m) or d_m <= 0:
                     if i == 0:
                         lon_i, lat_i = depot_lon, depot_lat
@@ -558,7 +648,7 @@ def _build_distance_matrix(
                     else:
                         lon_j, lat_j = customers[j - 1].lon, customers[j - 1].lat
                     d_m = _haversine_m(lon_i, lat_i, lon_j, lat_j)
-                    t_s = d_m / 1000 / AVG_SPEED_KMH * 3600
+                    t_s = d_m / 1000 / speed_kmh * 3600
                 dist[i][j] = d_m
                 time[i][j] = t_s
         return dist, time
@@ -574,7 +664,7 @@ def _build_distance_matrix(
                 continue
             d_m = _haversine_m(points[i][0], points[i][1], points[j][0], points[j][1])
             dist[i][j] = d_m
-            time[i][j] = d_m / 1000 / AVG_SPEED_KMH * 3600
+            time[i][j] = d_m / 1000 / speed_kmh * 3600
     return dist, time
 
 
@@ -752,6 +842,23 @@ def _two_opt(route: list[int], dist_matrix: list[list[float]]) -> list[int]:
                     best[i : j + 1] = reversed(best[i : j + 1])
                     improved = True
     return best
+
+
+def _solution_fuel_liters(
+    solution: RouteSolution,
+    vehicles: list[VehicleUnit],
+    dist_matrix: list[list[float]],
+) -> float:
+    """Combustible total (L) según distancia por ruta × fuel_rate del vehículo (L/km)."""
+    total = 0.0
+    for v_idx, route in enumerate(solution.vehicle_routes):
+        if len(route) <= 2:
+            continue
+        route_km = sum(dist_matrix[a][b] for a, b in zip(route, route[1:])) / 1000.0
+        vehicle = vehicles[min(v_idx, len(vehicles) - 1)]
+        rate = float(vehicle.fuel_rate or FUEL_L_PER_KM)
+        total += route_km * rate
+    return total
 
 
 def _aco_cvrp(
@@ -1160,8 +1267,8 @@ def _compute_kpis(
     cur_h = cur_metrics["total_s"] / 3600
     opt_h = opt_metrics["total_s"] / 3600
     workday_h = workday_hours or (shift_budget_seconds / 3600 if shift_budget_seconds else 12)
-    cur_fuel = cur_km * FUEL_L_PER_KM
-    opt_fuel = opt_km * FUEL_L_PER_KM
+    cur_fuel = _solution_fuel_liters(current, vehicles, dist_matrix)
+    opt_fuel = _solution_fuel_liters(optimized, vehicles, dist_matrix)
     co2_avoided = max(0, (cur_fuel - opt_fuel) * CO2_KG_PER_LITER)
     served_count = len(served_codes)
     coverage_pct = int(round(served_count / n_customers * 100)) if n_customers else 100
@@ -1326,9 +1433,10 @@ def build_optimization_vehicle_units(
                 vehicle_id=vehicle.id,
                 driver_id=driver_id,
                 capacity_kg=float(vehicle.max_capacity_kg),
-                fuel_rate=float(vehicle.fuel_consumption_rate or 1.5),
+                fuel_rate=float(vehicle.fuel_consumption_rate or FUEL_L_PER_KM),
                 ideal_operators=vehicle.ideal_operators_count or DEFAULT_IDEAL_OPERATORS,
                 assigned_operators=resolve_vehicle_assigned_operators(vehicle),
+                code=vehicle.code,
             )
         )
     return units
@@ -1481,6 +1589,7 @@ def run_optimization_engine(
     priority_fill_level: bool | None = None,
     time_window_enabled: bool | None = None,
     kpi_view: str | None = None,
+    departure_hour: int | None = None,
     collection_point_ids: list[int] | None = None,
     case_study_id: int | None = None,
     exclude_vehicle_ids: list[int] | None = None,
@@ -1574,11 +1683,22 @@ def run_optimization_engine(
         waste_level_pct=waste,
     )
     applied_crew_modifiers = build_applied_crew_modifiers(shortage)
+    resolved_departure_hour = normalize_departure_hour(departure_hour)
+    departure_band = (
+        congestion_band_for_hour(resolved_departure_hour)
+        if resolved_departure_hour is not None
+        else None
+    )
+    band_factor = departure_band.factor if departure_band is not None else 1.0
+    traffic_weighted = is_traffic_weighted(traffic_mult, band_factor)
     simulation_parameters = {
         "rainIntensity": rain,
         "wasteLevelPct": waste,
         "estimatedDurationHours": duration_h,
         "operatorsShortage": shortage or 0,
+        "departureHour": resolved_departure_hour,
+        "trafficBand": departure_band.display_label() if departure_band is not None else None,
+        "trafficBandFactor": round(band_factor, 4),
         "acoAnts": resolved_aco_ants,
         "acoIterations": resolved_aco_iterations,
         "appliedModifiers": applied_modifiers,
@@ -1615,6 +1735,19 @@ def run_optimization_engine(
             "warning",
         )
 
+    if departure_band is not None:
+        report(
+            "preparando",
+            f"Franja horaria de salida: {departure_band.display_label()}",
+            "info",
+        )
+    if traffic_weighted:
+        report(
+            "preparando",
+            "Tráfico activo — enrutando por tiempo ponderado (congestión modifica rutas y duraciones)",
+            "info",
+        )
+
     report("grafo_vial", f"Cargando grafo OSMnx — red vial de Unare")
     graph_started = time.perf_counter()
     base_graph = load_road_graph()
@@ -1623,6 +1756,7 @@ def run_optimization_engine(
         base_graph.copy(),
         traffic_multiplier=traffic_mult,
         scenario_id=normalized,
+        band_factor=band_factor,
     )
 
     if case_context is not None:
@@ -1681,8 +1815,15 @@ def run_optimization_engine(
     landfill_lon, landfill_lat = facilities.landfill
     unload_seconds = facilities.unload_seconds
     shift_budget_sec = float(facilities.shift_budget_seconds)
+    if duration_h is not None and duration_h > 0:
+        # Jornada de referencia solicitada (UI): recorta el presupuesto de turno
+        # para que el solver corte rutas antes (Tarea 7).
+        shift_budget_sec = float(cap_shift_budget_seconds(int(shift_budget_sec), duration_h))
+    fallback_speed_kmh = float(facilities.default_speed_kmh or AVG_SPEED_KMH)
     landfill_node = nearest_node(graph, landfill_lon, landfill_lat)
     n_customers = len(customers)
+    if duration_h is not None and duration_h > 0:
+        simulation_parameters["effectiveShiftBudgetHours"] = round(shift_budget_sec / 3600, 1)
     landfill_idx = _landfill_idx(n_customers)
     service_secs = [
         compute_service_time_sec(vehicle, shortage_for_engine) for vehicle in vehicles
@@ -1701,6 +1842,8 @@ def run_optimization_engine(
             landfill_node=landfill_node,
             landfill_lon=landfill_lon,
             landfill_lat=landfill_lat,
+            traffic_weighted=traffic_weighted,
+            fallback_speed_kmh=fallback_speed_kmh,
         )
 
     def pair_fn(i: int, j: int) -> tuple[float, float]:
@@ -1715,6 +1858,8 @@ def run_optimization_engine(
             landfill_node=landfill_node,
             landfill_lon=landfill_lon,
             landfill_lat=landfill_lat,
+            traffic_weighted=traffic_weighted,
+            fallback_speed_kmh=fallback_speed_kmh,
         )
 
     dist_matrix, time_matrix, matrix_meta = resolve_distance_matrix(
@@ -1726,6 +1871,8 @@ def run_optimization_engine(
         pair_fn=pair_fn,
         landfill_lon=landfill_lon,
         landfill_lat=landfill_lat,
+        traffic_band_factor=band_factor,
+        time_model="weighted" if traffic_weighted else "length",
     )
     if _distance_matrix_implausible(n_customers, dist_matrix, time_matrix):
         report(
@@ -1742,6 +1889,7 @@ def run_optimization_engine(
             landfill_node=landfill_node,
             landfill_lon=landfill_lon,
             landfill_lat=landfill_lat,
+            fallback_speed_kmh=fallback_speed_kmh,
         )
         matrix_meta = {**matrix_meta, "matrixCacheHit": False, "matrixFallback": "haversine"}
     matrix_cache_hit = matrix_meta["matrixCacheHit"]
@@ -1892,6 +2040,14 @@ def run_optimization_engine(
         )
     report("refinamiento_2opt", "Aplicando 2-opt local sobre rutas candidatas", "progress")
 
+    optimized_solution = _ensure_demo_anchor_vehicle_route(
+        optimized_solution,
+        vehicles,
+        n_customers,
+        dist_matrix,
+        time_matrix,
+    )
+
     served_indices = _served_customer_indices(optimized_solution, n_customers)
     served_codes = {customers[idx - 1].code for idx in served_indices}
     uncovered_point_codes = [customers[idx - 1].code for idx in optimized_solution.uncovered_customer_indices]
@@ -1934,6 +2090,11 @@ def run_optimization_engine(
     )
     kpis["engineMetrics"] = engine_metrics
     simulation_parameters["engineMetrics"] = engine_metrics
+    engine_metrics["departureHour"] = resolved_departure_hour
+    engine_metrics["trafficBand"] = (
+        departure_band.display_label() if departure_band is not None else None
+    )
+    engine_metrics["trafficBandFactor"] = round(band_factor, 4)
 
     opt_breakdown = kpis["durationBreakdown"]["optimized"]
     service_min = round(opt_breakdown["serviceHours"] * 60)

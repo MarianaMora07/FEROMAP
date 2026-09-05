@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import CollectionPoint, OptimizedRoute, RouteWaypoint, Sector, Vehicle
+from app.domain.waste_generation import projected_fill_level_pct
 from app.services.route_geometry_service import (
     build_route_linestring_cached,
     snap_lonlat_sequence,
@@ -16,10 +16,8 @@ from app.services.simulation_routes import latest_computed_routes
 
 
 def fill_level_pct(point: CollectionPoint) -> int:
-    if point.max_capacity_kg <= 0:
-        return 0
-    pct = (point.current_fill_level_kg / point.max_capacity_kg) * Decimal("100")
-    return int(round(float(pct)))
+    """% de llenado proyectado al momento actual (crece desde el último vaciado)."""
+    return projected_fill_level_pct(point)
 
 
 def priority_from_fill(pct: int) -> str:

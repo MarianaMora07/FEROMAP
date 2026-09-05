@@ -107,6 +107,19 @@ case-study-report case_study_code *args:
 phase12-evidence: _check
     bash scripts/phase12-evidence.sh
 
+# Evidencia académica B5 (D20–D21): 4 reportes + docs/fase-b/evidencia-demo-defensa.md
+phase-b-evidence: _check
+    bash scripts/phase-b-evidence.sh
+
+# Fase B — checks rápidos (sin ACO lento).
+phase-b-check: _check
+    {{compose}} exec -T api pytest tests/test_phase_b_weekly_autofill.py tests/test_phase_b_verify.py -v -m "phase_b and not slow"
+    npm test -- src/core/auth/permissions.test.ts
+
+# Fase B — verificación completa (D25): phase-a-flow + B1–B3 + UI smoke.
+phase-b-verify: _check
+    bash scripts/phase-b-verify.sh
+
 # Tests de aislamiento casos de estudio (Fase 12.7)
 test-case-study-isolation: _check
     {{compose}} exec -T api pytest tests/test_case_study_isolation.py -v

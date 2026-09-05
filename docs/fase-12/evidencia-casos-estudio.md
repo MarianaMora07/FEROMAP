@@ -1,6 +1,6 @@
 # Evidencia casos de estudio — Fase 12.7 (defensa)
 
-> Generado automáticamente: **2026-09-01 14:00 UTC**  
+> Generado automáticamente: **2026-09-04 15:26 UTC**  
 > Regenerar: `just phase12-evidence`
 
 ## Objetivo
@@ -19,13 +19,16 @@ Demostrar que los casos de estudio son **experimentos aislados**: mismo contened
 | `test_running_case_study_does_not_mutate_other_case_or_catalog` | Optimizar Norte no toca Sur ni catálogo |
 | `test_driver_report_accepts_case_study_flag` | CLI `just case-study-report` |
 
-## 2. Tabla comparativa (3 casos demo)
+## 2. Tabla comparativa (4 casos)
 
-| Caso           | Escenario | Puntos | Cubiertos | Dist. ACO (km) | Duración (h) | Rutas | Simulación |
-|----------------|-----------|--------|-----------|----------------|--------------|-------|------------|
-| CE-UNARE-NORTE | normal    | 15     | 15        | 27.1           | 6.04         | 1     | 102        |
-| CE-UNARE-SUR   | normal    | 15     | 15        | 29.2           | 6.17         | 1     | 103        |
-| CE-MULTI-VIAJE | saturated | 12     | 12        | 45.2           | 6.01         | 1     | 104        |
+| Caso            | Escenario | Puntos | Cubiertos | Pend. | Dist. ACO (km) | Duración (h) | Rutas | Simulación |
+|-----------------|-----------|--------|-----------|-------|----------------|--------------|-------|------------|
+| CE-UNARE-NORTE  | normal    | 15     | 15        | 0     | 116.7          | 11.17        | 7     | 73         |
+| CE-UNARE-SUR    | normal    | 15     | 15        | 0     | 128.1          | 11.63        | 7     | 74         |
+| CE-MULTI-VIAJE  | saturated | 12     | 12        | 0     | 127.0          | 10.45        | 7     | 75         |
+| CE-COMBINATORIO | saturated | 120    | 107       | 13    | 612.8          | 4.65         | 35    | 80         |
+
+> **CE-COMBINATORIO:** métricas de simulación semanal (5 días); km = suma diaria; duración = máx. h/ruta. No se muestra en la demo en vivo (D8).
 
 ## 3. Mismo punto, dos casos, dos rutas
 
@@ -34,15 +37,14 @@ Contenedor compartido **`CNT-006`** (M:N entre CE-UNARE-NORTE y CE-UNARE-SUR).
 - **Coordenadas catálogo:** (8.27574, -62.75866) — inmutables entre casos
 - **Llenado catálogo:** 456 kg / 1200 kg
 
-| Caso           | Demanda CNT-006 (kg) | Ruta asignada          | Orden parada |
-|----------------|----------------------|------------------------|--------------|
-| CE-UNARE-NORTE | 400                  | TR-01 / Maickol Mendez | 8            |
-| CE-UNARE-SUR   | 900                  | TR-01 / Maickol Mendez | 12           |
+| Caso           | Demanda CNT-006 (kg) | Ruta asignada       | Orden parada |
+|----------------|----------------------|---------------------|--------------|
+| CE-UNARE-NORTE | 456                  | TR-02 / María Gómez | 3            |
+| CE-UNARE-SUR   | 456                  | TR-02 / María Gómez | 1            |
 
 **Lectura para la defensa:**
 
-- ✅ Demanda distinta en `CNT-006`: Norte 400 kg vs Sur 900 kg (overrides por caso, catálogo intacto).
-- ✅ Rutas distintas: el ACO reoptimiza con instancias VRP separadas por caso (distancia Norte 27.1 km vs Sur 29.2 km).
+- ✅ Rutas distintas: el ACO reoptimiza con instancias VRP separadas por caso (distancia Norte 116.7 km vs Sur 128.1 km).
 
 ## 4. Reporte individual por caso
 
@@ -50,6 +52,8 @@ Contenedor compartido **`CNT-006`** (M:N entre CE-UNARE-NORTE y CE-UNARE-SUR).
 just case-study-report CE-UNARE-NORTE
 just case-study-report CE-UNARE-SUR
 just case-study-report CE-MULTI-VIAJE
+just case-study-report CE-COMBINATORIO
+just phase-b-evidence
 ```
 
 ## 5. Guion oral (3 min)

@@ -9,7 +9,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import CollectionPoint, DailyPlan, OptimizedRoute, RouteWaypoint, User, UserRole
+from app.db.models import CollectionPoint, DailyPlan, OptimizedRoute, RouteWaypoint, User, UserRole, Vehicle
 from app.services.collection_point_service import seed_meta_by_code
 from app.services.geo_service import fill_level_pct
 from app.services.operations_service import route_progress_percent
@@ -262,6 +262,55 @@ def _serialize_route_snapshot(
     }
 
 
+def _load_demo_conductor_fallback_routes(
+    db: Session,
+    *,
+    daily_plan: DailyPlan,
+) -> list[OptimizedRoute]:
+    """Muestra la ruta TR-01 (o cualquier ruta del día) al conductor demo si ACO no lo asignó."""
+    stmt = (
+        select(OptimizedRoute)
+        .join(Vehicle, OptimizedRoute.vehicle_id == Vehicle.id)
+        .where(
+            OptimizedRoute.daily_plan_id == daily_plan.id,
+            OptimizedRoute.route_kind == "optimized",
+            OptimizedRoute.status.in_(("pending", "in_progress", "completed")),
+            Vehicle.code == "TR-01",
+        )
+        .options(
+            joinedload(OptimizedRoute.vehicle),
+            joinedload(OptimizedRoute.driver),
+            joinedload(OptimizedRoute.daily_plan),
+            joinedload(OptimizedRoute.waypoints)
+            .joinedload(RouteWaypoint.collection_point)
+            .joinedload(CollectionPoint.sector),
+        )
+        .order_by(OptimizedRoute.id.asc())
+    )
+    anchor_routes = list(db.scalars(stmt).unique().all())
+    if anchor_routes:
+        return anchor_routes
+
+    stmt = (
+        select(OptimizedRoute)
+        .where(
+            OptimizedRoute.daily_plan_id == daily_plan.id,
+            OptimizedRoute.route_kind == "optimized",
+            OptimizedRoute.status.in_(("pending", "in_progress", "completed")),
+        )
+        .options(
+            joinedload(OptimizedRoute.vehicle),
+            joinedload(OptimizedRoute.driver),
+            joinedload(OptimizedRoute.daily_plan),
+            joinedload(OptimizedRoute.waypoints)
+            .joinedload(RouteWaypoint.collection_point)
+            .joinedload(CollectionPoint.sector),
+        )
+        .order_by(OptimizedRoute.id.asc())
+    )
+    return list(db.scalars(stmt).unique().all())
+
+
 def operator_route_snapshot(
     db: Session,
     user: User,
@@ -276,6 +325,9 @@ def operator_route_snapshot(
     daily_plan = db.scalar(select(DailyPlan).where(DailyPlan.operation_date == today))
     facilities = resolve_operational_facilities(db)
     routes = _load_driver_routes(db, driver_id=driver_id, daily_plan=daily_plan)
+
+    if not routes and user.email == "conductor@fero.com" and daily_plan is not None:
+        routes = _load_demo_conductor_fallback_routes(db, daily_plan=daily_plan)
 
     if routes:
         return _serialize_route_snapshot(

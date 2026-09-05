@@ -2,31 +2,1075 @@
   {
     "pointCode": "CNT-001",
     "visitsPerWeek": 3,
-    "weekdays": [0, 2, 4],
+    "weekdays": [
+      0,
+      2,
+      4
+    ],
     "effectiveFrom": "2026-01-01"
   },
   {
     "pointCode": "CNT-002",
-    "visitsPerWeek": 2,
-    "weekdays": [1, 4],
+    "visitsPerWeek": 3,
+    "weekdays": [
+      0,
+      2,
+      4
+    ],
     "effectiveFrom": "2026-01-01"
   },
   {
     "pointCode": "CNT-003",
     "visitsPerWeek": 3,
-    "weekdays": [0, 2, 4],
+    "weekdays": [
+      0,
+      2,
+      4
+    ],
     "effectiveFrom": "2026-01-01"
   },
   {
     "pointCode": "CNT-004",
-    "visitsPerWeek": 1,
-    "weekdays": [3],
+    "visitsPerWeek": 2,
+    "weekdays": [
+      0,
+      3
+    ],
     "effectiveFrom": "2026-01-01"
   },
   {
     "pointCode": "CNT-005",
     "visitsPerWeek": 2,
-    "weekdays": [1, 3],
+    "weekdays": [
+      1,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-006",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      0,
+      2
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-007",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      1,
+      2,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-008",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      0,
+      2,
+      3
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-009",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      1,
+      3,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-010",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-011",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      0
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-012",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      1
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-013",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      2
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-014",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      0,
+      3
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-015",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      1,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-016",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      0,
+      2
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-017",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      1,
+      2,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-018",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      0,
+      2,
+      3
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-019",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      1,
+      3,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-020",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-021",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      0
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-022",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      1
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-023",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      2
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-024",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      0,
+      3
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-025",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      1,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-026",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      0,
+      2
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-027",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      1,
+      2,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-028",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      0,
+      2,
+      3
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-029",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      1,
+      3,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-030",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-031",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      0
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-032",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      1
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-033",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      2
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-034",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      0,
+      3
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-035",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      1,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-036",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      0,
+      2
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-037",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      1,
+      2,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-038",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      0,
+      2,
+      3
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-039",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      1,
+      3,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-040",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-041",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      0
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-042",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      1
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-043",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      2
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-044",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      0,
+      3
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-045",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      1,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-046",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      0,
+      2
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-047",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      1,
+      2,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-048",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      0,
+      2,
+      3
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-049",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      1,
+      3,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-050",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-051",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      0
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-052",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      1
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-053",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      2
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-054",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      0,
+      3
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-055",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      1,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-056",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      0,
+      2
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-057",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      1,
+      2,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-058",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      0,
+      2,
+      3
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-059",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      1,
+      3,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-060",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-061",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      0
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-062",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      1
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-063",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      2
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-064",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      0,
+      3
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-065",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      1,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-066",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      0,
+      2
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-067",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      1,
+      2,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-068",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      0,
+      2,
+      3
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-069",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      1,
+      3,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-070",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-071",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      0
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-072",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      1
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-073",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      2
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-074",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      0,
+      3
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-075",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      1,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-076",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      0,
+      2
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-077",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      1,
+      2,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-078",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      0,
+      2,
+      3
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-079",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      1,
+      3,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-080",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-081",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      0
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-082",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      1
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-083",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      2
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-084",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      0,
+      3
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-085",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      1,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-086",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      0,
+      2
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-087",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      1,
+      2,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-088",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      0,
+      2,
+      3
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-089",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      1,
+      3,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-090",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-091",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      0
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-092",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      1
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-093",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      2
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-094",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      0,
+      3
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-095",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      1,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-096",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      0,
+      2
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-097",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      1,
+      2,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-098",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      0,
+      2,
+      3
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-099",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      1,
+      3,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-100",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-101",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      0
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-102",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      1
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-103",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      2
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-104",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      0,
+      3
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-105",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      1,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-106",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      0,
+      2
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-107",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      1,
+      2,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-108",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      0,
+      2,
+      3
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-109",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      1,
+      3,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-110",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-111",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      0
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-112",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      1
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-113",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      2
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-114",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      0,
+      3
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-115",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      1,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-116",
+    "visitsPerWeek": 2,
+    "weekdays": [
+      0,
+      2
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-117",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      1,
+      2,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-118",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      0,
+      2,
+      3
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-119",
+    "visitsPerWeek": 3,
+    "weekdays": [
+      1,
+      3,
+      4
+    ],
+    "effectiveFrom": "2026-01-01"
+  },
+  {
+    "pointCode": "CNT-120",
+    "visitsPerWeek": 1,
+    "weekdays": [
+      4
+    ],
     "effectiveFrom": "2026-01-01"
   }
 ]

@@ -1,6 +1,28 @@
 import type { KpiMetrics } from '../../data/types/simulation';
 import { apiGet, apiPost } from './client';
 import type { OptimizeResponse } from './simulation';
+import { fetchSimulationOptimizeJob } from './simulationJobs';
+
+const CONTINGENCY_JOB_POLL_MS = 450;
+const CONTINGENCY_JOB_MAX_WAIT_MS = 20 * 60 * 1000;
+
+async function awaitContingencyJob<T>(jobId: string): Promise<T> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < CONTINGENCY_JOB_MAX_WAIT_MS) {
+    const snapshot = await fetchSimulationOptimizeJob(jobId);
+    if (snapshot.status === 'completed' && snapshot.result) {
+      return snapshot.result as unknown as T;
+    }
+    if (snapshot.status === 'failed') {
+      throw new Error(snapshot.error ?? 'El recálculo de contingencia falló en el servidor');
+    }
+    if (snapshot.status === 'cancelled') {
+      throw new Error('El recálculo de contingencia fue cancelado');
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, CONTINGENCY_JOB_POLL_MS));
+  }
+  throw new Error('El recálculo de contingencia tardó más de 20 minutos');
+}
 
 export interface VehicleBreakdownRequest {
   vehicleId: string;
@@ -38,10 +60,14 @@ export interface VehicleBreakdownResponse {
   message: string;
 }
 
-export function reportVehicleBreakdown(
+export async function reportVehicleBreakdown(
   payload: VehicleBreakdownRequest,
 ): Promise<VehicleBreakdownResponse> {
-  return apiPost<VehicleBreakdownResponse>('/api/v1/contingencies/vehicle-breakdown', payload);
+  const { jobId } = await apiPost<{ jobId: string; status: string }>(
+    '/api/v1/contingencies/vehicle-breakdown',
+    payload,
+  );
+  return awaitContingencyJob<VehicleBreakdownResponse>(jobId);
 }
 
 export function fetchRecentIncidents(params?: {
@@ -73,10 +99,14 @@ export interface CriticalContainerRecalcResponse {
   message: string;
 }
 
-export function recalcCriticalContainer(
+export async function recalcCriticalContainer(
   payload: CriticalContainerRecalcRequest,
 ): Promise<CriticalContainerRecalcResponse> {
-  return apiPost<CriticalContainerRecalcResponse>('/api/v1/contingencies/critical-container-recalc', payload);
+  const { jobId } = await apiPost<{ jobId: string; status: string }>(
+    '/api/v1/contingencies/critical-container-recalc',
+    payload,
+  );
+  return awaitContingencyJob<CriticalContainerRecalcResponse>(jobId);
 }
 
 export type { KpiMetrics };

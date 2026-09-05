@@ -1,6 +1,6 @@
 import { AlertTriangle } from 'lucide-solid';
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
-import type { WeeklyPlanDay } from '../../core/api/planning';
+import type { WeeklyPlan, WeeklyPlanDay } from '../../core/api/planning';
 import type { PlanningCollectionPointRef } from '../../core/api/collectionPoints';
 import type { ScenarioId } from '../../data/types/simulation';
 import {
@@ -84,6 +84,90 @@ export function WeeklyPlanWeekCalendar(props: WeeklyPlanWeekCalendarProps) {
 
 interface WeeklyPlanMissingPointsAlertProps {
   days: WeeklyPlanDay[];
+}
+
+export function WeeklyPlanValidationTable(props: { plan: WeeklyPlan }) {
+  const rows = () => props.plan.preflight?.simulation?.rows ?? [];
+  const overall = () => props.plan.preflight?.simulation?.feasible;
+  return (
+    <Show when={rows().length > 0}>
+      <div class="space-y-2" data-testid="weekly-plan-validation-table">
+        <div class="flex items-center justify-between gap-2">
+          <p class="text-sm font-semibold text-text-primary dark:text-white">Validación por día (motor ACO)</p>
+          <Show when={overall() !== undefined}>
+            <span
+              class={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                overall()
+                  ? 'bg-fero-green/15 text-fero-green-dark dark:text-fero-green-mid'
+                  : 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+              }`}
+            >
+              {overall() ? 'Semana factible' : 'Hay días con problemas'}
+            </span>
+          </Show>
+        </div>
+        <div class="overflow-x-auto rounded-xl border border-border dark:border-dark-border">
+          <table class="w-full min-w-130 text-sm">
+            <thead>
+              <tr class="border-b border-border text-left text-[10px] uppercase tracking-wide text-text-muted dark:border-dark-border">
+                <th class="px-3 py-2 font-semibold">Día</th>
+                <th class="px-3 py-2 font-semibold">Puntos</th>
+                <th class="px-3 py-2 font-semibold">Km</th>
+                <th class="px-3 py-2 font-semibold">Duración</th>
+                <th class="px-3 py-2 font-semibold">Cobertura</th>
+                <th class="px-3 py-2 font-semibold">Sin cubrir</th>
+                <th class="px-3 py-2 font-semibold">Estado</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border dark:divide-dark-border">
+              <For each={rows()}>
+                {(row) => (
+                  <tr class={row.feasible === false || row.error ? 'bg-red-50/70 dark:bg-red-950/20' : ''}>
+                    <td class="px-3 py-2 font-medium text-text-primary dark:text-white">
+                      {row.operationDate ?? '—'}
+                    </td>
+                    <td class="px-3 py-2 text-text-secondary">{row.skipped ? '—' : (row.servedPoints ?? '—')}</td>
+                    <td class="px-3 py-2 text-text-secondary">
+                      {row.distanceKm != null ? `${row.distanceKm.toFixed(1)}` : '—'}
+                    </td>
+                    <td class="px-3 py-2 text-text-secondary">
+                      {row.durationHours != null ? `${row.durationHours.toFixed(1)} h` : '—'}
+                    </td>
+                    <td class="px-3 py-2 text-text-secondary">
+                      {row.coveragePct != null ? `${row.coveragePct}%` : '—'}
+                    </td>
+                    <td class="px-3 py-2 text-text-secondary">
+                      {row.uncoveredPoints != null && row.uncoveredPoints > 0 ? row.uncoveredPoints : '0'}
+                    </td>
+                    <td class="px-3 py-2">
+                      <Show
+                        when={row.error}
+                        fallback={
+                          <span
+                            class={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                              row.skipped
+                                ? 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                                : row.feasible
+                                  ? 'bg-fero-green/15 text-fero-green-dark dark:text-fero-green-mid'
+                                  : 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+                            }`}
+                          >
+                            {row.skipped ? 'Sin puntos' : row.feasible ? 'OK' : 'Revisar'}
+                          </span>
+                        }
+                      >
+                        {(err) => <span class="text-[11px] font-medium text-red-700 dark:text-red-300">{err()}</span>}
+                      </Show>
+                    </td>
+                  </tr>
+                )}
+              </For>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </Show>
+  );
 }
 
 export function WeeklyPlanMissingPointsAlert(props: WeeklyPlanMissingPointsAlertProps) {

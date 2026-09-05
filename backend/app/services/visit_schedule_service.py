@@ -11,6 +11,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import CollectionPoint, VisitSchedule
+from app.domain.visit_schedule_distribution import (
+    DEFAULT_EFFECTIVE_FROM,
+    build_visit_schedule_row,
+)
 
 
 def _serialize_schedule(schedule: VisitSchedule, point: CollectionPoint) -> dict[str, Any]:
@@ -109,3 +113,39 @@ def list_active_visit_schedules(db: Session, *, reference: date | None = None) -
             continue
         active.append(_serialize_schedule(schedule, point))
     return active
+
+
+def ensure_visit_schedules_coverage(db: Session) -> dict[str, int]:
+    """Crea frecuencias para puntos activos que aún no tienen visit_schedule."""
+    scheduled_ids = set(db.scalars(select(VisitSchedule.collection_point_id)).all())
+    points = db.scalars(
+        select(CollectionPoint)
+        .where(CollectionPoint.deleted_at.is_(None), CollectionPoint.status == "active")
+        .order_by(CollectionPoint.code)
+    ).all()
+
+    created = 0
+    for point in points:
+        if point.id in scheduled_ids:
+            continue
+        row = build_visit_schedule_row(point.code, effective_from=DEFAULT_EFFECTIVE_FROM)
+        db.add(
+            VisitSchedule(
+                collection_point_id=point.id,
+                visits_per_week=int(row["visitsPerWeek"]),
+                weekdays_json=json.dumps(row["weekdays"]),
+                is_extra_visit=False,
+                effective_from=DEFAULT_EFFECTIVE_FROM,
+                effective_until=None,
+            )
+        )
+        created += 1
+
+    if created:
+        db.flush()
+
+    return {
+        "created": created,
+        "total_schedules": len(scheduled_ids) + created,
+        "active_points": len(points),
+    }

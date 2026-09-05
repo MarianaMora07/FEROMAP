@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import csv
+import io
 import json
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 from sqlalchemy import func, select
@@ -18,6 +20,180 @@ from app.services.optimization_service import run_optimization_engine
 from app.services.scenario_utils import normalize_scenario_id
 from app.services.seed_loader import load_seed
 from app.services.simulation_parsing import parse_simulation
+
+
+# --- Comparativas multi-corrida (Tarea 5) ------------------------------------
+
+
+def _comparison_metrics(sim: Simulation) -> dict[str, Any]:
+    """Métricas numéricas de una corrida a partir de columnas top-level + KPIs."""
+    params: dict[str, Any] = {}
+    if sim.parameters_json:
+        params = json.loads(sim.parameters_json)
+    kpis = params.get("kpis") or {}
+    distance = kpis.get("distanceKm") or {}
+    duration = kpis.get("durationHours") or {}
+    fuel = kpis.get("fuelLiters") or {}
+    duration_current = duration.get("current")
+    duration_optimized = duration.get("optimized")
+    return {
+        "distanceCurrentKm": float(sim.kpi_total_distance_historical or distance.get("current", 0) or 0),
+        "distanceOptimizedKm": float(sim.kpi_total_distance_optimized or distance.get("optimized", 0) or 0),
+        "savingPct": float(sim.kpi_saving_percentage or 0),
+        "durationCurrentHours": float(duration_current) if duration_current is not None else None,
+        "durationOptimizedHours": float(duration_optimized) if duration_optimized is not None else None,
+        "fuelLiters": float(fuel.get("optimized", 0) or 0),
+        "co2KgAvoided": float(kpis.get("co2KgAvoided", 0) or 0),
+        "containersServed": int(kpis.get("containersServed", 0) or 0),
+        "params": params,
+    }
+
+
+def list_simulation_comparisons(
+    db: Session,
+    *,
+    from_date: date | None = None,
+    to_date: date | None = None,
+    scenario_id: str | None = None,
+    case_study_id: int | None = None,
+    limit: int = 200,
+) -> dict[str, Any]:
+    """Corridas del historial para la comparativa IA vs histórica (Tarea 5)."""
+    stmt = select(Simulation).order_by(Simulation.executed_at.asc())
+    if case_study_id is not None:
+        stmt = stmt.where(Simulation.case_study_id == case_study_id)
+    if from_date is not None:
+        stmt = stmt.where(Simulation.executed_at >= datetime.combine(from_date, datetime.min.time(), tzinfo=timezone.utc))
+    if to_date is not None:
+        end = datetime.combine(to_date + date.resolution, datetime.min.time(), tzinfo=timezone.utc)
+        stmt = stmt.where(Simulation.executed_at < end)
+    rows = db.scalars(stmt.limit(max(1, min(limit, 500)))).all()
+
+    labels = {row["id"]: row["label"] for row in load_seed("scenarios.json")}
+    items: list[dict[str, Any]] = []
+    for sim in rows:
+        parsed = parse_simulation(sim)
+        sid = parsed["scenarioId"]
+        if scenario_id and sid != scenario_id:
+            continue
+        metrics = _comparison_metrics(sim)
+        executed_at = sim.executed_at
+        items.append(
+            {
+                "id": sim.id,
+                "executedAt": executed_at.isoformat() if executed_at else None,
+                "date": executed_at.date().isoformat() if executed_at else None,
+                "scenarioId": sid,
+                "label": labels.get(sid, parsed["scenarioName"]),
+                "distanceHistoricalKm": metrics["distanceCurrentKm"],
+                "distanceOptimizedKm": metrics["distanceOptimizedKm"],
+                "durationHoursOptimized": metrics["durationOptimizedHours"],
+                "co2KgAvoided": metrics["co2KgAvoided"],
+                "savingPct": metrics["savingPct"],
+                "containersServed": metrics["containersServed"],
+                "caseStudyId": parsed.get("caseStudyId"),
+                "caseStudyCode": parsed.get("caseStudyCode"),
+                "caseStudyName": parsed.get("caseStudyName"),
+                "contingency": parsed["contingency"],
+            }
+        )
+    return {"items": items, "count": len(items)}
+
+
+def simulation_routes_feature_collection(db: Session, simulation_id: int) -> dict[str, Any]:
+    """FeatureCollection única con rutas actual e IA de una corrida."""
+    sim = db.get(Simulation, simulation_id)
+    if sim is None:
+        raise LookupError("Simulación no encontrada")
+    params: dict[str, Any] = {}
+    if sim.parameters_json:
+        params = json.loads(sim.parameters_json)
+    routes = params.get("routesGeojson") or {}
+    current = routes.get("current") or {}
+    optimized = routes.get("optimized") or {}
+    features = list(current.get("features", []) or []) + list(optimized.get("features", []) or [])
+    return {"type": "FeatureCollection", "features": features}
+
+
+def build_simulation_comparison_csv(sim: Simulation) -> str:
+    """CSV de la corrida: tabla de comparación actual vs IA + nota metodológica."""
+    metrics = _comparison_metrics(sim)
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["# Simulación", sim.id])
+    writer.writerow(["# Escenario", sim.scenario_name])
+    writer.writerow(["# Fecha", sim.executed_at.isoformat() if sim.executed_at else ""])
+    writer.writerow(["# Nota", "La ruta 'actual/histórica' es la línea base sintética (orden por código); la 'IA' es la optimizada por ACO."])
+    writer.writerow([])
+    writer.writerow(["metrica", "actual", "ia", "unidad"])
+    writer.writerow(["distancia", f"{metrics['distanceCurrentKm']:.2f}", f"{metrics['distanceOptimizedKm']:.2f}", "km"])
+    writer.writerow(["duracion", "", f"{metrics['durationOptimizedHours'] or 0:.2f}", "h"])
+    writer.writerow(["combustible", "", f"{metrics['fuelLiters']:.2f}", "L"])
+    writer.writerow(["co2_evitado", "", f"{metrics['co2KgAvoided']:.2f}", "kg"])
+    writer.writerow(["puntos_servidos", "", str(metrics["containersServed"]), "contenedores"])
+    writer.writerow(["ahorro", "", f"{metrics['savingPct']:.2f}%", ""])
+    return buffer.getvalue()
+
+
+def build_simulation_comparison_pdf(sim: Simulation) -> bytes:
+    """PDF de la corrida con la misma tabla de comparación."""
+    from fpdf import FPDF
+
+    metrics = _comparison_metrics(sim)
+    executed = sim.executed_at.isoformat() if sim.executed_at else ""
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 15)
+    pdf.cell(0, 10, "FEROMAP - Simulacion de rutas", ln=True)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.cell(0, 6, f"Simulacion #{sim.id} - {sim.scenario_name}", ln=True)
+    pdf.cell(0, 6, f"Fecha: {executed[:19]}", ln=True)
+    pdf.cell(0, 6, "Nota: la ruta 'actual/historica' es la linea base sintetica (orden por codigo);", ln=True)
+    pdf.cell(0, 6, "la 'IA' es la optimizada por ACO.", ln=True)
+    pdf.ln(4)
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(60, 8, "Metrica", border=1)
+    pdf.cell(40, 8, "Actual", border=1)
+    pdf.cell(40, 8, "IA", border=1)
+    pdf.cell(40, 8, "Unidad", border=1, ln=True)
+    pdf.set_font("Helvetica", "", 10)
+    rows = [
+        ("Distancia", f"{metrics['distanceCurrentKm']:.2f}", f"{metrics['distanceOptimizedKm']:.2f}", "km"),
+        ("Duracion", "", f"{metrics['durationOptimizedHours'] or 0:.2f}", "h"),
+        ("Combustible", "", f"{metrics['fuelLiters']:.2f}", "L"),
+        ("CO2 evitado", "", f"{metrics['co2KgAvoided']:.2f}", "kg"),
+        ("Puntos servidos", "", str(metrics["containersServed"]), "contenedores"),
+        ("Ahorro", "", f"{metrics['savingPct']:.2f}%", ""),
+    ]
+    for label, current, optimized, unit in rows:
+        pdf.cell(60, 7, label, border=1)
+        pdf.cell(40, 7, current, border=1)
+        pdf.cell(40, 7, optimized, border=1)
+        pdf.cell(40, 7, unit, border=1, ln=True)
+    return bytes(pdf.output())
+
+
+def export_simulation_detail_file(
+    db: Session,
+    simulation_id: int,
+    export_format: str,
+) -> tuple[Any, str, str]:
+    """Export de una corrida: (contenido, media_type, filename)."""
+    sim = db.get(Simulation, simulation_id)
+    if sim is None:
+        raise LookupError("Simulación no encontrada")
+    if export_format == "csv":
+        return (
+            build_simulation_comparison_csv(sim),
+            "text/csv; charset=utf-8",
+            f"feromap-simulacion-{simulation_id}.csv",
+        )
+    return (
+        build_simulation_comparison_pdf(sim),
+        "application/pdf",
+        f"feromap-simulacion-{simulation_id}.pdf",
+    )
 
 
 def _latest_optimization(db: Session) -> dict[str, Any] | None:

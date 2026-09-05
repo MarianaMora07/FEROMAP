@@ -26,6 +26,10 @@ function statusBadgeVariant(status: CaseStudyStatus): 'default' | 'success' | 'w
   return 'default';
 }
 
+function isCaseStudyDemoVisible(item: CaseStudyListItem): boolean {
+  return item.defaultParameters?.demoVisible !== false;
+}
+
 export default function CaseStudiesListPage() {
   const navigate = useNavigate();
   const [items, setItems] = createSignal<CaseStudyListItem[]>([]);
@@ -179,7 +183,14 @@ export default function CaseStudiesListPage() {
                         </Show>
                       </td>
                       <td class="px-3 py-2">
-                        <Badge variant={statusBadgeVariant(item.status)}>{STATUS_LABELS[item.status]}</Badge>
+                        <div class="flex flex-wrap items-center gap-2">
+                          <Badge variant={statusBadgeVariant(item.status)}>{STATUS_LABELS[item.status]}</Badge>
+                          <Show when={!isCaseStudyDemoVisible(item)}>
+                            <Badge variant="warning" title="Solo evidencia escrita — oculto en demo en vivo">
+                              Evidencia
+                            </Badge>
+                          </Show>
+                        </div>
                       </td>
                       <td class="px-3 py-2">
                         {item.activePointCount}/{item.pointCount}

@@ -26,6 +26,8 @@ interface OperatorRoutePanelProps {
   onRefresh?: () => void;
   vehicleId?: string | null;
   operationDate?: string;
+  /** Sin Card exterior — para incrustar en /operator/plan junto al mapa. */
+  embedded?: boolean;
 }
 
 function formatEstimatedTime(iso: string | null | undefined): string {
@@ -51,29 +53,8 @@ export function OperatorRoutePanel(props: OperatorRoutePanelProps) {
     return `${snapshot.stopsDone} de ${snapshot.stopsTotal} paradas${km}`;
   };
 
-  return (
-    <Card data-testid="operator-route-panel" aria-busy={props.loading ? 'true' : 'false'}>
-      <CardHeader
-        title="Mi ruta del día"
-        subtitle={props.snapshot?.routeLabel ?? 'Secuencia de paradas asignada'}
-        action={
-          <div class="flex items-center gap-3">
-            <Show when={props.onRefresh}>
-              <button
-                type="button"
-                class="text-xs font-medium text-fero-blue hover:underline"
-                onClick={() => props.onRefresh?.()}
-              >
-                Actualizar
-              </button>
-            </Show>
-            <A href="/operator/plan" class="text-xs font-medium text-fero-blue hover:underline">
-              Ver plan del día
-            </A>
-          </div>
-        }
-      />
-
+  const panelBody = (
+    <>
       <Show when={props.loading}>
         <LoadingPanel label="Cargando paradas…" indeterminate />
       </Show>
@@ -156,20 +137,22 @@ export function OperatorRoutePanel(props: OperatorRoutePanelProps) {
             </For>
           </ol>
 
-          <div class="flex flex-wrap gap-2 pt-1">
-            <A href={operatorMonitoringHref(linkParams())}>
-              <Button variant="outline" size="sm" class="gap-2">
-                <MapPin size={14} />
-                Abrir en monitoreo
-              </Button>
-            </A>
-            <A href={operatorMapHref({ ...linkParams(), focus: 'route' })}>
-              <Button variant="outline" size="sm" class="gap-2">
-                <FileText size={14} />
-                Mapa mi ruta
-              </Button>
-            </A>
-          </div>
+          <Show when={!props.embedded}>
+            <div class="flex flex-wrap gap-2 pt-1">
+              <A href={operatorMonitoringHref(linkParams())}>
+                <Button variant="outline" size="sm" class="gap-2">
+                  <MapPin size={14} />
+                  Abrir en monitoreo
+                </Button>
+              </A>
+              <A href={operatorMapHref({ ...linkParams(), focus: 'route' })}>
+                <Button variant="outline" size="sm" class="gap-2">
+                  <FileText size={14} />
+                  Mapa mi ruta
+                </Button>
+              </A>
+            </div>
+          </Show>
         </div>
       </Show>
 
@@ -178,6 +161,41 @@ export function OperatorRoutePanel(props: OperatorRoutePanelProps) {
         open={selectedStop() != null}
         onClose={() => setSelectedStop(null)}
       />
+    </>
+  );
+
+  if (props.embedded) {
+    return (
+      <div data-testid="operator-route-panel" aria-busy={props.loading ? 'true' : 'false'}>
+        {panelBody}
+      </div>
+    );
+  }
+
+  return (
+    <Card data-testid="operator-route-panel" aria-busy={props.loading ? 'true' : 'false'}>
+      <CardHeader
+        title="Mi ruta del día"
+        subtitle={props.snapshot?.routeLabel ?? 'Secuencia de paradas asignada'}
+        action={
+          <div class="flex items-center gap-3">
+            <Show when={props.onRefresh}>
+              <button
+                type="button"
+                class="text-xs font-medium text-fero-blue hover:underline"
+                onClick={() => props.onRefresh?.()}
+              >
+                Actualizar
+              </button>
+            </Show>
+            <A href="/operator/plan" class="text-xs font-medium text-fero-blue hover:underline">
+              Ver plan del día
+            </A>
+          </div>
+        }
+      />
+
+      {panelBody}
     </Card>
   );
 }

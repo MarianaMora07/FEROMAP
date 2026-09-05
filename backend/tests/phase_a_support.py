@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import CaseStudy, CollectionPoint, User, UserRole, WeeklyPlan
+from app.db.models import CaseStudy, CollectionPoint, DailyPlan, User, UserRole, WeeklyPlan
 from app.db.session import SessionLocal
 from app.services.case_study_planning import resolve_case_study_active_point_ids
 from app.services.optimization_service import run_optimization_engine
@@ -69,6 +69,17 @@ def pick_operation_date(week_start: date) -> date:
     return week_start
 
 
+def _detach_daily_plans_from_weekly_days(db: Session, weekly_plan_id: int) -> None:
+    """Evita FK al reemplazar días del plan semanal en tests de integración."""
+    daily_plans = db.scalars(
+        select(DailyPlan).where(DailyPlan.weekly_plan_id == weekly_plan_id)
+    ).all()
+    for daily_plan in daily_plans:
+        daily_plan.weekly_plan_day_id = None
+    if daily_plans:
+        db.flush()
+
+
 def prepare_weekly_plan_ce_unare_norte(db: Session, *, week_start: date) -> dict[str, Any]:
     """Reconfigura la semana con CE-UNARE-NORTE (reutiliza fila si ya existe)."""
     case = get_case_study_norte(db)
@@ -87,6 +98,7 @@ def prepare_weekly_plan_ce_unare_norte(db: Session, *, week_start: date) -> dict
         existing.expected_kpis_json = None
         existing.case_study_id = case.id
         existing.scenario_id = "normal"
+        _detach_daily_plans_from_weekly_days(db, existing.id)
         for day in list(existing.days):
             db.delete(day)
         db.flush()

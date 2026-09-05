@@ -16,6 +16,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import CollectionPoint, OptimizedRoute, RouteWaypoint, Sector, User, UserRole
+from app.domain.waste_generation import (
+    CRITICAL_FILL_PCT,
+    critical_day_offset,
+    fill_events_cycle_daily_values,
+    projected_fill_level_kg,
+)
 from app.schemas.collection_point import CollectionPointCreate, CollectionPointUpdate
 from app.services.geo_service import fill_level_pct, priority_from_fill, seed_meta_by_code
 from app.services.graph_service import UNARE_BBOX, load_road_graph, nearest_node
@@ -178,6 +184,7 @@ def serialize_collection_point_detail(point: CollectionPoint) -> dict[str, Any]:
     last_emptied = point.last_emptied_at
     seed_last = meta.get("lastCollection")
     capacity_kg = float(point.max_capacity_kg)
+    projected_kg = float(projected_fill_level_kg(point))
 
     return {
         "code": point.code,
@@ -192,7 +199,7 @@ def serialize_collection_point_detail(point: CollectionPoint) -> dict[str, Any]:
         "containerType": meta.get("containerType", "Estándar"),
         "capacityKg": capacity_kg,
         "capacityL": float(meta.get("capacityL", capacity_kg)),
-        "currentFillLevelKg": float(point.current_fill_level_kg),
+        "currentFillLevelKg": projected_kg,
         "lastEmptiedAt": last_emptied.isoformat() if last_emptied else None,
         "lastCollection": _format_last_collection(seed_last, last_emptied),
         "frequency": meta.get("frequency", "Diaria"),
@@ -237,47 +244,40 @@ def _history_from_waypoints(db: Session, point: CollectionPoint, days: int) -> d
         select(RouteWaypoint)
         .where(
             RouteWaypoint.collection_point_id == point.id,
-            RouteWaypoint.status == "collected",
+            # El avance de ruta marca las paradas como "completed" (ver
+            # operations_service.advance_route); se acepta también "collected"
+            # por si existen registros legacy con ese estado.
+            RouteWaypoint.status.in_(("collected", "completed")),
         )
         .order_by(RouteWaypoint.actual_arrival_at.asc(), RouteWaypoint.updated_at.asc())
     ).all()
 
-    if not waypoints:
-        return None
-
-    capacity = float(point.max_capacity_kg) or 1.0
-    by_day: dict[date, int] = {}
-
+    events: list[tuple[datetime, float]] = []
     for waypoint in waypoints:
         moment = waypoint.actual_arrival_at or waypoint.updated_at
         if moment is None or moment < since:
             continue
-        day = moment.astimezone(timezone.utc).date()
-        if waypoint.collected_weight_kg is not None:
-            fill_estimate = int(round(float(waypoint.collected_weight_kg) / capacity * 100))
-        else:
-            fill_estimate = fill_level_pct(point)
-        by_day[day] = max(by_day.get(day, 0), min(100, fill_estimate))
+        if waypoint.collected_weight_kg is None:
+            continue
+        events.append((moment, float(waypoint.collected_weight_kg)))
 
-    if len(by_day) < 2:
+    values = fill_events_cycle_daily_values(point, events, days=days)
+    if not values:
         return None
 
     today = datetime.now(timezone.utc).date()
-    labels: list[str] = []
-    values: list[int] = []
-    last_value = min(by_day.values())
+    labels = [_day_label(today - timedelta(days=days - 1 - index)) for index in range(days)]
 
-    for offset in range(days):
-        day = today - timedelta(days=days - 1 - offset)
-        labels.append(_day_label(day))
-        if day in by_day:
-            last_value = by_day[day]
-        values.append(last_value)
+    # Ancla el último punto al estado proyectado actual (sin adelantar horas futuras),
+    # salvo que hoy se haya recolectado: se conserva el pico medido de la recolección.
+    capacity = float(point.max_capacity_kg) or 1.0
+    today_spike = max(
+        (weight / capacity * 100.0 for moment, weight in events if moment.date() == today),
+        default=0.0,
+    )
+    values[-1] = min(100.0, max(float(fill_level_pct(point)), today_spike))
 
-    if values:
-        values[-1] = fill_level_pct(point)
-
-    return {"labels": labels, "values": values}
+    return {"labels": labels, "values": [int(round(value)) for value in values]}
 
 
 def collection_point_fill_history(
@@ -308,6 +308,60 @@ def collection_point_fill_history(
         "source": source,
         "labels": series["labels"],
         "values": series["values"],
+    }
+
+
+def collection_points_fill_forecast(
+    db: Session,
+    *,
+    days: int = 7,
+    sector_id: int | None = None,
+) -> dict[str, Any]:
+    """Simulación multi-día: qué contenedores cruzarían el umbral crítico cada día.
+
+    La proyección usa el estado actual (``last_emptied_at`` / llenado sembrado) y la
+    tasa de generación de cada contenedor. Es la base para frecuencias de visita y
+    para que el escenario "saturado" emerja de los datos.
+    """
+    now = datetime.now(timezone.utc)
+    today = now.date()
+    points = db.scalars(
+        select(CollectionPoint)
+        .where(
+            CollectionPoint.deleted_at.is_(None),
+            CollectionPoint.status == "active",
+            (CollectionPoint.sector_id == sector_id) if sector_id is not None else True,
+        )
+        .options(joinedload(CollectionPoint.sector))
+    ).all()
+
+    per_day: list[dict[str, Any]] = [
+        {
+            "date": (today + timedelta(days=index)).isoformat(),
+            "criticalCount": 0,
+            "codes": [],
+        }
+        for index in range(days)
+    ]
+
+    for point in points:
+        offset = critical_day_offset(point, days=days, at=now)
+        if offset is None:
+            continue
+        per_day[offset]["codes"].append(point.code)
+        per_day[offset]["criticalCount"] += 1
+
+    for entry in per_day:
+        entry["codes"].sort()
+
+    today_codes = per_day[0]["codes"] if per_day else []
+    return {
+        "days": days,
+        "generatedAt": now.isoformat(),
+        "criticalThresholdPct": CRITICAL_FILL_PCT,
+        "activePointCount": len(points),
+        "currentlyCritical": today_codes,
+        "perDay": per_day,
     }
 
 

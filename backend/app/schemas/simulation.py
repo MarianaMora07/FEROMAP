@@ -25,7 +25,10 @@ class OptimizeRequest(CamelModel):
         default=None,
         ge=1,
         le=12,
-        description="Jornada de referencia en horas (1–12). Turno típico: 12 h. Se persiste y define exceedsWorkday; no modifica el motor VRP.",
+        description=(
+            "Jornada de referencia en horas (1–12). Recorta el presupuesto de turno del motor "
+            "(si es menor que la jornada de la instalación) y define exceedsWorkday."
+        ),
     )
     operators_shortage: int | None = Field(
         default=None,
@@ -55,6 +58,16 @@ class OptimizeRequest(CamelModel):
     time_window_enabled: bool | None = Field(
         default=None,
         description="Ventanas amplias por sector (mañana/tarde) en construcción de ruta.",
+    )
+    departure_hour: int | None = Field(
+        default=None,
+        ge=0,
+        le=23,
+        description=(
+            "Hora de salida de la flota (0–23). Activa la franja horaria de congestión: "
+            "con factor efectivo ≠ 1 el motor enruta por tiempo ponderado y escala "
+            "los tiempos de viaje (06–09 pico mañana ×1.30, 17–19 ×1.25, …)."
+        ),
     )
     kpi_view: Literal["distance", "time", "co2"] | None = Field(
         default=None,

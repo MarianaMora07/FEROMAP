@@ -1,8 +1,8 @@
 import { A } from '@solidjs/router';
-import { BarChart3, Download, FileSpreadsheet, FileText, Map, Plus, Route } from 'lucide-solid';
+import { Download, FileSpreadsheet, FileText, Map, Plus, Route } from 'lucide-solid';
 import { Button } from '../../design-system/components';
-import { downloadReport } from '../../core/api/reports';
-import { analyticsHref, reportsHref } from '../../core/utils/simulationLinks';
+import { downloadSimulationExport } from '../../core/api/simulation';
+import { reportsHref } from '../../core/utils/simulationLinks';
 
 interface PostSimulationActionsProps {
   simulationId: number | null;
@@ -11,7 +11,6 @@ interface PostSimulationActionsProps {
 }
 
 export function PostSimulationActions(props: PostSimulationActionsProps) {
-  const analyticsLink = () => analyticsHref(props.simulationId);
   const reportsLink = () => reportsHref(props.simulationId);
 
   return (
@@ -34,11 +33,6 @@ export function PostSimulationActions(props: PostSimulationActionsProps) {
             Ver en mapa
           </Button>
         </A>
-        <A href={analyticsLink()}>
-          <Button variant="outline" size="sm" class="gap-2" icon={<BarChart3 size={16} />}>
-            Ver en analítica
-          </Button>
-        </A>
         <A href={reportsLink()}>
           <Button variant="outline" size="sm" class="gap-2" icon={<FileText size={16} />}>
             Ir a reportes
@@ -49,7 +43,9 @@ export function PostSimulationActions(props: PostSimulationActionsProps) {
           size="sm"
           class="gap-2"
           icon={<FileSpreadsheet size={16} />}
-          onClick={() => void downloadReport('csv')}
+          onClick={() => {
+            if (props.simulationId != null) void downloadSimulationExport('csv', props.simulationId);
+          }}
         >
           Descargar CSV
         </Button>
@@ -58,7 +54,9 @@ export function PostSimulationActions(props: PostSimulationActionsProps) {
           size="sm"
           class="gap-2"
           icon={<Download size={16} />}
-          onClick={() => void downloadReport('pdf')}
+          onClick={() => {
+            if (props.simulationId != null) void downloadSimulationExport('pdf', props.simulationId);
+          }}
         >
           Descargar PDF
         </Button>
