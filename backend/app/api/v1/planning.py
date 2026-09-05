@@ -13,7 +13,7 @@ from app.schemas.planning import (
     WeeklyPlanCreate,
     WeeklyPlanUpdate,
 )
-from app.services.optimization_job_service import create_optimization_job
+from app.services.optimization_job_service import create_optimization_job, run_contingency_background
 from app.services.operations_service import dispatch_optimized_routes
 from app.services.planning_service import (
     approve_weekly_plan,
@@ -38,10 +38,12 @@ from app.services.planning_service import (
     list_weekly_plans,
     mark_daily_plan_dispatched,
     open_daily_plan,
+    preflight_weekly_feasibility,
     query_planning_history,
     trace_incident,
     update_daily_plan_points,
     update_weekly_plan,
+    validate_weekly_plan_days,
 )
 from app.services.operator_service import operator_route_snapshot_or_403
 from app.services.planning_analytics_service import planning_analytics_summary, planning_dashboard_snapshot
@@ -145,13 +147,19 @@ def validate_weekly(plan_id: int, db: DbSession, _: PlannerOrAdmin):
     point_ids = sorted(set(point_ids))
     if not point_ids:
         raise HTTPException(status_code=400, detail="El plan semanal no tiene puntos para validar")
-    job = create_optimization_job(
+    # Pre-flight heurístico por día (demanda vs flota) — Tarea 9
+    from app.db.models import WeeklyPlan
+
+    db_plan = db.get(WeeklyPlan, plan_id)
+    if db_plan is not None:
+        preflight_weekly_feasibility(db, db_plan)
+        db.commit()
+    # Validación por día con el motor ACO (corre en background, no bloquea el request).
+    job = run_contingency_background(
+        job_type="planning_validation",
         scenario_id=plan["scenarioId"],
-        collection_point_ids=point_ids,
-        case_study_id=plan.get("caseStudyId"),
-        weekly_plan_id=plan_id,
-        planning_level="strategic",
-        auto_dispatch=False,
+        params={"weeklyPlanId": plan_id, "kind": "weekly_by_day"},
+        runner=lambda _session: validate_weekly_plan_days(_session, plan_id=plan_id),
     )
     return {"jobId": job.id, "weeklyPlanId": plan_id}
 
@@ -163,6 +171,7 @@ def approve_weekly(plan_id: int, body: WeeklyPlanApprove, db: DbSession, user: C
         plan_id,
         reference_simulation_id=body.reference_simulation_id,
         expected_kpis=body.expected_kpis,
+        allow_warnings=body.allow_warnings,
         user_id=user.id,
     )
     db.commit()
@@ -250,12 +259,16 @@ def list_daily(db: DbSession, from_date: date | None = Query(default=None, alias
 
 @router.get("/daily/{operation_date}")
 def get_daily(operation_date: date, db: DbSession):
-    try:
-        return get_daily_plan_by_date(db, operation_date)
-    except HTTPException as exc:
-        if exc.status_code != 404:
-            raise
-        return get_or_create_daily_plan(db, operation_date)
+    """Solo lectura: no crea el plan del día (Tarea 9)."""
+    return get_daily_plan_by_date(db, operation_date)
+
+
+@router.post("/daily/{operation_date}/ensure")
+def ensure_daily(operation_date: date, db: DbSession, _: PlannerOrAdmin):
+    """Crea el plan del día si hace falta (explícito)."""
+    result = get_or_create_daily_plan(db, operation_date)
+    db.commit()
+    return result
 
 
 @router.post("/daily/{operation_date}/open")
@@ -299,6 +312,7 @@ def optimize_daily(
         fleet_limit=exec_ctx.get("fleetLimit"),
         priority_fill_level=body.priority_fill_level,
         time_window_enabled=body.time_window_enabled,
+        departure_hour=body.departure_hour,
         kpi_view=body.kpi_view,
     )
     return {"jobId": job.id, "dailyPlanId": daily_plan_id, "pointCount": len(point_ids)}

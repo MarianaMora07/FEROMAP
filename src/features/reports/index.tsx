@@ -49,7 +49,7 @@ import {
   type ReportPeriodPreset,
 } from '../../core/utils/analyticsFilters';
 import { parseSimulationIdParam } from '../../core/utils/simulationLinks';
-import { SimulationContextBanner } from '../simulation/SimulationContextBanner';
+import { SimulationRunComparisonCard } from '../simulation/SimulationRunComparisonCard';
 
 function KpiIcon(props: { name: (typeof mockReportsKpis)[number]['icon'] }) {
   const map: Record<(typeof mockReportsKpis)[number]['icon'], () => JSX.Element> = {
@@ -187,7 +187,7 @@ export default function ReportsPage() {
 
   return (
     <div class="space-y-5">
-      <SimulationContextBanner simulationId={focusedSimulationId()} page="reports" />
+      <SimulationRunComparisonCard simulationId={focusedSimulationId()} />
       <Show when={loading()}>
         <div class="text-sm text-text-muted">Cargando reportes...</div>
       </Show>

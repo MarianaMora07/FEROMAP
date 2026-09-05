@@ -27,10 +27,11 @@ def get_case_studies(
     db: DbSession,
     _user: PlannerOrAdmin,
     status: str | None = Query(default=None),
+    demo_only: bool = Query(default=False, alias="demoOnly"),
     limit: int = Query(default=25, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ):
-    return list_case_studies(db, status_filter=status, limit=limit, offset=offset)
+    return list_case_studies(db, status_filter=status, demo_only=demo_only, limit=limit, offset=offset)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

@@ -249,7 +249,7 @@ async function compareLatestWeeklyVersions(): Promise<void> {
 
 async function resolveDefaultDraftCaseStudy(): Promise<CaseStudyDetail | null> {
   if (state.draftCaseStudy) return state.draftCaseStudy;
-  const response = await fetchCaseStudies({ limit: 1 });
+  const response = await fetchCaseStudies({ limit: 1, demoOnly: true });
   const first = response.items[0];
   if (!first) return null;
   const detail = await fetchCaseStudyDetail(first.id);
@@ -306,16 +306,12 @@ export async function createWeekDraft(weekStartDate: string): Promise<void> {
 
   setState({ isCreatingWeek: true, error: null, notice: null });
   try {
-    const caseStudy = await resolveDefaultDraftCaseStudy();
-    if (!caseStudy) {
-      throw new Error('No hay casos de estudio disponibles. Crea uno en Análisis → Casos de estudio.');
-    }
     const days = buildWorkdayShells(weekStartDate);
     let plan = withCalendarDays(
       await createWeeklyPlan({
         weekStartDate,
-        scenarioId: caseStudy.defaultScenarioId ?? 'normal',
-        caseStudyId: caseStudy.id,
+        scenarioId: 'normal',
+        caseStudyId: null,
         days: compactWeeklyPlanDaysForSave(weekStartDate, days).map((day) => ({
           operationDate: day.operationDate,
           collectionPointIds: day.collectionPointIds,
@@ -323,17 +319,17 @@ export async function createWeekDraft(weekStartDate: string): Promise<void> {
       }),
     );
     if (plan?.id) {
-      plan = withCalendarDays(await autofillWeeklyPlanFromCaseStudy(plan.id, caseStudy.id));
+      plan = withCalendarDays(await autofillWeeklyPlanFromSchedules(plan.id));
     }
     await refreshWeeklyPlanHistory();
     setState({
       plan,
       selectedPlanId: plan?.id ?? null,
-      draftCaseStudy: caseStudy,
+      draftCaseStudy: null,
       validationCompleted: false,
       validationSummary: null,
       validationProgress: 0,
-      notice: `Borrador creado para la semana del ${weekStartDate} con caso ${caseStudy.code}.`,
+      notice: `Borrador creado para la semana del ${weekStartDate} desde frecuencias de visita.`,
     });
     if (plan?.weekStartDate) {
       await refreshVisitSchedules(plan.weekStartDate);
@@ -431,8 +427,24 @@ export async function runWeeklyValidation(): Promise<void> {
       setState({ validationProgress: snapshot.progress ?? 0 });
       if (snapshot.status === 'completed' && snapshot.result) {
         const kpis = snapshot.result.kpis;
+        const result = snapshot.result as unknown as {
+          feasible?: boolean;
+          perDay?: Array<{
+            operationDate?: string;
+            skipped?: boolean;
+            feasible?: boolean;
+            error?: string;
+          }>;
+        };
+        const problemDays = (result.perDay ?? [])
+          .filter((day) => !day.skipped && (day.feasible === false || Boolean(day.error)))
+          .map((day) => day.operationDate ?? '?');
+        const notice =
+          problemDays.length > 0
+            ? `Validación por día: ${problemDays.length} día(s) con problemas (${problemDays.join(', ')}). Revisa cobertura o flota antes de aprobar.`
+            : `Validación completada — ${kpis.distanceKm.optimized.toFixed(1)} km estimados.`;
         setState({
-          notice: `Validación completada — ${kpis.distanceKm.optimized.toFixed(1)} km estimados.`,
+          notice,
           validationCompleted: true,
           validationSummary: {
             distanceKm: kpis.distanceKm.optimized,

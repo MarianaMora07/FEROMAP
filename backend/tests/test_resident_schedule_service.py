@@ -88,7 +88,7 @@ def test_build_schedule_empty_when_sector_has_no_points():
     assert schedule["nextCollection"] == "Sin recolección programada"
 
 
-def test_build_schedule_fallback_to_visit_schedules():
+def test_build_schedule_without_weekly_plan_does_not_fallback():
     db = MagicMock()
     sector_id = 3
     sector_points = [11, 12]
@@ -110,6 +110,7 @@ def test_build_schedule_fallback_to_visit_schedules():
     reference = datetime(2026, 8, 12, 8, 0, tzinfo=timezone.utc)  # miércoles
     schedule = build_resident_schedule(db, sector_id=sector_id, reference=reference)
 
-    assert schedule["source"] == "visit_schedules"
-    assert schedule["hasSchedule"] is True
-    assert schedule["isCollectionDay"] is True
+    assert schedule["source"] == "none"
+    assert schedule["hasSchedule"] is False
+    assert schedule["hasWeeklyPlan"] is False
+    assert schedule["isCollectionDay"] is False

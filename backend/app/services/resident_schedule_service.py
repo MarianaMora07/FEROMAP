@@ -189,18 +189,10 @@ def build_resident_schedule(
     if weekly_dates:
         collection_dates = weekly_dates
         source = "weekly_plan"
-    elif sector_point_ids:
-        weekdays = _weekdays_from_visit_schedules(db, sector_id, sector_point_ids)
-        if weekdays:
-            collection_dates = _dates_from_weekdays(weekdays, today, until)
-            source = "visit_schedules"
-        else:
-            collection_dates = _dates_from_weekdays(set(DEFAULT_WEEKDAYS), today, until)
-            source = "default"
 
     weekdays = {operation_date.weekday() for operation_date in collection_dates}
     has_plan = source == "weekly_plan" and bool(collection_dates)
-    has_schedule = bool(collection_dates)
+    has_schedule = has_plan
 
     next_dt = _next_collection_datetime(collection_dates, reference=now)
     frequency = (
@@ -218,7 +210,7 @@ def build_resident_schedule(
         for operation_date in collection_dates[:14]
     ]
 
-    is_collection_day = today in collection_dates
+    is_collection_day = has_plan and today in collection_dates
 
     return {
         "collectionDays": _format_collection_days(weekdays) if weekdays else "—",

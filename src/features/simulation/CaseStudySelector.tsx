@@ -8,11 +8,15 @@ interface CaseStudySelectorProps {
   value: CaseStudyDetail | null;
   onChange: (detail: CaseStudyDetail | null) => void;
   disabled?: boolean;
+  /** operational = plan semanal; thesis = simulación de tesis */
+  context?: 'operational' | 'thesis';
 }
 
 export function CaseStudySelector(props: CaseStudySelectorProps) {
   const [loadingDetail, setLoadingDetail] = createSignal(false);
-  const [cases] = createResource(() => fetchCaseStudies({ limit: 100 }).then((response) => response.items));
+  const [cases] = createResource(() =>
+    fetchCaseStudies({ limit: 100, demoOnly: true }).then((response) => response.items),
+  );
 
   const selectedValue = () => (props.value ? String(props.value.id) : '');
 
@@ -39,7 +43,11 @@ export function CaseStudySelector(props: CaseStudySelectorProps) {
         <p class="text-[10px] font-semibold uppercase tracking-wide text-text-muted">Caso de estudio</p>
       </div>
       <SelectField
-        label="Acotar puntos del experimento"
+        label={
+          props.context === 'operational'
+            ? 'Acotar puntos del plan semanal'
+            : 'Acotar puntos del experimento'
+        }
         value={selectedValue()}
         onChange={handleChange}
         disabled={props.disabled || loadingDetail()}
@@ -66,7 +74,9 @@ export function CaseStudySelector(props: CaseStudySelectorProps) {
       </Show>
       <Show when={!props.value}>
         <p class="mt-2 text-xs text-text-muted">
-          Sin caso seleccionado: el motor usa el catálogo operativo completo (compatibilidad legacy).
+          {props.context === 'operational'
+            ? 'Sin caso seleccionado: el plan semanal usa frecuencias de visita del catálogo.'
+            : 'Sin caso seleccionado: el motor usa el catálogo operativo completo (compatibilidad legacy).'}
         </p>
       </Show>
     </div>

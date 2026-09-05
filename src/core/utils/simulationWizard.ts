@@ -111,6 +111,8 @@ export interface SimulationUiParameters {
   acoPreset?: string;
   acoAnts?: string;
   acoIterations?: string;
+  /** Hora de salida de la flota (0–23) para la franja de congestión (Tarea 4). */
+  departureHour?: string;
 }
 
 export interface ParameterEffectNote {
@@ -149,9 +151,10 @@ export function buildParameterEffectNotes(params: SimulationUiParameters): Param
 
   notes.push({
     label: `Jornada de referencia (${params.durationHours} h)`,
-    status: 'informative',
+    status: 'connected',
     detail:
-      'Turno típico de recolección (p. ej. 12 h). Se usa para avisar si la ruta optimizada excede la jornada; no modifica el cálculo del motor VRP.',
+      'Turno de recolección (p. ej. 12 h). Si es menor que la jornada de la instalación, ' +
+      'recorta el presupuesto del motor (corta rutas antes) y define exceedsWorkday.',
   });
 
   if (params.crewShortageEnabled) {
@@ -186,6 +189,7 @@ export function buildSimulationRunParameters(params: SimulationUiParameters) {
     operatorsShortage?: number;
     acoAnts?: number;
     acoIterations?: number;
+    departureHour?: number;
   } = {
     estimatedDurationHours: Number(params.durationHours) || undefined,
     acoAnts: Number(params.acoAnts) || 12,
@@ -202,6 +206,12 @@ export function buildSimulationRunParameters(params: SimulationUiParameters) {
     const shortage = Number(params.operatorsShortage);
     if (shortage >= 1 && shortage <= 5) {
       payload.operatorsShortage = shortage;
+    }
+  }
+  if (params.departureHour !== undefined && params.departureHour.trim() !== '') {
+    const departureHour = Number(params.departureHour);
+    if (Number.isInteger(departureHour) && departureHour >= 0 && departureHour <= 23) {
+      payload.departureHour = departureHour;
     }
   }
 

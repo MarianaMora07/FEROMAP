@@ -1,7 +1,7 @@
 import { A } from '@solidjs/router';
 import { Show } from 'solid-js';
-import { ArrowLeft, BarChart3, FileText } from 'lucide-solid';
-import { analyticsHref, reportsHref, simulationResultsHref } from '../../core/utils/simulationLinks';
+import { ArrowLeft, FileText } from 'lucide-solid';
+import { reportsHref, simulationResultsHref } from '../../core/utils/simulationLinks';
 
 interface SimulationContextBannerProps {
   simulationId: number | null;
@@ -18,7 +18,7 @@ export function SimulationContextBanner(props: SimulationContextBannerProps) {
               <p class="text-sm font-semibold text-fero-green-dark">Contexto de simulación #{id()}</p>
               <p class="mt-0.5 text-sm text-text-secondary">
                 {props.page === 'analytics'
-                  ? 'Explora métricas con el contexto de la simulación seleccionada.'
+                  ? 'Los mocks de analítica no forman parte del guion de defensa. Usa reportes o la simulación de tesis.'
                   : 'Genera y descarga reportes relacionados con esta simulación.'}
               </p>
             </div>
@@ -30,15 +30,6 @@ export function SimulationContextBanner(props: SimulationContextBannerProps) {
                 <ArrowLeft size={14} />
                 Volver a resultados
               </A>
-              <Show when={props.page === 'reports'}>
-                <A
-                  href={analyticsHref(id())}
-                  class="inline-flex items-center gap-1 text-sm font-medium text-fero-blue hover:underline"
-                >
-                  <BarChart3 size={14} />
-                  Ver en analítica
-                </A>
-              </Show>
               <Show when={props.page === 'analytics'}>
                 <A
                   href={reportsHref(id())}

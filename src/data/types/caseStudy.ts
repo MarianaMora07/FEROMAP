@@ -31,6 +31,8 @@ export interface CaseStudyDefaultParameters {
   estimatedDurationHours?: number;
   rainIntensity?: string;
   wasteLevelPct?: number;
+  /** Si es false, el caso queda fuera de selectores de demo en vivo (D8). */
+  demoVisible?: boolean;
 }
 
 export interface CaseStudyPointMembership {

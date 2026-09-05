@@ -24,6 +24,25 @@ app.add_middleware(
 app.include_router(api_router)
 
 
+@app.on_event("startup")
+def _recover_orphan_jobs_on_startup():
+    """Marca jobs huérfanos de una sesión anterior como fallidos (Tarea 8)."""
+    try:
+        from app.services.optimization_job_service import recover_orphan_jobs
+
+        recovered = recover_orphan_jobs()
+        if recovered:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "Marcados %d jobs huérfanos como fallidos tras reinicio", recovered
+            )
+    except Exception:  # noqa: BLE001
+        import logging
+
+        logging.getLogger(__name__).exception("No se pudo recuperar jobs huérfanos al arrancar")
+
+
 @app.get("/health")
 def health():
     return {

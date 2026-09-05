@@ -2,7 +2,7 @@ import type { RouteCollection } from '../../data/types/geo';
 import type { KpiMetrics, Scenario, ScenarioId, SimulationLogEntry } from '../../data/types/simulation';
 import { kpiByScenario, optimizationLogMessages, scenarios } from '../../data/mock/kpis';
 import { getScenarioRoutes } from '../../data/mock/routes';
-import { apiGet, useMocks } from './client';
+import { apiDownload, apiGet, useMocks } from './client';
 import { mergeRouteCollections } from './routes';
 import {
   fetchSimulationOptimizeJob,
@@ -83,6 +83,8 @@ export interface SimulationRunParameters {
   acoAnts?: number;
   /** Iteraciones del ACO (5–60). */
   acoIterations?: number;
+  /** Hora de salida de la flota (0–23) para la franja de congestión (Tarea 4). */
+  departureHour?: number;
   /** Caso de estudio acotado (Fase 12.3). */
   caseStudyId?: number;
 }
@@ -123,4 +125,100 @@ export async function runSimulationOptimize(
 export async function fetchSimulationRoutes(scenarioId: ScenarioId): Promise<RouteCollection> {
   const result = await runSimulationOptimize(scenarioId);
   return mergeRouteCollections(result.routes.current, result.routes.optimized);
+}
+
+// --- Comparativa multi-corrida y export por corrida (Tarea 5) ---------------
+
+export interface SimulationComparisonRow {
+  id: number;
+  executedAt: string | null;
+  date: string | null;
+  scenarioId: string;
+  label: string;
+  distanceHistoricalKm: number;
+  distanceOptimizedKm: number;
+  durationHoursOptimized: number | null;
+  co2KgAvoided: number | null;
+  savingPct: number;
+  containersServed?: number;
+  caseStudyId?: number | null;
+  caseStudyCode?: string | null;
+  caseStudyName?: string | null;
+  contingency?: boolean;
+}
+
+export interface SimulationComparisonsOptions {
+  fromDate?: string;
+  toDate?: string;
+  scenarioId?: string;
+  caseStudyId?: number;
+}
+
+function comparisonsQuery(options: SimulationComparisonsOptions): string {
+  const params = new URLSearchParams();
+  if (options.fromDate) params.set('fromDate', options.fromDate);
+  if (options.toDate) params.set('toDate', options.toDate);
+  if (options.scenarioId) params.set('scenarioId', options.scenarioId);
+  if (options.caseStudyId != null) params.set('caseStudyId', String(options.caseStudyId));
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
+
+export async function fetchSimulationComparisons(
+  options?: SimulationComparisonsOptions,
+): Promise<SimulationComparisonRow[]> {
+  if (useMocks) return mockSimulationComparisons();
+  const payload = await apiGet<{ items: SimulationComparisonRow[]; count: number }>(
+    `/api/v1/simulations/comparisons${comparisonsQuery(options ?? {})}`,
+  );
+  return payload.items;
+}
+
+export function downloadSimulationExport(format: 'csv' | 'pdf', simulationId: number): Promise<void> {
+  const ext = format === 'pdf' ? 'pdf' : 'csv';
+  return apiDownload(
+    `/api/v1/simulations/${simulationId}/export?format=${format}`,
+    `feromap-simulacion-${simulationId}.${ext}`,
+  );
+}
+
+export function downloadSimulationRoutesGeoJSON(simulationId: number): Promise<void> {
+  return apiDownload(
+    `/api/v1/simulations/${simulationId}/routes.geojson`,
+    `feromap-simulacion-${simulationId}-rutas.geojson`,
+  );
+}
+
+function mockSimulationComparisons(): SimulationComparisonRow[] {
+  const daysAgo = (offset: number) => {
+    const date = new Date();
+    date.setDate(date.getDate() - offset);
+    return date.toISOString();
+  };
+  const scenario = (id: string): Scenario => scenarios.find((item) => item.id === id) ?? scenarios[0]!;
+  const raw: Array<[number, number, number, number]> = [
+    // (historical, optimized, saving, daysAgo)
+    [96.0, 88.0, 8.3, 6],
+    [101.0, 87.0, 13.9, 4],
+    [98.0, 79.0, 19.4, 2],
+    [103.0, 76.0, 26.2, 0],
+  ];
+  return raw.map(([historical, optimized, saving, offset], index) => {
+    const item = scenario(index % 2 === 0 ? 'normal' : 'rain');
+    const executedAt = daysAgo(offset);
+    return {
+      id: 200 + index,
+      executedAt,
+      date: executedAt.slice(0, 10),
+      scenarioId: item.id,
+      label: item.label,
+      distanceHistoricalKm: historical,
+      distanceOptimizedKm: optimized,
+      durationHoursOptimized: 6.5 - index * 0.4,
+      co2KgAvoided: 9.0 + index * 3.5,
+      savingPct: saving,
+      containersServed: 60,
+      contingency: false,
+    };
+  });
 }

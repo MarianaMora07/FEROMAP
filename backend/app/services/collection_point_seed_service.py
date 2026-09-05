@@ -166,6 +166,9 @@ def _build_point_for_sector(
 
     fill_pct = Decimal(str(20 + ((code_serial * 13) % 55)))
     max_capacity_kg = Decimal("1000")
+    # Horas estimadas para llenarse: determinístico por punto (72–119 h) para que
+    # la proyección de llenado varíe entre contenedores (Tarea 3).
+    estimated_fill_hours = Decimal(str(72 + ((code_serial * 7) % 48)))
 
     return (
         CollectionPoint(
@@ -177,6 +180,7 @@ def _build_point_for_sector(
             current_fill_level_kg=(max_capacity_kg * fill_pct / Decimal("100")).quantize(
                 Decimal("0.01")
             ),
+            estimated_fill_hours=estimated_fill_hours,
             status="active",
         ),
         code_serial,

@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import json
 import threading
+import time as _time
 import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 from app.config import settings
+from app.db.models import OptimizationJobRecord
 from app.db.session import SessionLocal
+from sqlalchemy import func, select
 from app.services.optimization_service import OptimizationCancelledError, run_optimization_engine
 
 PHASE_END_PROGRESS: dict[str, int] = {
@@ -55,6 +59,7 @@ class OptimizationJob:
     aco_iterations: int | None = None
     priority_fill_level: bool | None = None
     time_window_enabled: bool | None = None
+    departure_hour: int | None = None
     kpi_view: str | None = None
     collection_point_ids: list[int] | None = None
     case_study_id: int | None = None
@@ -64,6 +69,11 @@ class OptimizationJob:
     weekly_plan_id: int | None = None
     planning_level: str | None = None
     fleet_limit: int | None = None
+    job_type: str = "simulation"
+    extra_params: dict[str, Any] = field(default_factory=dict)
+    created_at: datetime | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
     phase: str | None = None
     progress: int = 0
     logs: list[dict[str, Any]] = field(default_factory=list)
@@ -72,6 +82,126 @@ class OptimizationJob:
     cancel_requested: bool = False
     aco_convergence: list[dict[str, Any]] = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
+    _last_persist: float = field(default=0.0, repr=False)
+
+
+# Campos configurables del motor que se guardan en params_json.
+_JOB_PARAM_FIELDS = (
+    "scenario_id",
+    "rain_intensity",
+    "waste_level_pct",
+    "estimated_duration_hours",
+    "operators_shortage",
+    "aco_ants",
+    "aco_iterations",
+    "priority_fill_level",
+    "time_window_enabled",
+    "departure_hour",
+    "kpi_view",
+    "collection_point_ids",
+    "case_study_id",
+    "auto_dispatch",
+    "operation_date",
+    "daily_plan_id",
+    "weekly_plan_id",
+    "planning_level",
+    "fleet_limit",
+)
+
+
+def _serialize_params(job: OptimizationJob) -> str:
+    params: dict[str, Any] = {
+        key: getattr(job, key) for key in _JOB_PARAM_FIELDS if getattr(job, key, None) is not None
+    }
+    params.update(job.extra_params or {})
+    return json.dumps(params, ensure_ascii=False, default=str)
+
+
+def _persist_job_snapshot(job: OptimizationJob, *, force: bool = False) -> None:
+    """Persiste hitos del job con throttling (cada ~2 s salvo hitos finales)."""
+    now = _time.monotonic()
+    if not force and now - job._last_persist < 2.0:
+        return
+    job._last_persist = now
+    try:
+        with SessionLocal() as db:
+            record = db.get(OptimizationJobRecord, job.id)
+            if record is None:
+                record = OptimizationJobRecord(id=job.id, created_at=job.created_at or datetime.now(timezone.utc))
+                db.add(record)
+            record.job_type = job.job_type
+            record.status = job.status
+            record.phase = job.phase
+            record.progress = job.progress
+            record.params_json = _serialize_params(job)
+            record.result_json = json.dumps(job.result, ensure_ascii=False, default=str) if job.result else None
+            record.error = job.error
+            record.logs_json = json.dumps(list(job.logs[-50:]), ensure_ascii=False, default=str)
+            record.started_at = job.started_at
+            record.finished_at = job.finished_at
+            db.commit()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[optimization_job] No se pudo persistir job {job.id}: {exc}", flush=True)
+
+
+def list_job_records(
+    *,
+    job_type: str | None = None,
+    status: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict[str, Any]:
+    """Historial persistente de jobs (Tarea 8)."""
+    stmt = select(OptimizationJobRecord)
+    count_stmt = select(func.count()).select_from(OptimizationJobRecord)
+    if job_type:
+        stmt = stmt.where(OptimizationJobRecord.job_type == job_type)
+        count_stmt = count_stmt.where(OptimizationJobRecord.job_type == job_type)
+    if status:
+        stmt = stmt.where(OptimizationJobRecord.status == status)
+        count_stmt = count_stmt.where(OptimizationJobRecord.status == status)
+    with SessionLocal() as db:
+        rows = db.scalars(
+            stmt.order_by(OptimizationJobRecord.created_at.desc()).offset(offset).limit(limit)
+        ).all()
+        total = db.scalar(count_stmt) or 0
+        return {
+            "items": [
+                {
+                    "id": row.id,
+                    "jobType": row.job_type,
+                    "status": row.status,
+                    "phase": row.phase,
+                    "progress": row.progress,
+                    "createdAt": row.created_at.isoformat() if row.created_at else None,
+                    "startedAt": row.started_at.isoformat() if row.started_at else None,
+                    "finishedAt": row.finished_at.isoformat() if row.finished_at else None,
+                    "error": row.error,
+                }
+                for row in rows
+            ],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
+
+
+def recover_orphan_jobs() -> int:
+    """Marca jobs pendientes/en ejecución de sesiones anteriores como fallidos."""
+    recovered = 0
+    with SessionLocal() as db:
+        rows = db.scalars(
+            select(OptimizationJobRecord).where(OptimizationJobRecord.status.in_(("pending", "running")))
+        ).all()
+        for row in rows:
+            if row.status not in {"pending", "running"}:
+                continue
+            row.status = "failed"
+            row.error = "Interrumpido por reinicio del servidor"
+            row.finished_at = datetime.now(timezone.utc)
+            recovered += 1
+        db.commit()
+    return recovered
 
 
 class JobProgressReporter:
@@ -101,6 +231,7 @@ class JobProgressReporter:
                     "phaseId": phase,
                 }
             )
+        _persist_job_snapshot(self._job)
 
     def set_aco_progress(
         self,
@@ -127,6 +258,7 @@ class JobProgressReporter:
                 self._job.aco_convergence.append(point)
             else:
                 self._job.aco_convergence[-1] = point
+        _persist_job_snapshot(self._job)
 
 
 _jobs: dict[str, OptimizationJob] = {}
@@ -158,6 +290,7 @@ def create_optimization_job(
     aco_iterations: int | None = None,
     priority_fill_level: bool | None = None,
     time_window_enabled: bool | None = None,
+    departure_hour: int | None = None,
     kpi_view: str | None = None,
     collection_point_ids: list[int] | None = None,
     case_study_id: int | None = None,
@@ -167,10 +300,14 @@ def create_optimization_job(
     weekly_plan_id: int | None = None,
     planning_level: str | None = None,
     fleet_limit: int | None = None,
+    job_type: str | None = None,
 ) -> OptimizationJob:
     resolved_auto_dispatch = auto_dispatch
     if resolved_auto_dispatch is None:
         resolved_auto_dispatch = planning_level == "operational"
+    if job_type is None:
+        job_type = "planning" if planning_level in {"operational", "administrative"} else "simulation"
+    created_at = datetime.now(timezone.utc)
     job = OptimizationJob(
         id=str(uuid.uuid4()),
         status="pending",
@@ -183,6 +320,7 @@ def create_optimization_job(
         aco_iterations=aco_iterations,
         priority_fill_level=priority_fill_level,
         time_window_enabled=time_window_enabled,
+        departure_hour=departure_hour,
         kpi_view=kpi_view,
         collection_point_ids=collection_point_ids,
         case_study_id=case_study_id,
@@ -192,12 +330,83 @@ def create_optimization_job(
         weekly_plan_id=weekly_plan_id,
         planning_level=planning_level,
         fleet_limit=fleet_limit,
+        job_type=job_type,
+        created_at=created_at,
     )
     with _jobs_lock:
         _jobs[job.id] = job
+    _persist_job_snapshot(job, force=True)
     thread = threading.Thread(target=_run_job_worker, args=(job.id,), daemon=True)
     thread.start()
     return job
+
+
+def start_background_job(job: OptimizationJob, runner: Callable[[Any], dict[str, Any]]) -> OptimizationJob:
+    """Ejecuta un runner (p. ej. contingencia) en worker propio sin bloquear el request."""
+    with _jobs_lock:
+        _jobs[job.id] = job
+    _persist_job_snapshot(job, force=True)
+    thread = threading.Thread(target=_run_background_worker, args=(job.id, runner), daemon=True)
+    thread.start()
+    return job
+
+
+def run_contingency_background(
+    *,
+    job_type: str,
+    scenario_id: str,
+    params: dict[str, Any],
+    runner: Callable[[Any], dict[str, Any]],
+) -> OptimizationJob:
+    """Crea y arranca un job asíncrono de contingencia (Tarea 8)."""
+    job = OptimizationJob(
+        id=str(uuid.uuid4()),
+        status="pending",
+        scenario_id=scenario_id,
+        rain_intensity=None,
+        waste_level_pct=None,
+        estimated_duration_hours=None,
+        job_type=job_type,
+        planning_level="operational",
+        auto_dispatch=True,
+        extra_params=params,
+        created_at=datetime.now(timezone.utc),
+    )
+    return start_background_job(job, runner)
+
+
+def _run_background_worker(job_id: str, runner: Callable[[Any], dict[str, Any]]) -> None:
+    job = get_optimization_job(job_id)
+    if job is None:
+        return
+    with job.lock:
+        job.status = "running"
+        job.phase = "ejecutando"
+        job.progress = 10
+        job.started_at = job.started_at or datetime.now(timezone.utc)
+    _persist_job_snapshot(job, force=True)
+    db = SessionLocal()
+    try:
+        result = runner(db)
+        with job.lock:
+            job.status = "completed"
+            job.phase = "persistencia"
+            job.progress = 100
+            job.finished_at = datetime.now(timezone.utc)
+            job.result = result
+        _persist_job_snapshot(job, force=True)
+    except Exception as exc:  # noqa: BLE001
+        db.rollback()
+        import traceback as _tb
+
+        print(f"[optimization_job] Job {job_id} FAILED: {exc}\n{_tb.format_exc()}", flush=True)
+        with job.lock:
+            job.status = "failed"
+            job.error = str(exc)
+            job.finished_at = datetime.now(timezone.utc)
+        _persist_job_snapshot(job, force=True)
+    finally:
+        db.close()
 
 
 def get_optimization_job(job_id: str) -> OptimizationJob | None:
@@ -263,6 +472,8 @@ def _run_job_worker(job_id: str) -> None:
             job.status = "running"
             job.phase = "preparando"
             job.progress = 0
+            job.started_at = job.started_at or datetime.now(timezone.utc)
+        _persist_job_snapshot(job, force=True)
 
         result = run_optimization_engine(
             db,
@@ -275,6 +486,7 @@ def _run_job_worker(job_id: str) -> None:
             aco_iterations=job.aco_iterations,
             priority_fill_level=job.priority_fill_level,
             time_window_enabled=job.time_window_enabled,
+            departure_hour=job.departure_hour,
             kpi_view=job.kpi_view,
             collection_point_ids=job.collection_point_ids,
             case_study_id=job.case_study_id,
@@ -296,10 +508,14 @@ def _run_job_worker(job_id: str) -> None:
                 job.progress = 100
                 result["logs"] = list(job.logs)
                 job.result = result
+            job.finished_at = datetime.now(timezone.utc)
+        _persist_job_snapshot(job, force=True)
     except OptimizationCancelledError:
         db.rollback()
         with job.lock:
             job.status = "cancelled"
+            job.finished_at = datetime.now(timezone.utc)
+        _persist_job_snapshot(job, force=True)
     except Exception as exc:  # noqa: BLE001
         import traceback as _tb
         print(f"[optimization_job] Job {job_id} FAILED: {exc}\n{_tb.format_exc()}", flush=True)
@@ -307,6 +523,8 @@ def _run_job_worker(job_id: str) -> None:
         with job.lock:
             job.status = "failed"
             job.error = str(exc)
+            job.finished_at = datetime.now(timezone.utc)
+        _persist_job_snapshot(job, force=True)
     finally:
         db.close()
         slot.release()

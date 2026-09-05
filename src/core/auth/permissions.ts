@@ -60,10 +60,12 @@ export interface NavItemDef {
   sidebarPrimary?: boolean;
 }
 
+export const DEMO_NAV_HIDDEN_HREFS = new Set<string>(['/analytics']);
+
 export const SIDEBAR_SECTION_GROUPS: Record<string, readonly string[]> = {
+  Operación: ['/planning', '/planning/weekly', '/optimization', '/planning/history', '/monitoring'],
   Análisis: ['/simulation', '/case-studies', '/demostracion'],
-  Operación: ['/planning', '/optimization', '/planning/history'],
-  Resultados: ['/reports', '/analytics'],
+  Resultados: ['/reports'],
 };
 
 export interface SidebarNavSection {
@@ -92,8 +94,8 @@ export const MAIN_NAV_ITEMS: NavItemDef[] = [
   { href: '/', label: 'Dashboard', sidebarPrimary: true, roles: ['administrador', 'planificador', 'conductor'] },
   {
     href: '/simulation',
-    label: 'Simulación de escenarios',
-    description: 'Evaluar condiciones e impacto del algoritmo',
+    label: 'Simulación de tesis',
+    description: 'Baseline vs ACO — escenario normal',
     sectionBefore: 'Análisis',
     roles: ['administrador', 'planificador'],
   },
@@ -105,8 +107,8 @@ export const MAIN_NAV_ITEMS: NavItemDef[] = [
   },
   {
     href: '/demostracion',
-    label: 'Demostración',
-    description: 'Cómo funciona el algoritmo ACO',
+    label: 'Demostración ACO',
+    description: 'Convergencia del algoritmo (~2 min)',
     roles: ['administrador', 'planificador'],
   },
   { href: '/map', label: 'Mapa GIS', sidebarPrimary: true, roles: ['administrador', 'planificador', 'conductor'] },
@@ -121,7 +123,7 @@ export const MAIN_NAV_ITEMS: NavItemDef[] = [
   {
     href: '/monitoring',
     label: 'Monitoreo en Tiempo Real',
-    description: 'Monitoreo en caliente',
+    description: 'Flota y rutas despachadas',
     roles: ['administrador', 'planificador', 'conductor'],
   },
   {
@@ -227,7 +229,9 @@ export function navItemsForRole(role: UserRole | undefined) {
     };
   }
   return {
-    main: MAIN_NAV_ITEMS.filter((item) => item.roles.includes(role)),
+    main: MAIN_NAV_ITEMS.filter(
+      (item) => item.roles.includes(role) && !DEMO_NAV_HIDDEN_HREFS.has(item.href),
+    ),
     bottom: BOTTOM_NAV_ITEMS.filter((item) => item.roles.includes(role)),
   };
 }

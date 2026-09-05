@@ -60,9 +60,12 @@ export function ResidentScheduleCard(props: ResidentScheduleCardProps) {
       >
         <div class="space-y-3">
           <div class="flex flex-wrap gap-2">
-            <Badge variant={schedule().isCollectionDay ? 'success' : 'default'}>
-              {schedule().isCollectionDay ? 'Hoy hay recolección' : 'Hoy no hay recolección'}
-            </Badge>
+            <Show when={schedule().hasWeeklyPlan && schedule().isCollectionDay}>
+              <Badge variant="success">Hoy hay recolección</Badge>
+            </Show>
+            <Show when={schedule().hasWeeklyPlan && !schedule().isCollectionDay}>
+              <Badge variant="default">Hoy no hay recolección</Badge>
+            </Show>
             <Show when={schedule().hasWeeklyPlan}>
               <Badge variant="info">Plan semanal aprobado</Badge>
             </Show>

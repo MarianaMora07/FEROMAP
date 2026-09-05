@@ -24,7 +24,7 @@ function overview(partial: Partial<ResidentOverview> = {}): ResidentOverview {
     },
     proximity: {
       status: 'approaching',
-      vehicleCode: 'TR-08',
+      vehicleCode: 'TR-01',
       routeId: 42,
       estimatedMinutes: 20,
       stopsBeforeSector: 2,
@@ -37,7 +37,7 @@ function overview(partial: Partial<ResidentOverview> = {}): ResidentOverview {
     activeRoutesInSector: [
       {
         routeId: 42,
-        vehicle: 'TR-08',
+        vehicle: 'TR-01',
         status: 'in_progress',
         stopsInSector: 4,
         pendingStops: 3,
@@ -77,7 +77,7 @@ describe('residentHubUx', () => {
     const action = deriveNextResidentAction(context, { sectorId: 1 });
 
     expect(action.tone).toBe('info');
-    expect(action.message).toContain('TR-08');
+    expect(action.message).toContain('TR-01');
     expect(action.href).toContain('focus=truck');
     expect(action.label).toBe('Ver en mapa');
   });
@@ -100,5 +100,25 @@ describe('residentHubUx', () => {
     expect(context.hasSector).toBe(false);
     expect(action.tone).toBe('error');
     expect(action.message).toContain('sector asignado');
+  });
+
+  it('does not show collection-day banner without approved weekly plan', () => {
+    const context = deriveResidentFieldContext({
+      overview: overview({
+        schedule: {
+          ...overview().schedule,
+          hasWeeklyPlan: false,
+          isCollectionDay: true,
+          source: 'visit_schedules',
+        },
+        proximity: null,
+        activeRoutesInSector: [],
+      }),
+      user: residentUser,
+    });
+    const action = deriveNextResidentAction(context);
+
+    expect(action.message).not.toContain('Hoy hay recolección');
+    expect(action.tone).toBe('warning');
   });
 });

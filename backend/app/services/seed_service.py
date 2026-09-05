@@ -40,6 +40,7 @@ from app.services.admin_service import ensure_default_settings
 from app.services.alert_service import seed_alerts_from_json
 from app.services.case_study_seed_service import case_study_seed_summary, seed_case_studies
 from app.services.collection_point_seed_service import ensure_collection_points_coverage
+from app.services.visit_schedule_service import ensure_visit_schedules_coverage
 from app.services.planning_service import (
     seed_daily_plan_demo,
     seed_optimized_daily_playback_demo,
@@ -379,40 +380,46 @@ def seed_into_session(session: Session) -> dict[str, Any]:
     try:
         visit_schedules_data = load_json("visit_schedules.json")
         seed_visit_schedules(session, visit_schedules_data)
+        ensure_visit_schedules_coverage(session)
     except FileNotFoundError:
         visit_schedules_data = []
 
     try:
         weekly_demo = load_json("weekly_plan_demo.json")
-        week_start, _ = week_range(date.today())
-        days = []
-        for day in weekly_demo.get("days", []):
-            operation_date = week_start + timedelta(days=int(day["weekdayOffset"]))
-            point_codes = day.get("collectionPointCodes", [])
-            point_ids = [
-                point.id
-                for point in collection_points
-                if point.code in point_codes
-            ]
-            days.append(
+        if weekly_demo.get("seedWeeklyPlan", False):
+            week_start, _ = week_range(date.today())
+            days = []
+            for day in weekly_demo.get("days", []):
+                operation_date = week_start + timedelta(days=int(day["weekdayOffset"]))
+                point_codes = day.get("collectionPointCodes", [])
+                point_ids = [
+                    point.id
+                    for point in collection_points
+                    if point.code in point_codes
+                ]
+                days.append(
+                    {
+                        "operationDate": operation_date.isoformat(),
+                        "collectionPointIds": point_ids,
+                    }
+                )
+            seed_weekly_plan_demo(
+                session,
                 {
-                    "operationDate": operation_date.isoformat(),
-                    "collectionPointIds": point_ids,
-                }
+                    "weekStartDate": week_start.isoformat(),
+                    "status": weekly_demo.get("status", "approved"),
+                    "scenarioId": weekly_demo.get("scenarioId", "normal"),
+                    "notes": weekly_demo.get("notes"),
+                    "days": days,
+                },
             )
-        seed_weekly_plan_demo(
-            session,
-            {
-                "weekStartDate": week_start.isoformat(),
-                "status": weekly_demo.get("status", "approved"),
-                "scenarioId": weekly_demo.get("scenarioId", "normal"),
-                "notes": weekly_demo.get("notes"),
-                "days": days,
-            },
-        )
+
         pending_rows = []
         for row in weekly_demo.get("pendingVisits", []):
-            origin = date.today() - timedelta(days=int(row.get("daysAgo", 1)))
+            if row.get("originOperationDate"):
+                origin = date.fromisoformat(row["originOperationDate"])
+            else:
+                origin = date.today() - timedelta(days=int(row.get("daysAgo", 1)))
             pending_rows.append(
                 {
                     "pointCode": row["pointCode"],

@@ -47,6 +47,9 @@ export interface EngineMetrics {
   acoParallelWorkers?: number;
   customers: number;
   vehicles: number;
+  departureHour?: number | null;
+  trafficBand?: string | null;
+  trafficBandFactor?: number;
 }
 
 export type KpiView = 'distance' | 'time' | 'co2';

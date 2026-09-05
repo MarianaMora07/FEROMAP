@@ -65,6 +65,13 @@ export function EngineComputationPanel(props: EngineComputationPanelProps) {
             <Show when={m().graphLoadSource}>
               <MetricRow label="Origen del grafo" value={m().graphLoadSource!} />
             </Show>
+            <Show when={m().trafficBand}>
+              <MetricRow
+                label="Franja de congestión"
+                value={m().trafficBand!}
+                hint={`Factor ×${(m().trafficBandFactor ?? 1).toFixed(2)} sobre los tiempos de viaje`}
+              />
+            </Show>
             <Show when={(m().acoParallelWorkers ?? 1) > 1}>
               <MetricRow
                 label="Paralelismo ACO"

@@ -21,8 +21,8 @@ test.describe('Residente — flujo completo', () => {
     await expect(page.getByTestId('resident-schedule-card')).toBeVisible();
     await expect(page.getByTestId('resident-schedule-card')).toContainText('Lunes, Miércoles, Viernes');
     await expect(page.getByTestId('resident-truck-status-card')).toBeVisible();
-    await expect(page.getByTestId('resident-truck-status-card')).toContainText('TR-08');
-    await expect(page.getByTestId('resident-next-action')).toContainText(/camino|TR-08/i);
+    await expect(page.getByTestId('resident-truck-status-card')).toContainText('TR-01');
+    await expect(page.getByTestId('resident-next-action')).toContainText(/camino|TR-01/i);
   });
 
   test('mapa mi sector muestra banner y modo sector', async ({ page }) => {

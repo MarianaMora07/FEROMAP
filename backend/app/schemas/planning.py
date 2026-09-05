@@ -33,6 +33,7 @@ class WeeklyPlanUpdate(CamelModel):
 class WeeklyPlanApprove(CamelModel):
     reference_simulation_id: int | None = None
     expected_kpis: dict[str, Any] | None = None
+    allow_warnings: bool = False
 
 
 class DailyPlanPointsUpdate(CamelModel):

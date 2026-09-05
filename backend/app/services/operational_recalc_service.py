@@ -15,6 +15,10 @@ from app.services.notification_service import notify_routes_dispatched
 from app.services.optimization_service import run_optimization_engine
 from app.services.planning_service import get_daily_plan_execution_context
 
+# Escenarios válidos en data/seeds/scenarios.json (el motor lanza ValueError si el
+# id no existe). La UI traduce "contenedor crítico" al escenario "saturated".
+_KNOWN_SCENARIO_IDS = {"normal", "peak_traffic", "rain", "saturated", "broken_vehicle"}
+
 
 def _resolve_collection_point(db: Session, collection_point_code: str) -> CollectionPoint:
     point = db.scalar(select(CollectionPoint).where(CollectionPoint.code == collection_point_code))
@@ -92,9 +96,11 @@ def handle_critical_container_recalc(
         )
 
     exec_ctx = get_daily_plan_execution_context(db, plan.id)
-    scenario_id = exec_ctx.get("scenarioId") or "critical_bin"
-    if fill_level >= 90:
-        scenario_id = "critical_bin"
+    scenario_id = exec_ctx.get("scenarioId")
+    if fill_level >= 90 or scenario_id not in _KNOWN_SCENARIO_IDS:
+        # Un contenedor ≥90% implica condiciones saturadas; un id de escenario
+        # desconocido (p. ej. "critical_bin") haría fallar al motor con 500.
+        scenario_id = "saturated"
 
     recalc = run_optimization_engine(
         db,

@@ -95,9 +95,15 @@ export interface CaseStudyGeoJson extends ContainerCollection {
   };
 }
 
-function buildListQuery(status?: CaseStudyStatus, limit = 25, offset = 0): string {
+function buildListQuery(
+  status?: CaseStudyStatus,
+  limit = 25,
+  offset = 0,
+  demoOnly = false,
+): string {
   const params = new URLSearchParams();
   if (status) params.set('status', status);
+  if (demoOnly) params.set('demoOnly', 'true');
   params.set('limit', String(limit));
   params.set('offset', String(offset));
   const qs = params.toString();
@@ -105,12 +111,12 @@ function buildListQuery(status?: CaseStudyStatus, limit = 25, offset = 0): strin
 }
 
 export function fetchCaseStudies(
-  options?: { status?: CaseStudyStatus; limit?: number; offset?: number },
+  options?: { status?: CaseStudyStatus; limit?: number; offset?: number; demoOnly?: boolean },
 ): Promise<CaseStudyListResponse> {
-  const { status, limit = 25, offset = 0 } = options ?? {};
+  const { status, limit = 25, offset = 0, demoOnly = false } = options ?? {};
   return withMockFallback(
     'case-studies-list',
-    () => apiGet<CaseStudyListResponse>(`/api/v1/case-studies${buildListQuery(status, limit, offset)}`),
+    () => apiGet<CaseStudyListResponse>(`/api/v1/case-studies${buildListQuery(status, limit, offset, demoOnly)}`),
     mockCaseStudyListResponse,
   );
 }

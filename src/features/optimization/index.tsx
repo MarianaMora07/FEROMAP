@@ -57,6 +57,7 @@ import { OptimizationDispatchBanner } from './OptimizationDispatchBanner';
 import { OptimizationComparisonPanel } from './OptimizationComparisonPanel';
 import { OptimizationConvergencePanel } from './OptimizationConvergencePanel';
 import { OptimizationWeeklyPlanGateBanner } from './OptimizationWeeklyPlanGateBanner';
+import { ModuleScopeBanner } from '../../core/demo/ModuleScopeBanner';
 import { OptimizationAcoSensitivityPanel } from './OptimizationAcoSensitivityPanel';
 import { useGenerateButtonVisibility } from './useGenerateButtonVisibility';
 import { resolveOptimizationContextualMessage } from './optimizationLayoutUx';
@@ -269,6 +270,7 @@ export default function OptimizationPage() {
 
   return (
     <div class="space-y-4 md:space-y-5">
+      <ModuleScopeBanner scope="operations" linkHref="/planning" linkLabel="Volver al hub de planificación" />
       <AppShellSubheader>
         <OptimizationHeaderBar />
       </AppShellSubheader>

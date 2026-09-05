@@ -18,6 +18,7 @@ class WeeklyPlan(Base):
     case_study_id: Mapped[int | None] = mapped_column(ForeignKey("case_studies.id", ondelete="SET NULL"), nullable=True)
     reference_simulation_id: Mapped[int | None] = mapped_column(ForeignKey("simulations.id"), nullable=True)
     expected_kpis_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    preflight_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     approved_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)

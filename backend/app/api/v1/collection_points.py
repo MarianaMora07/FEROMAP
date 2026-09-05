@@ -6,6 +6,7 @@ from app.schemas.visit_schedule import VisitScheduleUpsert
 from app.services.collection_point_service import (
     collection_point_detail,
     collection_point_fill_history,
+    collection_points_fill_forecast,
     collection_points_optimization_context,
     collection_points_summary,
     create_collection_point,
@@ -33,6 +34,17 @@ def get_collection_point_sector_options(db: DbSession, _user: PlannerOrAdmin):
 @router.get("/collection-points/optimization-context")
 def get_collection_points_optimization_context(db: DbSession, current_user: CurrentUser):
     return collection_points_optimization_context(db, current_user)
+
+
+@router.get("/collection-points/fill-forecast")
+def get_collection_points_fill_forecast(
+    db: DbSession,
+    _user: PlannerOrAdmin,
+    days: int = Query(default=7, ge=1, le=30),
+    sector_id: int | None = Query(default=None, alias="sectorId"),
+):
+    """Proyección multi-día: contenedores que cruzarían el umbral crítico por día."""
+    return collection_points_fill_forecast(db, days=days, sector_id=sector_id)
 
 
 @router.get("/collection-points/export")

@@ -147,8 +147,8 @@
   },
   {
     "code": "CE-COMBINATORIO",
-    "name": "Infierno combinatorio — 80 puntos Unare",
-    "description": "Catálogo completo demo (80 contenedores): escenario saturado, ventanas horarias, ausentismo y parámetros ACO al máximo. Stress test VRP multi-vehículo.",
+    "name": "Infierno combinatorio — catálogo completo Unare",
+    "description": "Catálogo demo (~120 contenedores activos): escenario saturado, ventanas horarias, ausentismo y parámetros ACO al máximo. Stress test VRP multi-vehículo — solo anexo (D8).",
     "defaultScenarioId": "saturated",
     "defaultParameters": {
       "operatorsShortage": 1,
@@ -156,7 +156,8 @@
       "acoIterations": 40,
       "wasteLevelPct": 35,
       "priorityFillLevel": true,
-      "timeWindowEnabled": true
+      "timeWindowEnabled": true,
+      "demoVisible": false
     },
     "status": "active",
     "includeAllPoints": true,

@@ -1,9 +1,9 @@
 import { For, Show, createMemo, createResource } from 'solid-js';
 import { A } from '@solidjs/router';
 import { ArrowLeft } from 'lucide-solid';
-import { Badge, Card, CardHeader, LoadingPanel, ProgressBar } from '../../design-system/components';
+import { Card, CardHeader, LoadingPanel, ProgressBar } from '../../design-system/components';
 import { fetchDailyPlan } from '../../core/api/planning';
-import { fetchOperatorRouteSnapshot, operatorStopStatusLabel, operatorStopStatusVariant } from '../../core/api/operator';
+import { fetchOperatorRouteSnapshot } from '../../core/api/operator';
 import { fetchRecentIncidents } from '../../core/api/contingencies';
 import { buildOperatorDaySummary, isClosedDailyPlan } from '../../core/operator/operatorDayClosureUx';
 import { deriveOperatorFieldContext } from '../../core/operator/operatorUx';
@@ -13,6 +13,8 @@ import { PlanningStatusBadge } from '../planning/PlanningStatusBadge';
 import { OperatorLevelBanner } from './OperatorLevelBanner';
 import { OperatorDaySummaryCard } from './OperatorDaySummaryCard';
 import { OperatorMyIncidents } from '../contingency/OperatorMyIncidents';
+import { OperatorRoutePanel } from './OperatorRoutePanel';
+import { OperatorMobilePlayback } from './OperatorMobilePlayback';
 
 export default function OperatorDailyPlanPage() {
   const operationDate = () => new Date().toISOString().slice(0, 10);
@@ -46,6 +48,7 @@ export default function OperatorDailyPlanPage() {
     }),
   );
   const isDayClosed = () => isClosedDailyPlan(dailyPlan());
+  const hasStops = () => (snapshot()?.stops.length ?? 0) > 0;
 
   const loading = () => dailyPlan.loading || snapshot.loading;
 
@@ -63,7 +66,7 @@ export default function OperatorDailyPlanPage() {
           Plan del día
         </h1>
         <p class="mt-1 text-sm text-text-secondary">
-          Vista de solo lectura — sin optimizar ni despachar.
+          Vista de solo lectura — paradas y mapa de tu ruta asignada.
         </p>
       </div>
 
@@ -133,52 +136,38 @@ export default function OperatorDailyPlanPage() {
           </Show>
         </Card>
 
-        <Card>
-          <CardHeader title="Secuencia de paradas" subtitle="Orden de visita en ruta" />
-          <Show
-            when={(snapshot()?.stops.length ?? 0) > 0}
-            fallback={
-              <p class="text-sm text-text-secondary">
-                No hay paradas asignadas. Revisa el estado del despacho con planificación.
-              </p>
-            }
-          >
-            <div class="overflow-x-auto">
-              <table class="w-full min-w-[520px] text-left text-sm">
-                <thead>
-                  <tr class="border-b border-border text-xs uppercase tracking-wide text-text-muted dark:border-dark-border">
-                    <th class="px-2 py-2">#</th>
-                    <th class="px-2 py-2">Código</th>
-                    <th class="px-2 py-2">Sector</th>
-                    <th class="px-2 py-2">Estado</th>
-                    <th class="px-2 py-2">Dirección</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <For each={snapshot()!.stops}>
-                    {(stop) => (
-                      <tr class="border-b border-border last:border-0 dark:border-dark-border">
-                        <td class="px-2 py-2.5 font-semibold text-text-primary dark:text-white">
-                          {stop.sequenceOrder}
-                        </td>
-                        <td class="px-2 py-2.5 font-medium">{stop.code}</td>
-                        <td class="px-2 py-2.5 text-text-secondary">{stop.sectorName ?? '—'}</td>
-                        <td class="px-2 py-2.5">
-                          <Badge variant={operatorStopStatusVariant(stop.status)} size="sm">
-                            {operatorStopStatusLabel(stop.status)}
-                          </Badge>
-                        </td>
-                        <td class="max-w-xs truncate px-2 py-2.5 text-text-secondary" title={stop.address}>
-                          {stop.address}
-                        </td>
-                      </tr>
-                    )}
-                  </For>
-                </tbody>
-              </table>
-            </div>
-          </Show>
-        </Card>
+        <div class="grid gap-4 lg:grid-cols-2 lg:items-start">
+          <Card class="lg:sticky lg:top-4" data-testid="operator-plan-map-card">
+            <CardHeader title="Mapa de ruta" subtitle="Recorrido asignado del día" />
+            <Show
+              when={hasStops() && snapshot()?.vehicleId}
+              fallback={
+                <p class="text-sm text-text-secondary">
+                  Sin geometría de ruta. Espera el despacho de planificación.
+                </p>
+              }
+            >
+              <OperatorMobilePlayback
+                dailyPlanId={snapshot()?.dailyPlanId}
+                vehicleId={snapshot()!.vehicleId!}
+                routeSnapshot={snapshot()}
+                class="h-56 sm:h-64"
+              />
+            </Show>
+          </Card>
+
+          <Card class="max-h-[min(70vh,560px)] overflow-y-auto" data-testid="operator-plan-stops-card">
+            <CardHeader title="Secuencia de paradas" subtitle="Orden de visita en ruta" />
+            <OperatorRoutePanel
+              embedded
+              snapshot={snapshot()}
+              loading={snapshot.loading}
+              onRefresh={() => void refetch()}
+              vehicleId={vehicleId()}
+              operationDate={operationDate()}
+            />
+          </Card>
+        </div>
 
         <Show when={dailyPlan()?.pendingPoints?.length}>
           <Card>

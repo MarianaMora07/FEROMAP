@@ -137,9 +137,9 @@ export default function DashboardPage() {
         </div>
 
         <p class="text-xs text-text-muted">
-          Toneladas semanales y evolución histórica en{' '}
-          <A href="/analytics" class="font-medium text-fero-blue hover:underline">
-            Analítica
+          Evolución semanal en{' '}
+          <A href="/reports" class="font-medium text-fero-blue hover:underline">
+            Reportes
           </A>
           . Estado de flota y llenado por sector en{' '}
           <A href="/monitoring" class="font-medium text-fero-blue hover:underline">

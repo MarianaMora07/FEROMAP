@@ -12,6 +12,7 @@ import { CaseStudySelector } from './CaseStudySelector';
 import {
   WeeklyPlanDayEditorDrawer,
   WeeklyPlanMissingPointsAlert,
+  WeeklyPlanValidationTable,
   WeeklyPlanWeekCalendar,
 } from './WeeklyPlanConfigureStep';
 
@@ -40,6 +41,7 @@ export function WeeklyPlanConfigurePanel(props: WeeklyPlanConfigurePanelProps) {
   return (
     <div class="space-y-4" data-testid="weekly-plan-step-1">
       <CaseStudySelector
+        context="operational"
         value={weeklyPlanState.draftCaseStudy}
         disabled={!props.editable}
         onChange={(detail) => {
@@ -76,6 +78,8 @@ export function WeeklyPlanConfigurePanel(props: WeeklyPlanConfigurePanelProps) {
         selectedWeekday={selectedWeekday()}
         onSelectDay={openDay}
       />
+
+      <WeeklyPlanValidationTable plan={props.plan} />
 
       <WeeklyPlanDayEditorDrawer
         open={drawerOpen()}

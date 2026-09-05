@@ -43,12 +43,16 @@ def build_matrix_cache_key(
     *,
     landfill_lon: float | None = None,
     landfill_lat: float | None = None,
+    traffic_band_factor: float = 1.0,
+    time_model: str = "length",
 ) -> str:
     payload: dict[str, Any] = {
         "depotNode": depot_node,
         "pointIds": sorted(point_ids),
         "scenarioId": scenario_id,
         "trafficMultiplier": round(float(traffic_multiplier), 4),
+        "trafficBandFactor": round(float(traffic_band_factor), 4),
+        "timeModel": time_model,
     }
     if landfill_lon is not None and landfill_lat is not None:
         payload["includesLandfill"] = True
@@ -119,13 +123,17 @@ def save_distance_matrix_cache(
     traffic_multiplier: float,
     landfill_lon: float | None = None,
     landfill_lat: float | None = None,
+    traffic_band_factor: float = 1.0,
+    time_model: str = "length",
 ) -> None:
-    path = _cache_path(cache_key)
+    """Persiste la matriz con su clave y metadatos de tráfico."""
     payload: dict[str, Any] = {
         "depotNode": depot_node,
         "pointIds": point_ids,
         "scenarioId": scenario_id,
         "trafficMultiplier": round(float(traffic_multiplier), 4),
+        "trafficBandFactor": round(float(traffic_band_factor), 4),
+        "timeModel": time_model,
         "distance": dist_matrix,
         "time": time_matrix,
     }
@@ -133,6 +141,7 @@ def save_distance_matrix_cache(
         payload["includesLandfill"] = True
         payload["landfillLon"] = round(float(landfill_lon), 6)
         payload["landfillLat"] = round(float(landfill_lat), 6)
+    path = _cache_path(cache_key)
     try:
         with path.open("w", encoding="utf-8") as fh:
             json.dump(payload, fh, separators=(",", ":"))
@@ -229,10 +238,13 @@ def find_incremental_parent_cache(
     traffic_multiplier: float,
     landfill_lon: float | None = None,
     landfill_lat: float | None = None,
+    traffic_band_factor: float = 1.0,
+    time_model: str = "length",
 ) -> dict[str, Any] | None:
     """Busca una matriz padre reutilizable (submatriz o parche incremental)."""
     current_set = set(point_ids)
     traffic = round(float(traffic_multiplier), 4)
+    band = round(float(traffic_band_factor), 4)
     includes_landfill = landfill_lon is not None and landfill_lat is not None
     best: dict[str, Any] | None = None
     best_score = float("inf")
@@ -243,6 +255,10 @@ def find_incremental_parent_cache(
         if entry.get("scenarioId") != scenario_id:
             continue
         if round(float(entry.get("trafficMultiplier", 0)), 4) != traffic:
+            continue
+        if round(float(entry.get("trafficBandFactor", 1.0)), 4) != band:
+            continue
+        if entry.get("timeModel", "length") != time_model:
             continue
         if bool(entry.get("includesLandfill")) != includes_landfill:
             continue
@@ -319,6 +335,8 @@ def resolve_distance_matrix(
     pair_fn: MatrixPairFn,
     landfill_lon: float | None = None,
     landfill_lat: float | None = None,
+    traffic_band_factor: float = 1.0,
+    time_model: str = "length",
 ) -> tuple[list[list[float]], list[list[float]], dict[str, Any]]:
     point_ids = [customer.point_id for customer in customers]
     cache_key = build_matrix_cache_key(
@@ -328,6 +346,8 @@ def resolve_distance_matrix(
         traffic_multiplier,
         landfill_lon=landfill_lon,
         landfill_lat=landfill_lat,
+        traffic_band_factor=traffic_band_factor,
+        time_model=time_model,
     )
 
     exact = load_distance_matrix_cache_entry(cache_key)
@@ -353,6 +373,8 @@ def resolve_distance_matrix(
         traffic_multiplier=traffic_multiplier,
         landfill_lon=landfill_lon,
         landfill_lat=landfill_lat,
+        traffic_band_factor=traffic_band_factor,
+        time_model=time_model,
     )
     if parent is not None and not _matrix_has_implausible_distances(parent["distance"]):
         dist, time, recomputed = build_matrix_from_parent(parent, customers, pair_fn)
@@ -366,6 +388,8 @@ def resolve_distance_matrix(
             traffic_multiplier=traffic_multiplier,
             landfill_lon=landfill_lon,
             landfill_lat=landfill_lat,
+            traffic_band_factor=traffic_band_factor,
+            time_model=time_model,
         )
         parent_count = len(parent["pointIds"])
         incremental = parent_count != len(point_ids) or recomputed > 0
@@ -392,6 +416,8 @@ def resolve_distance_matrix(
         traffic_multiplier=traffic_multiplier,
         landfill_lon=landfill_lon,
         landfill_lat=landfill_lat,
+        traffic_band_factor=traffic_band_factor,
+        time_model=time_model,
     )
     return _finalize_matrix(
         dist,

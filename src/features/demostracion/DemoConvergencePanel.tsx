@@ -5,6 +5,7 @@ import { demoConvergenceToChartPoints } from '../../core/demo-aco/demoConvergenc
 import { AcoConvergenceChart } from '../simulation/AcoConvergenceChart';
 import { ModuleGuidanceBanner } from '../shared/ModuleGuidanceBanner';
 import { AcoBenchmarkPanel } from '../simulation/AcoBenchmarkPanel';
+import { AlgorithmsBenchmarkPanel } from '../simulation/AlgorithmsBenchmarkPanel';
 
 interface DemoConvergencePanelProps {
   playback: DemoAcoPlaybackController;
@@ -131,9 +132,17 @@ export function DemoConvergencePanel(props: DemoConvergencePanelProps) {
       <div>
         <h3 class="mb-3 font-heading text-lg font-semibold text-text-primary">ACO en rutas reales</h3>
         <p class="mb-3 text-sm text-text-secondary">
-          Benchmark del motor en escenarios de Bucaramanga: tiempo de CPU del servidor vs. calidad de la solución.
+          Benchmark del motor en escenarios de la parroquia Unare: tiempo de CPU del servidor vs. calidad de la solución.
         </p>
         <AcoBenchmarkPanel />
+      </div>
+      <div>
+        <h3 class="mb-3 font-heading text-lg font-semibold text-text-primary">ACO vs otras familias</h3>
+        <p class="mb-3 text-sm text-text-secondary">
+          Evidencia para justificar la elección del algoritmo: las tres familias compiten sobre
+          las mismas instancias controladas (Tarea 6).
+        </p>
+        <AlgorithmsBenchmarkPanel />
       </div>
     </div>
   );

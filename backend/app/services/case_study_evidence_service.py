@@ -21,6 +21,7 @@ from app.services.case_study_optimization import (
 from app.services.case_study_planning_report import (
     PLANNING_MODE_THRESHOLD,
     build_case_study_planning_report_markdown,
+    run_weekly_planning_simulation,
     should_use_planning_report,
 )
 from app.services.optimization_report_service import (
@@ -31,8 +32,15 @@ from app.services.optimization_report_service import (
 from app.services.optimization_service import run_optimization_engine
 
 
-DEFAULT_CASE_CODES = ("CE-UNARE-NORTE", "CE-UNARE-SUR", "CE-MULTI-VIAJE")
+DEFAULT_CASE_CODES = ("CE-UNARE-NORTE", "CE-UNARE-SUR", "CE-MULTI-VIAJE", "CE-COMBINATORIO")
+DEFENSE_EVIDENCE_CASE_CODES = DEFAULT_CASE_CODES
 SHARED_DEMO_POINT_CODE = "CNT-006"
+DEFENSE_EVIDENCE_USAGE: dict[str, str] = {
+    "CE-UNARE-NORTE": "Demo acotada / ensayo rápido",
+    "CE-UNARE-SUR": "Evidencia comparativa (aislamiento M:N)",
+    "CE-MULTI-VIAJE": "Multi-viaje al vertedero",
+    "CE-COMBINATORIO": "Stress test — **solo anexo** (D8, no demo en vivo)",
+}
 ACO_ANTS = 12
 ACO_ITERATIONS = 20
 
@@ -55,11 +63,23 @@ class CaseStudyRunEvidence:
     shared_point_sequence: int | None
 
 
-def evidence_report_path() -> Path:
+def _repo_root() -> Path:
     repo_root = os.environ.get("FEROMAP_REPO_ROOT")
     if repo_root:
-        return Path(repo_root) / "docs" / "fase-12" / "evidencia-casos-estudio.md"
-    return Path(__file__).resolve().parents[2] / "docs" / "fase-12" / "evidencia-casos-estudio.md"
+        return Path(repo_root)
+    return Path(__file__).resolve().parents[3]
+
+
+def evidence_report_path() -> Path:
+    return _repo_root() / "docs" / "fase-12" / "evidencia-casos-estudio.md"
+
+
+def defense_evidence_report_path() -> Path:
+    return _repo_root() / "docs" / "fase-b" / "evidencia-demo-defensa.md"
+
+
+def defense_case_report_dir() -> Path:
+    return _repo_root() / "docs" / "fase-b" / "reportes"
 
 
 def _format_table(headers: list[str], rows: list[list[str]]) -> str:
@@ -186,6 +206,49 @@ def run_case_study_evidence(
     )
 
 
+def run_case_study_planning_evidence(
+    db: Session,
+    case_study_code: str,
+    *,
+    scenario_id: str | None = None,
+) -> CaseStudyRunEvidence:
+    """Métricas agregadas de la simulación semanal (casos > umbral planificación)."""
+    study, day_results = run_weekly_planning_simulation(db, case_study_code, scenario_id=scenario_id)
+    engine = resolve_engine_parameters(study, scenario_id=scenario_id)
+    active_points = sum(1 for row in study.point_memberships if row.active_in_study)
+    total_optimized = sum(day.optimized_count for day in day_results)
+    final_pending = day_results[-1].deferred_to_next if day_results else 0
+    total_km = sum(day.distance_km for day in day_results)
+    max_hours = max((day.max_route_hours for day in day_results), default=0.0)
+    total_routes = sum(day.route_count for day in day_results)
+    last_sim = day_results[-1].simulation_id if day_results else 0
+
+    return CaseStudyRunEvidence(
+        code=study.code,
+        name=study.name,
+        scenario_id=engine.scenario_id,
+        simulation_id=last_sim,
+        point_count=active_points,
+        served_points=total_optimized,
+        uncovered_points=final_pending,
+        distance_km=round(total_km, 1),
+        duration_h=round(max_hours, 2),
+        saving_pct=0.0,
+        route_count=total_routes,
+        shared_point_demand_kg=None,
+        shared_point_route=None,
+        shared_point_sequence=None,
+    )
+
+
+def run_defense_case_study_evidence(db: Session, case_study_code: str) -> CaseStudyRunEvidence:
+    study = get_case_study_by_code(db, case_study_code)
+    active_points = sum(1 for row in study.point_memberships if row.active_in_study)
+    if should_use_planning_report(active_points):
+        return run_case_study_planning_evidence(db, case_study_code)
+    return run_case_study_evidence(db, case_study_code)
+
+
 def build_case_study_report_markdown(
     db: Session,
     case_study_code: str,
@@ -261,7 +324,10 @@ def build_comparative_evidence_markdown(db: Session) -> str:
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     runs: list[CaseStudyRunEvidence] = []
     for code in DEFAULT_CASE_CODES:
-        runs.append(run_case_study_evidence(db, code))
+        if code == "CE-COMBINATORIO":
+            runs.append(run_defense_case_study_evidence(db, code))
+        else:
+            runs.append(run_case_study_evidence(db, code))
 
     norte = next(row for row in runs if row.code == "CE-UNARE-NORTE")
     sur = next(row for row in runs if row.code == "CE-UNARE-SUR")
@@ -295,16 +361,17 @@ def build_comparative_evidence_markdown(db: Session) -> str:
         "| `test_running_case_study_does_not_mutate_other_case_or_catalog` | Optimizar Norte no toca Sur ni catálogo |",
         "| `test_driver_report_accepts_case_study_flag` | CLI `just case-study-report` |",
         "",
-        "## 2. Tabla comparativa (3 casos demo)",
+        "## 2. Tabla comparativa (4 casos)",
         "",
         _format_table(
-            ["Caso", "Escenario", "Puntos", "Cubiertos", "Dist. ACO (km)", "Duración (h)", "Rutas", "Simulación"],
+            ["Caso", "Escenario", "Puntos", "Cubiertos", "Pend.", "Dist. ACO (km)", "Duración (h)", "Rutas", "Simulación"],
             [
                 [
                     row.code,
                     row.scenario_id,
                     str(row.point_count),
                     str(row.served_points),
+                    str(row.uncovered_points),
                     f"{row.distance_km:.1f}",
                     f"{row.duration_h:.2f}",
                     str(row.route_count),
@@ -313,6 +380,9 @@ def build_comparative_evidence_markdown(db: Session) -> str:
                 for row in runs
             ],
         ),
+        "",
+        "> **CE-COMBINATORIO:** métricas de simulación semanal (5 días); km = suma diaria; duración = máx. h/ruta. "
+        "No se muestra en la demo en vivo (D8).",
         "",
         "## 3. Mismo punto, dos casos, dos rutas",
         "",
@@ -394,6 +464,8 @@ def build_comparative_evidence_markdown(db: Session) -> str:
             "just case-study-report CE-UNARE-NORTE",
             "just case-study-report CE-UNARE-SUR",
             "just case-study-report CE-MULTI-VIAJE",
+            "just case-study-report CE-COMBINATORIO",
+            "just phase-b-evidence",
             "```",
             "",
             "## 5. Guion oral (3 min)",
@@ -403,3 +475,146 @@ def build_comparative_evidence_markdown(db: Session) -> str:
         ]
     )
     return "\n".join(lines)
+
+
+def build_defense_evidence_markdown(
+    db: Session,
+    *,
+    generated_at: str | None = None,
+    report_files: dict[str, str] | None = None,
+) -> str:
+    """Consolida evidencia B5 → docs/fase-b/evidencia-demo-defensa.md."""
+    timestamp = generated_at or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    runs = [run_defense_case_study_evidence(db, code) for code in DEFENSE_EVIDENCE_CASE_CODES]
+    report_files = report_files or {}
+
+    lines = [
+        "# Evidencia académica — demo de defensa (Fase B5)",
+        "",
+        f"> **Generado:** {timestamp}  ",
+        "> **Regenerar:** `just phase-b-evidence` (incluye reportes individuales + tabla comparativa)",
+        "",
+        "**Objetivo (D20–D21):** anexo reproducible con cuatro casos de estudio aislados. "
+        "Los tres primeros sustentan la narrativa oral; **CE-COMBINATORIO** documenta escala combinatoria "
+        "sin mostrarse en la demo en vivo (D8).",
+        "",
+        "## 1. Tabla comparativa (4 casos)",
+        "",
+        _format_table(
+            [
+                "Caso",
+                "Uso en defensa",
+                "Escenario",
+                "Puntos",
+                "Cubiertos",
+                "Pend.",
+                "km ACO",
+                "Max h/ruta",
+                "Rutas",
+                "Sim.",
+            ],
+            [
+                [
+                    row.code,
+                    DEFENSE_EVIDENCE_USAGE.get(row.code, "—"),
+                    row.scenario_id,
+                    str(row.point_count),
+                    str(row.served_points),
+                    str(row.uncovered_points),
+                    f"{row.distance_km:.1f}",
+                    f"{row.duration_h:.2f}",
+                    str(row.route_count),
+                    str(row.simulation_id),
+                ]
+                for row in runs
+            ],
+        ),
+        "",
+        "### Lectura para la tesis",
+        "",
+        "| Caso | Qué demuestra |",
+        "|------|---------------|",
+        "| CE-UNARE-NORTE | Subconjunto compacto (15 pts) — baseline vs ACO en escenario `normal`. |",
+        "| CE-UNARE-SUR | Mismo catálogo físico, demandas distintas (M:N con Norte vía `CNT-006`). |",
+        "| CE-MULTI-VIAJE | Restricción de capacidad y visitas al vertedero (`saturated`). |",
+        "| CE-COMBINATORIO | **Stress test** (~120 pts, 5 días simulados): dificultad combinatoria; "
+        "`demoVisible: false` en UI; citar solo en anexo / Cap. resultados. |",
+        "",
+        "> **D8:** no abrir CE-COMBINATORIO durante el guion de 10 min. "
+        "Ver [guion-demo-defensa-10min.md](./guion-demo-defensa-10min.md).",
+        "",
+        "## 2. Reportes individuales (regenerables)",
+        "",
+        "```bash",
+        "just case-study-report CE-UNARE-NORTE",
+        "just case-study-report CE-UNARE-SUR",
+        "just case-study-report CE-MULTI-VIAJE",
+        "just case-study-report CE-COMBINATORIO",
+        "```",
+        "",
+        "| Caso | Archivo | Generado |",
+        "|------|---------|----------|",
+    ]
+
+    for code in DEFENSE_EVIDENCE_CASE_CODES:
+        rel_path = report_files.get(code, f"reportes/{code}.md")
+        file_ts = report_files.get(f"{code}:timestamp", timestamp)
+        lines.append(f"| {code} | [{rel_path}](./{rel_path}) | {file_ts} |")
+
+    combinatorio = next(row for row in runs if row.code == "CE-COMBINATORIO")
+    lines.extend(
+        [
+            "",
+            f"**CE-COMBINATORIO** usa modo planificación semanal ({combinatorio.point_count} puntos activos, "
+            f"umbral > {PLANNING_MODE_THRESHOLD}). Métricas: {combinatorio.served_points} visitas en la semana simulada, "
+            f"{combinatorio.uncovered_points} pendiente(s) al cierre, {combinatorio.distance_km:.1f} km ACO acumulados.",
+            "",
+            "## 3. Aislamiento entre casos (pytest)",
+            "",
+            "```bash",
+            "just test-case-study-isolation",
+            "```",
+            "",
+            "Detalle ampliado: [evidencia-casos-estudio.md](../fase-12/evidencia-casos-estudio.md) "
+            "(sección CNT-006 Norte vs Sur).",
+            "",
+            "## 4. Capturas opcionales (anexo visual)",
+            "",
+            "Si se incluyen en la tesis, guardar en `docs/fase-b/capturas/` con el prefijo del caso:",
+            "",
+            "| Archivo sugerido | Contenido |",
+            "|------------------|-----------|",
+            "| `capturas/CE-UNARE-NORTE-kpis.png` | Paso 3 simulación — KPIs baseline vs ACO |",
+            "| `capturas/CE-MULTI-VIAJE-rutas.png` | Mapa multi-viaje al vertedero |",
+            "| `capturas/CE-COMBINATORIO-semanal.png` | Tabla semanal del reporte planificación |",
+            "",
+            "_Las capturas no se generan automáticamente; son opcionales para el PDF de anexo._",
+            "",
+            "## 5. Referencias",
+            "",
+            "- [alcance-demo-defensa.md](./alcance-demo-defensa.md) — §8 casos de estudio",
+            "- [guion-demo-defensa-10min.md](./guion-demo-defensa-10min.md) — demo en vivo",
+            "- [guion-defensa-casos-estudio.md](../fase-12/guion-defensa-casos-estudio.md) — guion oral 3 min",
+            "- `data/seeds/case_studies.json` — definición de casos",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def write_defense_case_reports(db: Session) -> dict[str, str]:
+    """Escribe reportes markdown por caso y devuelve metadatos para la tabla B5."""
+    out_dir = defense_case_report_dir()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    metadata: dict[str, str] = {}
+    for code in DEFENSE_EVIDENCE_CASE_CODES:
+        markdown = build_case_study_report_markdown(db, code)
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        if "_Generado " not in markdown and "_Regenerado " not in markdown:
+            markdown = markdown.rstrip() + f"\n\n_Regenerado {timestamp}_\n"
+        rel = f"reportes/{code}.md"
+        path = out_dir / f"{code}.md"
+        path.write_text(markdown, encoding="utf-8")
+        metadata[code] = rel
+        metadata[f"{code}:timestamp"] = timestamp
+    return metadata

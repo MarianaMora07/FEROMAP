@@ -14,6 +14,23 @@ import type { KpiView, OptimizationConstraints } from '../../core/api/optimizati
 import type { ScenarioId } from '../../data/types/simulation';
 import { shouldFleetAccordionStartOpen } from './optimizationLayoutUx';
 
+/** Hora de salida de la flota → banda de congestión (Tarea 4). */
+const departureHourOptions = [
+  { value: '6', label: '06:00 — Pico mañana (×1.30)' },
+  { value: '7', label: '07:00 — Pico mañana (×1.30)' },
+  { value: '8', label: '08:00 — Pico mañana (×1.30)' },
+  { value: '9', label: '09:00 — Valle (×1.00)' },
+  { value: '10', label: '10:00 — Valle (×1.00)' },
+  { value: '11', label: '11:00 — Valle (×1.00)' },
+  { value: '12', label: '12:00 — Valle (×1.00)' },
+  { value: '13', label: '13:00 — Valle (×1.00)' },
+  { value: '14', label: '14:00 — Valle (×1.00)' },
+  { value: '15', label: '15:00 — Valle (×1.00)' },
+  { value: '16', label: '16:00 — Valle (×1.00)' },
+  { value: '17', label: '17:00 — Pico tarde (×1.25)' },
+  { value: '18', label: '18:00 — Pico tarde (×1.25)' },
+];
+
 const vehicleToneClass = {
   blue: 'bg-fero-blue/10 text-fero-blue border-fero-blue/20',
   green: 'bg-fero-green/15 text-fero-green-dark border-fero-green/30',
@@ -88,6 +105,22 @@ export function OptimizationParametersForm(props: OptimizationParametersFormProp
             </For>
           </SelectField>
           <SelectField
+            label="Hora de salida de la flota"
+            name="departureHour"
+            value={String(preset().departureHour)}
+            onChange={(e) =>
+              updateOptimizationPreset({ departureHour: Number(e.currentTarget.value) })
+            }
+          >
+            <For each={departureHourOptions}>
+              {(option) => <option value={option.value}>{option.label}</option>}
+            </For>
+          </SelectField>
+          <p class="text-xs text-text-muted">
+            La hora define la franja de congestión (pico mañana 06–09 ×1.30, valle ×1.0,
+            pico tarde 17–19 ×1.25). Con tráfico activo el motor re-enruta por tiempo ponderado.
+          </p>
+          <SelectField
             label="Mostrar resultados por"
             name="kpiView"
             value={preset().kpiView}
@@ -103,7 +136,7 @@ export function OptimizationParametersForm(props: OptimizationParametersFormProp
           <p class="text-xs text-text-muted">
             Para comparar condiciones (lluvia, saturación, impacto en KPIs), usa{' '}
             <A href="/simulation" class="font-medium text-fero-blue hover:underline">
-              Simulación de escenarios
+              Simulación de tesis
             </A>
             .
           </p>

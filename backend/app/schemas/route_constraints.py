@@ -19,3 +19,9 @@ class DailyOptimizeRequest(CamelModel):
         default=None,
         description="Métrica principal para narrativa de KPIs (no altera el fitness del solver).",
     )
+    departure_hour: int | None = Field(
+        default=None,
+        ge=0,
+        le=23,
+        description="Hora de salida de la flota (0–23) para la franja de congestión.",
+    )

@@ -80,6 +80,29 @@ export const durationOptions = [
   { value: '12', label: '12 horas (turno típico)' },
 ];
 
+/** Franja horaria de congestión (Tarea 4): hora de salida de la flota → banda y factor. */
+export const departureHourOptions = [
+  { value: '6', label: '06:00 — Pico mañana (×1.30)' },
+  { value: '7', label: '07:00 — Pico mañana (×1.30)' },
+  { value: '8', label: '08:00 — Pico mañana (×1.30)' },
+  { value: '9', label: '09:00 — Valle (×1.00)' },
+  { value: '10', label: '10:00 — Valle (×1.00)' },
+  { value: '11', label: '11:00 — Valle (×1.00)' },
+  { value: '12', label: '12:00 — Valle (×1.00)' },
+  { value: '13', label: '13:00 — Valle (×1.00)' },
+  { value: '14', label: '14:00 — Valle (×1.00)' },
+  { value: '15', label: '15:00 — Valle (×1.00)' },
+  { value: '16', label: '16:00 — Valle (×1.00)' },
+  { value: '17', label: '17:00 — Pico tarde (×1.25)' },
+  { value: '18', label: '18:00 — Pico tarde (×1.25)' },
+];
+
+export const DEFAULT_DEPARTURE_HOUR = '7';
+
+export function departureHourLabel(value: string): string {
+  return departureHourOptions.find((option) => option.value === value)?.label ?? `${value}:00`;
+}
+
 export const acoPresetOptions = [
   { value: 'fast', label: 'Rápido (6 × 10)', ants: 6, iterations: 10 },
   { value: 'standard', label: 'Estándar (12 × 20)', ants: 12, iterations: 20 },

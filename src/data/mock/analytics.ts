@@ -1,6 +1,6 @@
 export const analyticsPageMeta = {
-  title: 'Analítica',
-  subtitle: 'Analiza datos clave y descubre patrones para mejorar la eficiencia del servicio.',
+  title: 'Analítica (datos de ejemplo)',
+  subtitle: 'KPIs ilustrativos con mocks — no usar en el guion de defensa en vivo.',
   dateLabel: '1 - 25 de junio, 2026',
 };
 

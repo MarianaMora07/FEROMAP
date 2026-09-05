@@ -64,6 +64,7 @@ import { ConfigurationSummaryPanel } from './ConfigurationSummaryPanel';
 import { ExecutionPanel } from './ExecutionPanel';
 import { SimulationHistoryPanel } from './SimulationHistoryPanel';
 import { ThesisVsOperationsNotice } from '../planning/ThesisVsOperationsNotice';
+import { ModuleScopeBanner } from '../../core/demo/ModuleScopeBanner';
 import { weeklyPlanHref } from '../../core/planning/weeklyPlanLinks';
 import { WizardStepNav } from './WizardStepNav';
 import { SimulationResultsStep } from './SimulationResultsStep';
@@ -90,6 +91,9 @@ import {
   acoPresetOptions,
   acoValuesForPreset,
   CREW_SHORTAGE_NARRATIVE,
+  DEFAULT_DEPARTURE_HOUR,
+  departureHourOptions,
+  departureHourLabel,
   rainIntensityOptions,
   resolveDefaultAcoPreset,
   simulationConditions,
@@ -101,8 +105,8 @@ import {
 type SimulationPageTab = 'flow' | 'history';
 
 const simulationPageTabs: { id: SimulationPageTab; label: string; hint: string }[] = [
-  { id: 'flow', label: 'Evaluar escenarios', hint: 'Comparar condiciones con el motor ACO (sin despacho)' },
-  { id: 'history', label: 'Historial de simulaciones', hint: 'Escenarios ejecutados para análisis' },
+  { id: 'flow', label: 'Baseline vs ACO', hint: 'Escenario normal — evaluación de tesis, sin despacho' },
+  { id: 'history', label: 'Historial de simulaciones', hint: 'Corridas previas del motor (no confundir con operación)' },
 ];
 
 function Toggle(props: {
@@ -206,6 +210,7 @@ export default function SimulationPage() {
   const [rainIntensity, setRainIntensity] = createSignal('alta');
   const [wasteLevel, setWasteLevel] = createSignal('30');
   const [duration, setDuration] = createSignal(DEFAULT_SHIFT_REFERENCE_HOURS);
+  const [departureHour, setDepartureHour] = createSignal(DEFAULT_DEPARTURE_HOUR);
   const [crewShortageEnabled, setCrewShortageEnabled] = createSignal(false);
   const [operatorsShortage, setOperatorsShortage] = createSignal('2');
   const [acoPreset, setAcoPreset] = createSignal<AcoPresetId>(initialAcoPreset);
@@ -293,6 +298,7 @@ export default function SimulationPage() {
       acoPreset: acoPreset(),
       acoAnts: acoAnts(),
       acoIterations: acoIterations(),
+      departureHour: departureHour(),
     }),
     caseStudyId: activeCaseStudy()?.id,
   });
@@ -524,6 +530,7 @@ export default function SimulationPage() {
 
   return (
     <div class="space-y-5">
+      <ModuleScopeBanner scope="thesis-simulation" linkHref="/optimization" linkLabel="Ir a planificación operativa" />
       <Show when={simulationState.isLoadingDetail}>
         <Card>
           <LoadingPanel
@@ -641,6 +648,7 @@ export default function SimulationPage() {
         <div class="grid items-start gap-4 xl:grid-cols-12">
           <div class="xl:col-span-3 space-y-4">
             <CaseStudySelector
+              context="thesis"
               value={activeCaseStudy()}
               onChange={handleCaseStudyChange}
               disabled={isSimulationBusy()}
@@ -779,6 +787,23 @@ export default function SimulationPage() {
                   </select>
                 </div>
               </div>
+              <div class="mt-4 rounded-lg border border-border px-3 py-2.5 dark:border-dark-border">
+                <p class="mb-2 text-sm font-semibold text-text-primary dark:text-white">
+                  Tráfico — franja horaria de salida
+                </p>
+                <label class="mb-1 block text-xs text-text-muted">Hora de salida de la flota</label>
+                <select
+                  value={departureHour()}
+                  onChange={(e) => setDepartureHour(e.currentTarget.value)}
+                  class="w-full rounded-md border border-border bg-surface px-2.5 py-2 text-sm dark:bg-dark-surface-hover dark:border-dark-border dark:text-white"
+                >
+                  <For each={departureHourOptions}>{(o) => <option value={o.value}>{o.label}</option>}</For>
+                </select>
+                <p class="mt-2 text-xs text-text-muted">
+                  Con congestión activa el motor enruta por tiempo ponderado: la misma parroquia a las 07:00
+                  (pico ×1.30) puede producir una ruta distinta que a las 14:00 (valle ×1.0).
+                </p>
+              </div>
             </Card>
           </div>
         </div>
@@ -831,6 +856,10 @@ export default function SimulationPage() {
                 <li>
                   <span class="font-semibold text-text-primary dark:text-white">Motor ACO:</span>{' '}
                   {acoAnts()} hormigas × {acoIterations()} iteraciones
+                </li>
+                <li>
+                  <span class="font-semibold text-text-primary dark:text-white">Salida de flota:</span>{' '}
+                  {departureHourLabel(departureHour())}
                 </li>
               </ul>
             </Card>

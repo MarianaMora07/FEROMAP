@@ -45,6 +45,34 @@ export interface WeeklyPlan {
   caseStudyName?: string | null;
   referenceSimulationId?: number | null;
   expectedKpis?: Record<string, unknown> | null;
+  preflight?: {
+    feasible?: boolean;
+    rows?: Array<{
+      operationDate?: string;
+      demandKg?: number;
+      capacityKg?: number;
+      expectedVehicles?: number;
+      availableVehicles?: number;
+      overloaded?: boolean;
+      insufficientFleet?: boolean;
+    }>;
+    simulation?: {
+      feasible?: boolean;
+      rows?: Array<{
+        operationDate?: string;
+        scenarioId?: string;
+        distanceKm?: number;
+        durationHours?: number;
+        coveragePct?: number | null;
+        uncoveredPoints?: number | null;
+        servedPoints?: number;
+        feasible?: boolean;
+        skipped?: boolean;
+        error?: string;
+      }>;
+    };
+  } | null;
+  preflightFeasible?: boolean | null;
   notes?: string | null;
   approvedAt?: string | null;
   days: WeeklyPlanDay[];
@@ -381,9 +409,14 @@ export function approveWeeklyPlan(
   return apiPost(`/api/v1/planning/weekly/${planId}/approve`, payload ?? {});
 }
 
-export function fetchDailyPlan(operationDate: string): Promise<DailyPlan> {
+export async function fetchDailyPlan(operationDate: string): Promise<DailyPlan> {
   if (useMocks) return Promise.resolve(mockDailyPlan(operationDate));
-  return apiGet(`/api/v1/planning/daily/${operationDate}`);
+  try {
+    return await apiGet<DailyPlan>(`/api/v1/planning/daily/${operationDate}`);
+  } catch {
+    // GET es solo lectura (Tarea 9): si el día aún no existe, se crea explícitamente.
+    return apiPost<DailyPlan>(`/api/v1/planning/daily/${operationDate}/ensure`, {});
+  }
 }
 
 export function openDailyPlan(operationDate: string): Promise<DailyPlan> {
@@ -395,6 +428,7 @@ export interface DailyOptimizeOptions {
   priorityFillLevel?: boolean;
   timeWindowEnabled?: boolean;
   kpiView?: 'distance' | 'time' | 'co2';
+  departureHour?: number;
 }
 
 export function optimizeDailyPlan(

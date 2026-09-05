@@ -69,6 +69,7 @@ async function optimizeDailyPlanAndWait(
     priorityFillLevel: preset.constraints.fill_level,
     timeWindowEnabled: preset.constraints.time_window,
     kpiView: preset.kpiView,
+    departureHour: preset.departureHour,
   });
   activeDailyOptimizationJobId = jobId;
   const startedAt = Date.now();
@@ -125,6 +126,8 @@ export interface OptimizationPreset {
   algorithm: string;
   objective: string;
   kpiView: KpiView;
+  /** Hora de salida de la flota (0–23) para la franja de congestión (Tarea 4). */
+  departureHour: number;
   constraints: OptimizationConstraints;
 }
 
@@ -148,6 +151,7 @@ const DEFAULT_PRESET: OptimizationPreset = {
   algorithm: 'aco',
   objective: 'distance_time',
   kpiView: 'distance',
+  departureHour: 7,
   constraints: {
     avoid_traffic: true,
     fill_level: true,

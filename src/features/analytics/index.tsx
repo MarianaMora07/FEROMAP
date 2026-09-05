@@ -43,7 +43,8 @@ import { fetchAnalyticsHeatmap, fetchAnalyticsSummary } from '../../core/api/ana
 import type { AnalyticsGranularity, AnalyticsHeatmapGeoJson } from '../../core/types/analytics';
 import { defaultDateRange } from '../../core/utils/analyticsFilters';
 import { parseSimulationIdParam } from '../../core/utils/simulationLinks';
-import { SimulationContextBanner } from '../simulation/SimulationContextBanner';
+import { SimulationRunComparisonCard } from '../simulation/SimulationRunComparisonCard';
+import { ModuleScopeBanner } from '../../core/demo/ModuleScopeBanner';
 import { PlanningAnalyticsSection } from './PlanningAnalyticsSection';
 import {
   analyticsEfficiencyIndicators as mockEfficiency,
@@ -323,7 +324,8 @@ export default function AnalyticsPage() {
 
   return (
     <div class="space-y-5">
-      <SimulationContextBanner simulationId={focusedSimulationId()} page="analytics" />
+      <ModuleScopeBanner scope="analytics-mock" linkHref="/reports" linkLabel="Ver reportes operativos" />
+      <SimulationRunComparisonCard simulationId={focusedSimulationId()} />
       <Show when={focusCollectionPoints()}>
         <div class="rounded-xl border border-fero-blue/30 bg-fero-blue/10 px-4 py-3">
           <p class="text-sm font-semibold text-fero-blue">Análisis de puntos de recolección</p>
