@@ -1,18 +1,22 @@
-import { For, Show, createEffect, createMemo, createResource, createSignal, onMount } from 'solid-js';
+import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from 'solid-js';
 import { A, useNavigate, useSearchParams } from '@solidjs/router';
 import {
+  ChevronDown,
+  Download,
+  History,
   MapPin,
+  MoreVertical,
   Route,
   Clock,
   Weight,
   Map,
+  Sparkles,
 } from 'lucide-solid';
 import {
   Button,
   Card,
   CardHeader,
 } from '../../design-system/components';
-import { appState } from '../../core/stores/appStore';
 import { routeDisplayKind } from '../../core/map/operationalMapLayers';
 import {
   executeOptimization,
@@ -29,41 +33,30 @@ import {
   buildRouteResults,
   buildScenarioInfoRows,
 } from '../../core/utils/optimizationResults';
-import {
-  type OptimizationTabId,
-} from '../../data/mock/optimization';
 import { downloadDailyPlanPdf } from '../../core/api/planning';
 import { optimizationDateHref, tomorrowIso } from '../../core/planning/planningUx';
 import { optimizationHref, operationalMapHref } from '../../core/planning/operationalLinks';
 import { parsePlaybackQueryParam } from '../../core/planning/operationalFlowUx';
 import { PlanningContextualCta } from '../planning/PlanningContextualCta';
-import { PlanningEmptyState } from '../planning/PlanningEmptyState';
-import { PLANNING_EMPTY_PRESETS } from '../../core/planning/planningEmptyStates';
 import { AppShellSubheader } from '../../design-system/layout/pageChromeSlots';
 import { OptimizationHeaderBar } from './OptimizationHeaderChrome';
 import { OptimizationRouteMap } from './OptimizationRouteMap';
 import { OptimizationPlaybackPanel } from './OptimizationPlaybackPanel';
-import { OptimizationMainTabs } from './OptimizationMainTabs';
-import { OptimizationMoreContextPanel } from './OptimizationMoreContextPanel';
-import { OptimizationHistoryPanel } from './OptimizationHistoryPanel';
+import { OptimizationPendingSection } from './OptimizationPendingSection';
 import { OptimizationParametersForm } from './OptimizationParametersForm';
-import { OptimizationResultsCompact } from './OptimizationResultsCompact';
 import { DurationBreakdownPanel } from '../simulation/DurationBreakdownPanel';
-import { LandfillKpiStrip } from '../landfill/LandfillKpiStrip';
 import { UncoveredPointsActionsPanel } from '../landfill/UncoveredPointsActionsPanel';
 import { OptimizationParametersSheet } from './OptimizationParametersSheet';
 import { OptimizationProgressPanel } from './OptimizationProgressPanel';
 import { OptimizationDispatchBanner } from './OptimizationDispatchBanner';
 import { OptimizationComparisonPanel } from './OptimizationComparisonPanel';
 import { OptimizationConvergencePanel } from './OptimizationConvergencePanel';
-import { OptimizationWeeklyPlanGateBanner } from './OptimizationWeeklyPlanGateBanner';
-import { ModuleScopeBanner } from '../../core/demo/ModuleScopeBanner';
-import { OptimizationAcoSensitivityPanel } from './OptimizationAcoSensitivityPanel';
 import { useGenerateButtonVisibility } from './useGenerateButtonVisibility';
 import { resolveOptimizationContextualMessage } from './optimizationLayoutUx';
 import { fetchDailyRoutePlayback } from '../../core/api/routePlayback';
+import { fetchSimulationRoutesGeojson } from '../../core/api/simulation';
 import { useRoutePlayback } from '../../core/route-playback/useRoutePlayback';
-import { mockDailyRoutePlayback } from '../../data/mock/routePlayback';
+import { ROUTE_PLAYBACK_LANDFILL_CODE } from '../../core/route-playback/routePlaybackTypes';
 
 const scenarioIconMap = {
   'map-pin': MapPin,
@@ -108,27 +101,41 @@ function ScenarioInfoCard() {
   );
 }
 
-function ResultsCard(props: {
-  routeResults: ReturnType<typeof buildRouteResults>;
-  totals: ReturnType<typeof buildResultsTotals>;
-  driverByVehicleId?: Record<string, string>;
-}) {
-  return (
-    <OptimizationResultsCompact
-      routeResults={props.routeResults}
-      totals={props.totals}
-      driverByVehicleId={props.driverByVehicleId}
-    />
-  );
+const RESULT_TABS = [
+  { id: 'resumen', label: 'Resumen' },
+  { id: 'comparacion', label: 'Comparación' },
+  { id: 'desglose', label: 'Desglose' },
+  { id: 'convergencia', label: 'Convergencia' },
+  { id: 'rutas', label: 'Rutas por vehículo' },
+] as const;
+
+const WEEKDAYS_ES = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+const MONTHS_ES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+function humanDateShort(iso: string): string {
+  const date = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return iso;
+  return `${WEEKDAYS_ES[date.getUTCDay()]} ${date.getUTCDate()} ${MONTHS_ES[date.getUTCMonth()]}`;
+}
+
+function minutesLabel(totalMinutes: number): string {
+  if (totalMinutes < 60) return `${Math.round(totalMinutes)} min`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = Math.round(totalMinutes % 60);
+  return minutes > 0 ? `${hours} h ${minutes} min` : `${hours} h`;
 }
 
 export default function OptimizationPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const [tab, setTab] = createSignal<OptimizationTabId>('nueva');
   const [paramsSheetOpen, setParamsSheetOpen] = createSignal(false);
   const [dispatchError, setDispatchError] = createSignal<string | null>(null);
   const [closeNotice, setCloseNotice] = createSignal<string | null>(null);
+  const [planTab, setPlanTab] = createSignal<'optimize' | 'pending'>('optimize');
+  const [resultsTab, setResultsTab] = createSignal<
+    'resumen' | 'comparacion' | 'desglose' | 'convergencia' | 'rutas'
+  >('comparacion');
+  const [pageMenuOpen, setPageMenuOpen] = createSignal(false);
   const { formGenerateInView, setGenerateAnchorRef } = useGenerateButtonVisibility();
 
   const dailyPlan = () => optimizationState.dailyPlan;
@@ -145,10 +152,10 @@ export default function OptimizationPage() {
   const [playbackPayload] = createResource(
     () => {
       if (!optimizationState.playbackOpen) return null;
-      return dailyPlan()?.id ?? 0;
+      return dailyPlan()?.id ?? null;
     },
     async (dailyPlanId) => {
-      if (!dailyPlanId) return mockDailyRoutePlayback(0);
+      if (!dailyPlanId) return null;
       return fetchDailyRoutePlayback(dailyPlanId);
     },
   );
@@ -168,27 +175,72 @@ export default function OptimizationPage() {
     closeOptimizationPlayback();
   };
   const kpis = () => optimizationState.kpis!;
+  // Rutas reales de la corrida: las de la sesión (lastResult) o, si el día llegó ya
+  // optimizado desde backend, las del GeoJSON de la simulación vinculada (sin mocks).
+  const [historyRoutes] = createResource(
+    () => (hasResults() && !optimizationState.lastResult ? (dailyPlan()?.simulationId ?? undefined) : undefined),
+    async (simulationId) => {
+      if (!simulationId) return null;
+      try {
+        return await fetchSimulationRoutesGeojson(simulationId);
+      } catch {
+        return null;
+      }
+    },
+  );
+  const realOptimizedRoutes = createMemo(() => {
+    const sessionRoutes = optimizationState.lastResult?.routes.optimized;
+    if (sessionRoutes && sessionRoutes.features.length > 0) return sessionRoutes;
+    const merged = historyRoutes();
+    if (!merged) return null;
+    const features = merged.features.filter(
+      (feature) => routeDisplayKind(feature.properties) === 'optimized',
+    );
+    return features.length > 0 ? { type: 'FeatureCollection' as const, features } : null;
+  });
   const routeResults = createMemo(() => {
     if (!hasResults()) return [];
-    const optimized =
-      optimizationState.lastResult?.routes.optimized ?? {
-        type: 'FeatureCollection' as const,
-        features: appState.routes.features.filter(
-          (feature) => routeDisplayKind(feature.properties) === 'optimized',
-        ),
-      };
-    return buildRouteResults(optimized, kpis());
+    return buildRouteResults(realOptimizedRoutes() ?? { type: 'FeatureCollection', features: [] }, kpis());
   });
   const totals = createMemo(() => (hasResults() ? buildResultsTotals(kpis()) : null));
-  const driverByVehicleId = createMemo(() => {
-    const map: Record<string, string> = {};
-    for (const vehicle of optimizationState.context?.vehicles ?? []) {
-      if (vehicle.driver && vehicle.driver !== '—') {
-        map[vehicle.id] = vehicle.driver;
-      }
-    }
-    return map;
+  const baselineApplies = createMemo(() => {
+    if (!hasResults()) return false;
+    const current = Number(kpis()?.distanceKm?.current ?? 0);
+    return current > 0;
   });
+  const visibleResultTabs = createMemo(() =>
+    RESULT_TABS.filter((tab) => tab.id !== 'comparacion' || baselineApplies()),
+  );
+  const savingPct = createMemo(() => {
+    const dist = kpis()?.distanceKm;
+    if (!dist?.current || !dist?.optimized || dist.current <= 0) return 0;
+    return Math.round((1 - dist.optimized / dist.current) * 100);
+  });
+  const summaryTiles = createMemo(() => [
+    { id: 'distancia', label: 'Distancia optimizada', value: `${totals()?.distanceKm.toFixed(1) ?? '—'} km` },
+    { id: 'duracion', label: 'Duración total', value: totals()?.duration ?? '—' },
+    { id: 'toneladas', label: 'Toneladas', value: `${totals()?.tons.toFixed(1) ?? '—'} t` },
+    { id: 'ahorro', label: 'Ahorro vs baseline', value: `${savingPct()}%` },
+  ]);
+  // Detalle real por vehículo desde el playback del plan (sin mocks).
+  const [routeDetails] = createResource(
+    () => (hasResults() ? (dailyPlan()?.id ?? null) : null),
+    async (dailyPlanId) => (dailyPlanId ? fetchDailyRoutePlayback(dailyPlanId) : null),
+  );
+  const perRouteRows = createMemo(() => {
+    const routes = routeDetails()?.routes ?? [];
+    return routes.map((route) => ({
+      vehicle: route.vehicleLabel || `R-${route.routeId}`,
+      distanceKm: route.distanceKm,
+      durationMin: route.totalDurationMinutes,
+      points: route.stops.filter(
+        (stop) => stop.stopType !== 'landfill' && stop.code !== ROUTE_PLAYBACK_LANDFILL_CODE,
+      ).length,
+    }));
+  });
+  const totalRoutePoints = createMemo(() =>
+    perRouteRows().reduce((sum, row) => sum + row.points, 0),
+  );
 
   const navigateToDate = (date: string) => {
     navigate(optimizationHref({ date }), { replace: true });
@@ -198,6 +250,42 @@ export default function OptimizationPage() {
   onMount(() => {
     const dateParam = Array.isArray(searchParams.date) ? searchParams.date[0] : searchParams.date;
     void initOptimizationPage(dateParam ?? undefined);
+  });
+
+  // Deep link '#pendientes' (desde el Dashboard o el hub) abre la pestaña Pendientes.
+  onMount(() => {
+    const syncTabFromHash = () => {
+      if (typeof window !== 'undefined' && window.location.hash === '#pendientes') {
+        setPlanTab('pending');
+      }
+    };
+    syncTabFromHash();
+    window.addEventListener('hashchange', syncTabFromHash);
+    onCleanup(() => window.removeEventListener('hashchange', syncTabFromHash));
+  });
+
+  // Al cambiar de día o al completar una corrida nueva, los resultados vuelven a "Resumen".
+  createEffect(() => {
+    selectedDate();
+    optimizationState.lastSimulationId;
+    setResultsTab('resumen');
+  });
+
+  // Sin baseline (ruta actual) la pestaña Comparación no aplica.
+  createEffect(() => {
+    if (!baselineApplies() && resultsTab() === 'comparacion') {
+      setResultsTab('resumen');
+    }
+  });
+
+  // Parámetros colapsados; se reabren solos solo la primera vez que hay un día sin resultados.
+  let paramsAutoOpened = false;
+  let paramsDetailsRef: HTMLDetailsElement | undefined;
+  createEffect(() => {
+    const ready = !optimizationState.isLoadingDailyPlan && !optimizationState.isLoadingContext;
+    if (!ready || hasResults() || paramsAutoOpened || !paramsDetailsRef) return;
+    paramsAutoOpened = true;
+    paramsDetailsRef.open = true;
   });
 
   createEffect(() => {
@@ -243,11 +331,6 @@ export default function OptimizationPage() {
     URL.revokeObjectURL(url);
   };
 
-  const handleViewDayFromHistory = (operationDate: string) => {
-    setTab('nueva');
-    navigateToDate(operationDate);
-  };
-
   const contextualMessage = createMemo(() =>
     resolveOptimizationContextualMessage({
       closeNotice: closeNotice(),
@@ -270,16 +353,112 @@ export default function OptimizationPage() {
 
   return (
     <div class="space-y-4 md:space-y-5">
-      <ModuleScopeBanner scope="operations" linkHref="/planning" linkLabel="Volver al hub de planificación" />
       <AppShellSubheader>
         <OptimizationHeaderBar />
       </AppShellSubheader>
-      <OptimizationMainTabs tab={tab()} onTabChange={setTab} />
 
-      <OptimizationWeeklyPlanGateBanner />
       <OptimizationDispatchBanner />
 
-      <Show when={tab() === 'nueva'}>
+      <div class="flex items-center justify-between gap-2 border-b border-default">
+        <div
+          class="flex gap-1 overflow-x-auto"
+          data-testid="plan-day-tabs"
+          role="tablist"
+          aria-label="Vista del plan del día"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={planTab() === 'optimize'}
+            data-testid="plan-day-tab-optimize"
+            onClick={() => setPlanTab('optimize')}
+            class={`shrink-0 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+              planTab() === 'optimize'
+                ? 'border-fero-green-mid text-fero-green-dark'
+                : 'border-transparent text-text-muted hover:text-text-secondary'
+            }`}
+          >
+            Optimizar y despachar
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={planTab() === 'pending'}
+            data-testid="plan-day-tab-pending"
+            onClick={() => setPlanTab('pending')}
+            class={`shrink-0 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+              planTab() === 'pending'
+                ? 'border-fero-green-mid text-fero-green-dark'
+                : 'border-transparent text-text-muted hover:text-text-secondary'
+            }`}
+          >
+            Pendientes
+          </button>
+        </div>
+
+        <div class="relative shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            class="gap-1 px-2"
+            aria-label="Más acciones"
+            data-testid="optimization-page-menu"
+            onClick={() => setPageMenuOpen((value) => !value)}
+          >
+            <MoreVertical size={16} />
+          </Button>
+          <Show when={pageMenuOpen()}>
+            <div
+              class="absolute right-0 z-20 mt-1 w-64 overflow-hidden rounded-lg border border-default bg-surface shadow-lg"
+              data-testid="optimization-page-menu-items"
+            >
+              <button
+                type="button"
+                class="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-text-primary hover:bg-app disabled:opacity-40"
+                disabled={!dailyPlan()?.id}
+                data-testid="optimization-menu-export-pdf"
+                onClick={() => {
+                  setPageMenuOpen(false);
+                  void handleDownloadDailyPdf();
+                }}
+              >
+                <Download size={15} class="shrink-0 text-text-muted" />
+                Exportar PDF del día
+              </button>
+              <button
+                type="button"
+                class="flex w-full items-center gap-2 border-t border-default px-3 py-2.5 text-left text-sm text-text-primary hover:bg-app"
+                data-testid="optimization-menu-close-day"
+                onClick={() => {
+                  setPageMenuOpen(false);
+                  void handleCloseDay();
+                }}
+              >
+                <Route size={15} class="shrink-0 text-text-muted" />
+                Cerrar día
+              </button>
+              <A
+                href={operationalMapHref({ focus: 'routes' })}
+                class="flex w-full items-center gap-2 border-t border-default px-3 py-2.5 text-sm text-text-primary hover:bg-app"
+                onClick={() => setPageMenuOpen(false)}
+              >
+                <Map size={15} class="shrink-0 text-text-muted" />
+                Ver en mapa operativo
+              </A>
+              <A
+                href="/planning/history"
+                class="flex w-full items-center gap-2 border-t border-default px-3 py-2.5 text-sm text-text-primary hover:bg-app"
+                onClick={() => setPageMenuOpen(false)}
+              >
+                <History size={15} class="shrink-0 text-text-muted" />
+                Historial de planificación
+              </A>
+            </div>
+          </Show>
+        </div>
+      </div>
+
+      <Show when={planTab() === 'optimize'}>
         <Show when={contextualMessage()}>
           {(message) => (
             <div data-testid="optimization-contextual-cta">
@@ -306,9 +485,16 @@ export default function OptimizationPage() {
         </Show>
 
         <div class="grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
-          <details class="group order-2 hidden space-y-4 xl:order-1 xl:col-span-3 xl:block" open>
-            <summary class="mb-3 cursor-pointer list-none text-sm font-semibold text-text-primary marker:content-none">
-              Parámetros
+          <details
+            ref={paramsDetailsRef}
+            class="group order-2 hidden space-y-4 xl:order-1 xl:col-span-3 xl:block"
+          >
+            <summary class="flex cursor-pointer list-none items-center justify-between gap-2 rounded-md px-3 py-2 text-sm font-semibold text-text-primary hover:bg-app marker:content-none">
+              <span>Parámetros</span>
+              <ChevronDown
+                size={15}
+                class="text-text-muted transition-transform group-open:rotate-180"
+              />
             </summary>
             {parametersPanel()}
           </details>
@@ -357,60 +543,177 @@ export default function OptimizationPage() {
               {parametersPanel()}
             </OptimizationParametersSheet>
 
-            <Show when={hasResults()}>
-              <UncoveredPointsActionsPanel
-                kpis={kpis()!}
-                dailyPlanId={dailyPlan()?.id}
-                operationDate={selectedDate()}
-                onDeferred={() => void refreshDailyPlan()}
-              />
-              <OptimizationComparisonPanel kpis={kpis()!} kpiView={optimizationState.preset.kpiView} />
-              <OptimizationConvergencePanel points={optimizationState.acoConvergence} />
-              <LandfillKpiStrip kpis={kpis()} routes={appState.routes} />
-              <DurationBreakdownPanel kpis={kpis()!} />
-              <div class="flex flex-wrap items-center justify-end gap-2">
-                <A href={operationalMapHref({ focus: 'routes' })}>
-                  <Button variant="outline" size="sm" icon={<Map size={16} />}>
-                    Ver en mapa operativo
+            <Show
+              when={
+                !hasResults() &&
+                !optimizationState.isOptimizing &&
+                !optimizationState.isLoadingDailyPlan &&
+                !optimizationState.isLoadingContext
+              }
+            >
+              <div
+                class="rounded-xl border border-dashed border-default bg-surface/40 px-4 py-10 text-center"
+                data-testid="optimization-empty-results"
+              >
+                <p class="text-base font-semibold text-text-primary">Este día aún no se ha optimizado</p>
+                <p class="mx-auto mt-1 max-w-md text-sm text-text-muted">
+                  Genera la ruta del {humanDateShort(selectedDate())} para ver resultados, simular el
+                  recorrido y despachar la operación.
+                </p>
+                <div class="mt-4 flex justify-center">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    class="gap-2"
+                    icon={<Sparkles size={14} />}
+                    data-testid="optimization-empty-generate"
+                    onClick={() => void handleGenerate()}
+                  >
+                    Generar ruta operativa
                   </Button>
-                </A>
+                </div>
               </div>
-              <ResultsCard
-                routeResults={routeResults()}
-                totals={totals()!}
-                driverByVehicleId={driverByVehicleId()}
-              />
-              <OptimizationAcoSensitivityPanel />
+            </Show>
+
+            <Show when={hasResults()}>
+              <p class="text-sm font-semibold text-text-primary" data-testid="optimization-results-context">
+                Resultados · {humanDateShort(selectedDate())}
+                {optimizationState.lastSimulationId ? ` · corrida #${optimizationState.lastSimulationId}` : ''}
+              </p>
+              <div
+                class="flex gap-1 overflow-x-auto border-b border-default"
+                data-testid="optimization-results-tabs"
+                role="tablist"
+                aria-label="Resultados del día"
+              >
+                <For each={visibleResultTabs()}>
+                  {(item) => (
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={resultsTab() === item.id}
+                      data-testid={`optimization-results-tab-${item.id}`}
+                      onClick={() => setResultsTab(item.id)}
+                      class={`shrink-0 border-b-2 px-3.5 py-2 text-sm font-medium transition-colors ${
+                        resultsTab() === item.id
+                          ? 'border-fero-green-mid text-fero-green-dark'
+                          : 'border-transparent text-text-muted hover:text-text-secondary'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  )}
+                </For>
+              </div>
+
+              <Show when={resultsTab() === 'resumen'}>
+                <div class="space-y-4">
+                  <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+                    <For each={summaryTiles()}>
+                      {(tile) => (
+                        <div class="rounded-lg border border-default bg-surface/60 px-3 py-2.5">
+                          <p class="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+                            {tile.label}
+                          </p>
+                          <p class="mt-1 text-lg font-bold text-text-primary">{tile.value}</p>
+                        </div>
+                      )}
+                    </For>
+                  </div>
+                  <UncoveredPointsActionsPanel
+                    kpis={kpis()!}
+                    dailyPlanId={dailyPlan()?.id}
+                    operationDate={selectedDate()}
+                    onDeferred={() => void refreshDailyPlan()}
+                  />
+                </div>
+              </Show>
+
+              <Show when={resultsTab() === 'comparacion'}>
+                <OptimizationComparisonPanel kpis={kpis()!} kpiView={optimizationState.preset.kpiView} />
+              </Show>
+
+              <Show when={resultsTab() === 'desglose'}>
+                <DurationBreakdownPanel kpis={kpis()!} />
+              </Show>
+
+              <Show when={resultsTab() === 'convergencia'}>
+                <OptimizationConvergencePanel points={optimizationState.acoConvergence} />
+              </Show>
+
+              <Show when={resultsTab() === 'rutas'}>
+                <Show
+                  when={perRouteRows().length > 0}
+                  fallback={
+                    <div
+                      class="rounded-xl border border-dashed border-default bg-surface/40 px-4 py-10 text-center"
+                      data-testid="optimization-routes-empty"
+                    >
+                      <p class="text-sm font-semibold text-text-primary">Sin rutas reales para este día</p>
+                      <p class="mx-auto mt-1 max-w-md text-sm text-text-muted">
+                        Ejecuta <span class="font-semibold">Generar</span> en este día para ver el detalle
+                        por vehículo de la corrida.
+                      </p>
+                    </div>
+                  }
+                >
+                  <div class="overflow-x-auto rounded-lg border border-default">
+                    <table class="w-full text-sm" data-testid="optimization-routes-table">
+                      <thead class="bg-app text-left text-xs uppercase tracking-wide text-text-muted">
+                        <tr>
+                          <th class="px-4 py-2.5 font-semibold">Vehículo</th>
+                          <th class="px-4 py-2.5 font-semibold">Distancia</th>
+                          <th class="px-4 py-2.5 font-semibold">Tiempo</th>
+                          <th class="px-4 py-2.5 font-semibold">Puntos</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-default">
+                        <For each={perRouteRows()}>
+                          {(row) => (
+                            <tr class="bg-surface/40">
+                              <td class="px-4 py-2.5 font-semibold text-text-primary">{row.vehicle}</td>
+                              <td class="px-4 py-2.5 text-text-secondary">
+                                {row.distanceKm != null ? `${row.distanceKm.toFixed(1)} km` : '—'}
+                              </td>
+                              <td class="px-4 py-2.5 text-text-secondary">{minutesLabel(row.durationMin)}</td>
+                              <td class="px-4 py-2.5 text-text-secondary">{row.points}</td>
+                            </tr>
+                          )}
+                        </For>
+                        <tr class="bg-app/70 font-semibold text-text-primary">
+                          <td class="px-4 py-2.5">Total</td>
+                          <td class="px-4 py-2.5">{totals()?.distanceKm.toFixed(1) ?? '—'} km</td>
+                          <td class="px-4 py-2.5">{totals()?.duration ?? '—'}</td>
+                          <td class="px-4 py-2.5">{totalRoutePoints()} paradas</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <p class="border-t border-default px-4 py-2 text-xs text-text-muted">
+                      Toneladas y capacidad disponibles solo agregadas: {totals()?.tons.toFixed(1) ?? '—'} t ·{' '}
+                      {totals()?.fuelL.toFixed(1) ?? '—'} L comb.
+                    </p>
+                  </div>
+                </Show>
+              </Show>
             </Show>
           </div>
         </div>
-
-        <OptimizationMoreContextPanel
-          selectedDate={selectedDate()}
-          dailyPlan={dailyPlan()}
-          weeklyPlanApproved={optimizationState.weeklyPlanApproved}
-          scenarioLabel={scenarioLabel()}
-          pendingCount={dailyPlan()?.pendingPoints.length ?? 0}
-          scheduledCount={dailyPlan()?.scheduledPoints.length ?? 0}
-          totalCount={dailyPlan()?.finalPointIds.length ?? 0}
-          pendingPoints={dailyPlan()?.pendingPoints ?? []}
-          loading={optimizationState.isLoadingDailyPlan}
-          pdfDisabled={!dailyPlan()?.id}
-          onRefreshPending={() => void refreshDailyPlan()}
-          onCloseDay={() => void handleCloseDay()}
-          onDownloadPdf={() => void handleDownloadDailyPdf()}
-          noWeeklyApprovedSlot={
-            !optimizationState.isLoadingDailyPlan && !optimizationState.weeklyPlanApproved ? (
-              <Card>
-                <PlanningEmptyState {...PLANNING_EMPTY_PRESETS.noWeeklyApproved} />
-              </Card>
-            ) : undefined
-          }
-        />
       </Show>
 
-      <Show when={tab() === 'historial'}>
-        <OptimizationHistoryPanel onViewDay={handleViewDayFromHistory} />
+      <Show when={planTab() === 'pending'}>
+        <div class="space-y-4">
+          <OptimizationPendingSection
+            operationDate={selectedDate()}
+            openPendingCount={dailyPlan()?.pendingPoints.length ?? 0}
+          />
+          <p class="text-sm text-text-muted">
+            ¿Terminaste con los pendientes?{' '}
+            <A href="/optimization" class="font-medium text-fero-blue hover:underline">
+              Volver a optimizar y despachar
+            </A>
+            .
+          </p>
+        </div>
       </Show>
     </div>
   );

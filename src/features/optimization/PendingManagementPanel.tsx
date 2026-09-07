@@ -1,9 +1,11 @@
-import { For, Show, createEffect, createSignal } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { Button, Card, CardHeader, TextField } from '../../design-system/components';
 import { PlanningStatusBadge } from '../planning/PlanningStatusBadge';
 import {
+  cancelBulkPendingVisits,
   cancelPendingVisit,
   fetchPendingVisits,
+  resolvePendingVisit,
   type PendingVisit,
 } from '../../core/api/planning';
 
@@ -13,13 +15,24 @@ interface PendingManagementPanelProps {
   embedded?: boolean;
 }
 
+function originDaysAgo(iso: string): number {
+  const [year, month, day] = iso.split('-').map(Number);
+  if (!year || !month || !day) return 0;
+  const origin = new Date(year, month - 1, day);
+  const today = new Date();
+  const diff = today.getTime() - origin.getTime();
+  return Math.max(0, Math.floor(diff / 86_400_000));
+}
+
 export function PendingManagementPanel(props: PendingManagementPanelProps) {
   const [items, setItems] = createSignal<PendingVisit[]>([]);
   const [status, setStatus] = createSignal('open');
   const [originFrom, setOriginFrom] = createSignal('');
   const [originTo, setOriginTo] = createSignal('');
   const [loading, setLoading] = createSignal(false);
+  const [acting, setActing] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
+  const [resultMessage, setResultMessage] = createSignal<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -44,14 +57,61 @@ export function PendingManagementPanel(props: PendingManagementPanelProps) {
     void load();
   });
 
-  const handleCancel = async (id: number) => {
-    await cancelPendingVisit(id, 'Cancelado desde planificación operativa');
-    await load();
+  /** Pendientes viejos (sin fecha objetivo, abiertos, origen > 30 días). */
+  const oldOpenIds = createMemo(() =>
+    items()
+      .filter(
+        (visit) =>
+          visit.status === 'open' &&
+          !visit.targetOperationDate &&
+          originDaysAgo(visit.originOperationDate) > 30,
+      )
+      .map((visit) => visit.id),
+  );
+
+  const runAction = async (action: () => Promise<void>) => {
+    setActing(true);
+    setError(null);
+    setResultMessage(null);
+    try {
+      await action();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo completar la acción');
+    } finally {
+      setActing(false);
+    }
   };
+
+  const handleCancel = async (id: number) =>
+    runAction(async () => {
+      await cancelPendingVisit(id, 'Cancelado desde planificación operativa');
+      setResultMessage('Pendiente cancelado.');
+      await load();
+    });
+
+  const handleResolve = async (id: number) =>
+    runAction(async () => {
+      await resolvePendingVisit(id);
+      setResultMessage('Pendiente marcado como ya visitado.');
+      await load();
+    });
+
+  const handleCancelOld = async () =>
+    runAction(async () => {
+      const result = await cancelBulkPendingVisits({ pendingIds: oldOpenIds() });
+      if (result.cancelled > 0) {
+        setResultMessage(
+          `${result.cancelled} pendiente${result.cancelled === 1 ? '' : 's'} antiguo${result.cancelled === 1 ? '' : 's'} cancelado${result.cancelled === 1 ? '' : 's'}.`,
+        );
+      } else {
+        setResultMessage('No había pendientes antiguos que cancelar.');
+      }
+      await load();
+    });
 
   const body = (
     <>
-      <div class="grid gap-3 md:grid-cols-4">
+      <div class="flex flex-wrap items-end gap-2">
         <TextField label="Estado" value={status()} onInput={(e) => setStatus(e.currentTarget.value)} />
         <TextField
           label="Origen desde"
@@ -65,14 +125,27 @@ export function PendingManagementPanel(props: PendingManagementPanelProps) {
           value={originTo()}
           onInput={(e) => setOriginTo(e.currentTarget.value)}
         />
-        <div class="flex items-end">
-          <Button variant="outline" loading={loading()} onClick={() => void load()}>
-            Filtrar
+        <Button variant="outline" loading={loading()} onClick={() => void load()}>
+          Filtrar
+        </Button>
+        <Show when={oldOpenIds().length > 0}>
+          <Button
+            variant="outline"
+            loading={acting()}
+            data-testid="pending-cancel-old"
+            onClick={() => void handleCancelOld()}
+          >
+            Cancelar antiguos (&gt;30 días, sin fecha)
           </Button>
-        </div>
+        </Show>
       </div>
       <Show when={error()}>
         <p class="mt-2 text-sm text-red-500">{error()}</p>
+      </Show>
+      <Show when={resultMessage()}>
+        <p class="mt-2 text-sm font-medium text-fero-green-dark" role="status">
+          {resultMessage()}
+        </p>
       </Show>
       <Show when={items().length === 0 && !loading()}>
         <p class="mt-4 text-sm text-text-muted">No hay pendientes para esta fecha.</p>
@@ -87,11 +160,32 @@ export function PendingManagementPanel(props: PendingManagementPanelProps) {
                   origen {visit.originOperationDate} · prioridad {visit.priority}
                 </span>
                 <PlanningStatusBadge status={visit.status} class="ml-2" />
+                <Show when={originDaysAgo(visit.originOperationDate) > 30}>
+                  <span class="ml-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+                    antiguo
+                  </span>
+                </Show>
               </div>
               <Show when={visit.status === 'open'}>
-                <Button size="sm" variant="outline" onClick={() => void handleCancel(visit.id)}>
-                  Cancelar
-                </Button>
+                <div class="flex items-center gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    loading={acting()}
+                    data-testid={`pending-resolve-${visit.id}`}
+                    onClick={() => void handleResolve(visit.id)}
+                  >
+                    Ya visitado
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    loading={acting()}
+                    onClick={() => void handleCancel(visit.id)}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
               </Show>
             </li>
           )}
@@ -105,12 +199,14 @@ export function PendingManagementPanel(props: PendingManagementPanelProps) {
   }
 
   return (
-    <Card id="pendientes">
-      <CardHeader
-        title="Gestión de pendientes"
-        subtitle={`Carry-over y visitas para el ${props.operationDate}`}
-      />
-      {body}
-    </Card>
+    <div id="pendientes">
+      <Card>
+        <CardHeader
+          title="Gestión de pendientes"
+          subtitle={`Carry-over y visitas para el ${props.operationDate}`}
+        />
+        {body}
+      </Card>
+    </div>
   );
 }

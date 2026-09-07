@@ -38,15 +38,15 @@ import type { KpiMetrics, ScenarioId, AcoConvergencePoint } from '../../data/typ
 import { optimizationLogMessages } from '../../data/mock/kpis';
 import { getScenarioRoutes } from '../../data/mock/routes';
 import { kpiByScenario } from '../../data/mock/kpis';
-import { isPlausibleDailyOptimizationKpis, formatDurationHours, buildRouteResults } from '../utils/optimizationResults';
-import { loadRoutesOnMap, loadRoutesWithRoadSnapping, showOptimizedRoute, appState } from './appStore';
+import { isPlausibleDailyOptimizationKpis, formatDurationHours } from '../utils/optimizationResults';
+import { loadRoutesOnMap, loadRoutesWithRoadSnapping, showOptimizedRoute } from './appStore';
 import { loadDashboardData } from './dashboardStore';
 import { writeLastOptimizedCodes } from '../utils/collectionPointsOptimization';
 import { recordOperationalRun } from '../utils/operationalHistory';
+import { fetchDailyRoutePlayback } from '../api/routePlayback';
 import { globalToast } from './toastStore';
 import type { ExecutionPhaseId } from '../../features/simulation/executionPhases';
 import { resolvePhaseFromLogMessage } from '../../features/simulation/executionPhases';
-import { routeDisplayKind } from '../map/operationalMapLayers';
 
 interface WeekCalendarDay {
   operationDate: string;
@@ -130,16 +130,20 @@ function isOptimizationRunCancelled(): boolean {
   return optimizationCancelRequested;
 }
 
-function resolveVehicleCodesFromState(): string[] {
-  if (!optimizationState.kpis) return [];
-  const optimized =
-    optimizationState.lastResult?.routes.optimized ?? {
-      type: 'FeatureCollection' as const,
-      features: appState.routes.features.filter(
-        (feature) => routeDisplayKind(feature.properties) === 'optimized',
+function resolveVehicleCodesFromDispatchedRoutes(): Promise<string[]> {
+  const planId = optimizationState.dailyPlan?.id;
+  if (!planId) return Promise.resolve([]);
+  return fetchDailyRoutePlayback(planId)
+    .then((playback) =>
+      Array.from(
+        new Set(
+          (playback.routes ?? [])
+            .map((route) => route.vehicleLabel)
+            .filter((label): label is string => Boolean(label)),
+        ),
       ),
-    };
-  return buildRouteResults(optimized, optimizationState.kpis).map((route) => route.id);
+    )
+    .catch(() => []);
 }
 
 function applyOptimizationProgress(
@@ -580,17 +584,18 @@ export async function dispatchOptimizationResult(): Promise<void> {
         ? await dispatchDailyPlanRoutes(optimizationState.dailyPlan.id)
         : await dispatchOptimizationRoutes();
 
-    const vehicleCodes = resolveVehicleCodesFromState();
-    const fallbackCodes =
-      vehicleCodes.length > 0
-        ? vehicleCodes
+    // Camiones reales de las rutas despachadas (playback del plan del día).
+    const dispatchedCodes = await resolveVehicleCodesFromDispatchedRoutes();
+    const vehicleCodes =
+      dispatchedCodes.length > 0
+        ? dispatchedCodes
         : (optimizationState.context?.assignableVehicles ?? []).slice(0, result.count).map((vehicle) => vehicle.id);
 
     setState({
       lastDispatch: {
         count: result.count,
         routeIds: result.dispatchedRouteIds,
-        vehicleCodes: fallbackCodes,
+        vehicleCodes,
         dismissed: false,
       },
       dailyPlan: optimizationState.dailyPlan ? { ...optimizationState.dailyPlan, status: 'dispatched' } : null,
@@ -599,16 +604,16 @@ export async function dispatchOptimizationResult(): Promise<void> {
         {
           id: `log-dispatch-${Date.now()}`,
           timestamp: new Date().toLocaleTimeString('es-VE'),
-          message: `Despachadas ${result.count} ruta(s) optimizada(s) a operación`,
+          message: `Notificadas ${result.count} ruta(s) a conductores`,
           type: 'success',
         },
       ],
     });
 
     const vehicleLabel =
-      fallbackCodes.length > 0 ? fallbackCodes.join(', ') : `${result.count} vehículo(s)`;
+      vehicleCodes.length > 0 ? vehicleCodes.join(', ') : `${result.count} vehículo(s)`;
     globalToast.addToast(
-      `${result.count} ruta${result.count === 1 ? '' : 's'} despachada${result.count === 1 ? '' : 's'} · ${vehicleLabel}`,
+      `${result.count} ruta${result.count === 1 ? '' : 's'} notificada${result.count === 1 ? '' : 's'} a conductores · ${vehicleLabel}`,
       'success',
     );
 

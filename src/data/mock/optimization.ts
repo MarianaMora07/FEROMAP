@@ -3,13 +3,6 @@ export const optimizationPageMeta = {
   subtitle: 'Uso diario de rutas — genere y despache rutas para la operación del día.',
 };
 
-export const optimizationTabs = [
-  { id: 'nueva', label: 'Nueva optimización' },
-  { id: 'historial', label: 'Historial operativo' },
-] as const;
-
-export type OptimizationTabId = (typeof optimizationTabs)[number]['id'];
-
 export const algorithms = [
   { id: 'aco', label: 'Colonia de Hormigas (ACO)' },
   { id: 'ga', label: 'Algoritmo Genético' },

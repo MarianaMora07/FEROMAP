@@ -151,7 +151,7 @@ const DEFAULT_PRESET: OptimizationPreset = {
   algorithm: 'aco',
   objective: 'distance_time',
   kpiView: 'distance',
-  departureHour: 7,
+  departureHour: 9,
   constraints: {
     avoid_traffic: true,
     fill_level: true,

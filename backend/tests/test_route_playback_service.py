@@ -68,7 +68,9 @@ def test_build_daily_route_playback_returns_stops_and_geometry():
     assert len(route_payload["lineCoordinates"]) >= 2
     assert len(route_payload["stops"]) == 2
     assert route_payload["stops"][0]["code"] == "CNT-000"
-    assert route_payload["stops"][0]["serviceMinutes"] == 5
+    # ADR-003 (docs/fase-8/adr-dotacion-tiempo-servicio.md): dotación completa
+    # (6) => BASE_SERVICE_SECONDS = 1200 s => 20 min/parada.
+    assert route_payload["stops"][0]["serviceMinutes"] == 20
     assert route_payload["stops"][0]["stopType"] == "collection"
     assert route_payload["totalDurationMinutes"] == 60
 
@@ -156,7 +158,9 @@ def test_build_daily_route_playback_uses_simulation_shortage_for_service_minutes
         payload = build_daily_route_playback(db, 8)
 
     assert payload["previewMode"] is False
-    assert payload["routes"][0]["stops"][0]["serviceMinutes"] == 6
+    # ADR-003: shortage 2 => dotación efectiva 4 => 2 operarios de campo faltantes
+    # => 1200 + 2×180 = 1560 s => 26 min/parada.
+    assert payload["routes"][0]["stops"][0]["serviceMinutes"] == 26
 
 
 def test_build_daily_route_playback_scopes_to_plan_simulation():

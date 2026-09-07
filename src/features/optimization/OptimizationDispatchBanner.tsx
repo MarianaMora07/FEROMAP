@@ -26,15 +26,16 @@ export function OptimizationDispatchBanner() {
             <CheckCircle2 size={18} class="mt-0.5 shrink-0 text-fero-green-dark" aria-hidden="true" />
             <div>
               <p class="font-semibold">
-                {active().count} ruta{active().count === 1 ? '' : 's'} despachada
-                {active().count === 1 ? '' : 's'}
+                {active().count} ruta{active().count === 1 ? '' : 's'} notificada
+                {active().count === 1 ? '' : 's'} a conductores
                 <Show when={active().vehicleCodes.length > 0}>
                   {' '}
-                  · vehículos {active().vehicleCodes.join(', ')}
+                  · camiones {active().vehicleCodes.join(', ')}
                 </Show>
               </p>
               <p class="text-xs text-text-secondary">
-                Las rutas ya están disponibles para monitoreo en campo.
+                Cada conductor ya puede consultar su recorrido asignado. Sigue el avance en
+                tiempo real desde Monitoreo.
               </p>
             </div>
           </div>
