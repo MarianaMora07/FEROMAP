@@ -112,6 +112,8 @@ def handle_critical_container_recalc(
         weekly_plan_id=plan.weekly_plan_id,
         operation_date=plan.operation_date,
         fleet_limit=exec_ctx.get("fleetLimit"),
+        fleet_by_type=exec_ctx.get("fleetByType"),
+        sector_partition=exec_ctx.get("sectorPartition"),
         contingency_meta={
             "recalcType": "critical_container",
             "collectionPointCode": collection_point_code,

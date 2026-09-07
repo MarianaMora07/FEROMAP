@@ -71,13 +71,19 @@ def test_realistic_optimization_converges_and_builds_driver_plans(capsys):
         assert optimized_km <= current_km * 1.10, (
             f"ACO empeoró demasiado vs baseline: {optimized_km:.1f} vs {current_km:.1f} km"
         )
-        assert float(kpis["durationHours"]["optimized"]) <= 14.0, "jornada irreal (>14 h)"
-
+        # durationHours.optimized es suma de jornadas de TODA la flota (la cota operativa
+        # diaria la aplica is_plausible_daily_optimization_kpis); la jornada "irreal"
+        # (>14 h) se detecta por ruta/conductor, no sobre el agregado.
         assert len(report.driver_rows) >= 1, "debe haber al menos una ruta para conductor"
         for row in report.driver_rows:
             assert row.stops > 0, f"ruta {row.route_id} sin paradas"
             assert row.distance_km > 0
             assert row.duration_h > 0
+
+        longest_jornada_h = max(row.duration_h for row in report.driver_rows)
+        assert longest_jornada_h <= 14.0, (
+            f"jornada irreal (ruta más larga {longest_jornada_h:.1f} h > 14 h)"
+        )
 
         covered_stops = sum(row.stops for row in report.driver_rows)
         assert covered_stops == served, "paradas en rutas ≠ puntos servidos"
