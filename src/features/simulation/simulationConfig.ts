@@ -97,7 +97,7 @@ export const departureHourOptions = [
   { value: '18', label: '18:00 — Pico tarde (×1.25)' },
 ];
 
-export const DEFAULT_DEPARTURE_HOUR = '7';
+export const DEFAULT_DEPARTURE_HOUR = '9';
 
 export function departureHourLabel(value: string): string {
   return departureHourOptions.find((option) => option.value === value)?.label ?? `${value}:00`;

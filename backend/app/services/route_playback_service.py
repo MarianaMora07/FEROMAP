@@ -143,6 +143,7 @@ def _serialize_route(
         "lineCoordinates": line_coordinates,
         "stops": stops,
         "totalDurationMinutes": max(1, int(round(total_seconds / 60))),
+        "distanceKm": round(float(getattr(route, "total_distance_meters", None) or 0) / 1000, 1),
         "startTime": _resolve_start_time(plan, waypoints),
     }
 

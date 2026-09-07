@@ -182,6 +182,10 @@ export function downloadSimulationExport(format: 'csv' | 'pdf', simulationId: nu
   );
 }
 
+export async function fetchSimulationRoutesGeojson(simulationId: number): Promise<RouteCollection> {
+  return apiGet<RouteCollection>(`/api/v1/simulations/${simulationId}/routes.geojson`);
+}
+
 export function downloadSimulationRoutesGeoJSON(simulationId: number): Promise<void> {
   return apiDownload(
     `/api/v1/simulations/${simulationId}/routes.geojson`,

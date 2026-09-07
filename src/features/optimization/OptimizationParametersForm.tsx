@@ -1,6 +1,6 @@
 import { For, Show } from 'solid-js';
 import { A } from '@solidjs/router';
-import { ChevronDown, Loader2, Sparkles } from 'lucide-solid';
+import { ChevronDown, Loader2, RotateCw, Sparkles } from 'lucide-solid';
 import { Button, Card, CardHeader, SelectField } from '../../design-system/components';
 import { canOptimize } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
@@ -81,6 +81,9 @@ export function OptimizationParametersForm(props: OptimizationParametersFormProp
     !optimizationState.isOptimizing &&
     canOptimize(authUser()?.role) &&
     optimizationState.weeklyPlanApproved;
+
+  const hasResults = () => optimizationState.kpis != null;
+  const generateLabel = () => (hasResults() ? 'Regenerar Plan Operativo' : 'Generar Plan Operativo');
 
   return (
     <div ref={props.generateAnchorRef}>
@@ -228,18 +231,20 @@ export function OptimizationParametersForm(props: OptimizationParametersFormProp
               icon={
                 optimizationState.isOptimizing ? (
                   <Loader2 size={18} class="animate-spin" />
+                ) : hasResults() ? (
+                  <RotateCw size={18} />
                 ) : (
                   <Sparkles size={18} />
                 )
               }
               disabled={!canSubmit()}
               title={!optimizationState.weeklyPlanApproved ? 'Falta aprobar plan semanal' : undefined}
-              aria-label="Generar ruta operativa"
+              aria-label={generateLabel()}
               data-testid="optimization-generate-route-form"
             >
               {optimizationState.isOptimizing
                 ? `Ejecutando optimización… ${optimizationState.optimizationProgress}%`
-                : 'Generar ruta operativa'}
+                : generateLabel()}
             </Button>
         </div>
       </form>

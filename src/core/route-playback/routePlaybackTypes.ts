@@ -34,6 +34,8 @@ export interface RoutePlaybackModel {
   lineCoordinates: RoutePlaybackCoordinate[];
   stops: RoutePlaybackStop[];
   totalDurationMinutes: number;
+  /** Kilómetros reales de la ruta (agregado en backend; opcional por retrocompat). */
+  distanceKm?: number;
   startTime?: string | null;
 }
 
