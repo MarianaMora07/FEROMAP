@@ -1,6 +1,6 @@
-# Manual de usuario — FEROMAP (flujo guiado)
+# Manual de usuario — FEROMAP
 
-**Versión:** 1.0 (post Fase 6)  
+**Versión:** 2.0 (alineado con `docs/ux/arquitectura-navegacion.md`)  
 **Rol principal:** Planificador / Administrador  
 **Sistema:** Sistema Basado en IA para Optimización Dinámica de Rutas de Recolección — Parroquia Unare
 
@@ -15,138 +15,129 @@
 |-------|------------|-----|
 | `plan@fero.com` | `123456789` | Planificador |
 | `admin@fero.com` | `123456789` | Administrador |
+| `conductor@fero.com` | `123456789` | Conductor |
+| `residente@fero.com` | `123456789` | Residente |
 
 ---
 
-## 2. ¿Qué módulo usar?
+## 2. Navegación (planificador / administrador)
+
+El menú lateral se organiza por frecuencia de uso:
+
+| Nivel | Ítems |
+|-------|-------|
+| **Primarios** | Dashboard · Plan semanal · Plan del día · Monitoreo en vivo · Mapa GIS |
+| ▸ Consulta y reportes | Historial unificado · Reportes |
+| ▸ Catálogos | Vehículos · Conductores · Puntos de Recolección |
+| ▸ Tesis y demostración | Simulación ACO · Casos de estudio · Demostración ACO |
+
+> El administrador ve etiquetas **demo / producto** junto a cada módulo para distinguir evidencia de tesis del producto operativo.
+
+**¿Qué módulo usar?**
 
 | Necesito… | Vaya a… |
 |-----------|---------|
-| Evaluar escenarios (lluvia, tráfico, saturación) y medir impacto del algoritmo | **Simulación de escenarios** (`/simulation`) |
-| Generar y despachar rutas del día | **Planificación operativa** (`/optimization`) |
-| Ver mapa con contenedores y rutas | **Mapa GIS** (`/map`) |
-| Exportar datos o PDF | **Reportes** (`/reports`) |
-| Tendencias y agregados | **Analítica** (`/analytics`) |
+| Ver qué sigue hoy y el estado de la semana/día | **Dashboard** (`/`) |
+| Aprobar qué puntos visitar cada día de la semana | **Plan semanal** (`/planning/weekly`) |
+| Generar, simular y despachar las rutas del día | **Plan del día** (`/optimization`) |
+| Gestionar visitas pendientes (carry-over) | **Plan del día → pestaña Pendientes** |
+| Ver la flota en el mapa / atender incidencias | **Monitoreo en vivo** (pestañas Mapa en vivo / Incidencias y alertas) |
+| Buscar una semana, un día o una incidencia | **Historial unificado** (`/planning/history`) |
+| Exportar reportes | **Reportes** (`/reports`) |
+| Evaluar el algoritmo (tesis) | **Simulación ACO** (grupo Tesis y demostración) |
+| Consultar mapa de contenedores/rutas | **Mapa GIS** (`/map`) |
 
 ---
 
-## 3. Flujo guiado: Simulación de escenarios
+## 3. Dashboard (hub del día)
 
-### 3.1 Entrada
+El Dashboard **absorbió el antiguo "Hub de planificación"**: al entrar como planificador ve:
 
-- Desde el **Dashboard**, pulse **Nueva simulación**.
-- O use el menú lateral: **Simulación de escenarios**.
+- Encabezado con accesos **Plan semanal** y **Monitoreo**.
+- **Mi planificación**: tarjeta "Qué hacer ahora" (siguiente acción sugerida), stepper **Recorrido operativo del día**, atajos (Semana/Hoy/Pendientes/Historial/Monitoreo) y tarjetas de **Semana actual · Hoy · Pendientes · Incidencias**.
+- Niveles directivo/administrativo/operativo con accesos directos.
+- **Situación operativa** (alertas activas y rutas en curso).
 
-### 3.2 Paso 1 — Configuración
+## 4. Plan semanal — configuración base (nivel directivo)
 
-1. Elija un **escenario base** (Normal, Tráfico pico, Lluvia, etc.) o use **Condiciones a simular** (toggles).
-2. Ajuste parámetros si aplica:
-   - **Intensidad de lluvia** (conectado al motor, solo escenario lluvia).
-   - **Nivel de desechos** (conectado, solo saturación).
-   - **Duración estimada** (informativo).
-3. Revise el panel lateral: vehículos asignables y puntos activos.
-4. Pulse **Continuar**.
+1. Menú primario → **Plan semanal** (`/planning/weekly`).
+2. En **Configurar días**: elija las **zonas** que se cubrirán cada día (una zona añade todos sus puntos y puede repetirse en varios días) y defina la **flota de la semana por tipo** (o use **Todos (por defecto)**). Guarde el borrador.
+3. **Validar** (motor real por día) y luego **Aprobar**. Hasta aprobar, el Plan del día está bloqueado.
+4. Tras aprobar, en el paso final: **Generar plan operativo de la semana** — el sistema optimiza Lun→Vie **en secuencia** (barra de progreso) y muestra la tabla **Camión × Día** (km, duración y puntos por camión).
+5. Desde esa tabla puede **Abrir día** (ir a `/optimization` de esa fecha) y **Notificar** a los conductores **por día o toda la semana** (la acción pide confirmación; es irreversible por día).
+6. Consulte **Versiones** y **Exportar PDF** en la etapa de configuración.
 
-### 3.3 Paso 2 — Revisión y ejecución
+## 5. Plan del día (uso diario)
 
-1. Confirme escenario derivado y recursos.
-2. Pulse **Ejecutar simulación**.
-3. Observe la barra de progreso y los logs del motor ACO.
+1. Menú primario → **Plan del día** (`/optimization`).
+2. Pestaña **Optimizar y despachar**:
+   1. Seleccione la **fecha de operación** (calendario superior).
+   2. Pulse **Generar Plan Operativo** (optimización ACO real, sin envío a campo); si el día ya tiene corrida el botón dice **Regenerar Plan Operativo**.
+   3. Revise los resultados: **Resumen**, **Comparación (Baseline vs ACO)**, **Desglose**, **Convergencia** y **Rutas por vehículo**.
+   4. Cuando esté conforme, **Notificar a conductores** (aparece solo después de generar) — asigna las rutas y avisa a los conductores. Después el botón pasa a **Monitoreo**.
+   5. Para ver el recorrido animado use el enlace/playback del mapa (`?playback=1`).
+   6. Al finalizar la jornada, use **Cerrar día** desde el menú **⋯** (arriba a la derecha).
+3. Pestaña **Pendientes**: gestiona visitas no cubiertas (carry-over) que pasan al siguiente día. Puede **Cancelar antiguos (>30 días, sin fecha)**, marcar un pendiente como **Ya visitado**, o **Cancelar** uno puntual. Los que deja abiertos se incorporan solos al regenerar.
 
-### 3.4 Paso 3 — Resultados e impacto
+## 6. Monitoreo en vivo
 
-- Resumen ejecutivo y KPIs (ruta actual vs simulada).
-- Mapa con rutas optimizadas.
-- Barra **¿Qué quieres hacer ahora?**:
-  - Ver en mapa
-  - Ver en analítica
-  - Ir a reportes
-  - Descargar CSV / PDF
-  - Nueva simulación
-  - Despachar en planificación operativa (enlace al módulo operativo)
+- Pestaña **Mapa en vivo**: flota sobre el mapa, lista de vehículos con progreso, controles de reproducción y avance.
+- Pestaña **Incidencias y alertas**: reportar avería, recálculo de contenedores críticos, actividades y alertas, e incidencias recientes.
+- El rol **conductor** opera desde **Mi operación** (`/operator`), no desde Monitoreo.
 
-### 3.5 Historial
+## 7. Historial unificado
 
-- En `/simulation`, pestaña **Historial**.
-- Desde una fila: ver resultados, analítica, reportes.
-- URL directa: `/simulation?view=history`.
+`/planning/history` — un solo buscador por **semana**, **día** o **incidencia**, con deep links a cada plan del día o corrida ACO vinculada.
 
----
+## 8. Simulación ACO (tesis)
 
-## 4. Planificación operativa (uso diario)
+Grupo **Tesis y demostración → Simulación ACO** (`/simulation`):
 
-1. Menú → **Planificación operativa**.
-2. Lea el banner: para evaluar escenarios, use Simulación.
-3. Configure **fecha de operación** (persistida en el servidor).
-4. Revise el panel **Plan del día**: puntos programados + pendientes de días anteriores.
-5. Pulse **Generar ruta operativa** (optimización sin despacho automático). Durante el cálculo verá la **fase actual del motor** y el progreso en tiempo real.
-6. Revise el mensaje **«Mejor ruta encontrada (ACO)»** — es una solución heurística de alta calidad, no una garantía de optimalidad global.
-7. Pulse **Despachar rutas** en un paso separado. Aparecerá un aviso con los vehículos despachados y un enlace a **Monitoreo**.
-8. Al finalizar la jornada, use **Cerrar día** para generar pendientes del día siguiente.
-9. El **Historial operativo** solo lista corridas iniciadas desde esta pantalla.
+- Pestaña **Baseline vs ACO**: configura escenario (condiciones, parámetros αβρ, dotación) → ejecuta → KPIs comparativos y exportaciones.
+- Pestaña **Historial**: corridas anteriores con `?simulationId=…` para abrir resultados directo.
 
-### 4.1 Plan semanal (nivel directivo)
+> La simulación **no despacha rutas** ni sustituye la operación diaria (banner explícito). El plan semanal vive en su módulo propio (`/planning/weekly`); las URLs antiguas `?view=weekly` redirigen solas.
 
-1. Menú → **Simulación de escenarios** → pestaña **Plan semanal** (`/simulation?view=weekly`).
-2. Asigne puntos por día de la semana (lun–vie).
-3. **Validar con simulación** (sin despacho).
-4. **Aprobar plan** para habilitar la planificación diaria.
+## 9. Catálogos
 
-### 4.2 Frecuencias por punto
+**Vehículos**, **Conductores** y **Puntos de Recolección** (grupo Catálogos) se gestionan poco:
 
-En **Puntos de Recolección**, seleccione un punto y configure **Frecuencia semanal** (visitas/semana y días lun–dom). Estas frecuencias alimentan el botón **Autocompletar desde frecuencias** en el plan semanal.
+- Vehículos: estado/disponibilidad y edición (sin alta/baja masiva). En el detalle de cada vehículo, la pestaña **Territorio** fija los **sectores preferentes** de ese camión (vía su conductor): el motor los respeta cuando el día tiene territorio completo; si no, el ACO reparte libre.
+- Conductores: crear/editar y asignar credencial.
+- Puntos de Recolección: CRUD completo, ubicación en mapa y **frecuencias semanales** por punto (alimentan el Autocompletar del Plan semanal).
 
-### 4.3 Versiones y reportes
+**Alertas** se atienden desde los paneles del Dashboard/Monitoreo (no tiene ítem propio en este menú).
 
-- En **Plan semanal**: **Ver versiones**, comparar cambios y **Exportar PDF**.
-- En **Planificación operativa**: **Exportar PDF del día** y panel de **Gestión de pendientes** con filtros.
+## 10. Reportes y administración
 
----
+- **Reportes**: período → Generar/Descargar (CSV/PDF) → Guardados.
+- **Administración** (solo admin): General · Usuarios y Roles · Auditoría (sin pestañas placeholder).
+- La **Analítica** con datos ilustrativos ya no está en el menú; usa Reportes o el Dashboard para KPIs.
 
-## 5. Dashboard
+## 11. Conductor y residente
 
-- **Nueva simulación** — flujo principal.
-- **Planificación operativa** — operación del día.
-- Tarjeta **Última simulación** — enlaces a resultados, analítica y reportes.
+| Rol | Home | Menú |
+|-----|------|------|
+| Conductor | `/operator` — Mi operación (ruta del día, averías) | Mi operación · Mapa GIS · Alertas |
+| Residente | `/resident` — Mi Recolección (horario, camión, sector) | Mi zona · Mapa mi sector · Puntos · Alertas |
 
----
-
-## 6. Reportes y analítica
-
-- **Reportes:** seleccione período y exporte CSV o PDF.
-- **Analítica:** filtros por fecha y sector; mapa de calor.
-- Si llega desde una simulación (`?simulationId=…`), verá un banner para volver a resultados.
-
----
-
-## 7. Solución de problemas
+## 12. Solución de problemas
 
 | Problema | Acción |
 |----------|--------|
-| No puedo ejecutar simulación | Verifique que hay vehículos asignables y puntos activos (panel lateral). |
+| No puedo ejecutar simulación | Verifique vehículos asignables y puntos activos (panel lateral). |
+| Plan del día bloqueado | Falta aprobar el Plan semanal (bandera directiva). |
 | Error al cargar | `just health` y `just defense-verify` en el servidor. |
-| Pantalla en blanco tras login | Compruebe que el stack está levantado (`just up`). |
+| Pantalla en blanco tras login | Compruebe el stack (`just up`). |
 
----
+## 13. Modo oscuro
 
-## 8. Modo oscuro integrado
+- Alternar claro/oscuro: menú del usuario (esquina superior).
+- Elegir Sistema/Claro/Oscuro: **Perfil → Preferencias del sistema → Tema → Guardar** (persiste tras F5).
 
-FEROMAP incluye un **modo oscuro integrado** alineado con la interfaz operativa (sidebar navy, contenido slate, acentos verde FERO).
+## 14. Documentación relacionada
 
-| Acción | Dónde |
-|--------|--------|
-| Alternar claro / oscuro | Menú lateral → **Modo oscuro** / **Modo claro** |
-| Elegir Sistema, Claro u Oscuro | **Perfil** → Preferencias del sistema → **Tema** → Guardar |
-
-- **Sistema:** sigue la preferencia de su dispositivo.
-- La elección se **guarda en su perfil** y se mantiene tras recargar la página (F5).
-- En modo oscuro, el sidebar usa tono navy; el ítem activo se resalta en **verde FERO** con texto legible.
-
----
-
-## 9. Documentación relacionada
-
+- [Arquitectura de navegación (fuente de verdad IA)](../ux/arquitectura-navegacion.md)
+- [Estado de módulos (matriz de trazabilidad)](../estado-modulos.md)
 - [Guión demo defensa](./guion-demo-defensa.md)
-- [Diagrama navegación Opción A](./diagrama-navegacion-opcion-a.md)
-- [Matriz responsabilidades](../fase-5/matriz-responsabilidades-modulos.md)
 - [Checklist aceptación](../fase-0/checklist-aceptacion-defensa.md)
