@@ -1,8 +1,8 @@
 import { For, Show } from 'solid-js';
 import { Archive, GitCompare, Plus } from 'lucide-solid';
-import { Button, Card, CardHeader } from '../../design-system/components';
-import { isCurrentWeek } from '../../core/api/planning';
-import { PLANNING_EMPTY_PRESETS } from '../../core/planning/planningEmptyStates';
+import { Button, Card, CardHeader } from '../../../design-system/components';
+import { isCurrentWeek } from '../../../core/api/planning';
+import { PLANNING_EMPTY_PRESETS } from '../../../core/planning/planningEmptyStates';
 import {
   archiveSelectedWeeklyPlan,
   canArchivePlan,
@@ -12,9 +12,9 @@ import {
   createNextWeekDraft,
   selectWeeklyPlan,
   weeklyPlanState,
-} from '../../core/stores/weeklyPlanStore';
-import { PlanningStatusBadge } from '../planning/PlanningStatusBadge';
-import { PlanningEmptyState } from '../planning/PlanningEmptyState';
+} from '../../../core/stores/weeklyPlanStore';
+import { PlanningStatusBadge } from '../PlanningStatusBadge';
+import { PlanningEmptyState } from '../PlanningEmptyState';
 
 export function WeeklyPlanListPanel() {
   const sortedHistory = () =>

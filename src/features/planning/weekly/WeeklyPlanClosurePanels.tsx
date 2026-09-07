@@ -5,8 +5,8 @@ import {
   weeklyPlanValidationWorkdayWarning,
   type WeeklyPlanPostApprovalStep,
   type WeeklyPlanValidationSummary,
-} from '../../core/planning/weeklyPlanUx';
-import { simulationResultsHref } from '../../core/utils/simulationLinks';
+} from '../../../core/planning/weeklyPlanUx';
+import { simulationResultsHref } from '../../../core/utils/simulationLinks';
 
 interface WeeklyPlanValidationResultPanelProps {
   summary: WeeklyPlanValidationSummary;

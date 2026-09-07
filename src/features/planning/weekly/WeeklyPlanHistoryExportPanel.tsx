@@ -1,7 +1,7 @@
 import { ChevronDown, FileText, GitCompare } from 'lucide-solid';
 import { For, Show } from 'solid-js';
-import { Button, TextField } from '../../design-system/components';
-import type { PlanVersion } from '../../core/api/planning';
+import { Button, TextField } from '../../../design-system/components';
+import type { PlanVersion } from '../../../core/api/planning';
 
 interface WeeklyPlanHistoryExportPanelProps {
   planId?: number;

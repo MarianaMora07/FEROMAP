@@ -1,8 +1,8 @@
 import { A } from '@solidjs/router';
 import { ArrowRight } from 'lucide-solid';
 import { Show } from 'solid-js';
-import { Button } from '../../design-system/components';
-import type { WeeklyPlanNextAction } from '../../core/planning/weeklyPlanUx';
+import { Button } from '../../../design-system/components';
+import type { WeeklyPlanNextAction } from '../../../core/planning/weeklyPlanUx';
 
 const toneClass = {
   warning: 'border-amber-300/60 bg-amber-50/90 dark:border-amber-900/40 dark:bg-amber-950/25',

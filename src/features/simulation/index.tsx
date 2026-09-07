@@ -57,7 +57,7 @@ import {
 import { parseSimulationIdParam, parseCaseStudyIdParam } from '../../core/utils/simulationLinks';
 import { fetchCaseStudyDetail, type CaseStudyDetail } from '../../core/api/caseStudies';
 import { applyCaseStudyToWizard } from '../../core/utils/caseStudySimulation';
-import { CaseStudySelector } from './CaseStudySelector';
+import { CaseStudySelector } from '../case-studies/CaseStudySelector';
 import { ContingencyResultBanner } from '../contingency/BreakdownReporter';
 import type { ScenarioId } from '../../data/types/simulation';
 import { ConfigurationSummaryPanel } from './ConfigurationSummaryPanel';
@@ -507,9 +507,6 @@ export default function SimulationPage() {
       }
       if (params.view === 'history') {
         setPageTab('history');
-      }
-      if (params.view === 'weekly') {
-        setPageTab('weekly');
       }
     });
 

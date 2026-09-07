@@ -1,23 +1,24 @@
 import { A } from '@solidjs/router';
 import { ArrowRight, CheckCircle2 } from 'lucide-solid';
 import { For, Show } from 'solid-js';
-import { Button, LoadingPanel } from '../../design-system/components';
-import { optimizationDateHref, todayIso } from '../../core/planning/planningUx';
-import { formatWeekdayLabel } from '../../core/planning/weeklyPlanCalendar';
+import { Button, LoadingPanel } from '../../../design-system/components';
+import { optimizationDateHref, todayIso } from '../../../core/planning/planningUx';
+import { formatWeekdayLabel } from '../../../core/planning/weeklyPlanCalendar';
 import {
   buildWeeklyPlanPostApprovalChecklist,
   weeklyPlanApproveBlockReason,
   weeklyPlanScheduledPointCount,
-} from '../../core/planning/weeklyPlanUx';
-import type { WeeklyPlan } from '../../core/api/planning';
-import type { ScenarioId } from '../../data/types/simulation';
-import { weeklyPlanState } from '../../core/stores/weeklyPlanStore';
+} from '../../../core/planning/weeklyPlanUx';
+import type { WeeklyPlan } from '../../../core/api/planning';
+import type { ScenarioId } from '../../../data/types/simulation';
+import { weeklyPlanState } from '../../../core/stores/weeklyPlanStore';
 import { WeeklyPlanConfigurePanel } from './WeeklyPlanConfigurePanel';
 import {
   WeeklyPlanApproveBlockedPanel,
   WeeklyPlanPostApprovalChecklist,
   WeeklyPlanValidationResultPanel,
 } from './WeeklyPlanClosurePanels';
+import { WeeklyPlanOperationalSection } from './WeeklyPlanOperationalSection';
 
 interface WeeklyPlanStepPanelsProps {
   step: number;
@@ -156,6 +157,10 @@ export function WeeklyPlanStepPanels(props: WeeklyPlanStepPanelsProps) {
 
           <Show when={props.plan.status === 'approved'}>
             <WeeklyPlanPostApprovalChecklist steps={postApprovalSteps()} />
+            <WeeklyPlanOperationalSection
+              planId={props.plan.id}
+              operationalPlan={props.plan.operationalPlan ?? null}
+            />
             <A href={optimizationDateHref(todayIso())}>
               <Button variant="primary" class="gap-2" data-testid="weekly-plan-primary-cta">
                 Ir a planificación operativa

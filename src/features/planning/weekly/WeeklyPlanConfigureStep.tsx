@@ -1,17 +1,17 @@
 import { AlertTriangle } from 'lucide-solid';
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
-import type { WeeklyPlan, WeeklyPlanDay } from '../../core/api/planning';
-import type { PlanningCollectionPointRef } from '../../core/api/collectionPoints';
-import type { ScenarioId } from '../../data/types/simulation';
+import type { WeeklyPlan, WeeklyPlanDay } from '../../../core/api/planning';
+import type { PlanningCollectionPointRef } from '../../../core/api/collectionPoints';
+import type { ScenarioId } from '../../../data/types/simulation';
 import {
   findWeeklyPlanMissingFromSchedules,
   formatWeekdayLabel,
   weeklyPlanDayLoadLevel,
   weeklyPlanLoadCardClass,
   type WeeklyPlanLoadLevel,
-} from '../../core/planning/weeklyPlanCalendar';
-import { getCollectionPointRef, weeklyPlanState } from '../../core/stores/weeklyPlanStore';
-import { Button, Drawer, SelectField, TextField } from '../../design-system/components';
+} from '../../../core/planning/weeklyPlanCalendar';
+import { getCollectionPointRef, weeklyPlanState } from '../../../core/stores/weeklyPlanStore';
+import { Button, Drawer, SelectField, TextField } from '../../../design-system/components';
 
 interface WeeklyPlanWeekCalendarProps {
   days: WeeklyPlanDay[];
@@ -72,6 +72,9 @@ export function WeeklyPlanWeekCalendar(props: WeeklyPlanWeekCalendarProps) {
                 <p class="text-xs opacity-80">puntos</p>
                 <Show when={day.expectedVehicleCount != null}>
                   <p class="mt-2 text-[11px] opacity-80">Flota {day.expectedVehicleCount}</p>
+                </Show>
+                <Show when={(day.sectorIds?.length ?? 0) > 0}>
+                  <p class="text-[11px] opacity-70">Zonas {day.sectorIds?.length ?? 0}</p>
                 </Show>
               </button>
             );
@@ -246,14 +249,49 @@ export function WeeklyPlanDayEditorDrawer(props: WeeklyPlanDayEditorDrawerProps)
     );
   });
 
-  const assignedPoints = createMemo(() =>
-    selectedIds()
-      .map((id) => {
-        const ref = props.catalog.find((point) => point.id === id) ?? getCollectionPointRef(id);
-        return ref ? { id, code: ref.code, sectorName: ref.sectorName } : null;
-      })
-      .filter((row): row is { id: number; code: string; sectorName?: string | null } => row != null),
-  );
+  type AssignedRow = { id: number; code: string; sectorName?: string | null };
+  const assignedPoints = createMemo<AssignedRow[]>(() => {
+    const rows: Array<AssignedRow | null> = selectedIds().map((id) => {
+      const ref = props.catalog.find((point) => point.id === id) ?? getCollectionPointRef(id);
+      return ref ? { id, code: ref.code, sectorName: ref.sectorName } : null;
+    });
+    return rows.filter((row): row is AssignedRow => row != null);
+  });
+
+  // Zonas (sectores) disponibles en el catálogo para elegir por día. Se agrupan por
+  // id numérico de sector cuando está disponible (persistible en sectorIds); si no,
+  // se cae al nombre como clave estable.
+  const sectorGroups = createMemo(() => {
+    const byKey = new Map<string, { name: string; ids: number[] }>();
+    for (const point of props.catalog) {
+      const name = point.sectorName ?? 'Sin sector';
+      const key = point.sectorId ? `sector:${point.sectorId}` : `name:${name}`;
+      const group = byKey.get(key) ?? { name, ids: [] };
+      group.ids.push(point.id);
+      byKey.set(key, group);
+    }
+    return Array.from(byKey.entries())
+      .map(([key, group]) => ({
+        key,
+        name: group.name,
+        ids: group.ids,
+        sectorId: key.startsWith('sector:') ? Number(key.slice('sector:'.length)) : null,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  });
+
+  const sectorIncludedCount = (ids: number[]) =>
+    ids.filter((id) => selectedIds().includes(id)).length;
+
+  const toggleSector = (group: { ids: number[]; active: boolean }) => {
+    setSelectedIds((current) => {
+      if (group.active) {
+        return current.filter((id) => !group.ids.includes(id));
+      }
+      const missing = group.ids.filter((id) => !current.includes(id));
+      return [...current, ...missing];
+    });
+  };
 
   const togglePoint = (pointId: number) => {
     setSelectedIds((current) =>
@@ -261,9 +299,17 @@ export function WeeklyPlanDayEditorDrawer(props: WeeklyPlanDayEditorDrawerProps)
     );
   };
 
+  const coveredSectorIds = createMemo(() =>
+    sectorGroups()
+      .filter((group) => group.ids.length > 0 && sectorIncludedCount(group.ids) === group.ids.length)
+      .map((group) => group.sectorId)
+      .filter((id): id is number => id != null),
+  );
+
   const handleApply = () => {
     const fleet = expectedVehicleCount().trim();
     props.onApply({
+      sectorIds: coveredSectorIds(),
       collectionPointIds: selectedIds(),
       expectedVehicleCount: fleet ? Number(fleet) : null,
       scenarioIdOverride: scenarioOverride() || null,
@@ -318,6 +364,46 @@ export function WeeklyPlanDayEditorDrawer(props: WeeklyPlanDayEditorDrawerProps)
 
             <Show when={props.editable && !props.caseStudyLinked}>
               <div class="space-y-3">
+                <div>
+                  <p class="text-sm font-semibold text-text-primary dark:text-white">
+                    Zonas que se cubren este día
+                  </p>
+                  <p class="mt-0.5 text-xs text-text-muted">
+                    Elegir una zona añade todos sus puntos al día. Puedes cubrir la misma zona en varios
+                    días de la semana.
+                  </p>
+                  <div class="mt-2 flex max-h-72 flex-wrap gap-2 overflow-y-auto pr-1">
+                    <For each={sectorGroups()}>
+                      {(group) => {
+                        const included = sectorIncludedCount(group.ids);
+                        const active = included === group.ids.length && group.ids.length > 0;
+                        return (
+                          <button
+                            type="button"
+                            aria-pressed={active}
+                            data-testid={`weekly-day-sector-${group.sectorId ?? group.name}`}
+                            onClick={() => toggleSector({ ids: group.ids, active })}
+                            class={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                              active
+                                ? 'border-fero-green/40 bg-fero-green/15 text-fero-green-dark dark:border-fero-green/60 dark:text-fero-green'
+                                : 'border-default text-text-secondary hover:bg-surface/70 dark:hover:bg-dark-surface-hover'
+                            }`}
+                          >
+                            <span>{group.name}</span>
+                            <span
+                              class={`rounded-full px-1.5 text-[10px] font-semibold ${
+                                active ? 'bg-fero-green/15' : 'bg-app/60'
+                              }`}
+                            >
+                              {included}/{group.ids.length}
+                            </span>
+                          </button>
+                        );
+                      }}
+                    </For>
+                  </div>
+                </div>
+
                 <TextField
                   label="Buscar en catálogo"
                   value={search()}
@@ -349,13 +435,18 @@ export function WeeklyPlanDayEditorDrawer(props: WeeklyPlanDayEditorDrawerProps)
 
             <Show when={props.editable}>
               <div class="grid gap-3 sm:grid-cols-2">
-                <TextField
-                  label="Flota esperada (opcional)"
-                  type="number"
-                  min="1"
-                  value={expectedVehicleCount()}
-                  onInput={(e) => setExpectedVehicleCount(e.currentTarget.value)}
-                />
+                <div>
+                  <TextField
+                    label="Límite de vehículos del día (opcional)"
+                    type="number"
+                    min="1"
+                    value={expectedVehicleCount()}
+                    onInput={(e) => setExpectedVehicleCount(e.currentTarget.value)}
+                  />
+                  <p class="mt-1 text-[11px] text-text-muted">
+                    Vacío = usar la flota configurada para la semana.
+                  </p>
+                </div>
                 <SelectField
                   label="Escenario del día (opcional)"
                   value={scenarioOverride()}
