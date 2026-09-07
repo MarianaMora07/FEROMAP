@@ -58,10 +58,11 @@ import { VehicleActionsMenu } from './VehicleActionsMenu';
 import { VehicleEditModal } from './VehicleEditModal';
 import { VehicleMaintenancePanel } from './VehicleMaintenancePanel';
 import { VehicleOptimizationBadges } from './VehicleOptimizationBadges';
+import { VehicleTerritoryPanel } from './VehicleTerritoryPanel';
 import { FleetStatsStrip, VehiclesFleetIntro } from './VehiclesFleetIntro';
 
 const implementedDetailTabs = vehicleDetailTabs.filter(
-  (tab) => tab.id === 'info' || tab.id === 'maintenance',
+  (tab) => tab.id === 'info' || tab.id === 'maintenance' || tab.id === 'territory',
 );
 
 function fuelBarColor(pct: number): 'green' | 'amber' | 'red' {
@@ -579,7 +580,7 @@ export default function VehiclesPage() {
                   </div>
 
                   <div class="mb-4 grid grid-cols-2 border-b border-border dark:border-dark-border">
-                    <For each={[...implementedDetailTabs]}>
+                    <For each={[...implementedDetailTabs].filter((tab) => tab.id !== 'territory' || canManage())}>
                       {(tab) => (
                         <button
                           type="button"
@@ -674,6 +675,10 @@ export default function VehiclesPage() {
                       loading={vehicleIncidents.loading}
                       error={vehicleIncidents.error}
                     />
+                  </Show>
+
+                  <Show when={detailTab() === 'territory'}>
+                    <VehicleTerritoryPanel vehicle={v()} editable={canManage()} />
                   </Show>
                 </div>
 

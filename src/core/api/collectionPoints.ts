@@ -86,6 +86,16 @@ export interface PlanningCollectionPointRef {
   id: number;
   code: string;
   sectorName?: string | null;
+  /** Id numérico del sector (desde /collection-points/sector-options). Null si no resuelto. */
+  sectorId?: number | null;
+}
+
+function normalizeSectorName(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
 }
 
 function resolvePlanningCollectionPointId(
@@ -104,20 +114,21 @@ function resolvePlanningCollectionPointId(
   return fallbackIndex + 1;
 }
 
-export function fetchCollectionPointsForPlanning(): Promise<PlanningCollectionPointRef[]> {
-  return fetchCollectionPoints().then((geo) =>
-    geo.features
-      .map((feature, index) => {
-        const id = resolvePlanningCollectionPointId(feature.properties, index);
-        if (id == null) return null;
-        return {
-          id,
-          code: String(feature.properties.id),
-          sectorName: feature.properties.sector,
-        };
-      })
-      .filter((row): row is PlanningCollectionPointRef => row != null),
-  );
+export async function fetchCollectionPointsForPlanning(): Promise<PlanningCollectionPointRef[]> {
+  const [geo, sectorOptions] = await Promise.all([fetchCollectionPoints(), fetchSectorOptions()]);
+  const sectorIdByName = new Map(sectorOptions.map((sector) => [normalizeSectorName(sector.name), sector.id]));
+  const rows: Array<PlanningCollectionPointRef | null> = geo.features.map((feature, index) => {
+    const id = resolvePlanningCollectionPointId(feature.properties, index);
+    if (id == null) return null;
+    const sectorName = feature.properties.sector ?? null;
+    return {
+      id,
+      code: String(feature.properties.id),
+      sectorName,
+      sectorId: sectorName ? (sectorIdByName.get(normalizeSectorName(sectorName)) ?? null) : null,
+    } satisfies PlanningCollectionPointRef;
+  });
+  return rows.filter((row): row is PlanningCollectionPointRef => row != null);
 }
 
 export interface SectorOption {

@@ -31,6 +31,7 @@ export interface Vehicle {
 export const vehicleDetailTabs = [
   { id: 'info', label: 'Información' },
   { id: 'maintenance', label: 'Mantenimiento' },
+  { id: 'territory', label: 'Territorio' },
   { id: 'history', label: 'Historial' },
   { id: 'docs', label: 'Documentos' },
 ] as const;
