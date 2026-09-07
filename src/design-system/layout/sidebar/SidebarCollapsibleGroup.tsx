@@ -13,6 +13,7 @@ interface SidebarCollapsibleGroupProps {
   items: NavItemDef[];
   defaultOpen?: boolean;
   iconMap: Record<string, IconComponent>;
+  showKinds?: boolean;
 }
 
 export function SidebarCollapsibleGroup(props: SidebarCollapsibleGroupProps) {
@@ -53,6 +54,7 @@ export function SidebarCollapsibleGroup(props: SidebarCollapsibleGroupProps) {
                   icon={Icon ? <Icon size={18} class="shrink-0" /> : null}
                   label={item.label}
                   description={item.description}
+                  kind={props.showKinds ? (item.kind ?? 'producto') : undefined}
                 />
               );
             }}

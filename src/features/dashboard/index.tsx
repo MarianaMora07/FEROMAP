@@ -7,9 +7,12 @@ import {
   TrafficCone,
   CirclePause,
   ArrowRight,
+  CalendarDays,
+  Radio,
 } from 'lucide-solid';
 import {
   Badge,
+  Button,
   Card,
   CardHeader,
   KpiCard,
@@ -23,7 +26,8 @@ import {
   recentAlerts as mockRecentAlerts,
 } from '../../data/mock/dashboard';
 import { dashboardView, loadDashboardData } from '../../core/stores/dashboardStore';
-import { PlanningWidgets } from './PlanningWidgets';
+import { PlannerHubSection } from '../planning/PlannerHubSection';
+import { weeklyPlanHref } from '../../core/planning/weeklyPlanLinks';
 import { OperationalSituationPanel } from './OperationalSituationPanel';
 import { OperatorHubSection } from '../operator/OperatorHubSection';
 import { ResidentHubSection } from '../resident/ResidentHubSection';
@@ -78,7 +82,31 @@ export default function DashboardPage() {
       </Show>
 
       <Show when={showPlannerActions()}>
-        <PlanningWidgets />
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-wide text-fero-green-dark">
+              Panel del planificador
+            </p>
+            <h1 class="font-heading text-2xl font-bold text-text-primary dark:text-white">Dashboard</h1>
+            <p class="mt-1 text-sm text-text-secondary">
+              Planifica tu jornada: de la aprobación semanal al despacho del día y el monitoreo de la flota.
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <A href={weeklyPlanHref}>
+              <Button variant="primary" size="sm" class="gap-2" icon={<CalendarDays size={14} />}>
+                Plan semanal
+              </Button>
+            </A>
+            <A href="/monitoring">
+              <Button variant="outline" size="sm" class="gap-2" icon={<Radio size={14} />}>
+                Monitoreo
+              </Button>
+            </A>
+          </div>
+        </div>
+
+        <PlannerHubSection />
         <OperationalSituationPanel />
       </Show>
 

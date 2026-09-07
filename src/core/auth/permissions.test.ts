@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEMO_NAV_HIDDEN_HREFS, sidebarNavLayout } from './permissions';
 
-describe('permissions — demo navigation (B3)', () => {
+describe('permissions — arquitectura de navegación (IA)', () => {
   it('hides analytics from planner sidebar', () => {
     const layout = sidebarNavLayout('planificador');
     const hrefs = layout.sections.flatMap((section) => section.items.map((item) => item.href));
@@ -9,20 +9,82 @@ describe('permissions — demo navigation (B3)', () => {
     expect(DEMO_NAV_HIDDEN_HREFS.has('/analytics')).toBe(true);
   });
 
-  it('lists Operación before Análisis in sidebar sections', () => {
+  it('orders planner primaries as planificar → operar → supervisar', () => {
     const layout = sidebarNavLayout('planificador');
-    expect(layout.sections[0]?.label).toBe('Operación');
-    expect(layout.sections[1]?.label).toBe('Análisis');
-    expect(layout.sections[0]?.items.map((item) => item.href)).toContain('/planning');
-    expect(layout.sections[0]?.items.map((item) => item.href)).toContain('/monitoring');
+    expect(layout.primary.map((item) => item.href)).toEqual([
+      '/',
+      '/planning/weekly',
+      '/optimization',
+      '/monitoring',
+      '/map',
+    ]);
+  });
+
+  it('groups sections as Consulta y reportes, Catálogos, Tesis y demostración', () => {
+    const layout = sidebarNavLayout('planificador');
+    expect(layout.sections.map((section) => section.label)).toEqual([
+      'Consulta y reportes',
+      'Catálogos',
+      'Tesis y demostración',
+    ]);
+
+    const [reportes, catalogos, tesis] = layout.sections;
+    expect(reportes.items.map((item) => item.href)).toEqual(['/planning/history', '/reports']);
+    expect(catalogos.items.map((item) => item.href)).toEqual([
+      '/vehicles',
+      '/drivers',
+      '/collection-points',
+    ]);
+    expect(tesis.items.map((item) => item.href)).toEqual([
+      '/simulation',
+      '/case-studies',
+      '/demostracion',
+    ]);
+  });
+
+  it('removes hub, levels y alertas del menú del planificador (Fase 1)', () => {
+    const layout = sidebarNavLayout('planificador');
+    const hrefs = [
+      ...layout.primary.map((item) => item.href),
+      ...layout.sections.flatMap((section) => section.items.map((item) => item.href)),
+    ];
+    expect(hrefs).not.toContain('/planning');
+    expect(hrefs).not.toContain('/optimization/levels');
+    expect(hrefs).not.toContain('/alerts');
   });
 
   it('labels thesis simulation module distinctly', () => {
     const layout = sidebarNavLayout('planificador');
-    const analysisItems = layout.sections.find((section) => section.label === 'Análisis')?.items ?? [];
-    const simulation = analysisItems.find((item) => item.href === '/simulation');
-    expect(simulation?.label).toBe('Simulación de tesis');
-    const demo = analysisItems.find((item) => item.href === '/demostracion');
+    const tesisItems = layout.sections.find((section) => section.label === 'Tesis y demostración')?.items ?? [];
+    const simulation = tesisItems.find((item) => item.href === '/simulation');
+    expect(simulation?.label).toBe('Simulación ACO');
+    const demo = tesisItems.find((item) => item.href === '/demostracion');
     expect(demo?.label).toBe('Demostración ACO');
+  });
+
+  it('marca los módulos de tesis con kind demo (badge solo admin)', () => {
+    const layout = sidebarNavLayout('planificador');
+    const tesisItems = layout.sections.find((section) => section.label === 'Tesis y demostración')?.items ?? [];
+    expect(tesisItems.every((item) => item.kind === 'demo')).toBe(true);
+    const planSemanal = layout.primary.find((item) => item.href === '/planning/weekly');
+    expect(planSemanal?.kind).toBeUndefined(); // 'producto' es el valor por defecto al renderizar
+  });
+
+  it('keeps alertas en la nav de conductor y residente', () => {
+    const operator = sidebarNavLayout('conductor');
+    const operatorHrefs = [
+      ...operator.primary.map((item) => item.href),
+      ...operator.sections.flatMap((section) => section.items.map((item) => item.href)),
+    ];
+    expect(operatorHrefs).toContain('/alerts');
+    expect(operatorHrefs).not.toContain('/simulation');
+
+    const resident = sidebarNavLayout('residente');
+    const residentHrefs = [
+      ...resident.primary.map((item) => item.href),
+      ...resident.sections.flatMap((section) => section.items.map((item) => item.href)),
+    ];
+    expect(residentHrefs).toContain('/alerts?scope=sector');
+    expect(residentHrefs).not.toContain('/simulation');
   });
 });

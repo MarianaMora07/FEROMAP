@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Query
 
-from app.api.deps import DbSession, PlannerOrAdmin
+from app.api.deps import CurrentUser, DbSession, PlannerOrAdmin
 from app.schemas.alert import AlertStatusUpdate
 from app.services.alert_service import (
     list_alert_activity,
@@ -12,16 +12,22 @@ router = APIRouter(prefix="/alerts", tags=["alerts"])
 
 
 @router.get("/activity")
-def get_alert_activity(db: DbSession, _user: PlannerOrAdmin, limit: int = Query(8, ge=1, le=50)):
+def get_alert_activity(
+    db: DbSession,
+    _user: CurrentUser,
+    limit: int = Query(8, ge=1, le=50),
+):
+    """Lectura para cualquier rol autenticado; el UI acota por rol (conductor/residente usan demo)."""
     return list_alert_activity(db, limit=limit)
 
 
 @router.get("")
 def get_alerts(
     db: DbSession,
-    _user: PlannerOrAdmin,
+    _user: CurrentUser,
     active_only: bool = Query(True),
 ):
+    """Lectura para cualquier rol autenticado; el UI acota por rol."""
     return list_alerts_payload(db, active_only=active_only)
 
 

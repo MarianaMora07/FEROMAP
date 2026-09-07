@@ -30,7 +30,6 @@ const NAV_ICONS: Record<string, typeof LayoutDashboard> = {
   '/': LayoutDashboard,
   '/operator': ClipboardList,
   '/optimization': Map,
-  '/planning': LayoutDashboard,
   '/planning/weekly': CalendarDays,
   '/planning/history': History,
   '/map': MapPin,
@@ -54,6 +53,7 @@ interface SidebarProps {
 export function Sidebar(props: SidebarProps) {
   const location = useLocation();
   const layout = createMemo(() => sidebarNavLayout(authUser()?.role));
+  const showKinds = () => authUser()?.role === 'administrador';
 
   return (
     <aside
@@ -77,6 +77,7 @@ export function Sidebar(props: SidebarProps) {
                 icon={<Icon size={18} class="shrink-0" />}
                 label={item.label}
                 description={item.description}
+                kind={showKinds() ? (item.kind ?? 'producto') : undefined}
               />
             );
           }}
@@ -90,6 +91,7 @@ export function Sidebar(props: SidebarProps) {
               label={section.label}
               items={section.items}
               iconMap={NAV_ICONS}
+              showKinds={showKinds()}
             />
           )}
         </For>
