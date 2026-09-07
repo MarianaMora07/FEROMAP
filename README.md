@@ -181,11 +181,11 @@ Variables opcionales para scripts: `DEMO_EMAIL`, `DEMO_PASSWORD`.
 Con `VITE_USE_MOCKS=false` en `.env` y el stack levantado:
 
 1. **Login** — `plan@fero.com` / `123456789`
-2. **Dashboard** (`/`) — CTA **Nueva simulación**
-3. **Simulación** (`/simulation`) — Configurar escenario → **Ejecutar simulación** → KPIs en paso 3
-4. **Acciones post-resultado** — Analítica, reportes o mapa (deep links con `simulationId`)
+2. **Dashboard** (`/`) — hub del día: "Qué hacer ahora", accesos a Plan semanal y Monitoreo
+3. **Simulación ACO** (`/simulation`, grupo **Tesis y demostración**) — Configurar escenario → **Ejecutar simulación** → KPIs en paso 3
+4. **Acciones post-resultado** — Reportes, mapa o Plan del día (deep links con `simulationId`)
 5. **Historial** — Pestaña Historial en `/simulation`
-6. *(Opcional)* **Planificación operativa** (`/optimization`) — Despacho diario (módulo secundario)
+6. *(Opcional)* **Plan del día** (`/optimization`) — pestaña Optimizar y despachar (generar → simular → despachar); pestaña **Pendientes** para carry-over
 
 Verificación automática:
 
@@ -311,7 +311,7 @@ FEROMAP/
 ├── backend/              # FastAPI, Alembic, motor de optimización
 ├── data/                 # GeoJSON, grafos OSM, seeds
 ├── deploy/nginx/         # SPA + proxy /api (prod)
-├── docs/                 # Fases 0–6, manual, guion demo, diagramas
+├── docs/                 # Fases 0–B, manual, guion demo, IA (ux/), estado de módulos
 ├── src/                  # Frontend SolidJS
 ├── scripts/              # compose.sh, defense-verify.sh
 ├── compose.yml           # Servicios base
