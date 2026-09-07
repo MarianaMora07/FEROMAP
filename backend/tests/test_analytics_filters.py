@@ -20,9 +20,11 @@ def _simulation(
     *,
     executed_at: datetime,
     containers: int = 10,
+    case_study_id: int | None = None,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         id=sim_id,
+        case_study_id=case_study_id,
         executed_at=executed_at,
         scenario_name=f"Sim {sim_id}",
         parameters_json='{"kpis": {"containersServed": '

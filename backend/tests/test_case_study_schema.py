@@ -7,7 +7,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db.models import CaseStudy, CaseStudyPoint, CollectionPoint, Simulation
+from app.db.models import CaseStudy, CaseStudyPoint, CollectionPoint, Sector, Simulation
 from app.db.session import SessionLocal
 
 

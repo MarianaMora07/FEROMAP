@@ -162,6 +162,9 @@ def test_map_operational_context_filters_routes_outside_bbox(monkeypatch):
     assert route_ids == {"route-1"}
 
 
-def test_planned_route_statuses_exclude_completed():
-    assert PLANNED_ROUTE_STATUSES == ("pending", "in_progress")
-    assert "completed" not in PLANNED_ROUTE_STATUSES
+def test_planned_route_statuses_include_completed_for_tracking():
+    # "completed" se añadió a propósito (commit 1ba8119, "better route tracking"):
+    # el mapa operativo dibuja también rutas terminadas para seguimiento del turno;
+    # el frontend las separa por status (pending = capa punteada, resto = activa).
+    assert PLANNED_ROUTE_STATUSES == ("pending", "in_progress", "completed")
+    assert "completed" in PLANNED_ROUTE_STATUSES

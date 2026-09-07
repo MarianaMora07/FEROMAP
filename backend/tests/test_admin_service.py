@@ -46,7 +46,9 @@ def test_ensure_default_settings_creates_singleton():
     assert isinstance(created[0], SystemSettings)
     blob = json.loads(created[0].settings_json)
     assert blob["operational"]["system_name"].startswith("FEROMAP")
-    assert blob["operational"]["landfill_lat"] == -62.690
+    # Vertedero de Unare (docs/fase-9, guion manual): lat 8.280, lon -62.690.
+    assert blob["operational"]["landfill_lat"] == 8.280
+    assert blob["operational"]["landfill_lon"] == -62.690
     assert blob["integrations"]["map_provider"] == "OpenStreetMap"
 
 
