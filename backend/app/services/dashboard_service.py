@@ -19,7 +19,7 @@ from app.services.planning_analytics_service import planning_dashboard_snapshot
 from app.services.optimization_service import run_optimization_engine
 from app.services.scenario_utils import normalize_scenario_id
 from app.services.seed_loader import load_seed
-from app.services.simulation_parsing import parse_simulation
+from app.services.simulation_parsing import _case_study_fields, parse_simulation
 
 
 # --- Comparativas multi-corrida (Tarea 5) ------------------------------------

@@ -329,7 +329,7 @@ def test_collection_points_optimization_context_counts_critical_and_boost():
 
     db.scalars.side_effect = [
         MagicMock(all=MagicMock(return_value=points)),
-        MagicMock(all=MagicMock(return_value=[route])),
+        MagicMock(unique=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[route])))),
     ]
     db.scalar.return_value = latest_at
 

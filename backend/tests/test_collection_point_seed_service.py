@@ -36,6 +36,22 @@ def db():
         session.rollback()
 
 
+def _db_has_seed_demo(db: Session) -> bool:
+    """True si la BD global ya trae el seed demo (≈120 collection points)."""
+    total = db.scalar(
+        select(func.count()).select_from(CollectionPoint).where(CollectionPoint.deleted_at.is_(None))
+    )
+    return (total or 0) >= 100
+
+
+# Estos tests asumen BD sin seed: crean códigos CNT-0xx y cuentan puntos globales.
+# En la BD sembrada (120 pts) chocan por UniqueViolation / totales 125, así que solo
+# corren en el paso unit de CI/BD limpia; si la BD ya está sembrada se saltan.
+def _skip_if_seeded(db: Session) -> None:
+    if _db_has_seed_demo(db):
+        pytest.skip("Requiere BD sin seed: corre en el paso unit de CI/BD limpia")
+
+
 def _seed_minimal_sectors(db: Session, count: int) -> list[Sector]:
     parish = Parish(name="Test Parish", city="Ciudad Guayana")
     db.add(parish)
@@ -50,6 +66,7 @@ def _seed_minimal_sectors(db: Session, count: int) -> list[Sector]:
 
 
 def test_ensure_coverage_creates_one_point_per_empty_sector(db: Session):
+    _skip_if_seeded(db)
     sectors = _seed_minimal_sectors(db, 3)
     db.add(
         CollectionPoint(
@@ -72,6 +89,7 @@ def test_ensure_coverage_creates_one_point_per_empty_sector(db: Session):
 
 
 def test_ensure_coverage_reaches_target_total(db: Session):
+    _skip_if_seeded(db)
     sectors = _seed_minimal_sectors(db, 4)
     for index, sector in enumerate(sectors[:2]):
         db.add(
@@ -95,6 +113,7 @@ def test_ensure_coverage_reaches_target_total(db: Session):
 
 
 def test_generate_missing_collection_points_is_idempotent_after_seed(db: Session):
+    _skip_if_seeded(db)
     sectors = _seed_minimal_sectors(db, 5)
     ensure_collection_points_coverage(db, target_total=5)
     db.flush()
@@ -105,6 +124,7 @@ def test_generate_missing_collection_points_is_idempotent_after_seed(db: Session
     assert second_pass["total_points"] == 5
 
 
+@pytest.mark.integration
 def test_seeded_database_has_120_points_across_all_sectors(db: Session):
     total = db.scalar(
         select(func.count()).select_from(CollectionPoint).where(CollectionPoint.deleted_at.is_(None))
