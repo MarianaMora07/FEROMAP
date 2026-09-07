@@ -43,7 +43,7 @@ test.describe('Modo oscuro integrado — sidebar', () => {
     expectNoPageErrors(page);
     await stubProfileTheme(page, 'light');
     await ensurePlannerSession(page, '/');
-    await expect(page.getByTestId('sidebar-nav-simulation')).toBeVisible();
+    await expect(page.getByTestId('sidebar-nav-optimization')).toBeVisible();
     await expectSidebarDark(page, false);
     await captureSidebar(page, 'sidebar-planner-light.png');
 
@@ -95,7 +95,7 @@ test.describe('Modo oscuro integrado — sidebar', () => {
     expectNoPageErrors(page);
     await ensurePlannerSession(page, '/');
 
-    const link = page.getByTestId('sidebar-nav-simulation');
+    const link = page.getByTestId('sidebar-nav-optimization');
     await link.focus();
     await expect(link).toBeFocused();
     await expect(link).toHaveCSS('outline-style', 'none');
