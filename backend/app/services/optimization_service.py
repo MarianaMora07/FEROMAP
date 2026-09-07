@@ -384,6 +384,28 @@ def partition_customers_by_vehicle_sectors(
     return assigned, unassigned
 
 
+def sector_territory_applies(
+    customers: list[CustomerNode],
+    explicit_sector_driver_map: dict[int, int],
+) -> bool:
+    """¿Conviene el ACO por territorio (sector→conductor)?
+
+    Solo cuando existe asignación explícita en BD (sectors.driver_id) **y** todos los
+    contenedores del día pertenecen a sectores con conductor asignado. Si el día mezcla
+    sectores sin territorio, o se armó por zonas sin respetar conductores, es preferible
+    el ACO global multi-flota: el algoritmo reparte libremente y nada queda "atrapado"
+    en un camión por un reparto artificial (round-robin de la BD vacía).
+    """
+    if not explicit_sector_driver_map:
+        return False
+    if any(customer.sector_id is None for customer in customers):
+        return False
+    sector_ids = {customer.sector_id for customer in customers if customer.sector_id is not None}
+    if not sector_ids:
+        return False
+    return sector_ids.issubset(explicit_sector_driver_map.keys())
+
+
 def _extract_node_submatrix(matrix: list[list[float]], global_nodes: list[int]) -> list[list[float]]:
     return [[matrix[row][col] for col in global_nodes] for row in global_nodes]
 
@@ -422,6 +444,40 @@ def _remap_local_route_to_global(
     return remapped
 
 
+def _merge_fleet_convergence_curve(
+    per_vehicle_curves: list[list[dict[str, float | int]]],
+) -> list[dict[str, float | int]]:
+    """Agrega las curvas best-so-far locales (una por vehículo/sector) en la
+    curva de convergencia de la flota.
+
+    El ACO por sectores corre un `_aco_cvrp` por vehículo sobre SU subproblema, así
+    que cada curva local es no creciente pero en km del sector (magnitudes distintas
+    y no comparables entre vehículos). Concatenarlas producía saltos al cambiar de
+    vehículo y hacía inválido comparar el primer punto con el último. Aquí se suman
+    los mejores locales por número de iteración (congelando el último mejor conocido
+    de los vehículos que ya se detuvieron por paciencia), de modo que la curva
+    resultante es no creciente, está en km de flota y su último punto coincide con la
+    distancia ACO final.
+    """
+    max_iterations = max((len(curve) for curve in per_vehicle_curves), default=0)
+    merged: list[dict[str, float | int]] = []
+    for iteration in range(1, max_iterations + 1):
+        fleet_best_km = 0.0
+        fleet_iteration_best_km = 0.0
+        for curve in per_vehicle_curves:
+            point = curve[min(iteration, len(curve)) - 1]
+            fleet_best_km += float(point["bestDistanceKm"])
+            fleet_iteration_best_km += float(point["iterationBestDistanceKm"])
+        merged.append(
+            {
+                "iteration": iteration,
+                "bestDistanceKm": round(fleet_best_km, 3),
+                "iterationBestDistanceKm": round(fleet_iteration_best_km, 3),
+            }
+        )
+    return merged
+
+
 def _optimize_by_sector_assignment(
     customers: list[CustomerNode],
     vehicles: list[VehicleUnit],
@@ -450,7 +506,7 @@ def _optimize_by_sector_assignment(
     iterations_run = 0
     stopped_early = False
     parallel_workers = 1
-    convergence: list[dict[str, float | int]] = []
+    per_vehicle_convergence: list[list[dict[str, float | int]]] = []
 
     vehicles_with_work = sum(1 for indices in assigned_by_vehicle if indices)
     progress_slots = max(1, vehicles_with_work)
@@ -543,11 +599,13 @@ def _optimize_by_sector_assignment(
         stopped_early = stopped_early or local_solution.aco_stopped_early
         parallel_workers = max(parallel_workers, local_solution.aco_parallel_workers)
         if local_solution.aco_convergence:
-            convergence.extend(local_solution.aco_convergence)
+            per_vehicle_convergence.append(local_solution.aco_convergence)
         completed_slots += 1
 
     if not math.isfinite(total_distance) or total_distance <= 0:
         total_distance, total_duration = _evaluate_solution(vehicle_routes, dist_matrix, time_matrix)
+
+    convergence = _merge_fleet_convergence_curve(per_vehicle_convergence)
 
     return RouteSolution(
         vehicle_routes=vehicle_routes,
@@ -602,6 +660,78 @@ def _matrix_pair_metrics(
     return d_m, t_s
 
 
+def _path_metrics_for_node_sequence(
+    graph: nx.MultiDiGraph,
+    path: list[int],
+    *,
+    by_time: bool,
+) -> tuple[float, float]:
+    """Suma distancia (m) y tiempo (s) a lo largo de un camino ya calculado.
+
+    Replica la agregación de ``path_metrics_between_nodes``: por cada tramo se
+    elige la arista de menor ``weight`` entre paralelas y se acumula ``length``
+    y ``travel_time`` (o ``weight`` si ``by_time``).
+    """
+    if len(path) < 2:
+        return 0.0, 0.0
+    dist_m = 0.0
+    time_s = 0.0
+    for u, v in zip(path[:-1], path[1:]):
+        edge_data = graph.get_edge_data(u, v) or graph.get_edge_data(v, u)
+        if not edge_data:
+            continue
+        edge = min(edge_data.values(), key=lambda d: d.get("weight", float("inf")))
+        dist_m += float(edge.get("length", 0))
+        if by_time:
+            time_s += float(edge.get("weight", edge.get("travel_time", 0)))
+        else:
+            time_s += float(edge.get("travel_time", edge.get("weight", 0)))
+    return dist_m, time_s
+
+
+def _row_path_metrics_from_source(
+    graph: nx.MultiDiGraph,
+    undirected: nx.Graph,
+    source: int,
+    targets: list[int],
+    *,
+    by_time: bool,
+) -> dict[int, tuple[float, float]]:
+    """Distancia/tiempo desde ``source`` a cada ``target`` con UNA pasada de Dijkstra.
+
+    Antes la matriz completa hacía un shortest-path por par (≈N²); esto calcula
+    un árbol por origen (≈N pasadas), ~N veces menos trabajo en frío, con los
+    mismos caminos mínimos (dirigido con respaldo no dirigido si no hay ruta).
+    """
+    weight_attr = "weight" if by_time else "length"
+    try:
+        directed_paths = nx.single_source_dijkstra_path(graph, source, weight=weight_attr)
+    except (nx.NodeNotFound, nx.NetworkXError):
+        directed_paths = {}
+
+    undirected_paths: dict[int, list[int]] | None = None
+    out: dict[int, tuple[float, float]] = {}
+    for target in targets:
+        if target == source:
+            continue
+        path = directed_paths.get(target)
+        if path is None:
+            if undirected_paths is None:
+                try:
+                    undirected_paths = nx.single_source_dijkstra_path(
+                        undirected, source, weight=weight_attr
+                    )
+                except (nx.NodeNotFound, nx.NetworkXError):
+                    undirected_paths = {}
+            path = undirected_paths.get(target)
+        out[target] = (
+            (float("inf"), float("inf"))
+            if path is None
+            else _path_metrics_for_node_sequence(graph, path, by_time=by_time)
+        )
+    return out
+
+
 def _build_distance_matrix(
     graph: nx.MultiDiGraph | None,
     depot_node: int,
@@ -624,16 +754,19 @@ def _build_distance_matrix(
 
     if graph is not None:
         graph_nodes = [depot_node] + [c.graph_node for c in customers] + [landfill_node]
-        for i in range(n):
-            for j in range(n):
+        undirected = graph.to_undirected()
+        for i, source_node in enumerate(graph_nodes):
+            row = _row_path_metrics_from_source(
+                graph,
+                undirected,
+                source_node,
+                graph_nodes,
+                by_time=traffic_weighted,
+            )
+            for j, target_node in enumerate(graph_nodes):
                 if i == j:
                     continue
-                d_m, t_s = path_metrics_between_nodes(
-                    graph,
-                    graph_nodes[i],
-                    graph_nodes[j],
-                    by_time=traffic_weighted,
-                )
+                d_m, t_s = row.get(target_node, (float("inf"), float("inf")))
                 if not math.isfinite(d_m) or d_m <= 0:
                     if i == 0:
                         lon_i, lat_i = depot_lon, depot_lat
@@ -994,6 +1127,147 @@ def _aco_cvrp(
         aco_parallel_workers=parallel_workers,
         aco_convergence=convergence,
         uncovered_customer_indices=best_uncovered,
+    )
+
+
+def _greedy_feasible_route(
+    order: list[int],
+    demands: list[float],
+    capacity: float,
+    dist_matrix: list[list[float]],
+    time_matrix: list[list[float]],
+    *,
+    landfill_idx: int,
+    service_sec: float,
+    unload_sec: float,
+    shift_budget_sec: float,
+) -> tuple[list[int], list[int]]:
+    """Ruta determinista en orden dado respetando capacidad y jornada.
+
+    Cuando un punto no cabe por capacidad, el vehículo descarga en el vertedero y
+    continúa (mismo modelo multi-viaje que el ACO). Los puntos que no caben dentro
+    de la jornada quedan sin cubrir. Es el baseline "actual" con restricciones.
+    """
+    route: list[int] = [0]
+    uncovered: list[int] = []
+    load = 0.0
+    elapsed = 0.0
+
+    def leg(a: int, b: int) -> float:
+        return float(time_matrix[a][b])
+
+    for customer in order:
+        demand = float(demands[customer - 1])
+        previous = route[-1]
+        direct_time = elapsed + service_sec + leg(previous, customer)
+        if load + demand <= capacity and direct_time + leg(customer, 0) <= shift_budget_sec:
+            route.append(customer)
+            elapsed = direct_time
+            load += demand
+            continue
+        # Descarga al vertedero y reintenta (mismo criterio de factibilidad que el ACO).
+        reset_time = elapsed + leg(previous, landfill_idx) + unload_sec
+        reset_ready = reset_time + service_sec + leg(landfill_idx, customer)
+        if load + demand > capacity and reset_ready + leg(customer, 0) <= shift_budget_sec:
+            route.append(landfill_idx)
+            elapsed = reset_ready
+            load = demand
+            route.append(customer)
+            continue
+        uncovered.append(customer)
+
+    route.append(0)
+    return route, uncovered
+
+
+def _baseline_factible_partitioned(
+    assigned_by_vehicle: list[list[int]],
+    demands: list[float],
+    capacities: list[float],
+    dist_matrix: list[list[float]],
+    time_matrix: list[list[float]],
+    *,
+    landfill_idx: int,
+    shift_budget_sec: float,
+    unload_sec: float,
+    service_secs: list[float],
+) -> RouteSolution:
+    """Baseline por sectores con restricciones reales (capacidad/jornada/vertedero)."""
+    routes: list[list[int]] = []
+    uncovered: list[int] = []
+    for index, customer_indices in enumerate(assigned_by_vehicle):
+        if not customer_indices:
+            routes.append([0, 0])
+            continue
+        vehicle_service = service_secs[min(index, len(service_secs) - 1)] if service_secs else 0.0
+        capacity = float(capacities[min(index, len(capacities) - 1)])
+        route, route_uncovered = _greedy_feasible_route(
+            customer_indices,
+            demands,
+            capacity,
+            dist_matrix,
+            time_matrix,
+            landfill_idx=landfill_idx,
+            service_sec=vehicle_service,
+            unload_sec=unload_sec,
+            shift_budget_sec=shift_budget_sec,
+        )
+        routes.append(route)
+        uncovered.extend(route_uncovered)
+    distance_m, duration_s = _evaluate_solution(routes, dist_matrix, time_matrix)
+    return RouteSolution(
+        vehicle_routes=routes,
+        distance_m=distance_m,
+        duration_s=duration_s,
+        uncovered_customer_indices=sorted(set(uncovered)),
+    )
+
+
+def _baseline_factible_global(
+    n_customers: int,
+    demands: list[float],
+    capacities: list[float],
+    dist_matrix: list[list[float]],
+    time_matrix: list[list[float]],
+    *,
+    landfill_idx: int,
+    shift_budget_sec: float,
+    unload_sec: float,
+    service_secs: list[float],
+) -> RouteSolution:
+    """Baseline global con restricciones: reparte en orden de código entre la flota."""
+    order = list(range(1, n_customers + 1))
+    routes: list[list[int]] = []
+    uncovered: list[int] = []
+    remaining = order[:]
+    for index in range(len(capacities)):
+        if not remaining:
+            routes.append([0, 0])
+            continue
+        capacity = float(capacities[index])
+        vehicle_service = service_secs[min(index, len(service_secs) - 1)] if service_secs else 0.0
+        route, route_uncovered = _greedy_feasible_route(
+            remaining,
+            demands,
+            capacity,
+            dist_matrix,
+            time_matrix,
+            landfill_idx=landfill_idx,
+            service_sec=vehicle_service,
+            unload_sec=unload_sec,
+            shift_budget_sec=shift_budget_sec,
+        )
+        served = {node for node in route if 1 <= node <= n_customers}
+        remaining = [customer for customer in remaining if customer not in served]
+        routes.append(route)
+        uncovered.extend(route_uncovered)
+    uncovered = sorted(set(uncovered))
+    distance_m, duration_s = _evaluate_solution(routes, dist_matrix, time_matrix)
+    return RouteSolution(
+        vehicle_routes=routes,
+        distance_m=distance_m,
+        duration_s=duration_s,
+        uncovered_customer_indices=uncovered,
     )
 
 
@@ -1399,8 +1673,13 @@ def build_optimization_vehicle_units(
     exclude_vehicle_ids: set[int] | None = None,
     contingency: bool = False,
     fleet_limit: int | None = None,
+    fleet_by_type: dict[str, int] | None = None,
 ) -> list[VehicleUnit]:
-    """Arma la flota VRP: todos los asignables con conductor; fleet_limit es tope opcional."""
+    """Arma la flota VRP: todos los asignables con conductor; fleet_limit es tope opcional.
+
+    Si ``fleet_by_type`` (p. ej. {"Compactadora": 3}) está definido, por cada tipo se
+    toman las primeras N unidades ordenadas por id y el resto de la flota no participa.
+    """
     stmt = (
         select(Vehicle)
         .where(Vehicle.status.in_(["available", "in_route"]))
@@ -1413,6 +1692,18 @@ def build_optimization_vehicle_units(
         vehicles_db = [vehicle for vehicle in vehicles_db if vehicle.id not in exclude_vehicle_ids]
     if contingency:
         vehicles_db = [vehicle for vehicle in vehicles_db if vehicle.status == "available"]
+    if fleet_by_type:
+        limited: list[Vehicle] = []
+        used: dict[str, int] = {}
+        for vehicle in vehicles_db:
+            vtype = vehicle.vehicle_type
+            if vtype not in fleet_by_type:
+                continue
+            if used.get(vtype, 0) >= fleet_by_type[vtype]:
+                continue
+            limited.append(vehicle)
+            used[vtype] = used.get(vtype, 0) + 1
+        vehicles_db = limited
 
     active_routes = get_active_routes_by_vehicle_id(db)
     units: list[VehicleUnit] = []
@@ -1602,6 +1893,8 @@ def run_optimization_engine(
     weekly_plan_id: int | None = None,
     planning_level: str | None = None,
     fleet_limit: int | None = None,
+    fleet_by_type: dict[str, int] | None = None,
+    sector_partition: bool | None = None,
 ) -> dict[str, Any]:
     """Ejecuta el motor real de optimización y persiste resultados."""
     computation_started = time.perf_counter()
@@ -1803,6 +2096,7 @@ def run_optimization_engine(
         exclude_vehicle_ids=excluded_ids,
         contingency=contingency_meta is not None,
         fleet_limit=fleet_limit,
+        fleet_by_type=fleet_by_type,
     )
     if not vehicles:
         raise RuntimeError("No hay vehículos con conductor asignado para la optimización")
@@ -1910,50 +2204,95 @@ def run_optimization_engine(
         )
     graph_seconds = time.perf_counter() - graph_started
 
-    sector_driver_map = resolve_sector_driver_map_for_optimization(
-        customers,
-        vehicles,
-        build_sector_driver_map(db),
+    # Territorio sector→conductor: solo se respeta si existe asignación explícita en BD
+    # y cubre todos los puntos del día. En caso contrario (BD sin territorios, día armado
+    # por zonas desde el Plan semanal o mezcla) se usa el ACO global multi-flota, que
+    # reparte los contenedores libremente entre la flota.
+    explicit_sector_driver_map = build_sector_driver_map(db)
+    use_sector_partition = (
+        sector_partition
+        if sector_partition is not None
+        else sector_territory_applies(customers, explicit_sector_driver_map)
     )
-    assigned_by_vehicle, sector_unassigned = partition_customers_by_vehicle_sectors(
-        customers,
-        vehicles,
-        sector_driver_map,
-    )
-    assigned_point_count = sum(len(indices) for indices in assigned_by_vehicle)
-    vehicles_with_sectors = sum(1 for indices in assigned_by_vehicle if indices)
-
-    report(
-        "instancia_vrp",
-        (
-            f"Instancia VRP por sectores: {vehicles_with_sectors}/{len(vehicles)} vehículos con puntos, "
-            f"{assigned_point_count} contenedores asignados por conductor"
-        ),
-    )
-    if sector_unassigned:
+    if use_sector_partition:
+        resolved_sector_driver_map = resolve_sector_driver_map_for_optimization(
+            customers,
+            vehicles,
+            explicit_sector_driver_map,
+        )
+        assigned_by_vehicle, sector_unassigned = partition_customers_by_vehicle_sectors(
+            customers,
+            vehicles,
+            resolved_sector_driver_map,
+        )
+        assigned_point_count = sum(len(indices) for indices in assigned_by_vehicle)
+        vehicles_with_sectors = sum(1 for indices in assigned_by_vehicle if indices)
         report(
             "instancia_vrp",
             (
-                f"{len(sector_unassigned)} contenedor(es) sin conductor de flota "
-                "(sector sin asignación o conductor sin vehículo activo)"
+                f"Instancia VRP por sectores: {vehicles_with_sectors}/{len(vehicles)} vehículos con puntos, "
+                f"{assigned_point_count} contenedores asignados por conductor"
             ),
-            "warning",
         )
+        if sector_unassigned:
+            report(
+                "instancia_vrp",
+                (
+                    f"{len(sector_unassigned)} contenedor(es) sin conductor de flota "
+                    "(sector sin asignación o conductor sin vehículo activo)"
+                ),
+                "warning",
+            )
+    else:
+        assigned_by_vehicle = [[] for _ in vehicles]
+        sector_unassigned = []
+        assigned_point_count = 0
+        vehicles_with_sectors = 0
+        if not explicit_sector_driver_map:
+            report(
+                "instancia_vrp",
+                (
+                    "Sin territorios sector→conductor en BD: ACO global multi-flota "
+                    "(el algoritmo reparte los puntos entre la flota)"
+                ),
+                "info",
+            )
+        else:
+            report(
+                "instancia_vrp",
+                (
+                    "Día con sectores sin territorio explícito o armado por zonas: ACO global "
+                    "multi-flota en lugar de partición por conductor"
+                ),
+                "info",
+            )
 
-    use_sector_partition = assigned_point_count > 0
+    baseline_demands = [customer.demand_kg for customer in customers]
+    baseline_capacities = [vehicle.capacity_kg for vehicle in vehicles]
     if use_sector_partition:
-        current_solution = _baseline_routes_partitioned(
+        current_solution = _baseline_factible_partitioned(
             assigned_by_vehicle,
+            baseline_demands,
+            baseline_capacities,
             dist_matrix,
             time_matrix,
+            landfill_idx=landfill_idx,
+            shift_budget_sec=shift_budget_sec,
+            unload_sec=float(unload_seconds),
+            service_secs=service_secs,
         )
     else:
-        report(
-            "instancia_vrp",
-            "Sin asignación sector→conductor usable; se usa CVRP global de respaldo",
-            "warning",
+        current_solution = _baseline_factible_global(
+            len(customers),
+            baseline_demands,
+            baseline_capacities,
+            dist_matrix,
+            time_matrix,
+            landfill_idx=landfill_idx,
+            shift_budget_sec=shift_budget_sec,
+            unload_sec=float(unload_seconds),
+            service_secs=service_secs,
         )
-        current_solution = _baseline_route(len(customers), dist_matrix, time_matrix)
 
     report(
         "aco",
