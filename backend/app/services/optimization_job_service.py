@@ -69,6 +69,8 @@ class OptimizationJob:
     weekly_plan_id: int | None = None
     planning_level: str | None = None
     fleet_limit: int | None = None
+    fleet_by_type: dict[str, int] | None = None
+    sector_partition: bool | None = None
     job_type: str = "simulation"
     extra_params: dict[str, Any] = field(default_factory=dict)
     created_at: datetime | None = None
@@ -106,6 +108,8 @@ _JOB_PARAM_FIELDS = (
     "weekly_plan_id",
     "planning_level",
     "fleet_limit",
+    "fleet_by_type",
+    "sector_partition",
 )
 
 
@@ -300,6 +304,8 @@ def create_optimization_job(
     weekly_plan_id: int | None = None,
     planning_level: str | None = None,
     fleet_limit: int | None = None,
+    fleet_by_type: dict[str, int] | None = None,
+    sector_partition: bool | None = None,
     job_type: str | None = None,
 ) -> OptimizationJob:
     resolved_auto_dispatch = auto_dispatch
@@ -330,6 +336,8 @@ def create_optimization_job(
         weekly_plan_id=weekly_plan_id,
         planning_level=planning_level,
         fleet_limit=fleet_limit,
+        fleet_by_type=fleet_by_type,
+        sector_partition=sector_partition,
         job_type=job_type,
         created_at=created_at,
     )
@@ -496,6 +504,8 @@ def _run_job_worker(job_id: str) -> None:
             weekly_plan_id=job.weekly_plan_id,
             planning_level=job.planning_level,
             fleet_limit=job.fleet_limit,
+            fleet_by_type=job.fleet_by_type,
+            sector_partition=job.sector_partition,
             reporter=reporter,
         )
         with job.lock:
@@ -528,3 +538,54 @@ def _run_job_worker(job_id: str) -> None:
     finally:
         db.close()
         slot.release()
+
+
+def start_weekly_operational_plan_job(weekly_plan_id: int) -> OptimizationJob:
+    """Lanza la generación del plan operativo semanal (optimiza Lun→Vie en secuencia)."""
+    from app.services.weekly_operational_service import generate_weekly_operational_plan
+
+    job = OptimizationJob(
+        id=str(uuid.uuid4()),
+        status="pending",
+        scenario_id=None,
+        rain_intensity=None,
+        waste_level_pct=None,
+        estimated_duration_hours=None,
+        operators_shortage=None,
+        job_type="weekly_operational_plan",
+        planning_level="administrative",
+        extra_params={"weeklyPlanId": weekly_plan_id},
+        created_at=datetime.now(timezone.utc),
+    )
+
+    def update_progress(message: str, value: int) -> None:
+        with job.lock:
+            if job.status not in ("pending", "running"):
+                job.status = "running"
+            job.phase = message
+            job.progress = value
+        _persist_job_snapshot(job)
+
+    def runner(db: Session) -> dict[str, Any]:
+        with job.lock:
+            job.status = "running"
+            job.phase = "Preparando plan operativo…"
+            job.progress = 1
+        _persist_job_snapshot(job)
+        # Respeta el semáforo global de un solo motor: espera si hay otro ACO corriendo.
+        slot = _get_optimization_slot()
+        acquired = False
+        try:
+            acquired = _acquire_optimization_slot(job)
+            if not acquired:
+                return {"weeklyPlanId": weekly_plan_id, "cancelled": True}
+            return generate_weekly_operational_plan(
+                db,
+                weekly_plan_id,
+                on_progress=update_progress,
+            )
+        finally:
+            if acquired:
+                slot.release()
+
+    return start_background_job(job, runner)
