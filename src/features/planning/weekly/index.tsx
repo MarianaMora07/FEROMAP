@@ -1,9 +1,8 @@
 import { A } from '@solidjs/router';
 import { ArrowLeft } from 'lucide-solid';
 import { Button } from '../../../design-system/components';
-import { WeeklyPlanTab } from '../../simulation/WeeklyPlanTab';
+import { WeeklyPlanTab } from './WeeklyPlanTab';
 import { CollapsiblePlanningGlossary } from '../CollapsiblePlanningGlossary';
-import { WeeklyPlanDirectivoNotice } from '../WeeklyPlanDirectivoNotice';
 
 export default function PlanningWeeklyPage() {
   return (
@@ -18,14 +17,13 @@ export default function PlanningWeeklyPage() {
             Configura, valida y aprueba la semana antes de optimizar el día.
           </p>
         </div>
-        <A href="/planning">
+        <A href="/">
           <Button variant="outline" size="sm" class="gap-2" icon={<ArrowLeft size={14} />}>
-            Hub de planificación
+            Dashboard
           </Button>
         </A>
       </div>
 
-      <WeeklyPlanDirectivoNotice />
       <CollapsiblePlanningGlossary />
       <WeeklyPlanTab embedded />
     </div>

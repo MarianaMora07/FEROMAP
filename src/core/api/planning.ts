@@ -34,6 +34,36 @@ export interface VersionDiffChange {
   after: unknown;
 }
 
+export interface WeeklyPlanDayRoute {
+  vehicleCode: string;
+  driverName?: string | null;
+  distanceKm: number;
+  durationMin: number;
+  stops: number;
+}
+
+export interface WeeklyPlanDayOperational {
+  operationDate: string;
+  weekday: number;
+  status: string;
+  dailyPlanId?: number | null;
+  simulationId?: number | null;
+  pointCount?: number;
+  servedPoints?: number;
+  uncoveredPoints?: number;
+  distanceKm?: number;
+  durationHours?: number;
+  vehicles: WeeklyPlanDayRoute[];
+  error?: string | null;
+}
+
+export interface WeeklyOperationalPlan {
+  generatedAt: string;
+  weekStartDate: string;
+  fleetByType?: Record<string, number> | null;
+  days: WeeklyPlanDayOperational[];
+}
+
 export interface WeeklyPlan {
   id: number;
   weekStartDate: string;
@@ -44,6 +74,10 @@ export interface WeeklyPlan {
   caseStudyCode?: string | null;
   caseStudyName?: string | null;
   referenceSimulationId?: number | null;
+  /** Composición de flota de la semana por tipo (ej. { Compactadora: 3, Volteo: 1 }). */
+  fleetByType?: Record<string, number> | null;
+  /** Resumen del plan operativo generado (camión × día). */
+  operationalPlan?: WeeklyOperationalPlan | null;
   expectedKpis?: Record<string, unknown> | null;
   preflight?: {
     feasible?: boolean;
@@ -142,6 +176,18 @@ export function sanitizeWeeklyPlanDays(days: WeeklyPlanDay[]): WeeklyPlanDay[] {
       (id): id is number => typeof id === 'number' && Number.isFinite(id) && id > 0,
     ),
   }));
+}
+
+function sanitizeFleetByType(fleet: Record<string, number> | null | undefined): Record<string, number> | null {
+  if (!fleet || typeof fleet !== 'object') return null;
+  const resolved: Record<string, number> = {};
+  for (const [type, count] of Object.entries(fleet)) {
+    const value = Number(count);
+    if (Number.isFinite(value) && value >= 1) {
+      resolved[type] = Math.floor(value);
+    }
+  }
+  return Object.keys(resolved).length > 0 ? resolved : null;
 }
 
 function mockWeeklyPlan(): WeeklyPlan {
@@ -284,6 +330,64 @@ export function fetchWeeklyPlanById(planId: number): Promise<WeeklyPlan> {
   return apiGet(`/api/v1/planning/weekly/${planId}`);
 }
 
+export interface WeeklyDayPoint {
+  id: number;
+  code: string;
+  sector?: string | null;
+  fillLevelPct?: number;
+  active?: boolean;
+}
+
+export interface WeeklyDayPlan {
+  weeklyPlanId: number;
+  operationDate: string;
+  weekday: number;
+  pointSource?: string | null;
+  scenarioId: ScenarioId;
+  expectedVehicleCount?: number | null;
+  preflight?: Record<string, unknown> | null;
+  simulation?: {
+    operationDate?: string;
+    distanceKm?: number;
+    durationHours?: number;
+    coveragePct?: number | null;
+    feasible?: boolean;
+    error?: string;
+  } | null;
+  points: WeeklyDayPoint[];
+  pointCount: number;
+}
+
+export async function fetchWeeklyDayPlan(
+  planId: number,
+  operationDate: string,
+): Promise<WeeklyDayPlan> {
+  if (useMocks) {
+    const plan = await fetchWeeklyPlanById(planId);
+    const day = (plan.days ?? []).find((row) => row.operationDate === operationDate);
+    const ids = day?.collectionPointIds ?? [1, 2, 3];
+    return {
+      weeklyPlanId: planId,
+      operationDate,
+      weekday: day?.weekday ?? 0,
+      pointSource: day?.pointSource ?? null,
+      scenarioId: plan.scenarioId ?? 'normal',
+      expectedVehicleCount: day?.expectedVehicleCount ?? 2,
+      preflight: null,
+      simulation: null,
+      points: ids.map((id, index) => ({
+        id,
+        code: `CNT-${String(id).padStart(3, '0')}`,
+        sector: 'Unare I',
+        fillLevelPct: 30 + (index * 17) % 60,
+        active: true,
+      })),
+      pointCount: ids.length,
+    };
+  }
+  return apiGet<WeeklyDayPlan>(`/api/v1/planning/weekly/${planId}/days/${operationDate}/plan`);
+}
+
 export function archiveWeeklyPlan(planId: number): Promise<WeeklyPlan> {
   if (useMocks) {
     const plan = findMockWeeklyPlan(planId) ?? { ...mockWeeklyPlan(), id: planId };
@@ -339,11 +443,13 @@ export function createWeeklyPlan(payload: {
   weekStartDate: string;
   scenarioId: ScenarioId;
   caseStudyId?: number | null;
+  fleetByType?: Record<string, number> | null;
   days: Array<{ operationDate: string; collectionPointIds: number[] }>;
   notes?: string;
 }): Promise<WeeklyPlan> {
   const sanitizedPayload = {
     ...payload,
+    fleetByType: sanitizeFleetByType(payload.fleetByType),
     days: payload.days.map((day) => ({
       operationDate: day.operationDate,
       collectionPointIds: day.collectionPointIds.filter(
@@ -359,6 +465,7 @@ export function createWeeklyPlan(payload: {
       status: 'draft',
       weekStartDate: sanitizedPayload.weekStartDate,
       weekEndDate: weekEndFromStart(sanitizedPayload.weekStartDate),
+      fleetByType: sanitizedPayload.fleetByType ?? null,
       days: sanitizedPayload.days.map((day, index) => ({
         operationDate: day.operationDate,
         weekday: new Date(day.operationDate).getDay() === 0 ? 6 : new Date(day.operationDate).getDay() - 1,
@@ -374,28 +481,61 @@ export function createWeeklyPlan(payload: {
 
 export function updateWeeklyPlan(
   planId: number,
-  payload: { scenarioId?: ScenarioId; caseStudyId?: number | null; days?: WeeklyPlanDay[]; notes?: string },
+  payload: {
+    scenarioId?: ScenarioId;
+    caseStudyId?: number | null;
+    fleetByType?: Record<string, number> | null;
+    days?: WeeklyPlanDay[];
+    notes?: string;
+  },
 ): Promise<WeeklyPlan> {
   const sanitizedPayload = payload.days
     ? { ...payload, days: sanitizeWeeklyPlanDays(payload.days) }
     : payload;
+  const withFleet =
+    'fleetByType' in sanitizedPayload
+      ? { ...sanitizedPayload, fleetByType: sanitizeFleetByType(sanitizedPayload.fleetByType) }
+      : sanitizedPayload;
   if (useMocks) {
     const existing = findMockWeeklyPlan(planId) ?? { ...mockWeeklyPlan(), id: planId };
     const plan = upsertMockWeeklyPlan({
       ...existing,
-      ...sanitizedPayload,
-      days: sanitizedPayload.days
-        ? sanitizeWeeklyPlanDays(sanitizedPayload.days)
+      ...withFleet,
+      days: withFleet.days
+        ? sanitizeWeeklyPlanDays(withFleet.days)
         : existing.days,
     });
     return Promise.resolve(plan);
   }
-  return apiPatch(`/api/v1/planning/weekly/${planId}`, sanitizedPayload);
+  return apiPatch(`/api/v1/planning/weekly/${planId}`, withFleet);
 }
 
 export function validateWeeklyPlan(planId: number): Promise<{ jobId: string; weeklyPlanId: number }> {
   if (useMocks) return Promise.resolve({ jobId: 'mock-job', weeklyPlanId: planId });
   return apiPost(`/api/v1/planning/weekly/${planId}/validate`, {});
+}
+
+export function generateWeeklyOperationalPlan(
+  planId: number,
+): Promise<{ jobId: string; weeklyPlanId: number }> {
+  if (useMocks) return Promise.resolve({ jobId: 'mock-job', weeklyPlanId: planId });
+  return apiPost(`/api/v1/planning/weekly/${planId}/generate-operational`, {});
+}
+
+export interface WeeklyNotifyDayResult {
+  operationDate: string;
+  status: string;
+  dailyPlanId: number;
+  dispatchedRouteIds: number[];
+}
+
+export function notifyWeeklyOperationalDays(
+  planId: number,
+): Promise<{ items: WeeklyNotifyDayResult[]; count: number }> {
+  if (useMocks) {
+    return Promise.resolve({ items: [], count: 0 });
+  }
+  return apiPost(`/api/v1/planning/weekly/${planId}/notify-days`, {});
 }
 
 export function approveWeeklyPlan(
@@ -576,6 +716,37 @@ async function fetchWeeklyOrDailyPdf(path: string): Promise<Blob> {
   });
   if (!res.ok) throw new Error('No se pudo descargar el PDF');
   return res.blob();
+}
+
+export interface PendingBulkCancelResult {
+  cancelled: number;
+  ids: number[];
+}
+
+export function cancelBulkPendingVisits(params: {
+  pendingIds?: number[];
+  olderThanDays?: number;
+  targetDate?: string;
+}): Promise<PendingBulkCancelResult> {
+  if (useMocks) {
+    const ids = params.pendingIds ?? [];
+    return Promise.resolve({ cancelled: ids.length, ids });
+  }
+  return apiPost<PendingBulkCancelResult>('/api/v1/planning/pending/cancel-bulk', params);
+}
+
+export function resolvePendingVisit(pendingId: number): Promise<PendingVisit> {
+  if (useMocks) {
+    return Promise.resolve({
+      id: pendingId,
+      collectionPointId: 1,
+      originOperationDate: new Date().toISOString().slice(0, 10),
+      reason: 'resolved',
+      status: 'resolved',
+      priority: 0,
+    });
+  }
+  return apiPost<PendingVisit>(`/api/v1/planning/pending/${pendingId}/resolve`, {});
 }
 
 export function cancelPendingVisit(pendingId: number, reason?: string): Promise<PendingVisit> {

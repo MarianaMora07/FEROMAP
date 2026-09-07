@@ -1,18 +1,18 @@
 import { ChevronDown } from 'lucide-solid';
 import { Show, createEffect, createMemo, createSignal, onMount } from 'solid-js';
 import { Archive } from 'lucide-solid';
-import { Button, Card, CardHeader, LoadingPanel } from '../../design-system/components';
+import { Button, Card, CardHeader, LoadingPanel } from '../../../design-system/components';
 import {
   canReachWeeklyPlanStep,
   weeklyPlanStepGuideText,
   weeklyPlanStepTitle,
-} from '../../core/planning/weeklyPlanUx';
-import { PlanningEmptyState } from '../planning/PlanningEmptyState';
-import { PLANNING_EMPTY_PRESETS } from '../../core/planning/planningEmptyStates';
-import { PlanningLevelBanner } from '../planning/PlanningLevelBanner';
-import { PlanningStatusBadge } from '../planning/PlanningStatusBadge';
-import { fetchScenarios } from '../../core/api/simulation';
-import type { ScenarioId } from '../../data/types/simulation';
+} from '../../../core/planning/weeklyPlanUx';
+import { PlanningEmptyState } from '../PlanningEmptyState';
+import { PLANNING_EMPTY_PRESETS } from '../../../core/planning/planningEmptyStates';
+import { PlanningLevelBanner } from '../PlanningLevelBanner';
+import { PlanningStatusBadge } from '../PlanningStatusBadge';
+import { fetchScenarios } from '../../../core/api/simulation';
+import type { ScenarioId } from '../../../data/types/simulation';
 import {
   approveCurrentWeeklyPlan,
   archiveSelectedWeeklyPlan,
@@ -30,7 +30,7 @@ import {
   setWeeklyScenario,
   showLatestVersionChanges,
   weeklyPlanState,
-} from '../../core/stores/weeklyPlanStore';
+} from '../../../core/stores/weeklyPlanStore';
 import { WeeklyPlanFlowStepper } from './WeeklyPlanFlowStepper';
 import { WeeklyPlanHistoryExportPanel } from './WeeklyPlanHistoryExportPanel';
 import { WeeklyPlanListPanel } from './WeeklyPlanListPanel';

@@ -41,7 +41,7 @@ interface WeeklyPlanState {
   selectedPlanId: number | null;
   versions: PlanVersion[];
   versionDiff: Array<{ path: string; before: unknown; after: unknown }>;
-  collectionPoints: Array<{ id: number; code: string; sectorName?: string | null }>;
+  collectionPoints: Array<{ id: number; code: string; sectorName?: string | null; sectorId?: number | null }>;
   isLoading: boolean;
   isSaving: boolean;
   isValidating: boolean;
@@ -382,6 +382,7 @@ export async function saveWeeklyPlanDraft(scenarioId: ScenarioId, days: WeeklyPl
       weekStartDate: weekStart,
       scenarioId,
       caseStudyId: state.plan?.caseStudyId ?? state.draftCaseStudy?.id ?? null,
+      fleetByType: state.plan?.fleetByType ?? null,
       days: sanitizedDays.map((day) => ({
         operationDate: day.operationDate,
         collectionPointIds: day.collectionPointIds,
@@ -392,6 +393,7 @@ export async function saveWeeklyPlanDraft(scenarioId: ScenarioId, days: WeeklyPl
         ? await updateWeeklyPlan(state.plan.id, {
             scenarioId,
             caseStudyId: payload.caseStudyId,
+            fleetByType: payload.fleetByType,
             days: sanitizedDays,
           })
         : await createWeeklyPlan(payload),
@@ -535,6 +537,26 @@ export function setWeeklyScenario(scenarioId: ScenarioId): void {
     return;
   }
   setState('plan', 'scenarioId', scenarioId);
+}
+
+export function updateWeeklyPlanFleet(fleetByType: Record<string, number> | null): void {
+  if (!state.plan) return;
+  const resolved: Record<string, number> = {};
+  for (const [type, count] of Object.entries(fleetByType ?? {})) {
+    const value = Math.floor(Number(count));
+    if (Number.isFinite(value) && value >= 1) {
+      resolved[type] = value;
+    }
+  }
+  setState('plan', 'fleetByType', Object.keys(resolved).length > 0 ? resolved : null);
+  // La composición (o el uso de toda la flota) gobierna: se limpian límites por día
+  // heredados de autofill para que el motor use exactamente la flota indicada.
+  setState(
+    'plan',
+    'days',
+    (state.plan?.days ?? []).map((day) => ({ ...day, expectedVehicleCount: null })),
+  );
+  setState({ validationCompleted: false, validationSummary: null });
 }
 
 export async function autofillWeeklyFromCaseStudy(caseStudyId?: number | null): Promise<void> {

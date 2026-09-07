@@ -3,7 +3,7 @@ import { Check, Loader2 } from 'lucide-solid';
 import {
   canReachWeeklyPlanStep,
   weeklyPlanFlowSteps,
-} from '../../core/planning/weeklyPlanUx';
+} from '../../../core/planning/weeklyPlanUx';
 
 interface WeeklyPlanFlowStepperProps {
   flowStep: number;

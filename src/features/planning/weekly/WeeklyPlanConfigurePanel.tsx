@@ -1,14 +1,11 @@
 import { For, Show, createMemo, createSignal } from 'solid-js';
-import { Button, SelectField } from '../../design-system/components';
-import { mergeWeekCalendarDays } from '../../core/planning/weeklyPlanCalendar';
-import type { WeeklyPlan } from '../../core/api/planning';
-import type { ScenarioId } from '../../data/types/simulation';
-import {
-  applyWeeklyCaseStudy,
-  updateWeeklyPlanDay,
-  weeklyPlanState,
-} from '../../core/stores/weeklyPlanStore';
-import { CaseStudySelector } from './CaseStudySelector';
+import { Button, SelectField } from '../../../design-system/components';
+import { mergeWeekCalendarDays } from '../../../core/planning/weeklyPlanCalendar';
+import type { WeeklyPlan } from '../../../core/api/planning';
+import type { ScenarioId } from '../../../data/types/simulation';
+import { applyWeeklyCaseStudy, updateWeeklyPlanDay, updateWeeklyPlanFleet, weeklyPlanState } from '../../../core/stores/weeklyPlanStore';
+import { CaseStudySelector } from '../../case-studies/CaseStudySelector';
+import { WeeklyPlanFleetEditor } from './WeeklyPlanFleetEditor';
 import {
   WeeklyPlanDayEditorDrawer,
   WeeklyPlanMissingPointsAlert,
@@ -67,6 +64,12 @@ export function WeeklyPlanConfigurePanel(props: WeeklyPlanConfigurePanelProps) {
         </SelectField>
         <p class="mt-1 text-xs text-text-muted">Se usa al validar y al abrir cada día en operación.</p>
       </div>
+
+      <WeeklyPlanFleetEditor
+        value={props.plan.fleetByType}
+        editable={props.editable}
+        onChange={(fleet) => updateWeeklyPlanFleet(fleet)}
+      />
 
       <Show when={!caseStudyLinked()}>
         <WeeklyPlanMissingPointsAlert days={calendarDays()} />
