@@ -19,6 +19,7 @@ class WeeklyPlanCreate(CamelModel):
     week_start_date: date
     scenario_id: str = "normal"
     case_study_id: int | None = None
+    fleet_by_type: dict[str, int] | None = None
     days: list[WeeklyPlanDayInput]
     notes: str | None = None
 
@@ -26,6 +27,7 @@ class WeeklyPlanCreate(CamelModel):
 class WeeklyPlanUpdate(CamelModel):
     scenario_id: str | None = None
     case_study_id: int | None = None
+    fleet_by_type: dict[str, int] | None = None
     days: list[WeeklyPlanDayInput] | None = None
     notes: str | None = None
 
@@ -54,6 +56,12 @@ class DeferUncoveredRequest(CamelModel):
 
 class PendingCancelRequest(CamelModel):
     reason: str | None = None
+
+
+class PendingCancelBulkRequest(CamelModel):
+    pending_ids: list[int] | None = None
+    older_than_days: int | None = Field(default=None, gt=0)
+    target_date: date | None = None
 
 
 class OptimizePlanningContext(CamelModel):

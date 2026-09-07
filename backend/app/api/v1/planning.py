@@ -6,6 +6,7 @@ from app.api.deps import CurrentUser, DbSession, PlannerOrAdmin
 from app.schemas.route_constraints import DailyOptimizeRequest
 from app.schemas.planning import (
     DailyPlanPointsUpdate,
+    PendingCancelBulkRequest,
     PendingCancelRequest,
     PendingIncorporateRequest,
     DeferUncoveredRequest,
@@ -20,6 +21,7 @@ from app.services.planning_service import (
     archive_weekly_plan,
     autofill_weekly_plan_from_schedules,
     autofill_weekly_plan_from_case_study,
+    bulk_cancel_pending_visits,
     cancel_pending_visit,
     close_daily_plan,
     compare_plan_versions,
@@ -30,6 +32,7 @@ from app.services.planning_service import (
     get_daily_plan_by_date,
     get_daily_plan_execution_context,
     get_or_create_daily_plan,
+    get_weekly_day_plan,
     get_weekly_plan,
     incorporate_pending_visit,
     list_operational_history,
@@ -40,6 +43,7 @@ from app.services.planning_service import (
     open_daily_plan,
     preflight_weekly_feasibility,
     query_planning_history,
+    resolve_pending_visit,
     trace_incident,
     update_daily_plan_points,
     update_weekly_plan,
@@ -90,6 +94,7 @@ def create_weekly(body: WeeklyPlanCreate, db: DbSession, _: PlannerOrAdmin):
         week_start_date=body.week_start_date,
         scenario_id=body.scenario_id,
         case_study_id=body.case_study_id,
+        fleet_by_type=body.fleet_by_type,
         days=[
             {
                 "operation_date": day.operation_date,
@@ -112,6 +117,12 @@ def get_weekly(plan_id: int, db: DbSession):
     return get_weekly_plan(db, plan_id)
 
 
+@router.get("/weekly/{plan_id}/days/{operation_date}/plan")
+def get_weekly_day_plan_view(plan_id: int, operation_date: date, db: DbSession):
+    """Detalle de un día de la semana con los puntos a recorrer (Tarea 10, nivel 2)."""
+    return get_weekly_day_plan(db, plan_id, operation_date)
+
+
 @router.patch("/weekly/{plan_id}")
 def patch_weekly(plan_id: int, body: WeeklyPlanUpdate, db: DbSession, _: PlannerOrAdmin):
     update_kwargs: dict = {
@@ -131,6 +142,8 @@ def patch_weekly(plan_id: int, body: WeeklyPlanUpdate, db: DbSession, _: Planner
         "scenario_id": body.scenario_id,
         "notes": body.notes,
     }
+    if "fleet_by_type" in body.model_fields_set:
+        update_kwargs["fleet_by_type"] = body.fleet_by_type
     if "case_study_id" in body.model_fields_set:
         update_kwargs["case_study_id"] = body.case_study_id
     result = update_weekly_plan(db, plan_id, **update_kwargs)
@@ -176,6 +189,32 @@ def approve_weekly(plan_id: int, body: WeeklyPlanApprove, db: DbSession, user: C
     )
     db.commit()
     return result
+
+
+@router.post("/weekly/{plan_id}/generate-operational")
+def generate_weekly_operational(plan_id: int, db: DbSession, _: PlannerOrAdmin):
+    from app.db.models import WeeklyPlan
+    from app.services.optimization_job_service import start_weekly_operational_plan_job
+
+    plan = db.get(WeeklyPlan, plan_id)
+    if plan is None:
+        raise HTTPException(status_code=404, detail="Plan semanal no encontrado")
+    if plan.status != "approved":
+        raise HTTPException(
+            status_code=400,
+            detail="Primero aprueba el plan semanal para generar el plan operativo",
+        )
+    job = start_weekly_operational_plan_job(plan_id)
+    return {"jobId": job.id, "weeklyPlanId": plan_id}
+
+
+@router.post("/weekly/{plan_id}/notify-days")
+def notify_weekly_days(plan_id: int, db: DbSession, _: PlannerOrAdmin):
+    from app.services.weekly_operational_service import notify_weekly_operational_days
+
+    items = notify_weekly_operational_days(db, plan_id)
+    db.commit()
+    return {"items": items, "count": len(items)}
 
 
 @router.post("/weekly/{plan_id}/autofill-from-schedules")
@@ -310,6 +349,8 @@ def optimize_daily(
         planning_level="administrative",
         auto_dispatch=False,
         fleet_limit=exec_ctx.get("fleetLimit"),
+        fleet_by_type=exec_ctx.get("fleetByType"),
+        sector_partition=exec_ctx.get("sectorPartition"),
         priority_fill_level=body.priority_fill_level,
         time_window_enabled=body.time_window_enabled,
         departure_hour=body.departure_hour,
@@ -388,6 +429,25 @@ def list_pending(
             origin_to=origin_to,
         )
     }
+
+
+@router.post("/pending/cancel-bulk")
+def cancel_pending_bulk(body: PendingCancelBulkRequest, db: DbSession, _: PlannerOrAdmin):
+    result = bulk_cancel_pending_visits(
+        db,
+        pending_ids=body.pending_ids,
+        older_than_days=body.older_than_days,
+        target_date=body.target_date,
+    )
+    db.commit()
+    return result
+
+
+@router.post("/pending/{pending_id}/resolve")
+def resolve_pending(pending_id: int, db: DbSession, _: PlannerOrAdmin):
+    result = resolve_pending_visit(db, pending_id)
+    db.commit()
+    return result
 
 
 @router.post("/pending/{pending_id}/cancel")

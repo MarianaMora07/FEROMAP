@@ -18,6 +18,10 @@ class WeeklyPlan(Base):
     case_study_id: Mapped[int | None] = mapped_column(ForeignKey("case_studies.id", ondelete="SET NULL"), nullable=True)
     reference_simulation_id: Mapped[int | None] = mapped_column(ForeignKey("simulations.id"), nullable=True)
     expected_kpis_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Composición de flota de la semana por tipo (ej. {"Compactadora": 3, "Volteo": 1}).
+    fleet_by_type_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Resumen del plan operativo generado (camión × día) tras "Generar plan operativo".
+    operational_plan_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     preflight_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

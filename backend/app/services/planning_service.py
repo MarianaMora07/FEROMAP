@@ -48,6 +48,63 @@ def _dump_json_list(values: list[int]) -> str:
     return json.dumps(sorted(set(values)))
 
 
+def _parse_fleet_by_type(value: str | None) -> dict[str, int] | None:
+    """Composición de flota semanal por tipo (ej. {"Compactadora": 3})."""
+    if not value:
+        return None
+    try:
+        parsed = json.loads(value)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    resolved: dict[str, int] = {}
+    for key, count in parsed.items():
+        if isinstance(count, bool) or not isinstance(count, int) or count < 1:
+            continue
+        resolved[str(key)] = count
+    return resolved or None
+
+
+def _dump_fleet_by_type(fleet: dict[str, int] | None) -> str | None:
+    if not fleet:
+        return None
+    normalized = {str(key): int(count) for key, count in fleet.items() if int(count) > 0}
+    return json.dumps(normalized, ensure_ascii=False) if normalized else None
+
+
+def _weekly_fleet_by_type(plan: WeeklyPlan) -> dict[str, int] | None:
+    return _parse_fleet_by_type(plan.fleet_by_type_json)
+
+
+def _plan_fleet_vehicles(db: Session, plan: WeeklyPlan) -> list[Any]:
+    """Vehículos asignables de la semana respetando la composición por tipo.
+
+    Sin ``fleetByType`` configurada devuelve toda la flota asignable (legacy). Con
+    configuración, por cada tipo se toman las primeras N unidades por id (mismo
+    criterio que el motor: ``build_optimization_vehicle_units``).
+    """
+    from app.db.models import Vehicle
+
+    vehicles = db.scalars(
+        select(Vehicle).where(Vehicle.status.in_(("available", "in_route"))).order_by(Vehicle.id)
+    ).all()
+    fleet = _weekly_fleet_by_type(plan)
+    if not fleet:
+        return list(vehicles)
+    selected: list[Vehicle] = []
+    used: dict[str, int] = {}
+    for vehicle in vehicles:
+        vtype = vehicle.vehicle_type
+        if vtype not in fleet:
+            continue
+        if used.get(vtype, 0) >= fleet[vtype]:
+            continue
+        selected.append(vehicle)
+        used[vtype] = used.get(vtype, 0) + 1
+    return selected or list(vehicles)
+
+
 def monday_of_week(value: date) -> date:
     return value - timedelta(days=value.weekday())
 
@@ -106,6 +163,29 @@ def _weekly_plan_payload(db: Session, plan: WeeklyPlan) -> dict[str, Any]:
         except (TypeError, ValueError, json.JSONDecodeError):
             preflight = None
     plan_case = _case_study_summary(db, plan.case_study_id)
+    operational_plan = None
+    if plan.operational_plan_json:
+        try:
+            operational_plan = json.loads(plan.operational_plan_json)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            operational_plan = None
+    # Estado vivo del plan operativo: sobrescribe el estado guardado en el JSON con el
+    # estado real del DailyPlan (optimized / dispatched / closed), de modo que al volver
+    # a entrar la tabla refleje la operación sin depender de la sesión.
+    if operational_plan and isinstance(operational_plan, dict):
+        op_days = operational_plan.get("days") or []
+        daily_plan_ids = [
+            day.get("dailyPlanId") for day in op_days if day.get("dailyPlanId")
+        ]
+        if daily_plan_ids:
+            daily_rows = db.execute(
+                select(DailyPlan.id, DailyPlan.status).where(DailyPlan.id.in_(daily_plan_ids))
+            ).all()
+            live_status = {int(row[0]): str(row[1]) for row in daily_rows}
+            for day in op_days:
+                daily_id = day.get("dailyPlanId")
+                if daily_id is not None and daily_id in live_status:
+                    day["status"] = live_status[daily_id]
     return {
         "id": plan.id,
         "weekStartDate": plan.week_start_date.isoformat(),
@@ -116,6 +196,8 @@ def _weekly_plan_payload(db: Session, plan: WeeklyPlan) -> dict[str, Any]:
         "caseStudyCode": plan_case["code"] if plan_case else None,
         "caseStudyName": plan_case["name"] if plan_case else None,
         "referenceSimulationId": plan.reference_simulation_id,
+        "fleetByType": _parse_fleet_by_type(plan.fleet_by_type_json),
+        "operationalPlan": operational_plan,
         "expectedKpis": expected_kpis,
         "preflight": preflight,
         "preflightFeasible": bool(preflight and preflight.get("feasible")),
@@ -291,6 +373,7 @@ def create_weekly_plan_draft(
     days: list[dict[str, Any]],
     notes: str | None = None,
     case_study_id: int | None = None,
+    fleet_by_type: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     week_start, week_end = week_range(week_start_date)
     existing = db.scalar(select(WeeklyPlan).where(WeeklyPlan.week_start_date == week_start))
@@ -309,6 +392,7 @@ def create_weekly_plan_draft(
         status="draft",
         scenario_id=scenario_id,
         case_study_id=case_study_id,
+        fleet_by_type_json=_dump_fleet_by_type(fleet_by_type),
         notes=notes,
     )
     db.add(plan)
@@ -354,6 +438,7 @@ def update_weekly_plan(
     scenario_id: str | None,
     notes: str | None,
     case_study_id: int | None | object = _UNSET,
+    fleet_by_type: dict[str, int] | None | object = _UNSET,
 ) -> dict[str, Any]:
     plan = db.scalar(select(WeeklyPlan).where(WeeklyPlan.id == plan_id).options(joinedload(WeeklyPlan.days)))
     if plan is None:
@@ -369,6 +454,10 @@ def update_weekly_plan(
         if case_study_id is not None:
             _ensure_case_study_linkable(db, case_study_id)
         plan.case_study_id = case_study_id  # type: ignore[assignment]
+    if fleet_by_type is not _UNSET:
+        plan.fleet_by_type_json = _dump_fleet_by_type(
+            fleet_by_type if fleet_by_type is not None else {}
+        )
 
     if days:
         for day in list(plan.days):
@@ -485,11 +574,9 @@ def preflight_weekly_feasibility(db: Session, plan: WeeklyPlan) -> dict[str, Any
     contenedor y la capacidad de la flota disponible/esperada por día. Se persiste
     en ``preflight_json`` y se usa como guarda al aprobar.
     """
-    from app.db.models import CollectionPoint, Vehicle
+    from app.db.models import CollectionPoint
 
-    vehicles = db.scalars(
-        select(Vehicle).where(Vehicle.status.in_(("available", "in_route"))).order_by(Vehicle.id)
-    ).all()
+    vehicles = _plan_fleet_vehicles(db, plan)
     vehicle_capacities = sorted((float(v.max_capacity_kg) or 0 for v in vehicles), reverse=True)
     available_vehicles = len(vehicles)
     rows: list[dict[str, Any]] = []
@@ -580,6 +667,8 @@ def validate_weekly_plan_days(db: Session, *, plan_id: int) -> dict[str, Any]:
                 scenario_id,
                 collection_point_ids=resolved_ids,
                 fleet_limit=day.expected_vehicle_count,
+                fleet_by_type=_weekly_fleet_by_type(plan),
+                sector_partition=False if _json_list(day.sector_ids_json) else None,
                 auto_commit=False,
                 auto_dispatch=False,
                 reporter=None,
@@ -622,6 +711,82 @@ def validate_weekly_plan_days(db: Session, *, plan_id: int) -> dict[str, Any]:
         "perDay": rows,
         "feasible": aggregate["feasible"],
         "weeklyPlanId": plan.id,
+    }
+
+
+def get_weekly_day_plan(db: Session, plan_id: int, operation_date: date) -> dict[str, Any]:
+    """Plan de un día de la semana enriquecido con los puntos a recorrer (Tarea 10).
+
+    Devuelve el detalle que necesita el nivel 2 (día) de la vista de optimización:
+    fecha, escenario efectivo, flota esperada, pre-flight/validación del día y la
+    lista de puntos (código, sector, % de llenado proyectado, estado).
+    """
+    from app.domain.waste_generation import projected_fill_level_pct
+
+    plan = db.scalar(select(WeeklyPlan).where(WeeklyPlan.id == plan_id).options(joinedload(WeeklyPlan.days)))
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan semanal no encontrado")
+    day = next((row for row in plan.days if row.operation_date == operation_date), None)
+    if day is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El plan no tiene ese día")
+
+    resolved_ids, point_source, effective_case_id = resolve_weekly_day_point_ids(db, plan, day)
+    case_meta = _case_study_summary(db, effective_case_id)
+    points: list[dict[str, Any]] = []
+    if resolved_ids:
+        rows = db.scalars(
+            select(CollectionPoint)
+            .where(CollectionPoint.id.in_(resolved_ids))
+            .options(joinedload(CollectionPoint.sector))
+        ).all()
+        by_id = {point.id: point for point in rows}
+        for point_id in resolved_ids:
+            point = by_id.get(point_id)
+            if point is None:
+                continue
+            points.append(
+                {
+                    "id": point.id,
+                    "code": point.code,
+                    "sector": point.sector.name if point.sector else None,
+                    "fillLevelPct": projected_fill_level_pct(point),
+                    "active": point.status == "active",
+                }
+            )
+
+    preflight: dict[str, Any] | None = None
+    if plan.preflight_json:
+        try:
+            preflight = json.loads(plan.preflight_json)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            preflight = None
+    day_preflight = None
+    day_simulation = None
+    if preflight:
+        day_preflight = next(
+            (row for row in preflight.get("rows") or [] if row.get("operationDate") == operation_date.isoformat()),
+            None,
+        )
+        day_simulation = next(
+            (row for row in (preflight.get("simulation") or {}).get("rows") or []
+             if row.get("operationDate") == operation_date.isoformat()),
+            None,
+        )
+
+    return {
+        "weeklyPlanId": plan.id,
+        "operationDate": operation_date.isoformat(),
+        "weekday": day.weekday,
+        "pointSource": point_source,
+        "caseStudyId": effective_case_id,
+        "caseStudyCode": case_meta["code"] if case_meta else None,
+        "caseStudyName": case_meta["name"] if case_meta else None,
+        "scenarioId": day.scenario_id_override or plan.scenario_id,
+        "expectedVehicleCount": day.expected_vehicle_count,
+        "preflight": day_preflight,
+        "simulation": day_simulation,
+        "points": points,
+        "pointCount": len(points),
     }
 
 
@@ -693,6 +858,8 @@ def get_daily_plan_execution_context(db: Session, daily_plan_id: int) -> dict[st
         weekly_plan = db.get(WeeklyPlan, weekly_day.weekly_plan_id)
     scenario_id = plan.scenario_id
     fleet_limit: int | None = None
+    fleet_by_type: dict[str, int] | None = None
+    sector_partition: bool | None = None
     case_study_id: int | None = None
     if weekly_day is not None:
         if weekly_day.scenario_id_override:
@@ -700,9 +867,15 @@ def get_daily_plan_execution_context(db: Session, daily_plan_id: int) -> dict[st
         fleet_limit = weekly_day.expected_vehicle_count
         if weekly_plan is not None:
             case_study_id = effective_case_study_id(weekly_plan, weekly_day)
+            fleet_by_type = _weekly_fleet_by_type(weekly_plan)
+            if _json_list(weekly_day.sector_ids_json):
+                # Día armado por zonas (Plan semanal): el ACO reparte libre entre la flota.
+                sector_partition = False
     return {
         "scenarioId": scenario_id,
         "fleetLimit": fleet_limit,
+        "fleetByType": fleet_by_type,
+        "sectorPartition": sector_partition,
         "weeklyPlanDayId": weekly_day.id if weekly_day else None,
         "caseStudyId": case_study_id,
     }
@@ -1439,6 +1612,57 @@ def cancel_pending_visit(db: Session, pending_id: int, *, reason: str | None = N
     if reason:
         payload["cancelReason"] = reason
     return payload
+
+
+def bulk_cancel_pending_visits(
+    db: Session,
+    *,
+    pending_ids: list[int] | None = None,
+    older_than_days: int | None = None,
+    target_date: date | None = None,
+) -> dict[str, Any]:
+    """Cancela pendientes en lote (misma regla que ``cancel_pending_visit``).
+
+    Sin filtros no hace nada (evita borrados masivos accidentales). Filtros opcionales:
+    ``pending_ids`` (ids concretos), ``older_than_days`` (sin fecha objetivo y origen más
+    antiguo que N días), ``target_date`` (fecha objetivo concreta). Se combinan con AND.
+    """
+    if not pending_ids and older_than_days is None and target_date is None:
+        return {"cancelled": 0, "ids": []}
+
+    stmt = select(PendingVisit).where(PendingVisit.status.in_(["open", "incorporated"]))
+    if pending_ids:
+        stmt = stmt.where(PendingVisit.id.in_(pending_ids))
+    if older_than_days is not None and older_than_days > 0:
+        cutoff = date.today() - timedelta(days=older_than_days)
+        stmt = stmt.where(PendingVisit.origin_operation_date < cutoff)
+        if target_date is None:
+            stmt = stmt.where(PendingVisit.target_operation_date.is_(None))
+    if target_date is not None:
+        stmt = stmt.where(PendingVisit.target_operation_date == target_date)
+
+    visits = db.scalars(stmt).all()
+    now = datetime.now(timezone.utc)
+    cancelled_ids: list[int] = []
+    for visit in visits:
+        visit.status = "cancelled"
+        visit.resolved_at = now
+        cancelled_ids.append(visit.id)
+    db.flush()
+    return {"cancelled": len(cancelled_ids), "ids": cancelled_ids}
+
+
+def resolve_pending_visit(db: Session, pending_id: int) -> dict[str, Any]:
+    """Marca un pendiente abierto como ya visitado (no volverá a la optimización)."""
+    visit = db.get(PendingVisit, pending_id)
+    if visit is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pendiente no encontrado")
+    if visit.status not in {"open", "incorporated"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El pendiente ya fue cerrado")
+    visit.status = "resolved"
+    visit.resolved_at = datetime.now(timezone.utc)
+    db.flush()
+    return _serialize_pending(db, visit)
 
 
 def resolve_pending_visits_for_points(db: Session, point_ids: list[int], *, operation_date: date) -> int:
