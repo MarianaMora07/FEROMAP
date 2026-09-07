@@ -61,7 +61,8 @@ if [[ -z "${job_id}" ]]; then
   exit 1
 fi
 optimize_json=""
-deadline=$((SECONDS + 120))
+deadline=$((SECONDS + 600))
+warned_slow=false
 while [[ "${SECONDS}" -lt "${deadline}" ]]; do
   optimize_json="$(curl -sf -H "Authorization: Bearer ${TOKEN}" "${API_BASE}/api/v1/simulations/jobs/${job_id}")"
   status="$(echo "${optimize_json}" | python -c "import sys,json; print(json.load(sys.stdin).get('status',''))")"
@@ -71,6 +72,10 @@ while [[ "${SECONDS}" -lt "${deadline}" ]]; do
   if [[ "${status}" == "failed" || "${status}" == "cancelled" ]]; then
     echo "❌ Job terminó con status=${status}" >&2
     exit 1
+  fi
+  if [[ ${SECONDS} -gt 150 && "${warned_slow}" == "false" ]]; then
+    warned_slow=true
+    echo "   ⏳ Sigue corriendo (primera corrida construye la matriz de costos en frío; puede tardar varios minutos y luego se cachea)." >&2
   fi
   sleep 1
 done
@@ -102,11 +107,19 @@ d = json.load(sys.stdin)
 result = d.get('result') or {}
 kpis = result.get('kpis') or {}
 dist = kpis.get('distanceKm') or {}
-metrics = kpis.get('engineMetrics') or {}
+metrics = result.get('engineMetrics') or kpis.get('engineMetrics') or {}
 current = float(dist.get('current') or 0)
 optimized = float(dist.get('optimized') or 0)
 cpu = float(metrics.get('computationSeconds') or 0)
-routes = int(kpis.get('routesCount') or result.get('routesCount') or 0)
+raw_routes = result.get('routes') or []
+if isinstance(raw_routes, dict):
+    optimized_fc = raw_routes.get('optimized') or {}
+    feats = optimized_fc.get('features') if isinstance(optimized_fc, dict) else None
+    routes = len(feats) if isinstance(feats, list) else 0
+elif isinstance(raw_routes, list):
+    routes = len(raw_routes)
+else:
+    routes = int(kpis.get('routesCount') or result.get('routesCount') or 0)
 errors = []
 if current <= 0:
     errors.append('baseline_km')

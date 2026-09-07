@@ -112,9 +112,9 @@ test.describe('Fase A — UI tras flujo (requiere just phase-a-flow)', () => {
     });
   });
 
-  test('planificador ve hub operativo en /planning', async ({ page }) => {
+  test('planificador ve el hub operativo integrado en el dashboard', async ({ page }) => {
     expectNoPageErrors(page);
-    await ensurePlannerSession(page, '/planning');
+    await ensurePlannerSession(page, '/');
     await expect(page.getByTestId('planner-hub')).toBeVisible({ timeout: 45_000 });
     await expect(page.getByText('Mi planificación')).toBeVisible();
   });

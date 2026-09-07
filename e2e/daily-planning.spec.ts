@@ -20,19 +20,21 @@ test.describe('Planificación operativa — plan del día', () => {
     await page.getByTestId('optimization-experience-chip').click();
     await expect(page.getByTestId('optimization-experience-stepper')).toBeVisible();
 
-    await page.getByTestId('optimization-more-context').locator('summary').click();
-    await expect(page.getByTestId('optimization-desk-intro')).toBeVisible();
+    // Acciones administrativas en el menú "⋯".
+    await page.getByTestId('optimization-page-menu').click();
+    await expect(page.getByTestId('optimization-menu-export-pdf')).toBeVisible();
+    await expect(page.getByTestId('optimization-menu-close-day')).toBeVisible();
+    await expect(page.getByText('Historial de planificación')).toBeVisible();
+    await page.getByTestId('optimization-page-menu').click();
 
-    await page.getByText('Ciclo administrativo').click();
-    await expect(page.getByTestId('daily-timeline-stepper')).toBeVisible();
-
+    await page.getByTestId('plan-day-tab-pending').click();
     await expect(page.getByTestId('optimization-pending-section')).toBeVisible();
     await page.getByTestId('optimization-pending-section').locator('summary').click();
     await expect(page.getByTestId('pending-management-panel')).toBeVisible();
 
-    await expect(page.getByRole('button', { name: 'Actualizar pendientes' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Cerrar día' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Generar ruta operativa' })).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: /(Generar|Regenerar) Plan Operativo/ }),
+    ).toBeVisible();
   });
 
   test('abre gestión de pendientes con hash #pendientes', async ({ page }) => {
@@ -50,7 +52,6 @@ test.describe('Planificación operativa — flujo semanal', () => {
   test('muestra stepper directivo y detalle del plan', async ({ page }) => {
     await ensurePlannerSession(page, '/planning/weekly');
     await expect(page.getByTestId('planning-weekly-page')).toBeVisible({ timeout: 45_000 });
-    await expect(page.getByTestId('weekly-plan-directivo-notice')).toBeVisible();
     await expect(page.getByTestId('weekly-plan-tab')).toBeVisible();
     await expect(page.getByTestId('weekly-plan-stepper')).toBeVisible();
     await expect(page.getByTestId('weekly-plan-stepper').getByRole('button', { name: 'Validar' })).toBeVisible();
@@ -107,10 +108,10 @@ test.describe('Planificación operativa — ciclo hub a historial', () => {
     expectNoPageErrors(page);
   });
 
-  test('hub de planificación accesible', async ({ page }) => {
-    await ensurePlannerSession(page, '/planning');
+  test('dashboard actúa como hub de planificación', async ({ page }) => {
+    await ensurePlannerSession(page, '/');
     await expect(page.getByTestId('planner-hub')).toBeVisible({ timeout: 45_000 });
-    await expect(page.getByRole('heading', { name: 'Hub de planificación' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
     await expect(page.getByText('Mi planificación')).toBeVisible();
   });
 
@@ -119,6 +120,9 @@ test.describe('Planificación operativa — ciclo hub a historial', () => {
     await expect(page.getByText(/Monitoreo en tiempo real|Supervisión operativa|Flota en vivo/)).toBeVisible({
       timeout: 30_000,
     });
+    await expect(page.getByTestId('monitoring-tab-map')).toHaveAttribute('aria-selected', 'true');
+    await page.getByTestId('monitoring-tab-incidents').click();
+    await expect(page.getByTestId('monitoring-tab-incidents')).toHaveAttribute('aria-selected', 'true');
   });
 
   test('historial unificado carga semana por defecto', async ({ page }) => {
