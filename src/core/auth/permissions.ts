@@ -54,18 +54,23 @@ export interface NavItemDef {
   roles: UserRole[];
   /** Texto secundario bajo la etiqueta en el menú lateral */
   description?: string;
-  /** Muestra un encabezado de sección antes de este ítem */
-  sectionBefore?: string;
   /** Enlace visible siempre en la parte superior del sidebar */
   sidebarPrimary?: boolean;
+  /** Clasificación demo/producto mostrada como badge solo para admin (docs/ux §3) */
+  kind?: 'demo' | 'producto';
 }
 
 export const DEMO_NAV_HIDDEN_HREFS = new Set<string>(['/analytics']);
 
+/**
+ * Grupos colapsables del sidebar (admin/planificador).
+ * Fuente de verdad de la IA: docs/ux/arquitectura-navegacion.md §3.
+ * Orden de los primarios = ciclo planificar → operar → supervisar.
+ */
 export const SIDEBAR_SECTION_GROUPS: Record<string, readonly string[]> = {
-  Operación: ['/planning', '/planning/weekly', '/optimization', '/planning/history', '/monitoring'],
-  Análisis: ['/simulation', '/case-studies', '/demostracion'],
-  Resultados: ['/reports'],
+  'Consulta y reportes': ['/planning/history', '/reports'],
+  Catálogos: ['/vehicles', '/drivers', '/collection-points'],
+  'Tesis y demostración': ['/simulation', '/case-studies', '/demostracion'],
 };
 
 export interface SidebarNavSection {
@@ -93,72 +98,62 @@ export function sidebarNavLayout(role: UserRole | undefined): {
 export const MAIN_NAV_ITEMS: NavItemDef[] = [
   { href: '/', label: 'Dashboard', sidebarPrimary: true, roles: ['administrador', 'planificador', 'conductor'] },
   {
+    href: '/planning/weekly',
+    label: 'Plan semanal',
+    description: 'Directivo — configura, valida y aprueba la semana',
+    sidebarPrimary: true,
+    roles: ['administrador', 'planificador'],
+  },
+  {
+    href: '/optimization',
+    label: 'Plan del día',
+    description: 'Optimiza, simula y despacha la jornada',
+    sidebarPrimary: true,
+    roles: ['administrador', 'planificador'],
+  },
+  {
+    href: '/monitoring',
+    label: 'Monitoreo en vivo',
+    description: 'Flota, rutas e incidencias en tiempo real',
+    sidebarPrimary: true,
+    roles: ['administrador', 'planificador', 'conductor'],
+  },
+  { href: '/map', label: 'Mapa GIS', sidebarPrimary: true, roles: ['administrador', 'planificador', 'conductor'] },
+  {
+    href: '/planning/history',
+    label: 'Historial unificado',
+    description: 'Semana, día e incidencias',
+    roles: ['administrador', 'planificador'],
+  },
+  { href: '/reports', label: 'Reportes', roles: ['administrador', 'planificador'] },
+  { href: '/vehicles', label: 'Vehículos', roles: ['administrador', 'planificador'] },
+  { href: '/drivers', label: 'Conductores', roles: ['administrador', 'planificador'] },
+  {
+    href: '/collection-points',
+    label: 'Puntos de Recolección',
+    roles: ['administrador', 'planificador'],
+  },
+  {
     href: '/simulation',
-    label: 'Simulación de tesis',
+    label: 'Simulación ACO',
     description: 'Baseline vs ACO — escenario normal',
-    sectionBefore: 'Análisis',
+    kind: 'demo',
     roles: ['administrador', 'planificador'],
   },
   {
     href: '/case-studies',
     label: 'Casos de estudio',
     description: 'Subconjuntos aislados para la tesis',
+    kind: 'demo',
     roles: ['administrador', 'planificador'],
   },
   {
     href: '/demostracion',
     label: 'Demostración ACO',
     description: 'Convergencia del algoritmo (~2 min)',
+    kind: 'demo',
     roles: ['administrador', 'planificador'],
   },
-  { href: '/map', label: 'Mapa GIS', sidebarPrimary: true, roles: ['administrador', 'planificador', 'conductor'] },
-  { href: '/vehicles', label: 'Vehículos', sidebarPrimary: true, roles: ['administrador', 'planificador'] },
-  { href: '/drivers', label: 'Conductores', sidebarPrimary: true, roles: ['administrador', 'planificador'] },
-  {
-    href: '/collection-points',
-    label: 'Puntos de Recolección',
-    sidebarPrimary: true,
-    roles: ['administrador', 'planificador'],
-  },
-  {
-    href: '/monitoring',
-    label: 'Monitoreo en Tiempo Real',
-    description: 'Flota y rutas despachadas',
-    roles: ['administrador', 'planificador', 'conductor'],
-  },
-  {
-    href: '/planning/weekly',
-    label: 'Plan semanal',
-    description: 'Directivo — aprobar la semana',
-    roles: ['administrador', 'planificador'],
-  },
-  {
-    href: '/planning',
-    label: 'Hub de planificación',
-    description: 'Tu operación del día',
-    sectionBefore: 'Operación',
-    roles: ['administrador', 'planificador'],
-  },
-  {
-    href: '/optimization',
-    label: 'Planificación operativa',
-    description: 'Día a día — optimizar y despachar',
-    roles: ['administrador', 'planificador'],
-  },
-  {
-    href: '/planning/history',
-    label: 'Historial de planificación',
-    description: 'Semana, día e incidencias',
-    roles: ['administrador', 'planificador'],
-  },
-  {
-    href: '/reports',
-    label: 'Reportes',
-    sectionBefore: 'Resultados',
-    roles: ['administrador', 'planificador'],
-  },
-  { href: '/analytics', label: 'Analítica', roles: ['administrador', 'planificador'] },
-  { href: '/alerts', label: 'Alertas', sidebarPrimary: true, roles: ['administrador', 'planificador', 'conductor'] },
 ];
 
 /** Nav lateral reducida para residentes (vista ciudadano). */
@@ -167,7 +162,6 @@ export const RESIDENT_MAIN_NAV_ITEMS: NavItemDef[] = [
     href: '/resident',
     label: 'Mi Recolección',
     description: 'Horario y estado en tu sector',
-    sectionBefore: 'Mi zona',
     sidebarPrimary: true,
     roles: ['residente'],
   },
@@ -201,7 +195,6 @@ export const OPERATOR_MAIN_NAV_ITEMS: NavItemDef[] = [
     href: '/operator',
     label: 'Mi operación',
     description: 'Tu ruta en campo',
-    sectionBefore: 'Campo',
     sidebarPrimary: true,
     roles: ['conductor'],
   },

@@ -20,7 +20,6 @@ import { PlanningEmptyState } from './PlanningEmptyState';
 import { PlanningGlossaryStrip } from './PlanningGlossaryStrip';
 import { PlanningStatusBadge } from './PlanningStatusBadge';
 import { OperationalFlowStepper } from './OperationalFlowStepper';
-import { PlannerHubDashboardMinimal } from './PlannerHubDashboardMinimal';
 
 const toneClass = {
   warning: 'border-amber-300/60 bg-amber-50/90 dark:border-amber-900/40 dark:bg-amber-950/25',
@@ -42,13 +41,7 @@ const quickActionIcons = {
   monitoring: Radio,
 } as const;
 
-interface PlannerHubSectionProps {
-  /** Vista compacta para dashboard vs landing completa en /planning */
-  variant?: 'dashboard' | 'landing';
-}
-
-export function PlannerHubSection(props: PlannerHubSectionProps) {
-  const variant = () => props.variant ?? 'dashboard';
+export function PlannerHubSection() {
   const [snapshot] = createResource(() => fetchPlanningDashboardSnapshot());
 
   const weekly = () => snapshot()?.weeklyPlan;
@@ -64,18 +57,7 @@ export function PlannerHubSection(props: PlannerHubSectionProps) {
   };
 
   return (
-    <Show
-      when={variant() === 'landing'}
-      fallback={
-        <PlannerHubDashboardMinimal
-          loading={snapshot.loading}
-          snapshot={snapshot()}
-          nextAction={nextAction()}
-          journeySteps={journeySteps()}
-        />
-      }
-    >
-      <section class="space-y-4" id="mi-planificacion" data-testid="planner-hub">
+    <section class="space-y-4" id="mi-planificacion" data-testid="planner-hub">
         <div class="flex flex-wrap items-end justify-between gap-2">
           <div>
             <p class="text-xs font-semibold uppercase tracking-wide text-fero-green-dark">Operación diaria</p>
@@ -282,7 +264,6 @@ export function PlannerHubSection(props: PlannerHubSectionProps) {
             </div>
           </Card>
         </div>
-      </section>
-    </Show>
+    </section>
   );
 }

@@ -54,14 +54,8 @@ export interface AdminCategory {
 
 export const adminTabs: AdminTab[] = [
   { id: 'general', label: 'General' },
-  { id: 'routes', label: 'Rutas y Optimización' },
-  { id: 'collection', label: 'Recolección' },
-  { id: 'notifications', label: 'Notificaciones' },
-  { id: 'integrations', label: 'Integraciones' },
   { id: 'users', label: 'Usuarios y Roles' },
   { id: 'audit', label: 'Auditoría' },
-  { id: 'security', label: 'Seguridad' },
-  { id: 'api', label: 'API' },
 ];
 
 export const adminCategories: AdminCategory[] = [

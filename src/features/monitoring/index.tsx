@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from 'solid-js';
-import { A, useSearchParams } from '@solidjs/router';
+import { A, Navigate, useSearchParams } from '@solidjs/router';
 import maplibregl, { type Map as MapLibreMap, type Marker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import {
@@ -132,6 +132,9 @@ function statusForBadge(status: FleetLiveStatus) {
 }
 
 export default function MonitoringPage() {
+  // IA: /monitoring es vista de supervisión; el conductor opera desde /operator.
+  if (isConductor(authUser()?.role)) return <Navigate href="/operator" />;
+
   const [searchParams] = useSearchParams();
   const mapRef: { current?: MapLibreMap } = {};
   const markersById = new Map<string, Marker>();
@@ -177,6 +180,7 @@ export default function MonitoringPage() {
   const [legendOpen, setLegendOpen] = createSignal(false);
   const [incidentsRefreshKey, setIncidentsRefreshKey] = createSignal(0);
   const [fieldPanelOpen, setFieldPanelOpen] = createSignal(true);
+  const [monitorTab, setMonitorTab] = createSignal<'map' | 'incidents'>('map');
 
   const vehicleIdParam = () => parseVehicleIdParam(searchParams.vehicleId);
 
@@ -538,6 +542,42 @@ export default function MonitoringPage() {
         <MonitoringStatsStrip kpis={monitoringKpis()} loading={monitoringData.loading} />
       </Show>
 
+      <div
+        class="flex gap-1 overflow-x-auto border-b border-default"
+        data-testid="monitoring-tabs"
+        role="tablist"
+        aria-label="Vista del monitoreo"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={monitorTab() === 'map'}
+          data-testid="monitoring-tab-map"
+          onClick={() => setMonitorTab('map')}
+          class={`shrink-0 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+            monitorTab() === 'map'
+              ? 'border-fero-green-mid text-fero-green-dark'
+              : 'border-transparent text-text-muted hover:text-text-secondary'
+          }`}
+        >
+          Mapa en vivo
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={monitorTab() === 'incidents'}
+          data-testid="monitoring-tab-incidents"
+          onClick={() => setMonitorTab('incidents')}
+          class={`shrink-0 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+            monitorTab() === 'incidents'
+              ? 'border-fero-green-mid text-fero-green-dark'
+              : 'border-transparent text-text-muted hover:text-text-secondary'
+          }`}
+        >
+          Incidencias y alertas
+        </button>
+      </div>
+
       <div class="flex flex-wrap items-center justify-end gap-2">
         <Show when={fieldMode()}>
           <p class="mr-auto text-sm text-text-secondary">
@@ -551,6 +591,7 @@ export default function MonitoringPage() {
           </p>
         </Show>
         <div id="reportar-averia" class="flex flex-wrap items-center gap-2">
+          <Show when={monitorTab() === 'incidents'}>
           <BreakdownReporter
             variant={fieldMode() ? 'operator' : 'planner'}
             compact={!fieldMode()}
@@ -582,6 +623,8 @@ export default function MonitoringPage() {
               onComplete={() => void refetch()}
             />
           </Show>
+          </Show>
+          <Show when={monitorTab() === 'map'}>
           <MonitoringPlaybackToggle
             visible={canOpenPlayback() && !fieldMode()}
             open={playbackOpen()}
@@ -620,10 +663,11 @@ export default function MonitoringPage() {
                   : 'Avance operativo flota'}
             </Button>
           </Show>
+          </Show>
         </div>
       </div>
 
-      <Show when={playbackOpen() && !fieldMode()}>
+      <Show when={monitorTab() === 'map' && playbackOpen() && !fieldMode()}>
       <MonitoringPlaybackPanel
         open={playbackOpen()}
         mode={playbackMode()}
@@ -652,6 +696,7 @@ export default function MonitoringPage() {
         />
       </Show>
 
+      <Show when={monitorTab() === 'map'}>
       <div class={`grid items-stretch gap-4 ${fieldMode() ? '' : 'xl:grid-cols-5'}`}>
         <Card
           padding={false}
@@ -817,6 +862,7 @@ export default function MonitoringPage() {
         </Card>
         </Show>
       </div>
+      </Show>
 
       <Show when={fieldMode()}>
         <OperatorFieldBottomPanel
@@ -839,7 +885,7 @@ export default function MonitoringPage() {
         />
       </Show>
 
-      <Show when={!fieldMode()}>
+      <Show when={!fieldMode() && monitorTab() === 'incidents'}>
         <MonitoringContextPanel
           activities={liveActivities()}
           routeProgress={displayRouteProgress()}

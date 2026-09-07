@@ -1,5 +1,5 @@
-import { Route, Router } from '@solidjs/router';
-import { Suspense, lazy, type Component } from 'solid-js';
+import { Navigate, Route, Router } from '@solidjs/router';
+import { Suspense, lazy, type Component, type JSX } from 'solid-js';
 import { LoadingPanel } from '../design-system/components';
 import { AppShell } from '../design-system/layout/AppShell';
 import { AuthGate, GuestGate, RoleGate } from '../core/auth/AuthGate';
@@ -27,6 +27,7 @@ function lazyPage(loader: () => Promise<{ default: Component }>) {
 
 const DashboardPage = lazyPage(() => import('../features/dashboard'));
 const OptimizationPage = lazyPage(() => import('../features/optimization'));
+const OptimizationLevelsPage = lazyPage(() => import('../features/optimization/OptimizationLevelsPage'));
 const MapPage = lazyPage(() => import('../features/map'));
 const VehiclesPage = lazyPage(() => import('../features/vehicles'));
 const DriversPage = lazyPage(() => import('../features/drivers'));
@@ -44,12 +45,11 @@ const ResidentPage = lazyPage(() => import('../features/resident'));
 const ProfilePage = lazyPage(() => import('../features/profile'));
 const OperatorPage = lazyPage(() => import('../features/operator'));
 const OperatorDailyPlanPage = lazyPage(() => import('../features/operator/OperatorDailyPlanPage'));
-const PlanningHubPage = lazyPage(() => import('../features/planning/hub'));
 const PlanningWeeklyPage = lazyPage(() => import('../features/planning/weekly'));
 const PlanningHistoryPage = lazyPage(() => import('../features/planning/history'));
 const LoginPage = lazyPage(() => import('../features/auth'));
 
-function ProtectedShell(props: { children: unknown }) {
+function ProtectedShell(props: { children?: JSX.Element }) {
   return (
     <AuthGate>
       <RoleGate>
@@ -73,9 +73,10 @@ export default function App() {
       <Route path="/" component={ProtectedShell}>
         <Route path="/" component={DashboardPage} />
         <Route path="/optimization" component={OptimizationPage} />
+        <Route path="/optimization/levels" component={OptimizationLevelsPage} />
         <Route path="/operator" component={OperatorPage} />
         <Route path="/operator/plan" component={OperatorDailyPlanPage} />
-        <Route path="/planning" component={PlanningHubPage} />
+        <Route path="/planning" component={() => <Navigate href="/" />} />
         <Route path="/planning/weekly" component={PlanningWeeklyPage} />
         <Route path="/planning/history" component={PlanningHistoryPage} />
         <Route path="/map" component={MapPage} />

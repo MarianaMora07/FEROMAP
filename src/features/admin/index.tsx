@@ -1,24 +1,8 @@
 import { For, Show, createSignal } from 'solid-js';
-import { Badge } from '../../design-system/components';
-import { adminMvpTabIds, adminPageMeta, adminTabs, type AdminTabId } from '../../data/mock/admin';
+import { adminPageMeta, adminTabs, type AdminTabId } from '../../data/mock/admin';
 import { AdminAuditLogPanel } from './AdminAuditLogPanel';
 import { AdminOperationalSettings } from './AdminOperationalSettings';
 import { AdminUsersPanel } from './AdminUsersPanel';
-
-function ComingSoonPanel(props: { title: string }) {
-  return (
-    <div class="flex flex-col items-center justify-center rounded-xl border border-dashed border-border px-6 py-16 text-center dark:border-dark-border">
-      <Badge variant="default" class="mb-3">
-        Próximamente
-      </Badge>
-      <h3 class="font-heading text-lg font-semibold text-text-primary dark:text-white">{props.title}</h3>
-      <p class="mt-2 max-w-md text-sm text-text-muted">
-        Esta sección estará disponible en una próxima versión. El MVP incluye configuración operativa,
-        usuarios y auditoría.
-      </p>
-    </div>
-  );
-}
 
 export default function AdminPage() {
   const [tab, setTab] = createSignal<AdminTabId>('general');
@@ -28,10 +12,6 @@ export default function AdminPage() {
     setFlash(message);
     window.setTimeout(() => setFlash((cur) => (cur === message ? null : cur)), 2500);
   };
-
-  const isMvp = (id: AdminTabId) => adminMvpTabIds.has(id);
-
-  const tabLabel = () => adminTabs.find((t) => t.id === tab())?.label ?? '';
 
   return (
     <div class="space-y-5">
@@ -50,17 +30,10 @@ export default function AdminPage() {
                 type="button"
                 onClick={() => setTab(item.id)}
                 class={`relative flex items-center gap-2 px-3 py-2.5 text-sm font-medium transition-colors ${
-                  tab() === item.id
-                    ? 'text-fero-blue'
-                    : 'text-text-muted hover:text-text-primary'
+                  tab() === item.id ? 'text-fero-blue' : 'text-text-muted hover:text-text-primary'
                 }`}
               >
                 {item.label}
-                <Show when={!isMvp(item.id)}>
-                  <span class="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-text-muted dark:bg-dark-surface-hover">
-                    Próx.
-                  </span>
-                </Show>
                 <Show when={tab() === item.id}>
                   <span class="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-fero-blue" />
                 </Show>
@@ -86,10 +59,6 @@ export default function AdminPage() {
 
       <Show when={tab() === 'audit'}>
         <AdminAuditLogPanel />
-      </Show>
-
-      <Show when={!isMvp(tab())}>
-        <ComingSoonPanel title={tabLabel()} />
       </Show>
     </div>
   );

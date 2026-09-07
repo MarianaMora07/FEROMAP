@@ -3,6 +3,7 @@ import {
   recentAlertActivity,
 } from '../../data/mock/alerts';
 import type { AlertCategory, AlertPriority, AlertStatus, SystemAlert } from '../types/alert';
+import { authUser } from '../stores/authStore';
 import { apiGet, apiPatch, withMockFallback } from './client';
 
 export type { AlertCategory, AlertPriority, AlertStatus, SystemAlert };
@@ -42,31 +43,42 @@ function mockStatsFromAlerts(alerts: SystemAlert[]): AlertsStats {
   };
 }
 
-export function fetchAlerts(): Promise<AlertsResponse> {
+/**
+ * Conductor y residente consumen alertas curadas de demo (scoping por ruta/sector
+ * aún no existe en el backend). Planificador/admin usan la API real.
+ */
+function personaUsesDemoAlerts(): boolean {
+  const role = authUser()?.role;
+  return role === 'conductor' || role === 'residente';
+}
+
+function demoAlertsResponse(): AlertsResponse {
   const mockActive = alertsList.filter((alert) => alert.status !== 'resuelta');
-  return withMockFallback(
-    'alerts',
-    () => apiGet<AlertsResponse>('/api/v1/alerts'),
-    {
-      alerts: mockActive,
-      stats: mockStatsFromAlerts(alertsList),
-    },
-  );
+  return {
+    alerts: mockActive,
+    stats: mockStatsFromAlerts(alertsList),
+  };
+}
+
+function demoAlertActivity(): AlertActivityItem[] {
+  return recentAlertActivity.map((item) => ({
+    id: item.id,
+    alertId: item.id,
+    time: item.time,
+    title: item.title,
+    detail: item.detail,
+    status: item.status,
+  }));
+}
+
+export function fetchAlerts(): Promise<AlertsResponse> {
+  if (personaUsesDemoAlerts()) return Promise.resolve(demoAlertsResponse());
+  return withMockFallback('alerts', () => apiGet<AlertsResponse>('/api/v1/alerts'), demoAlertsResponse());
 }
 
 export function fetchAlertActivity(): Promise<AlertActivityItem[]> {
-  return withMockFallback(
-    'alerts-activity',
-    () => apiGet<AlertActivityItem[]>('/api/v1/alerts/activity'),
-    recentAlertActivity.map((item) => ({
-      id: item.id,
-      alertId: item.id,
-      time: item.time,
-      title: item.title,
-      detail: item.detail,
-      status: item.status,
-    })),
-  );
+  if (personaUsesDemoAlerts()) return Promise.resolve(demoAlertActivity());
+  return withMockFallback('alerts-activity', () => apiGet<AlertActivityItem[]>('/api/v1/alerts/activity'), demoAlertActivity());
 }
 
 export async function updateAlertStatus(
