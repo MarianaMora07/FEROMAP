@@ -12,6 +12,7 @@ from app.services.optimization_service import (
     build_optimization_vehicle_units,
     partition_customers_by_vehicle_sectors,
     resolve_sector_driver_map_for_optimization,
+    sector_territory_applies,
     _baseline_routes_partitioned,
     _extract_node_submatrix,
     _optimize_by_sector_assignment,
@@ -31,11 +32,13 @@ def _vehicle(
     status: str = "available",
     default_driver_id: int | None = None,
     assigned: int | None = None,
+    vehicle_type: str = "Compactadora",
 ) -> SimpleNamespace:
     return SimpleNamespace(
         id=vehicle_id,
         code=code,
         status=status,
+        vehicle_type=vehicle_type,
         max_capacity_kg=Decimal("12000"),
         fuel_consumption_rate=Decimal("0.35"),
         ideal_operators_count=6,
@@ -91,6 +94,7 @@ def test_build_optimization_vehicle_units_uses_default_driver():
             fuel_rate=0.35,
             ideal_operators=6,
             assigned_operators=6,
+            code="TR-03",
         ),
         VehicleUnit(
             vehicle_id=2,
@@ -99,6 +103,7 @@ def test_build_optimization_vehicle_units_uses_default_driver():
             fuel_rate=0.35,
             ideal_operators=6,
             assigned_operators=6,
+            code="TR-04",
         ),
     ]
 
@@ -168,6 +173,66 @@ def test_build_optimization_vehicle_units_excludes_maintenance():
 
     assert len(units) == 1
     assert units[0].vehicle_id == 2
+
+
+def test_build_optimization_vehicle_units_fleet_by_type_composes_fleet():
+    vehicles = [
+        _vehicle("TR-01", vehicle_id=1, default_driver_id=10, vehicle_type="Compactadora"),
+        _vehicle("TR-02", vehicle_id=2, default_driver_id=20, vehicle_type="Compactadora"),
+        _vehicle("TR-03", vehicle_id=3, default_driver_id=30, vehicle_type="Volteo"),
+        _vehicle("TR-06", vehicle_id=4, default_driver_id=40, vehicle_type="Volteo"),
+        _vehicle("TR-07", vehicle_id=5, default_driver_id=50, vehicle_type="Compactadora"),
+    ]
+    db = MagicMock()
+    db.scalars.side_effect = [
+        MagicMock(unique=MagicMock(return_value=MagicMock(all=MagicMock(return_value=vehicles)))),
+        MagicMock(unique=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))),
+    ]
+
+    units = build_optimization_vehicle_units(
+        db,
+        fleet_by_type={"Compactadora": 2, "Volteo": 1},
+    )
+
+    assert [unit.vehicle_id for unit in units] == [1, 2, 3]
+
+
+def test_build_optimization_vehicle_units_fleet_by_type_skips_unlisted_types():
+    vehicles = [
+        _vehicle("TR-01", vehicle_id=1, default_driver_id=10, vehicle_type="Compactadora"),
+        _vehicle("TR-03", vehicle_id=2, default_driver_id=20, vehicle_type="Volteo"),
+        _vehicle("TR-15", vehicle_id=3, default_driver_id=30, vehicle_type="Volteo"),
+    ]
+    db = MagicMock()
+    db.scalars.side_effect = [
+        MagicMock(unique=MagicMock(return_value=MagicMock(all=MagicMock(return_value=vehicles)))),
+        MagicMock(unique=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))),
+    ]
+
+    units = build_optimization_vehicle_units(db, fleet_by_type={"Volteo": 1})
+
+    assert [unit.vehicle_id for unit in units] == [2]
+
+
+def test_sector_territory_applies_requires_explicit_and_full_coverage():
+    # Sin territorios explícitos → ACO global.
+    customers = [_customer(1, "A", 10), _customer(2, "B", 11)]
+    assert not sector_territory_applies(customers, {})
+
+    # Cobertura completa explícita → territorio.
+    assert sector_territory_applies(customers, {10: 100, 11: 200})
+
+    # Un contenedor de sector sin territorio explícito → ACO global (no quedar atrapado).
+    mixed = [_customer(1, "A", 10), _customer(2, "B", 99)]
+    assert not sector_territory_applies(mixed, {10: 100})
+
+    # Cliente sin sector → ACO global.
+    no_sector = [_customer(1, "A", 10), _customer(2, "B", None)]
+    assert not sector_territory_applies(no_sector, {10: 100})
+
+
+def test_sector_territory_applies_empty_customers():
+    assert not sector_territory_applies([], {10: 100})
 
 
 def test_build_optimization_vehicle_units_fleet_limit_caps():
