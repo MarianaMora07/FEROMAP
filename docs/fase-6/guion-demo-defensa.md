@@ -9,7 +9,7 @@
 
 ## Mensaje clave (decir al inicio, ~30 s)
 
-> «FEROMAP guía al planificador en un flujo de **simulación de escenarios**: configura condiciones, ejecuta el cálculo de rutas paso a paso y muestra el impacto medible. La **planificación operativa** es un módulo aparte para el despacho diario.»
+> «FEROMAP guía al planificador en un flujo de **simulación de escenarios**: configura condiciones, ejecuta el cálculo de rutas paso a paso y muestra el impacto medible. El **Plan del día** (módulo operativo) lleva esas rutas al despacho diario.»
 
 No hace falta explicar “dos pantallas parecidas”: los banners y el menú ya orientan.
 
@@ -19,7 +19,7 @@ No hace falta explicar “dos pantallas parecidas”: los banners y el menú ya 
 
 | Tiempo | Pantalla | Qué hacer | Qué decir (apoyado en la UI) |
 |--------|----------|-----------|------------------------------|
-| **0:00–0:45** | `/login` → `/` | Iniciar sesión como planificador | Dashboard con CTA **Nueva simulación** como entrada principal |
+| **0:00–0:45** | `/login` → `/` → `/simulation` | Iniciar sesión como planificador | Dashboard = hub del día (grupo **Tesis y demostración → Simulación ACO** para la evaluación del algoritmo) |
 | **0:45–1:30** | `/simulation` paso 1 | Escenario **Tráfico pico** o toggles tráfico + saturación | «Aquí defino las condiciones del día: lluvia, avería, saturación… El sistema deriva el escenario automáticamente.» |
 | **1:30–2:00** | Paso 1 → **Continuar** | Revisar resumen lateral (vehículos, puntos) | «Antes de calcular, valida que hay camiones y contenedores suficientes.» |
 | **2:00–4:00** | Paso 2 | **Ejecutar simulación** | **Señalar el wizard:** aparece «Ejecutando — fase X de 8». **Stepper izquierdo:** 8 etapas en español claro. **Panel central:** «Qué está haciendo ahora» + barra de progreso real. **Mapa:** animación según la fase (red de calles → exploración → ruta final). |
@@ -27,8 +27,8 @@ No hace falta explicar “dos pantallas parecidas”: los banners y el menú ya 
 | **4:30–5:30** | Paso 3 | KPIs comparativos, **desglose Viaje · Paradas · Total**, mapa | «El algoritmo minimiza **kilómetros**; la **duración** suma viaje más tiempo en paradas según la dotación. Aquí veo el desglose: viaje, paradas con dotación 6/6, y total.» |
 | **5:30–6:15** | Paso 3 acciones | **Ver en analítica** (deep link con `simulationId`) | «Desde el resultado sigo el análisis sin perder el contexto de esta corrida.» |
 | **6:15–6:30** | Paso 3 (opcional) | **Ver en plan del día** (si hay plan semanal aprobado) | «El escenario de tesis no se mezcla con operación; este enlace solo aparece cuando la semana está aprobada y lleva al plan administrativo.» |
-| **6:30–7:00** | `/planning` | Stepper **Recorrido operativo del día** | «El hub encadena semana → optimizar → simular → despachar → monitorear sin que yo recuerde URLs.» |
-| **7:00–7:30** | `/optimization?playback=1` | Banner experiencia del día + **Simular recorrido** | «Mismo día: rutas generadas y replay animado antes de despachar.» |
+| **6:30–7:00** | `/` (Dashboard-hub) | Stepper **Recorrido operativo del día** | «El hub encadena semana → plan del día → pendientes → monitoreo sin que yo recuerde URLs.» |
+| **7:00–7:30** | `/optimization?playback=1` | Pestaña **Optimizar y despachar** — banner experiencia del día + **Simular recorrido** | «Mismo día: rutas generadas y replay animado antes de despachar.» |
 | **7:30–8:00** | `/monitoring?dailyPlanId=…&playback=1` | **Reproducir ruta** en monitoreo | «Tras despachar, el replay operativo cierra la narrativa del camión en campo.» |
 | **(alternativa)** | `/demostracion` | **Modo presentación (60 s)** o Iniciar demo → pestaña Convergencia | «Antes del mapa real, el laberinto muestra cómo el ACO explora, deposita feromonas y converge — mismo α, β y ρ que el motor de producción.» |
 | **(alternativa)** | `/simulation?view=history` | Pestaña Historial — una corrida anterior | «Historial de escenarios de tesis; no es el despacho operativo del día.» |
@@ -96,7 +96,7 @@ Documentación técnica: [docs/fase-8/adr-dotacion-tiempo-servicio.md](../fase-8
 
 ### Secuencia
 
-1. **Ir a** `/demostracion` (menú **Análisis → Demostración**).
+1. **Ir a** `/demostracion` (grupo **Tesis y demostración → Demostración ACO**).
 2. **Pestaña Laberinto** (por defecto): pulsar **Modo presentación (60 s)** *o* **Iniciar demo**.
    - Narrar: «Cada hormiga elige el siguiente paso con probabilidad según feromonas (α) y distancia (β).»
    - Señalar el heatmap: azul = poca feromona, ámbar = mucha (contraste legible).
@@ -113,6 +113,19 @@ Guion detallado: [docs/fase-11/guion-demo-aco.md](../fase-11/guion-demo-aco.md).
 
 ---
 
+## Escena «Plan semanal → plan operativo» (opcional, ~2–3 min)
+
+Si el tribunal quiere ver el flujo directivo real (semana completa):
+
+| Pantalla | Qué hacer | Qué decir |
+|---|---|---|
+| `/planning/weekly` · Configurar días | Mostrar **zonas por día** (pills que añaden puntos, repetibles) y **flota por tipo** | «El plan semanal es la configuración base: aquí decido qué zonas se cubren cada día y con qué flota, sin tocar el algoritmo.» |
+| Validar → Aprobar | Aprobar la semana | «Al aprobar queda congelada la cobertura.» |
+| Paso final: **Generar plan operativo de la semana** | Correr la generación (Lun→Vie en secuencia) | «El sistema optimiza cada día con el motor real usando esa configuración y me deja la tabla Camión × Día.» |
+| Tabla Camión × Día | Señalar filas/columnas + **Notificar** un día | «Veo qué camión sale cada día; notifico a los conductores y el estado queda persistido para Monitoreo.» |
+
+> Precaución: el motor real tarda; ensaya con semana pequeña o deja generado el plan antes de la demo (Plan B abajo).
+
 ## Plan B (si el motor tarda)
 
 - Tener una simulación previa en historial → abrir con `?simulationId=…`
@@ -123,7 +136,7 @@ Guion detallado: [docs/fase-11/guion-demo-aco.md](../fase-11/guion-demo-aco.md).
 
 ## Cierre (~30 s)
 
-> «El flujo es reproducible: configurar → ejecutar con transparencia → interpretar → analítica/reporte. La separación Simulación / Planificación operativa está documentada en la matriz de responsabilidades (Opción A).»
+> «El flujo es reproducible: configurar → ejecutar con transparencia → interpretar → analítica/reporte. La separación **Simulación ACO / Plan del día** está documentada en `docs/ux/arquitectura-navegacion.md` (grupos Tesis vs. operativo).»
 
 ---
 

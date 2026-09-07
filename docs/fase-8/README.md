@@ -41,7 +41,7 @@ npm test -- src/data/types/crewServiceTime.test.ts src/core/utils/optimizationRe
 
 | Test | Archivo |
 |------|---------|
-| 6→300s, 5→330s, 1→450s | `test_fase8_acceptance.py`, `crewServiceTime.test.ts` |
+| 6→1200s (20 min), 5→1380s, 1→2100s (ideal 6; ADR-003) | `test_fase8_acceptance.py`, `crewServiceTime.test.ts` |
 | KPI: distancia igual, duración sube | `test_fase8_acceptance.py` |
 | `operatorsShortage` global | `test_fase8_acceptance.py`, `test_scenario_crew_modifiers.py` |
 | ACO: misma semilla → misma ruta | `test_fase8_acceptance.py` |
