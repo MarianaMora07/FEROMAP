@@ -283,29 +283,42 @@ export function buildRouteResults(
   });
 }
 
-export function buildScenarioInfoRows(
-  pointsToVisit: number,
-  kpis: KpiMetrics | null,
-  criticalCount: number,
-) {
+export interface ScenarioInfoRowsInput {
+  /** Puntos programados del día (no del catálogo). */
+  pointsToVisit: number;
+  kpis: KpiMetrics | null;
+  /** Contenedores críticos (>90 % llenado) entre los puntos del día. */
+  criticalCount: number;
+  /** Duración de la jornada más larga entre los camiones (horas). */
+  maxVehicleHours?: number | null;
+}
+
+export function buildScenarioInfoRows(input: ScenarioInfoRowsInput) {
+  const { pointsToVisit, kpis, criticalCount } = input;
+  const fleetTotalHours = kpis ? kpis.durationHours.optimized : null;
   return [
     {
-      label: 'Puntos a visitar',
+      label: 'Puntos programados hoy',
       value: String(pointsToVisit),
       icon: 'map-pin' as const,
     },
     {
-      label: 'Distancia estimada (optimizada)',
+      label: 'Distancia total (flota)',
       value: kpis ? `${kpis.distanceKm.optimized.toFixed(1)} km` : '—',
       icon: 'route' as const,
     },
     {
-      label: 'Tiempo estimado (optimizado)',
-      value: kpis ? formatDurationHours(kpis.durationHours.optimized) : '—',
+      label: 'Tiempo total de flota',
+      value: fleetTotalHours != null ? formatDurationHours(fleetTotalHours) : '—',
       icon: 'clock' as const,
     },
     {
-      label: 'Contenedores críticos',
+      label: 'Jornada por camión (máx.)',
+      value: input.maxVehicleHours != null ? formatDurationHours(input.maxVehicleHours) : '—',
+      icon: 'truck' as const,
+    },
+    {
+      label: 'Contenedores críticos del día',
       value: String(criticalCount),
       icon: 'weight' as const,
     },

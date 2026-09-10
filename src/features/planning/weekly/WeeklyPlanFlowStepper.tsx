@@ -12,10 +12,15 @@ interface WeeklyPlanFlowStepperProps {
   loading?: boolean;
   validating?: boolean;
   guideText?: string;
+  /** Semana aprobada/archivada: los pasos de proceso (Validar, Aprobar) quedan bloqueados; Configurar queda en solo lectura. */
+  readOnly?: boolean;
 }
 
 export function WeeklyPlanFlowStepper(props: WeeklyPlanFlowStepperProps) {
+  const isStepLocked = (stepId: number) => Boolean(props.readOnly && (stepId === 2 || stepId === 3));
+
   const handleStepClick = (stepId: number) => {
+    if (isStepLocked(stepId)) return;
     if (!canReachWeeklyPlanStep(stepId, props.flowStep) || !props.onStepChange) return;
     props.onStepChange(stepId);
   };
@@ -35,7 +40,8 @@ export function WeeklyPlanFlowStepper(props: WeeklyPlanFlowStepperProps) {
           {(item, index) => {
             const isActive = () => props.viewStep === item.id;
             const isComplete = () => props.flowStep > item.id;
-            const isReachable = () => canReachWeeklyPlanStep(item.id, props.flowStep);
+            const isReachable = () =>
+              !isStepLocked(item.id) && canReachWeeklyPlanStep(item.id, props.flowStep);
             const isLoadingStep = () => Boolean(props.validating && item.id === 2 && props.flowStep === 2);
 
             const chipClass = () => {

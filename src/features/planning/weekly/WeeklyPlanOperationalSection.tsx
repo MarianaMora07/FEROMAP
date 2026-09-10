@@ -1,17 +1,16 @@
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
-import { A } from '@solidjs/router';
+import { A, useNavigate } from '@solidjs/router';
 import { CalendarRange, ExternalLink, Radio, RefreshCw, Send, Truck, Zap } from 'lucide-solid';
 import { Button } from '../../../design-system/components';
 import {
   dispatchDailyPlan,
-  generateWeeklyOperationalPlan,
   notifyWeeklyOperationalDays,
   type WeeklyOperationalPlan,
   type WeeklyPlanDayOperational,
 } from '../../../core/api/planning';
-import { fetchSimulationOptimizeJob } from '../../../core/api/simulationJobs';
-import { selectWeeklyPlan } from '../../../core/stores/weeklyPlanStore';
+import { generateWeeklyOperationalPlanForWeek, selectWeeklyPlan } from '../../../core/stores/weeklyPlanStore';
 import { optimizationHref, monitoringHref } from '../../../core/planning/operationalLinks';
+import { optimizationDateHref, todayIso } from '../../../core/planning/planningUx';
 import { WEEKDAY_LABELS } from '../../../core/planning/weeklyPlanCalendar';
 
 interface WeeklyPlanOperationalSectionProps {
@@ -35,6 +34,7 @@ function dayTotals(day: WeeklyPlanDayOperational): { km: number; min: number; st
 }
 
 export function WeeklyPlanOperationalSection(props: WeeklyPlanOperationalSectionProps) {
+  const navigate = useNavigate();
   const [running, setRunning] = createSignal(false);
   const [confirmAll, setConfirmAll] = createSignal(false);
   const [notifyingAll, setNotifyingAll] = createSignal(false);
@@ -69,6 +69,24 @@ export function WeeklyPlanOperationalSection(props: WeeklyPlanOperationalSection
     planDays().filter((day) => day.status === 'optimized' && day.dailyPlanId != null),
   );
 
+  /**
+   * Abre la planificación operativa del primer día con rutas generadas de la semana
+   * (o del primer día de la semana si todavía no hay rutas).
+   */
+  const navigateToOperationalView = (days: WeeklyPlanDayOperational[]) => {
+    const target = days.find((day) => day.dailyPlanId != null) ?? days[0];
+    if (target?.operationDate) {
+      navigate(
+        optimizationHref({
+          date: target.operationDate,
+          dailyPlanId: target.dailyPlanId ?? undefined,
+        }),
+      );
+      return;
+    }
+    navigate(optimizationDateHref(todayIso()));
+  };
+
   const notifyAll = async () => {
     setNotifyingAll(true);
     setError(null);
@@ -99,39 +117,14 @@ export function WeeklyPlanOperationalSection(props: WeeklyPlanOperationalSection
     setProgress(0);
     setPhase('Iniciando generación…');
     try {
-      const { jobId } = await generateWeeklyOperationalPlan(props.planId);
-      if (jobId === 'mock-job') {
-        setProgress(100);
-        setPhase('Listo');
-        setNotice('Plan operativo generado.');
-        await selectWeeklyPlan(props.planId);
-        return;
-      }
-      while (true) {
-        const snapshot = await fetchSimulationOptimizeJob(jobId);
-        setProgress(snapshot.progress ?? 0);
-        setPhase(snapshot.phase ? String(snapshot.phase) : 'Optimizando…');
-        if (snapshot.status === 'completed') {
-          if (snapshot.result) {
-            const summary = (snapshot.result as unknown as WeeklyOperationalPlan | null) ?? null;
-            if (summary?.days) {
-              setLocalPlan(summary);
-            }
-          }
-          setProgress(100);
-          setPhase('Plan operativo generado');
-          setNotice('Rutas optimizadas para toda la semana. Revisa la tabla y notifica por día.');
-          await selectWeeklyPlan(props.planId);
-          return;
-        }
-        if (snapshot.status === 'failed') {
-          throw new Error(snapshot.error ?? 'La generación del plan operativo falló');
-        }
-        if (snapshot.status === 'cancelled') {
-          throw new Error('Generación cancelada');
-        }
-        await new Promise((resolve) => setTimeout(resolve, 800));
-      }
+      const days = await generateWeeklyOperationalPlanForWeek((value, phaseLabel) => {
+        setProgress(value);
+        setPhase(phaseLabel);
+      });
+      setProgress(100);
+      setPhase('Plan operativo generado');
+      setNotice('Rutas optimizadas para toda la semana. Abriendo la planificación operativa…');
+      navigateToOperationalView(days.length > 0 ? days : planDays());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo generar el plan operativo');
     } finally {
@@ -171,7 +164,8 @@ export function WeeklyPlanOperationalSection(props: WeeklyPlanOperationalSection
             </p>
             <p class="mt-0.5 text-xs text-text-muted">
               Genera las rutas de todos los días (Lun–Vie) en secuencia con el motor real, usando
-              las zonas y la flota por tipo configuradas. Luego notifica día a día.
+              las zonas y la flota por tipo configuradas, y abre la planificación operativa del
+              primer día. Luego notifica día a día.
             </p>
           </div>
         </div>
@@ -189,17 +183,19 @@ export function WeeklyPlanOperationalSection(props: WeeklyPlanOperationalSection
               Notificar toda la semana
             </Button>
           </Show>
-          <Button
-            variant="primary"
-            size="sm"
-            class="gap-2"
-            icon={running() ? <RefreshCw size={14} class="animate-spin" /> : <Zap size={14} />}
-            disabled={running()}
-            data-testid="weekly-generate-operational"
-            onClick={() => void run()}
-          >
-            {planDays().length > 0 ? 'Regenerar plan operativo' : 'Generar plan operativo de la semana'}
-          </Button>
+          <Show when={planDays().length === 0 || running()}>
+            <Button
+              variant="primary"
+              size="sm"
+              class="gap-2"
+              icon={running() ? <RefreshCw size={14} class="animate-spin" /> : <Zap size={14} />}
+              disabled={running()}
+              data-testid="weekly-generate-operational"
+              onClick={() => void run()}
+            >
+              Generar plan operativo de la semana
+            </Button>
+          </Show>
         </div>
       </div>
 

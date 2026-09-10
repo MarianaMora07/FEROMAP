@@ -1,6 +1,6 @@
 import { ChevronDown } from 'lucide-solid';
 import { Show, createEffect, createMemo, createSignal, onMount } from 'solid-js';
-import { Archive } from 'lucide-solid';
+import { Archive, Lock } from 'lucide-solid';
 import { Button, Card, CardHeader, LoadingPanel } from '../../../design-system/components';
 import {
   canReachWeeklyPlanStep,
@@ -24,6 +24,7 @@ import {
   exportWeeklyPlanPdf,
   initWeeklyPlanTab,
   isWeeklyPlanEditable,
+  isWeeklyPlanReadOnly,
   loadWeeklyPlanVersions,
   runWeeklyValidation,
   saveWeeklyPlanDraft,
@@ -50,6 +51,7 @@ export function WeeklyPlanTab(props: WeeklyPlanTabProps) {
 
   const plan = () => weeklyPlanState.plan;
   const editable = () => isWeeklyPlanEditable();
+  const readOnly = () => isWeeklyPlanReadOnly();
   const flowStep = () => deriveWeeklyFlowStep();
   const weekLabel = createMemo(() => {
     const current = plan();
@@ -82,6 +84,7 @@ export function WeeklyPlanTab(props: WeeklyPlanTabProps) {
   });
 
   const handleStepChange = (step: number) => {
+    if (readOnly() && (step === 2 || step === 3)) return;
     if (canReachWeeklyPlanStep(step, flowStep())) {
       setViewStep(step);
     }
@@ -116,11 +119,7 @@ export function WeeklyPlanTab(props: WeeklyPlanTabProps) {
       </Show>
 
       <div class="grid gap-4 lg:grid-cols-12">
-        <div class="lg:col-span-4">
-          <WeeklyPlanListPanel />
-        </div>
-
-        <div class="space-y-4 lg:col-span-8">
+        <div class="order-2 space-y-4 lg:order-1 lg:col-span-8">
           <WeeklyPlanFlowStepper
             flowStep={flowStep()}
             viewStep={viewStep()}
@@ -128,6 +127,7 @@ export function WeeklyPlanTab(props: WeeklyPlanTabProps) {
             loading={weeklyPlanState.isLoading}
             validating={weeklyPlanState.isValidating}
             guideText={weeklyPlanStepGuideText(viewStep())}
+            readOnly={readOnly()}
           />
 
           <Card>
@@ -146,6 +146,20 @@ export function WeeklyPlanTab(props: WeeklyPlanTabProps) {
                 <div class="flex flex-wrap items-center gap-3">
                   <PlanningStatusBadge status={plan()?.status ?? 'draft'} />
                 </div>
+
+                <Show when={readOnly()}>
+                  <div
+                    class="flex items-start gap-2 rounded-lg border border-fero-blue/40 bg-fero-blue/10 px-3 py-2 text-sm text-fero-blue"
+                    data-testid="weekly-plan-read-only"
+                  >
+                    <Lock size={16} class="mt-0.5 shrink-0" aria-hidden="true" />
+                    <span>
+                      Semana {plan()?.status === 'archived' ? 'archivada' : 'aprobada'} — modo solo
+                      lectura. Validar y aprobar quedan bloqueados; crea una semana nueva desde la
+                      lista si necesitas planificar de nuevo.
+                    </span>
+                  </div>
+                </Show>
 
                 <WeeklyPlanFleetEditor
                   value={plan()?.fleetByType}
@@ -222,6 +236,10 @@ export function WeeklyPlanTab(props: WeeklyPlanTabProps) {
               </div>
             </Show>
           </Card>
+        </div>
+
+        <div class="order-1 lg:order-2 lg:col-span-4">
+          <WeeklyPlanListPanel />
         </div>
       </div>
     </div>

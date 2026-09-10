@@ -8,6 +8,7 @@ import {
   MoreVertical,
   Route,
   Clock,
+  Truck,
   Weight,
   Map,
   Sparkles,
@@ -18,6 +19,7 @@ import {
   CardHeader,
 } from '../../design-system/components';
 import { routeDisplayKind } from '../../core/map/operationalMapLayers';
+import type { RouteCollection } from '../../core/types/geo';
 import {
   executeOptimization,
   closeOptimizationDay,
@@ -62,18 +64,36 @@ const scenarioIconMap = {
   'map-pin': MapPin,
   route: Route,
   clock: Clock,
+  truck: Truck,
   weight: Weight,
 } as const;
 
-function ScenarioInfoCard() {
-  const context = () => optimizationState.context;
+function ScenarioInfoCard(props: { optimizedRoutes: RouteCollection | null }) {
+  const dailyPlan = () => optimizationState.dailyPlan;
   const kpis = () => optimizationState.kpis;
+
+  // Valores **del día**: puntos programados y críticos (>90 % de llenado) del plan.
+  const dayPointCount = () =>
+    dailyPlan()?.finalPointIds?.length ?? dailyPlan()?.scheduledPoints?.length ?? 0;
+  const dayCriticalCount = () =>
+    (dailyPlan()?.scheduledPoints ?? []).filter((point) => (point.fillLevelPct ?? 0) > 90).length;
+
+  // La duración del motor es la **suma de toda la flota**; aquí también mostramos
+  // la jornada del camión más cargado, que es lo que se interpreta como "el día".
+  const maxVehicleHours = () => {
+    const durations = (props.optimizedRoutes?.features ?? [])
+      .map((feature) => feature.properties.durationMin)
+      .filter((value): value is number => typeof value === 'number' && value > 0);
+    return durations.length > 0 ? Math.max(...durations) / 60 : null;
+  };
+
   const rows = createMemo(() =>
-    buildScenarioInfoRows(
-      context()?.pointsToVisit ?? 0,
-      kpis(),
-      context()?.pointsContext.criticalCount ?? 0,
-    ),
+    buildScenarioInfoRows({
+      pointsToVisit: dayPointCount(),
+      kpis: kpis(),
+      criticalCount: dayCriticalCount(),
+      maxVehicleHours: maxVehicleHours(),
+    }),
   );
 
   return (
@@ -131,7 +151,7 @@ export default function OptimizationPage() {
   const [paramsSheetOpen, setParamsSheetOpen] = createSignal(false);
   const [dispatchError, setDispatchError] = createSignal<string | null>(null);
   const [closeNotice, setCloseNotice] = createSignal<string | null>(null);
-  const [planTab, setPlanTab] = createSignal<'optimize' | 'pending'>('optimize');
+  const [planTab, setPlanTab] = createSignal<'optimize' | 'results' | 'pending'>('optimize');
   const [resultsTab, setResultsTab] = createSignal<
     'resumen' | 'comparacion' | 'desglose' | 'convergencia' | 'rutas'
   >('comparacion');
@@ -340,13 +360,14 @@ export default function OptimizationPage() {
 
   const parametersPanel = () => (
     <>
-      <OptimizationParametersForm
-        onGenerate={() => void handleGenerate()}
-        disabled={optimizationState.isLoadingContext}
-        formGenerateVisible={formGenerateInView()}
-        generateAnchorRef={setGenerateAnchorRef}
-      />
-      <ScenarioInfoCard />
+      <Show when={!hasResults()}>
+        <OptimizationParametersForm
+          onGenerate={() => void handleGenerate()}
+          disabled={optimizationState.isLoadingContext}
+          formGenerateVisible={formGenerateInView()}
+          generateAnchorRef={setGenerateAnchorRef}
+        />
+      </Show>
       <OptimizationProgressPanel />
     </>
   );
@@ -379,6 +400,20 @@ export default function OptimizationPage() {
             }`}
           >
             Optimizar y despachar
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={planTab() === 'results'}
+            data-testid="plan-day-tab-results"
+            onClick={() => setPlanTab('results')}
+            class={`shrink-0 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+              planTab() === 'results'
+                ? 'border-fero-green-mid text-fero-green-dark'
+                : 'border-transparent text-text-muted hover:text-text-secondary'
+            }`}
+          >
+            Resultados
           </button>
           <button
             type="button"
@@ -485,21 +520,27 @@ export default function OptimizationPage() {
         </Show>
 
         <div class="grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
-          <details
-            ref={paramsDetailsRef}
-            class="group order-2 hidden space-y-4 xl:order-1 xl:col-span-3 xl:block"
-          >
-            <summary class="flex cursor-pointer list-none items-center justify-between gap-2 rounded-md px-3 py-2 text-sm font-semibold text-text-primary hover:bg-app marker:content-none">
-              <span>Parámetros</span>
-              <ChevronDown
-                size={15}
-                class="text-text-muted transition-transform group-open:rotate-180"
-              />
-            </summary>
-            {parametersPanel()}
-          </details>
+          <Show when={!hasResults()}>
+            <details
+              ref={paramsDetailsRef}
+              class="group order-2 hidden space-y-4 xl:order-1 xl:col-span-3 xl:block"
+            >
+              <summary class="flex cursor-pointer list-none items-center justify-between gap-2 rounded-md px-3 py-2 text-sm font-semibold text-text-primary hover:bg-app marker:content-none">
+                <span>Parámetros</span>
+                <ChevronDown
+                  size={15}
+                  class="text-text-muted transition-transform group-open:rotate-180"
+                />
+              </summary>
+              {parametersPanel()}
+            </details>
+          </Show>
 
-          <div class="order-1 space-y-4 xl:order-2 xl:col-span-9">
+          <div
+            class={`order-1 space-y-4 xl:order-2 ${hasResults() ? 'xl:col-span-12' : 'xl:col-span-9'}`}
+          >
+            <ScenarioInfoCard optimizedRoutes={realOptimizedRoutes()} />
+
             <div class="relative min-h-[420px]">
               <OptimizationRouteMap
                 hasResults={hasResults()}
@@ -529,19 +570,21 @@ export default function OptimizationPage() {
               </Show>
             </div>
 
-            <Button
-              variant="outline"
-              size="sm"
-              class="w-full xl:hidden"
-              data-testid="optimization-parameters-sheet-trigger"
-              onClick={() => setParamsSheetOpen(true)}
-            >
-              Parámetros de optimización
-            </Button>
+            <Show when={!hasResults()}>
+              <Button
+                variant="outline"
+                size="sm"
+                class="w-full xl:hidden"
+                data-testid="optimization-parameters-sheet-trigger"
+                onClick={() => setParamsSheetOpen(true)}
+              >
+                Parámetros de optimización
+              </Button>
 
-            <OptimizationParametersSheet open={paramsSheetOpen()} onOpenChange={setParamsSheetOpen}>
-              {parametersPanel()}
-            </OptimizationParametersSheet>
+              <OptimizationParametersSheet open={paramsSheetOpen()} onOpenChange={setParamsSheetOpen}>
+                {parametersPanel()}
+              </OptimizationParametersSheet>
+            </Show>
 
             <Show
               when={
@@ -575,7 +618,31 @@ export default function OptimizationPage() {
               </div>
             </Show>
 
-            <Show when={hasResults()}>
+          </div>
+        </div>
+      </Show>
+
+      <Show when={planTab() === 'results'}>
+        <Show
+          when={hasResults()}
+          fallback={
+            <div
+              class="rounded-xl border border-dashed border-default bg-surface/40 px-4 py-10 text-center"
+              data-testid="optimization-results-empty"
+            >
+              <p class="text-base font-semibold text-text-primary">Este día aún no tiene resultados</p>
+              <p class="mx-auto mt-1 max-w-md text-sm text-text-muted">
+                Genera el plan del día en “Optimizar y despachar” para ver el resumen, la comparación,
+                el desglose, la convergencia y las rutas por vehículo.
+              </p>
+              <div class="mt-4 flex justify-center">
+                <Button variant="primary" size="sm" onClick={() => setPlanTab('optimize')}>
+                  Ir a optimizar y despachar
+                </Button>
+              </div>
+            </div>
+          }
+        >
               <p class="text-sm font-semibold text-text-primary" data-testid="optimization-results-context">
                 Resultados · {humanDateShort(selectedDate())}
                 {optimizationState.lastSimulationId ? ` · corrida #${optimizationState.lastSimulationId}` : ''}
@@ -696,9 +763,7 @@ export default function OptimizationPage() {
                 </Show>
               </Show>
             </Show>
-          </div>
-        </div>
-      </Show>
+          </Show>
 
       <Show when={planTab() === 'pending'}>
         <div class="space-y-4">

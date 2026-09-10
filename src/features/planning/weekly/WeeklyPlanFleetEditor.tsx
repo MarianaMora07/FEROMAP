@@ -111,9 +111,22 @@ export function WeeklyPlanFleetEditor(props: WeeklyPlanFleetEditorProps) {
     Object.values(draft()).reduce((sum, count) => sum + Math.max(0, count), 0),
   );
 
-  const setCount = (type: string, count: number) => {
+  /**
+   * Tope superior por tipo: la cantidad de unidades asignables con conductor del catálogo.
+   * Solo se impone cuando la disponibilidad se cargó con datos (si el catálogo falla o viene
+   * vacío no se limita, para no bloquear la edición).
+   */
+  const maxFor = (row: WeeklyFleetTypeRow) =>
+    availabilityKnown() && availability().length > 0 ? row.available : Number.POSITIVE_INFINITY;
+
+  const clampCount = (row: WeeklyFleetTypeRow, count: number) => {
+    const max = maxFor(row);
+    return Math.max(0, Math.min(Math.floor(count), Number.isFinite(max) ? max : Number.MAX_SAFE_INTEGER));
+  };
+
+  const setCount = (row: WeeklyFleetTypeRow, count: number) => {
     setDirty(true);
-    setDraft((current) => ({ ...current, [type]: Math.max(0, Math.floor(count)) }));
+    setDraft((current) => ({ ...current, [row.type]: clampCount(row, count) }));
   };
 
   /** Usar todos los asignables: limpia la restricción (el motor toma el catálogo completo). */
@@ -134,7 +147,7 @@ export function WeeklyPlanFleetEditor(props: WeeklyPlanFleetEditorProps) {
 
   const rowHint = (row: WeeklyFleetTypeRow) => {
     if (!availabilityKnown()) return 'disponibilidad por confirmar…';
-    if (row.available > 0) return `${row.available} asignables con conductor`;
+    if (row.available > 0) return `máx. ${row.available} asignables con conductor`;
     return 'sin unidades asignables';
   };
 
@@ -164,9 +177,12 @@ export function WeeklyPlanFleetEditor(props: WeeklyPlanFleetEditorProps) {
         <For each={typeRows()}>
           {(row) => {
             const count = () => draft()[row.type] ?? 0;
+            const max = () => maxFor(row);
+            const atMax = () => Number.isFinite(max()) && count() >= max();
+            const exceeds = () => Number.isFinite(max()) && count() > max();
             return (
               <div class="flex items-center justify-between gap-3 rounded-lg border border-border bg-app/40 px-3 py-2 dark:border-dark-border">
-                <div>
+                <div class="min-w-0">
                   <p
                     class="text-sm font-medium text-text-primary dark:text-white"
                     data-testid={`weekly-plan-fleet-type-${row.type}`}
@@ -174,6 +190,11 @@ export function WeeklyPlanFleetEditor(props: WeeklyPlanFleetEditorProps) {
                     {row.type}
                   </p>
                   <p class="text-[11px] text-text-muted">{rowHint(row)}</p>
+                  <Show when={exceeds()}>
+                    <p class="text-[11px] font-medium text-amber-700 dark:text-amber-200">
+                      Por encima del máximo asignable ({max()}).
+                    </p>
+                  </Show>
                 </div>
                 <div class="flex items-center gap-1">
                   <Button
@@ -181,27 +202,28 @@ export function WeeklyPlanFleetEditor(props: WeeklyPlanFleetEditorProps) {
                     variant="outline"
                     aria-label={`Menos ${row.type}`}
                     disabled={!props.editable || count() <= 0}
-                    onClick={() => setCount(row.type, count() - 1)}
+                    onClick={() => setCount(row, count() - 1)}
                   >
                     −
                   </Button>
                   <input
                     type="number"
                     min="0"
-                    max={99}
+                    max={Number.isFinite(max()) ? max() : 99}
                     value={count()}
                     disabled={!props.editable}
                     aria-label={`Cantidad ${row.type}`}
                     data-testid={`weekly-plan-fleet-input-${row.type}`}
-                    onInput={(event) => setCount(row.type, Number(event.currentTarget.value) || 0)}
+                    onInput={(event) => setCount(row, Number(event.currentTarget.value) || 0)}
                     class="w-14 rounded-md border border-border bg-elevated px-2 py-1 text-center text-sm text-text-primary outline-none focus:border-fero-green dark:border-dark-border dark:bg-dark-surface"
                   />
                   <Button
                     size="sm"
                     variant="outline"
                     aria-label={`Más ${row.type}`}
-                    disabled={!props.editable}
-                    onClick={() => setCount(row.type, count() + 1)}
+                    title={Number.isFinite(max()) ? `Máximo ${max()} disponibles` : undefined}
+                    disabled={!props.editable || atMax()}
+                    onClick={() => setCount(row, count() + 1)}
                   >
                     +
                   </Button>

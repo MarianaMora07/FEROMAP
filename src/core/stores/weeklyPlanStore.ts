@@ -13,14 +13,17 @@ import {
   fetchWeeklyPlans,
   fetchWeeklyPlanVersions,
   downloadWeeklyPlanPdf,
+  generateWeeklyOperationalPlan,
   isPastWeek,
   mondayIso,
   sanitizeWeeklyPlanDays,
   updateWeeklyPlan,
   validateWeeklyPlan,
   type PlanVersion,
+  type WeeklyOperationalPlan,
   type WeeklyPlan,
   type WeeklyPlanDay,
+  type WeeklyPlanDayOperational,
 } from '../api/planning';
 import type { ScenarioId } from '../../data/types/simulation';
 import { deriveWeeklyPlanFlowStep as resolveWeeklyPlanFlowStep, weeklyPlanScheduledPointCount } from '../planning/weeklyPlanUx';
@@ -51,6 +54,9 @@ interface WeeklyPlanState {
   isArchiving: boolean;
   isDeleting: boolean;
   isCreatingWeek: boolean;
+  isGeneratingOperational: boolean;
+  operationalProgress: number;
+  operationalPhase: string;
   validationJobId: string | null;
   validationCompleted: boolean;
   validationProgress: number;
@@ -75,6 +81,9 @@ const [state, setState] = createStore<WeeklyPlanState>({
   isArchiving: false,
   isDeleting: false,
   isCreatingWeek: false,
+  isGeneratingOperational: false,
+  operationalProgress: 0,
+  operationalPhase: '',
   validationJobId: null,
   validationCompleted: false,
   validationProgress: 0,
@@ -143,11 +152,14 @@ export async function initWeeklyPlanTab(): Promise<void> {
     ]);
     setState({ collectionPoints: points });
     const plan = withCalendarDays(await pickDefaultPlan(history));
+    // Al remontar la vista conservamos la validación ya hecha del mismo plan
+    // (el store sobrevive a la navegación SPA) para no obligar a revalidar.
+    const samePlan = plan?.id != null && plan.id === state.selectedPlanId;
     setState({
       plan,
       selectedPlanId: plan?.id ?? null,
-      validationCompleted: false,
-      validationSummary: null,
+      validationCompleted: samePlan ? state.validationCompleted : false,
+      validationSummary: samePlan ? state.validationSummary : null,
       validationProgress: 0,
     });
     if (plan?.weekStartDate) {
@@ -181,6 +193,23 @@ export function buildDefaultWeekDays(weekStart: string, pointIds: number[]): Wee
 
 export function nextWeekMonday(): string {
   return addWeeksToMonday(mondayIso(), 1);
+}
+
+/**
+ * Lunes de la siguiente semana a crear: la posterior a la última planificada
+ * (o la próxima semana si todavía no hay ninguna). Siempre es una semana libre.
+ */
+export function nextWeekToCreate(): string {
+  const latest = [...state.history]
+    .map((row) => row.weekStartDate)
+    .sort((a, b) => b.localeCompare(a))[0];
+  return addWeeksToMonday(latest ?? mondayIso(), 1);
+}
+
+/** Indica si una semana está aprobada/archivada y por tanto es de solo lectura. */
+export function isWeeklyPlanReadOnly(): boolean {
+  const status = state.plan?.status;
+  return status === 'approved' || status === 'archived';
 }
 
 export function canCreateNextWeekDraft(): boolean {
@@ -222,12 +251,14 @@ export async function selectWeeklyPlan(
   setState({ isLoading: true, error: null, versionDiff: [], versions: [] });
   try {
     const plan = withCalendarDays(await resolvePlanFromHistory(planId));
+    // Reelegir el mismo plan conserva la validación (y su previsualización) ya hecha.
+    const samePlan = planId === state.selectedPlanId;
     setState({
       plan,
       selectedPlanId: planId,
-      validationCompleted: false,
+      validationCompleted: samePlan ? state.validationCompleted : false,
       notice: null,
-      validationSummary: null,
+      validationSummary: samePlan ? state.validationSummary : null,
       validationProgress: 0,
     });
     await syncDraftCaseStudyFromPlan(plan);
@@ -357,6 +388,11 @@ export async function createNextWeekDraft(): Promise<void> {
   await createWeekDraft(nextWeekMonday());
 }
 
+/** Crea un borrador para la primera semana libre posterior a la última planificada. */
+export async function createFollowingWeekDraft(): Promise<void> {
+  await createWeekDraft(nextWeekToCreate());
+}
+
 export async function createCurrentWeekDraft(): Promise<void> {
   await createWeekDraft(mondayIso());
 }
@@ -476,12 +512,43 @@ export async function runWeeklyValidation(): Promise<void> {
             operationDate?: string;
             skipped?: boolean;
             feasible?: boolean;
-            error?: string;
+            error?: string | null;
+            distanceKm?: number;
+            durationHours?: number;
+            coveragePct?: number | null;
+            servedPoints?: number;
+            uncoveredPoints?: number;
+            vehicles?: Array<{
+              vehicleCode?: string;
+              driverName?: string | null;
+              distanceKm?: number;
+              durationMin?: number;
+              stops?: number;
+            }>;
           }>;
         };
-        const problemDays = (result.perDay ?? [])
+        const perDay = result.perDay ?? [];
+        const problemDays = perDay
           .filter((day) => !day.skipped && (day.feasible === false || Boolean(day.error)))
           .map((day) => day.operationDate ?? '?');
+        const days = perDay.map((day) => ({
+          operationDate: day.operationDate ?? '?',
+          skipped: Boolean(day.skipped),
+          feasible: day.feasible !== false && !day.error,
+          error: day.error ?? null,
+          distanceKm: day.distanceKm ?? null,
+          durationHours: day.durationHours ?? null,
+          coveragePct: day.coveragePct ?? null,
+          servedPoints: day.servedPoints ?? null,
+          uncoveredPoints: day.uncoveredPoints ?? null,
+          vehicles: (day.vehicles ?? []).map((vehicle) => ({
+            vehicleCode: vehicle.vehicleCode ?? '—',
+            driverName: vehicle.driverName ?? null,
+            distanceKm: vehicle.distanceKm ?? 0,
+            durationMin: vehicle.durationMin ?? 0,
+            stops: vehicle.stops ?? 0,
+          })),
+        }));
         const notice =
           problemDays.length > 0
             ? `Validación por día: ${problemDays.length} día(s) con problemas (${problemDays.join(', ')}). Revisa cobertura o flota antes de aprobar.`
@@ -498,6 +565,7 @@ export async function runWeeklyValidation(): Promise<void> {
             exceedsWorkday: kpis.exceedsWorkday?.optimized ?? false,
             workdayHours: kpis.workdayHours ?? 12,
             simulationId: snapshot.result.simulationId ?? null,
+            days,
           },
         });
         break;
@@ -517,6 +585,71 @@ export async function runWeeklyValidation(): Promise<void> {
     throw error;
   } finally {
     setState({ isValidating: false, validationJobId: null });
+  }
+}
+
+/**
+ * Refresca el plan seleccionado sin tocar el estado de validación (a diferencia de
+ * `selectWeeklyPlan`), para poder generar/ver el plan operativo y luego aprobar.
+ */
+async function refreshSelectedPlanPreservingValidation(planId: number): Promise<void> {
+  if (state.selectedPlanId !== planId) return;
+  const plan = withCalendarDays(await fetchWeeklyPlanById(planId));
+  setState({ plan });
+}
+
+/**
+ * Genera el plan operativo de la semana (camión × día) para el plan seleccionado,
+ * sea borrador o aprobado (borrador = revisión antes de aprobar). Devuelve los días
+ * generados.
+ */
+export async function generateWeeklyOperationalPlanForWeek(
+  onProgress?: (progress: number, phase: string) => void,
+): Promise<WeeklyPlanDayOperational[]> {
+  const planId = state.plan?.id;
+  if (!planId) {
+    throw new Error('No hay plan semanal seleccionado');
+  }
+  setState({
+    isGeneratingOperational: true,
+    operationalProgress: 0,
+    operationalPhase: 'Iniciando generación…',
+    error: null,
+  });
+  try {
+    const { jobId } = await generateWeeklyOperationalPlan(planId);
+    if (jobId === 'mock-job') {
+      setState({ operationalProgress: 100, operationalPhase: 'Listo' });
+      await refreshSelectedPlanPreservingValidation(planId);
+      return [];
+    }
+    while (true) {
+      const snapshot = await fetchSimulationOptimizeJob(jobId);
+      const progress = snapshot.progress ?? 0;
+      const phase = snapshot.phase ? String(snapshot.phase) : 'Optimizando…';
+      setState({ operationalProgress: progress, operationalPhase: phase });
+      onProgress?.(progress, phase);
+      if (snapshot.status === 'completed') {
+        const days = ((snapshot.result as unknown as WeeklyOperationalPlan | null)?.days) ?? [];
+        setState({ operationalProgress: 100, operationalPhase: 'Plan operativo generado' });
+        await refreshSelectedPlanPreservingValidation(planId);
+        return days;
+      }
+      if (snapshot.status === 'failed') {
+        throw new Error(snapshot.error ?? 'La generación del plan operativo falló');
+      }
+      if (snapshot.status === 'cancelled') {
+        throw new Error('Generación cancelada');
+      }
+      await new Promise((resolve) => setTimeout(resolve, 800));
+    }
+  } catch (error) {
+    setState({
+      error: error instanceof Error ? error.message : 'No se pudo generar el plan operativo',
+    });
+    throw error;
+  } finally {
+    setState({ isGeneratingOperational: false });
   }
 }
 

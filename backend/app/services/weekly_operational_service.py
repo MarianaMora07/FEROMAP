@@ -104,11 +104,14 @@ def _collect_engine_context(
     plan: WeeklyPlan,
     day: Any,
     daily_plan_id: int,
+    *,
+    point_ids: list[int] | None = None,
 ) -> dict[str, Any]:
     """Reúne escenario/flota/partición igual que el flujo diario operativo."""
-    from app.services.planning_service import consolidate_daily_points
+    if point_ids is None:
+        from app.services.planning_service import consolidate_daily_points
 
-    point_ids = consolidate_daily_points(db, daily_plan_id)
+        point_ids = consolidate_daily_points(db, daily_plan_id)
     scenario_id = day.scenario_id_override or plan.scenario_id
     return {
         "pointIds": point_ids,
@@ -117,6 +120,57 @@ def _collect_engine_context(
         "fleetLimit": day.expected_vehicle_count,
         "sectorPartition": False if _json_int_list(day.sector_ids_json) else None,
     }
+
+
+def _prepare_draft_daily_plan(
+    db: Session, plan: WeeklyPlan, day: Any
+) -> tuple[int, list[int]]:
+    """Prepara el plan del día de un borrador semanal (revisión antes de aprobar).
+
+    No usa ``open_daily_plan``/``resolve_scheduled_point_ids`` (que exigen semana
+    aprobada): resuelve los puntos desde el propio plan y asocia el ``DailyPlan``
+    al plan semanal en borrador. Devuelve ``(daily_plan_id, point_ids)``.
+    """
+    from app.db.models import PendingVisit
+    from app.services.case_study_planning import resolve_weekly_day_point_ids
+
+    operation_date = day.operation_date
+    resolved_ids, _source, _case = resolve_weekly_day_point_ids(db, plan, day)
+    pending_ids = [
+        visit.collection_point_id
+        for visit in db.scalars(
+            select(PendingVisit)
+            .where(
+                PendingVisit.status == "open",
+                (PendingVisit.target_operation_date.is_(None))
+                | (PendingVisit.target_operation_date == operation_date),
+            )
+            .order_by(PendingVisit.priority.desc(), PendingVisit.id)
+        ).all()
+    ]
+    final_ids = sorted(set(resolved_ids) | set(pending_ids))
+
+    daily = db.scalar(select(DailyPlan).where(DailyPlan.operation_date == operation_date))
+    if daily is None:
+        daily = DailyPlan(
+            operation_date=operation_date,
+            weekly_plan_id=plan.id,
+            weekly_plan_day_id=day.id,
+            status="draft",
+            scenario_id=day.scenario_id_override or plan.scenario_id,
+            scheduled_point_ids_json=json.dumps(resolved_ids),
+            pending_point_ids_json=json.dumps(pending_ids),
+            final_point_ids_json=json.dumps(final_ids),
+        )
+        db.add(daily)
+        db.flush()
+    else:
+        daily.weekly_plan_id = plan.id
+        daily.weekly_plan_day_id = day.id
+        daily.scheduled_point_ids_json = json.dumps(resolved_ids)
+        daily.pending_point_ids_json = json.dumps(pending_ids)
+        daily.final_point_ids_json = json.dumps(final_ids)
+    return daily.id, final_ids
 
 
 def generate_weekly_operational_plan(
@@ -136,10 +190,10 @@ def generate_weekly_operational_plan(
     )
     if plan is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan semanal no encontrado")
-    if plan.status != "approved":
+    if plan.status not in ("draft", "approved"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Primero aprueba el plan semanal para generar el plan operativo",
+            detail="Solo se puede generar el plan operativo de un borrador o de una semana aprobada",
         )
 
     days = sorted(
@@ -187,9 +241,13 @@ def generate_weekly_operational_plan(
         }
         try:
             report(index, f"{label} {day.operation_date} · preparando ({index}/{total})")
-            daily = open_daily_plan(db, day.operation_date)
-            daily_plan_id = daily["id"]
-            ctx = _collect_engine_context(db, plan, day, daily_plan_id)
+            if plan.status == "approved":
+                daily = open_daily_plan(db, day.operation_date)
+                daily_plan_id = daily["id"]
+                ctx = _collect_engine_context(db, plan, day, daily_plan_id)
+            else:
+                daily_plan_id, final_ids = _prepare_draft_daily_plan(db, plan, day)
+                ctx = _collect_engine_context(db, plan, day, daily_plan_id, point_ids=final_ids)
             if not ctx["pointIds"]:
                 day_summary.update({"status": "skipped", "reason": "sin puntos"})
                 result_rows.append(day_summary)

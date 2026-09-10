@@ -32,9 +32,13 @@ test.describe('Planificación operativa — plan del día', () => {
     await page.getByTestId('optimization-pending-section').locator('summary').click();
     await expect(page.getByTestId('pending-management-panel')).toBeVisible();
 
-    await expect(
-      page.getByRole('button', { name: /(Generar|Regenerar) Plan Operativo/ }),
-    ).toBeVisible();
+    // El día puede llegar sin rutas (muestra "Generar"), optimizado ("Notificar") o ya
+    // notificado automáticamente ("Monitoreo").
+    const showsCta =
+      (await page.getByTestId('optimization-generate-route').isVisible()) ||
+      (await page.getByTestId('optimization-dispatch-route').isVisible()) ||
+      (await page.getByTestId('optimization-monitoring-route').isVisible());
+    expect(showsCta).toBeTruthy();
   });
 
   test('abre gestión de pendientes con hash #pendientes', async ({ page }) => {
@@ -71,10 +75,11 @@ test.describe('Planificación operativa — flujo semanal', () => {
     await expect(page.getByText('Falta validar', { exact: true })).toBeVisible();
   });
 
-  test('flujo completo: borrador, autocompletar, validar, aprobar y abrir optimización', async ({
+  test('flujo completo: borrador, autocompletar, validar y ver plan', async ({
     page,
     request,
   }) => {
+    test.setTimeout(1_800_000);
     await ensurePlannerSession(page, '/planning/weekly');
     await expect(page.getByTestId('planning-weekly-page')).toBeVisible({ timeout: 45_000 });
 
@@ -89,11 +94,11 @@ test.describe('Planificación operativa — flujo semanal', () => {
 
     await page.getByTestId('weekly-plan-stepper').getByRole('button', { name: 'Aprobar' }).click();
     await expect(page.getByTestId('weekly-plan-approve-blocked')).toHaveCount(0);
-    await page.getByTestId('weekly-plan-primary-cta').click();
-    await expect(page.getByTestId('weekly-plan-post-approval-checklist')).toBeVisible({ timeout: 30_000 });
 
-    await page.getByTestId('weekly-plan-primary-cta').click();
-    await expect(page).toHaveURL(/\/optimization/, { timeout: 30_000 });
+    // "Ver plan" genera el plan operativo de la semana (motor real) y abre la
+    // planificación operativa del primer día; la aprobación queda para después.
+    await page.getByTestId('weekly-plan-review-cta').click();
+    await expect(page).toHaveURL(/\/optimization/, { timeout: 1_500_000 });
   });
 
   test('redirige la URL legada de simulación al plan semanal operativo', async ({ page }) => {

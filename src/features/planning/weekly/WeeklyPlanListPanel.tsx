@@ -7,11 +7,11 @@ import {
   archiveSelectedWeeklyPlan,
   canArchivePlan,
   canCreateCurrentWeekDraft,
-  canCreateNextWeekDraft,
   canDeletePlan,
   createCurrentWeekDraft,
-  createNextWeekDraft,
+  createFollowingWeekDraft,
   deleteWeeklyPlanRow,
+  nextWeekToCreate,
   selectWeeklyPlan,
   weeklyPlanState,
 } from '../../../core/stores/weeklyPlanStore';
@@ -64,17 +64,16 @@ export function WeeklyPlanListPanel() {
     <Card class="h-full">
       <CardHeader title="Semanas" subtitle="Pasadas, actual y próximas" />
       <div class="mb-3 flex flex-col gap-2">
-        <Show when={canCreateNextWeekDraft()}>
-          <Button
-            size="sm"
-            class="w-full gap-2"
-            icon={<Plus size={14} />}
-            loading={weeklyPlanState.isCreatingWeek}
-            onClick={() => void createNextWeekDraft()}
-          >
-            Nueva semana
-          </Button>
-        </Show>
+        <Button
+          size="sm"
+          class="w-full gap-2"
+          icon={<Plus size={14} />}
+          loading={weeklyPlanState.isCreatingWeek}
+          data-testid="weekly-plan-create-week"
+          onClick={() => void createFollowingWeekDraft()}
+        >
+          Nueva semana · {nextWeekToCreate()}
+        </Button>
         <Show when={canCreateCurrentWeekDraft()}>
           <Button
             size="sm"

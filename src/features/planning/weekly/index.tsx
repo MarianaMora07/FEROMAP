@@ -2,7 +2,6 @@ import { A } from '@solidjs/router';
 import { ArrowLeft } from 'lucide-solid';
 import { Button } from '../../../design-system/components';
 import { WeeklyPlanTab } from './WeeklyPlanTab';
-import { CollapsiblePlanningGlossary } from '../CollapsiblePlanningGlossary';
 
 export default function PlanningWeeklyPage() {
   return (
@@ -24,7 +23,6 @@ export default function PlanningWeeklyPage() {
         </A>
       </div>
 
-      <CollapsiblePlanningGlossary />
       <WeeklyPlanTab embedded />
     </div>
   );

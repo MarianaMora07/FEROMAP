@@ -38,18 +38,22 @@ test.describe('Plan operativo semanal — generar, abrir y notificar', () => {
 
     await page.getByTestId('weekly-plan-stepper').getByRole('button', { name: 'Aprobar' }).click();
     await expect(page.getByTestId('weekly-plan-approve-blocked')).toHaveCount(0);
+
+    // "Ver plan" genera el plan operativo de la semana y abre la planificación
+    // operativa. Volvemos (SPA) para aprobar la semana ya revisada.
+    await page.getByTestId('weekly-plan-review-cta').click();
+    await expect(page).toHaveURL(/\/optimization/, { timeout: 1_500_000 });
+    await page.goBack();
+    await expect(page.getByTestId('planning-weekly-page')).toBeVisible({ timeout: 45_000 });
+
+    await page.getByTestId('weekly-plan-stepper').getByRole('button', { name: 'Aprobar' }).click();
     await page.getByTestId('weekly-plan-primary-cta').click();
     await expect(page.getByTestId('weekly-plan-post-approval-checklist')).toBeVisible({
       timeout: 60_000,
     });
 
-    // Generar plan operativo de la semana si la tabla aún no existe
-    const table = page.getByTestId('weekly-operational-table');
-    if (!(await table.isVisible())) {
-      await page.getByTestId('weekly-generate-operational').click();
-      await expect(table).toBeVisible({ timeout: 1_500_000 });
-    }
-    await expect(page.getByRole('button', { name: /Regenerar plan operativo/ })).toBeVisible();
+    // El plan operativo ya fue generado por "Ver plan"; la tabla camión × día debe estar.
+    await expect(page.getByTestId('weekly-operational-table')).toBeVisible({ timeout: 60_000 });
 
     // Abrir un día desde la tabla
     const firstDayLink = page.locator('[data-testid^="weekly-open-day-"]').first();

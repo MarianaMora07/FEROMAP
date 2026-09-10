@@ -639,6 +639,50 @@ def _aggregate_weekly_day_results(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _simulation_route_rows(db: Session, simulation_id: int) -> list[dict[str, Any]]:
+    """Rutas optimizadas de una simulación **aún en sesión** (sin commit).
+
+    La validación corre el motor con ``auto_commit=False``: las rutas y sus waypoints
+    existen en la sesión hasta el ``rollback``. Este helper las lee para poder mostrar
+    la previsualización 'qué / quién / cuándo' antes de aprobar la semana.
+    """
+    routes = db.scalars(
+        select(OptimizedRoute)
+        .where(
+            OptimizedRoute.simulation_id == simulation_id,
+            OptimizedRoute.route_kind == "optimized",
+        )
+        .options(joinedload(OptimizedRoute.vehicle), joinedload(OptimizedRoute.driver))
+        .order_by(OptimizedRoute.id)
+    ).unique().all()
+    rows: list[dict[str, Any]] = []
+    for route in routes:
+        stops = int(
+            db.scalar(
+                select(func.count())
+                .select_from(RouteWaypoint)
+                .where(
+                    RouteWaypoint.route_id == route.id,
+                    RouteWaypoint.waypoint_type == "collection",
+                )
+            )
+            or 0
+        )
+        driver = route.driver
+        rows.append(
+            {
+                "vehicleCode": route.vehicle.code if route.vehicle else "—",
+                "driverName": (
+                    f"{driver.first_name} {driver.last_name}".strip() if driver else None
+                ),
+                "distanceKm": round(float(route.total_distance_meters or 0) / 1000, 1),
+                "durationMin": round((route.estimated_duration_seconds or 0) / 60),
+                "stops": stops,
+            }
+        )
+    return rows
+
+
 def validate_weekly_plan_days(db: Session, *, plan_id: int) -> dict[str, Any]:
     """Valida la semana ejecutando el motor ACO **por día** (Tarea 9).
 
@@ -686,6 +730,9 @@ def validate_weekly_plan_days(db: Session, *, plan_id: int) -> dict[str, Any]:
                     "uncoveredPoints": kpis.get("uncoveredPoints"),
                     "servedPoints": len(result.get("servedPointCodes") or []),
                     "feasible": int(kpis.get("uncoveredPoints", 0) or 0) == 0,
+                    # Previsualización 'quién': camiones/conductores que asigna el motor
+                    # en esta corrida (rutas en sesión, se descartan con el rollback).
+                    "vehicles": _simulation_route_rows(db, int(result["simulationId"])),
                 }
             )
         except Exception as exc:  # noqa: BLE001
