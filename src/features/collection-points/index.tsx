@@ -32,6 +32,7 @@ import {
   Badge,
   Button,
   Card,
+  ConfirmDialog,
   Drawer,
   ProgressBar,
   StatusBadge,
@@ -124,6 +125,7 @@ export default function CollectionPointsPage() {
   const [placeMode, setPlaceMode] = createSignal(false);
   const [submitting, setSubmitting] = createSignal(false);
   const [exporting, setExporting] = createSignal(false);
+  const [pendingDeletePoint, setPendingDeletePoint] = createSignal<CollectionPoint | null>(null);
   const { toasts, addToast, removeToast } = createToastStore();
   const [apiPoints, { refetch: refetchPoints }] = createResource(fetchCollectionPointsList);
   const [pointsSummary, { refetch: refetchSummary }] = createResource(fetchCollectionPointsSummary);
@@ -480,14 +482,20 @@ export default function CollectionPointsPage() {
     }
   };
 
-  const handleDeletePoint = async (point: CollectionPoint) => {
-    if (!window.confirm(`¿Eliminar el punto ${point.id}? Esta acción no se puede deshacer.`)) return;
+  const handleDeletePoint = (point: CollectionPoint) => {
+    setPendingDeletePoint(point);
+  };
+
+  const confirmDeletePoint = async () => {
+    const point = pendingDeletePoint();
+    if (!point) return;
     setSubmitting(true);
     try {
       await deleteCollectionPoint(point.id);
       addToast(`Punto ${point.id} eliminado`, 'success');
       const remaining = allPoints().filter((p) => p.id !== point.id);
       setSelectedId(remaining[0]?.id ?? '');
+      setPendingDeletePoint(null);
       await refreshData();
     } catch (error) {
       const message = error instanceof ApiError ? error.message : 'No se pudo eliminar el punto';
@@ -1147,6 +1155,22 @@ export default function CollectionPointsPage() {
           setPlaceMode(false);
         }}
         onSubmit={handleFormSubmit}
+      />
+
+      <ConfirmDialog
+        open={pendingDeletePoint() != null}
+        title={`¿Eliminar el punto ${pendingDeletePoint()?.id ?? ''}?`}
+        message={
+          pendingDeletePoint()?.label
+            ? `Se eliminará «${pendingDeletePoint()!.label}»${pendingDeletePoint()!.address ? ` (${pendingDeletePoint()!.address})` : ''}. Esta acción no se puede deshacer.`
+            : 'Se eliminará el punto de recolección. Esta acción no se puede deshacer.'
+        }
+        confirmLabel="Eliminar punto"
+        tone="danger"
+        loading={submitting()}
+        onConfirm={() => void confirmDeletePoint()}
+        onCancel={() => setPendingDeletePoint(null)}
+        testId="collection-point-delete-confirm"
       />
 
       <ToastContainer toasts={toasts()} onDismiss={removeToast} />

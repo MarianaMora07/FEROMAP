@@ -1,4 +1,4 @@
-import { apiGet, apiPatch, apiPost, useMocks } from './client';
+import { apiDelete, apiGet, apiPatch, apiPost, useMocks } from './client';
 import { tomorrowIso } from '../planning/planningUx';
 import type { ScenarioId } from '../../data/types/simulation';
 
@@ -394,6 +394,16 @@ export function archiveWeeklyPlan(planId: number): Promise<WeeklyPlan> {
     return Promise.resolve(upsertMockWeeklyPlan({ ...plan, status: 'archived' }));
   }
   return apiPost(`/api/v1/planning/weekly/${planId}/archive`, {});
+}
+
+export function deleteWeeklyPlan(planId: number): Promise<{ id: number; deleted: boolean }> {
+  if (useMocks) {
+    const items = ensureMockWeeklyPlans();
+    const index = items.findIndex((plan) => plan.id === planId);
+    if (index >= 0) items.splice(index, 1);
+    return Promise.resolve({ id: planId, deleted: index >= 0 });
+  }
+  return apiDelete(`/api/v1/planning/weekly/${planId}`);
 }
 
 export function fetchCurrentWeeklyPlan(referenceDate?: string): Promise<WeeklyPlan> {

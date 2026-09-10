@@ -7,6 +7,7 @@ import {
   autofillWeeklyPlanFromSchedules,
   compareWeeklyPlanVersions,
   createWeeklyPlan,
+  deleteWeeklyPlan,
   fetchCurrentWeeklyPlan,
   fetchWeeklyPlanById,
   fetchWeeklyPlans,
@@ -34,6 +35,7 @@ import { fetchActiveVisitSchedules, type VisitSchedule } from '../api/visitSched
 import { fetchSimulationOptimizeJob } from '../api/simulationJobs';
 import { fetchCollectionPointsForPlanning } from '../api/collectionPoints';
 import { fetchCaseStudies, fetchCaseStudyDetail, type CaseStudyDetail } from '../api/caseStudies';
+import { globalToast } from './toastStore';
 
 interface WeeklyPlanState {
   plan: WeeklyPlan | null;
@@ -47,6 +49,7 @@ interface WeeklyPlanState {
   isValidating: boolean;
   isApproving: boolean;
   isArchiving: boolean;
+  isDeleting: boolean;
   isCreatingWeek: boolean;
   validationJobId: string | null;
   validationCompleted: boolean;
@@ -70,6 +73,7 @@ const [state, setState] = createStore<WeeklyPlanState>({
   isValidating: false,
   isApproving: false,
   isArchiving: false,
+  isDeleting: false,
   isCreatingWeek: false,
   validationJobId: null,
   validationCompleted: false,
@@ -192,6 +196,11 @@ export function canCreateCurrentWeekDraft(): boolean {
 export function canArchivePlan(plan: WeeklyPlan | null | undefined): boolean {
   if (!plan) return false;
   return plan.status === 'approved' && isPastWeek(plan.weekStartDate);
+}
+
+/** Solo los borradores se pueden eliminar; las semanas aprobadas se archivan. */
+export function canDeletePlan(plan: WeeklyPlan | null | undefined): boolean {
+  return plan?.status === 'draft';
 }
 
 export function deriveWeeklyFlowStep(): number {
@@ -352,6 +361,34 @@ export async function createCurrentWeekDraft(): Promise<void> {
   await createWeekDraft(mondayIso());
 }
 
+export async function deleteWeeklyPlanRow(planId: number): Promise<void> {
+  setState({ isDeleting: true, error: null, notice: null });
+  try {
+    await deleteWeeklyPlan(planId);
+    const history = await refreshWeeklyPlanHistory();
+    if (state.selectedPlanId === planId) {
+      const fallback = withCalendarDays(await pickDefaultPlan(history));
+      setState({
+        plan: fallback,
+        selectedPlanId: fallback?.id ?? null,
+        versions: [],
+        versionDiff: [],
+        validationCompleted: false,
+        validationSummary: null,
+        validationProgress: 0,
+      });
+    }
+    globalToast.addToast('Semana eliminada.', 'success');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'No se pudo eliminar la semana';
+    setState({ error: message });
+    globalToast.addToast(message, 'error');
+    throw error;
+  } finally {
+    setState({ isDeleting: false });
+  }
+}
+
 export async function archiveSelectedWeeklyPlan(): Promise<void> {
   if (!state.plan?.id) throw new Error('No hay plan seleccionado');
   if (!canArchivePlan(state.plan)) {
@@ -419,6 +456,10 @@ export async function saveWeeklyPlanDraft(scenarioId: ScenarioId, days: WeeklyPl
 export async function runWeeklyValidation(): Promise<void> {
   if (!state.plan?.id) {
     throw new Error('Primero guarda un borrador del plan semanal');
+  }
+  // Persiste cambios pendientes (p. ej. la flota recién ajustada) antes de simular.
+  if (isWeeklyPlanEditable()) {
+    await saveWeeklyPlanDraft(state.plan.scenarioId ?? 'normal', state.plan.days ?? []);
   }
   setState({ isValidating: true, error: null, notice: null, validationCompleted: false, validationSummary: null, validationProgress: 0 });
   try {

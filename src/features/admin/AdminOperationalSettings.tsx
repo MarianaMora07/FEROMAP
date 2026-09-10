@@ -1,6 +1,6 @@
 import { For, Show, createSignal, onMount } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
-import { Button, Card, SelectField, TextField } from '../../design-system/components';
+import { Button, Card, ConfirmDialog, SelectField, TextField } from '../../design-system/components';
 import {
   fetchAdminSettings,
   runAdminSeed,
@@ -63,6 +63,7 @@ export function AdminOperationalSettings(props: { onFlash: (message: string) => 
   const [settings, setSettings] = createSignal<OperationalSettings | null>(null);
   const [saving, setSaving] = createSignal(false);
   const [seeding, setSeeding] = createSignal(false);
+  const [confirmSeedOpen, setConfirmSeedOpen] = createSignal(false);
 
   onMount(() => {
     void fetchAdminSettings().then(setSettings);
@@ -86,10 +87,11 @@ export function AdminOperationalSettings(props: { onFlash: (message: string) => 
   };
 
   const loadSeeds = () => {
-    const ok = window.confirm(
-      'Esto borra los datos actuales y recarga los seeds demo. Deberás iniciar sesión de nuevo (admin@fero.com). ¿Continuar?',
-    );
-    if (!ok) return;
+    setConfirmSeedOpen(true);
+  };
+
+  const runSeeds = () => {
+    setConfirmSeedOpen(false);
     setSeeding(true);
     void runAdminSeed()
       .then(async (result) => {
@@ -106,10 +108,11 @@ export function AdminOperationalSettings(props: { onFlash: (message: string) => 
   };
 
   return (
-    <Show
-      when={settings()}
-      fallback={<p class="text-sm text-text-muted">Cargando configuración...</p>}
-    >
+    <>
+      <Show
+        when={settings()}
+        fallback={<p class="text-sm text-text-muted">Cargando configuración...</p>}
+      >
       {(s) => (
         <div class="space-y-4">
           <Card class="space-y-4 p-4">
@@ -340,6 +343,20 @@ export function AdminOperationalSettings(props: { onFlash: (message: string) => 
           </div>
         </div>
       )}
-    </Show>
+      </Show>
+
+      <ConfirmDialog
+        open={confirmSeedOpen()}
+        title="¿Recargar datos demo (seeds)?"
+        message="Esto borra los datos actuales y recarga parroquia, sectores, puntos, flota, conductores, rutas y alertas desde data/seeds."
+        detail="Deberás iniciar sesión de nuevo (admin@fero.com)."
+        confirmLabel="Cargar seeds"
+        tone="danger"
+        loading={seeding()}
+        onConfirm={runSeeds}
+        onCancel={() => setConfirmSeedOpen(false)}
+        testId="admin-seeds-confirm"
+      />
+    </>
   );
 }

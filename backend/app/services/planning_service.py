@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import (
@@ -1747,6 +1747,39 @@ def archive_weekly_plan(db: Session, plan_id: int, *, user_id: int | None = None
     )
     db.flush()
     return get_weekly_plan(db, plan.id)
+
+
+def delete_weekly_plan(db: Session, plan_id: int) -> dict[str, Any]:
+    """Elimina un borrador de plan semanal (con sus días) y sus referencias.
+
+    Solo se permiten borradores: las semanas aprobadas quedan en el historial y los
+    planes diarios ya despachados dependen de ellas, por lo que se archivan en su lugar.
+    """
+    plan = db.scalar(select(WeeklyPlan).where(WeeklyPlan.id == plan_id).options(joinedload(WeeklyPlan.days)))
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan semanal no encontrado")
+    if plan.status != "draft":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Solo se pueden eliminar borradores. Usa «Archivar» para semanas aprobadas.",
+        )
+    day_ids = [day.id for day in plan.days]
+    # Los planes diarios no deben quedar apuntando a filas eliminadas.
+    if day_ids:
+        db.execute(
+            update(DailyPlan)
+            .where(DailyPlan.weekly_plan_day_id.in_(day_ids))
+            .values(weekly_plan_day_id=None)
+        )
+    db.execute(update(DailyPlan).where(DailyPlan.weekly_plan_id == plan.id).values(weekly_plan_id=None))
+    db.execute(
+        delete(PlanVersion).where(
+            PlanVersion.entity_type == "weekly_plan", PlanVersion.entity_id == plan.id
+        )
+    )
+    db.delete(plan)
+    db.flush()
+    return {"id": plan_id, "deleted": True}
 
 
 def trace_incident(db: Session, incident_id: int) -> dict[str, Any]:
