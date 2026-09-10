@@ -1,0 +1,13 @@
+# Reglas del proyecto
+
+## Commits
+
+- **Todos los mensajes de commit deben escribirse en inglés**, aunque la conversación sea en español.
+- Seguir **Conventional Commits**: `type(scope): description`.
+  - Tipos permitidos: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`.
+  - `scope` es opcional; usa un nombre corto del módulo (p. ej. `optimization`, `weekly-plan`, `backend`, `design-system`).
+  - La descripción va en imperativo, en minúscula, sin punto final y con ≤ 72 caracteres.
+  - Añade cuerpo (separado por una línea en blanco) cuando el cambio necesite contexto: qué y por qué. Líneas ≤ 72 caracteres.
+  - Usa el footer `BREAKING CHANGE:` solo para cambios incompatibles.
+- No añadas trailers de co-autoría ni "generated with" salvo que se pidan explícitamente.
+- No hagas commit salvo que el usuario lo pida.
