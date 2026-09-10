@@ -12,6 +12,7 @@ from app.services.planning_service import (
     consolidate_daily_points,
     create_pending_visit,
     create_weekly_plan_draft,
+    delete_weekly_plan,
     monday_of_week,
     week_range,
 )
@@ -64,3 +65,39 @@ def test_create_pending_visit_deduplicates_open_entries():
         reason="not_visited",
     )
     assert result is existing
+
+
+def test_delete_weekly_plan_missing_returns_404():
+    db = MagicMock()
+    db.scalar.return_value = None
+    with pytest.raises(HTTPException) as exc:
+        delete_weekly_plan(db, 99)
+    assert exc.value.status_code == 404
+    db.delete.assert_not_called()
+
+
+def test_delete_weekly_plan_rejects_non_draft():
+    db = MagicMock()
+    plan = MagicMock()
+    plan.status = "approved"
+    db.scalar.return_value = plan
+    with pytest.raises(HTTPException) as exc:
+        delete_weekly_plan(db, 7)
+    assert exc.value.status_code == 400
+    db.delete.assert_not_called()
+
+
+def test_delete_weekly_plan_removes_draft_and_unlinks_daily_plans():
+    db = MagicMock()
+    plan = MagicMock()
+    plan.status = "draft"
+    plan.id = 7
+    day = MagicMock()
+    day.id = 3
+    plan.days = [day]
+    db.scalar.return_value = plan
+    result = delete_weekly_plan(db, 7)
+    assert result == {"id": 7, "deleted": True}
+    # Desvincula weekly_plan_day_id, weekly_plan_id y borra versiones.
+    assert db.execute.call_count == 3
+    db.delete.assert_called_once_with(plan)

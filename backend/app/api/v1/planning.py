@@ -28,6 +28,7 @@ from app.services.planning_service import (
     consolidate_daily_points,
     defer_uncovered_points_from_daily_plan,
     create_weekly_plan_draft,
+    delete_weekly_plan,
     get_current_weekly_plan,
     get_daily_plan_by_date,
     get_daily_plan_execution_context,
@@ -121,6 +122,14 @@ def get_weekly(plan_id: int, db: DbSession):
 def get_weekly_day_plan_view(plan_id: int, operation_date: date, db: DbSession):
     """Detalle de un día de la semana con los puntos a recorrer (Tarea 10, nivel 2)."""
     return get_weekly_day_plan(db, plan_id, operation_date)
+
+
+@router.delete("/weekly/{plan_id}")
+def delete_weekly(plan_id: int, db: DbSession, _: PlannerOrAdmin):
+    """Elimina un borrador de plan semanal (con sus días)."""
+    result = delete_weekly_plan(db, plan_id)
+    db.commit()
+    return result
 
 
 @router.patch("/weekly/{plan_id}")

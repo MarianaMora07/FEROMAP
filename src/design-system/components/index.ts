@@ -6,6 +6,7 @@ export { ProgressBar } from './ProgressBar';
 export { LoadingPanel } from './LoadingPanel';
 export { ToastContainer, createToastStore } from './Toast';
 export { Modal } from './Modal';
+export { ConfirmDialog } from './ConfirmDialog';
 export { Drawer } from './Drawer';
 export { Table } from './Table';
 export { TextField } from './TextField';

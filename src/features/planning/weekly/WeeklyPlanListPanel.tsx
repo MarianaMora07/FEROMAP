@@ -1,6 +1,6 @@
-import { For, Show } from 'solid-js';
-import { Archive, GitCompare, Plus } from 'lucide-solid';
-import { Button, Card, CardHeader } from '../../../design-system/components';
+import { For, Show, createSignal } from 'solid-js';
+import { Archive, GitCompare, Plus, Trash2 } from 'lucide-solid';
+import { Button, Card, CardHeader, ConfirmDialog } from '../../../design-system/components';
 import { isCurrentWeek } from '../../../core/api/planning';
 import { PLANNING_EMPTY_PRESETS } from '../../../core/planning/planningEmptyStates';
 import {
@@ -8,8 +8,10 @@ import {
   canArchivePlan,
   canCreateCurrentWeekDraft,
   canCreateNextWeekDraft,
+  canDeletePlan,
   createCurrentWeekDraft,
   createNextWeekDraft,
+  deleteWeeklyPlanRow,
   selectWeeklyPlan,
   weeklyPlanState,
 } from '../../../core/stores/weeklyPlanStore';
@@ -17,8 +19,13 @@ import { PlanningStatusBadge } from '../PlanningStatusBadge';
 import { PlanningEmptyState } from '../PlanningEmptyState';
 
 export function WeeklyPlanListPanel() {
+  const [pendingDeleteId, setPendingDeleteId] = createSignal<number | null>(null);
+  const [deleting, setDeleting] = createSignal(false);
+
   const sortedHistory = () =>
     [...weeklyPlanState.history].sort((a, b) => b.weekStartDate.localeCompare(a.weekStartDate));
+
+  const pendingDeleteRow = () => sortedHistory().find((row) => row.id === pendingDeleteId()) ?? null;
 
   const handleSelect = (planId: number) => {
     void selectWeeklyPlan(planId);
@@ -32,6 +39,25 @@ export function WeeklyPlanListPanel() {
   const handleArchive = (event: MouseEvent, planId: number) => {
     event.stopPropagation();
     void selectWeeklyPlan(planId).then(() => archiveSelectedWeeklyPlan());
+  };
+
+  const handleDelete = (event: MouseEvent, planId: number) => {
+    event.stopPropagation();
+    setPendingDeleteId(planId);
+  };
+
+  const confirmDelete = async () => {
+    const planId = pendingDeleteId();
+    if (planId == null) return;
+    setDeleting(true);
+    try {
+      await deleteWeeklyPlanRow(planId);
+      setPendingDeleteId(null);
+    } catch {
+      // El store ya notifica el error (toast + estado).
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -121,6 +147,18 @@ export function WeeklyPlanListPanel() {
                           Archivar
                         </button>
                       </Show>
+                      <Show when={canDeletePlan(row)}>
+                        <button
+                          type="button"
+                          class="inline-flex items-center gap-1 text-xs font-medium text-red-600 hover:underline dark:text-red-400"
+                          disabled={weeklyPlanState.isDeleting}
+                          data-testid={`weekly-plan-delete-${row.id}`}
+                          onClick={(event) => handleDelete(event, row.id)}
+                        >
+                          <Trash2 size={12} />
+                          Eliminar
+                        </button>
+                      </Show>
                     </div>
                   </div>
                 </li>
@@ -129,6 +167,22 @@ export function WeeklyPlanListPanel() {
           </For>
         </ul>
       </Show>
+
+      <ConfirmDialog
+        open={pendingDeleteId() != null}
+        title="¿Eliminar esta semana?"
+        message={
+          pendingDeleteRow()
+            ? `Se eliminará la semana ${pendingDeleteRow()!.weekStartDate} → ${pendingDeleteRow()!.weekEndDate} y su configuración de días. Esta acción no se puede deshacer.`
+            : 'Esta acción no se puede deshacer.'
+        }
+        confirmLabel="Eliminar semana"
+        tone="danger"
+        loading={deleting()}
+        onConfirm={() => void confirmDelete()}
+        onCancel={() => setPendingDeleteId(null)}
+        testId={`weekly-plan-delete-confirm-${pendingDeleteId() ?? 'none'}`}
+      />
     </Card>
   );
 }

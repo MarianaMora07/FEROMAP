@@ -29,9 +29,11 @@ import {
   saveWeeklyPlanDraft,
   setWeeklyScenario,
   showLatestVersionChanges,
+  updateWeeklyPlanFleet,
   weeklyPlanState,
 } from '../../../core/stores/weeklyPlanStore';
 import { WeeklyPlanFlowStepper } from './WeeklyPlanFlowStepper';
+import { WeeklyPlanFleetEditor } from './WeeklyPlanFleetEditor';
 import { WeeklyPlanHistoryExportPanel } from './WeeklyPlanHistoryExportPanel';
 import { WeeklyPlanListPanel } from './WeeklyPlanListPanel';
 import { WeeklyPlanStepPanels } from './WeeklyPlanStepPanels';
@@ -144,6 +146,12 @@ export function WeeklyPlanTab(props: WeeklyPlanTabProps) {
                 <div class="flex flex-wrap items-center gap-3">
                   <PlanningStatusBadge status={plan()?.status ?? 'draft'} />
                 </div>
+
+                <WeeklyPlanFleetEditor
+                  value={plan()?.fleetByType}
+                  editable={editable()}
+                  onChange={(fleet) => updateWeeklyPlanFleet(fleet)}
+                />
 
                 <WeeklyPlanStepPanels
                   step={viewStep()}
