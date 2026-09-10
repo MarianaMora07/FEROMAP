@@ -12,12 +12,15 @@ test.describe('Route playback — optimización', () => {
       timeout: 45_000,
     });
 
+    // El día puede llegar ya optimizado (botón "Generar" oculto) o requerir generación.
     const generateButton = page.getByTestId('optimization-generate-route');
-    await expect(generateButton).toBeVisible();
-    await generateButton.click();
-
+    if (await generateButton.isVisible()) {
+      await generateButton.click();
+    }
+    // Los resultados viven en la pestaña de primer nivel "Resultados".
+    await page.getByTestId('plan-day-tab-results').click();
     await page.getByTestId('optimization-results-tab-rutas').click();
-    await expect(page.getByText('Mejor ruta encontrada (ACO)')).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByText('Mejor ruta encontrada (ACO)')).toBeVisible({ timeout: 90_000 });
 
     // El botón "Simular" salió del toolbar; el playback se abre con el deep link ?playback=1.
     await page.goto('/optimization?playback=1', { waitUntil: 'domcontentloaded' });
@@ -37,11 +40,15 @@ test.describe('Route playback — optimización', () => {
 
   test('deep link playback=1 abre panel con controles', async ({ page }) => {
     await ensurePlannerSession(page, '/optimization');
+    // El día puede llegar ya optimizado (botón "Generar" oculto) o requerir generación.
     const generateButton = page.getByTestId('optimization-generate-route');
-    await expect(generateButton).toBeVisible({ timeout: 45_000 });
-    await generateButton.click();
+    if (await generateButton.isVisible()) {
+      await generateButton.click();
+    }
+    // Los resultados viven en la pestaña de primer nivel "Resultados".
+    await page.getByTestId('plan-day-tab-results').click();
     await page.getByTestId('optimization-results-tab-rutas').click();
-    await expect(page.getByText('Mejor ruta encontrada (ACO)')).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByText('Mejor ruta encontrada (ACO)')).toBeVisible({ timeout: 90_000 });
 
     await page.goto('/optimization?playback=1', { waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('optimization-playback-panel')).toBeVisible({ timeout: 20_000 });

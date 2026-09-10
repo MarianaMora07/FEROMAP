@@ -130,7 +130,7 @@ export interface DailyPlan {
   scenarioId: ScenarioId;
   weeklyPlanId?: number | null;
   simulationId?: number | null;
-  scheduledPoints: Array<{ id: number; code: string; sectorName?: string | null }>;
+  scheduledPoints: Array<{ id: number; code: string; sectorName?: string | null; fillLevelPct?: number | null }>;
   pendingPoints: PendingVisit[];
   pendingPointIds: number[];
   finalPointIds: number[];

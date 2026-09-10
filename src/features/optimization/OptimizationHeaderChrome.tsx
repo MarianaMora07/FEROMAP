@@ -1,6 +1,7 @@
 import { Show, createMemo, createSignal } from 'solid-js';
+import { Portal } from 'solid-js/web';
 import { A, useNavigate } from '@solidjs/router';
-import { ChevronLeft, ChevronRight, Loader2, Radio, RotateCw, Send, Sparkles, AlertTriangle } from 'lucide-solid';
+import { ChevronLeft, ChevronRight, Loader2, Radio, Send, Sparkles, AlertTriangle } from 'lucide-solid';
 import { Button, Drawer } from '../../design-system/components';
 import { canOptimize } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
@@ -32,9 +33,12 @@ export function OptimizationHeaderBar() {
   const dailyPlan = () => optimizationState.dailyPlan;
   const selectedDate = () => optimizationState.preset.operationDate;
   const hasResults = () => optimizationState.kpis != null;
+  // El plan del día ya generado no se regenera desde esta vista (no cambian las
+  // condiciones iniciales aquí): el botón solo se muestra mientras no hay resultados.
+  const showGenerate = () => !hasResults() || optimizationState.isOptimizing;
   const isDispatched = () => dailyPlan()?.status === 'dispatched';
   const isPlanClosed = () => dailyPlan()?.status === 'closed';
-  const generateActionLabel = () => (hasResults() ? 'Regenerar Plan Operativo' : 'Generar Plan Operativo');
+  const generateActionLabel = () => 'Generar Plan Operativo';
   const pointCount = () => dailyPlan()?.finalPointIds.length ?? optimizationState.context?.pointsToVisit ?? 0;
   const monitoringLink = () =>
     isDispatched()
@@ -143,33 +147,33 @@ export function OptimizationHeaderBar() {
               Cancelar
             </Button>
           </Show>
-          <Button
-            variant="gradient"
-            size="sm"
-            class="font-semibold"
-            icon={
-              optimizationState.isOptimizing ? (
-                <Loader2 size={14} class="animate-spin" />
-              ) : hasResults() ? (
-                <RotateCw size={14} />
-              ) : (
-                <Sparkles size={14} />
-              )
-            }
-            disabled={optimizationState.isOptimizing || !canOptimize(authUser()?.role)}
-            aria-label={generateActionLabel()}
-            data-testid="optimization-generate-route"
-            onClick={() => {
-              if (!optimizationState.weeklyPlanApproved) {
-                setGateOpen(true);
-                return;
+          <Show when={showGenerate()}>
+            <Button
+              variant="gradient"
+              size="sm"
+              class="font-semibold"
+              icon={
+                optimizationState.isOptimizing ? (
+                  <Loader2 size={14} class="animate-spin" />
+                ) : (
+                  <Sparkles size={14} />
+                )
               }
-              setGateOpen(false);
-              void executeOptimization();
-            }}
-          >
-            {optimizationState.isOptimizing ? `${optimizationState.optimizationProgress}%` : generateActionLabel()}
-          </Button>
+              disabled={optimizationState.isOptimizing || !canOptimize(authUser()?.role)}
+              aria-label={generateActionLabel()}
+              data-testid="optimization-generate-route"
+              onClick={() => {
+                if (!optimizationState.weeklyPlanApproved) {
+                  setGateOpen(true);
+                  return;
+                }
+                setGateOpen(false);
+                void executeOptimization();
+              }}
+            >
+              {optimizationState.isOptimizing ? `${optimizationState.optimizationProgress}%` : generateActionLabel()}
+            </Button>
+          </Show>
           <Show
             when={isDispatched() && monitoringLink()}
             fallback={
@@ -242,58 +246,67 @@ export function OptimizationHeaderBar() {
       </Show>
 
       <Show when={gateOpen() && !optimizationState.weeklyPlanApproved}>
-        <div
-          class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          role="dialog"
-          aria-modal="true"
-          data-testid="optimization-approval-dialog"
-          onClick={() => setGateOpen(false)}
-        >
+        <Portal>
           <div
-            class="w-full max-w-md rounded-xl border border-default bg-surface p-5 shadow-xl"
-            onClick={(event) => event.stopPropagation()}
+            class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            role="dialog"
+            aria-modal="true"
+            data-testid="optimization-approval-dialog"
+            onClick={() => setGateOpen(false)}
           >
-            <h3 class="font-heading text-lg font-bold text-text-primary dark:text-white">
-              La semana del {selectedDate()} no está aprobada
-            </h3>
-            <p class="mt-1 text-sm text-text-muted">
-              Para generar rutas hace falta aprobar el plan semanal de esta semana. Puedes ir al Plan
-              semanal, o elegir un día de la próxima semana que ya esté aprobada.
-            </p>
-            <div class="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
-              <Button variant="outline" size="sm" onClick={() => setGateOpen(false)}>
-                Cancelar
-              </Button>
-              <Show when={nextWeek()}>
-                {(week) => (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    data-testid="optimization-dialog-next-week"
-                    onClick={() => {
-                      setGateOpen(false);
-                      navigate(optimizationHref({ date: week().start }), { replace: true });
-                      selectOperationDate(week().start);
-                    }}
-                  >
-                    Ver un día de la semana {week().start}
-                  </Button>
-                )}
-              </Show>
-              <Button
-                variant="primary"
-                size="sm"
-                data-testid="optimization-dialog-weekly"
-                onClick={() => {
-                  setGateOpen(false);
-                  navigate(weeklyPlanHref);
-                }}
-              >
-                Ir al Plan semanal
-              </Button>
+            <div
+              class="flex max-h-[90vh] w-full max-w-md flex-col overflow-y-auto rounded-xl border border-default bg-surface p-5 shadow-xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <h3 class="font-heading text-lg font-bold text-text-primary dark:text-white">
+                La semana del {selectedDate()} no está aprobada
+              </h3>
+              <p class="mt-1 text-sm text-text-muted">
+                Para generar rutas hace falta aprobar el plan semanal de esta semana. Puedes ir al
+                Plan semanal, o elegir un día de la próxima semana que ya esté aprobada.
+              </p>
+              <div class="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="w-full sm:w-auto"
+                  onClick={() => setGateOpen(false)}
+                >
+                  Cancelar
+                </Button>
+                <Show when={nextWeek()}>
+                  {(week) => (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      class="w-full sm:w-auto"
+                      data-testid="optimization-dialog-next-week"
+                      onClick={() => {
+                        setGateOpen(false);
+                        navigate(optimizationHref({ date: week().start }), { replace: true });
+                        selectOperationDate(week().start);
+                      }}
+                    >
+                      Ver un día de la semana {week().start}
+                    </Button>
+                  )}
+                </Show>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  class="w-full sm:w-auto"
+                  data-testid="optimization-dialog-weekly"
+                  onClick={() => {
+                    setGateOpen(false);
+                    navigate(weeklyPlanHref);
+                  }}
+                >
+                  Ir al Plan semanal
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
+        </Portal>
       </Show>
 
       <Drawer

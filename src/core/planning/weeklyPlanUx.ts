@@ -54,6 +54,28 @@ export function weeklyPlanHasScheduledPoints(plan: WeeklyPlan | null | undefined
   return Boolean(plan?.days?.some((day) => day.collectionPointIds.length > 0));
 }
 
+export interface WeeklyPlanValidationVehicle {
+  vehicleCode: string;
+  driverName?: string | null;
+  distanceKm: number;
+  durationMin: number;
+  stops: number;
+}
+
+/** Previsualización por día del plan que calcularía el motor (no persistida). */
+export interface WeeklyPlanValidationDay {
+  operationDate: string;
+  skipped: boolean;
+  feasible: boolean;
+  error?: string | null;
+  distanceKm?: number | null;
+  durationHours?: number | null;
+  coveragePct?: number | null;
+  servedPoints?: number | null;
+  uncoveredPoints?: number | null;
+  vehicles: WeeklyPlanValidationVehicle[];
+}
+
 export interface WeeklyPlanValidationSummary {
   distanceKm: number;
   durationHours: number;
@@ -63,6 +85,8 @@ export interface WeeklyPlanValidationSummary {
   exceedsWorkday: boolean;
   workdayHours: number;
   simulationId: number | null;
+  /** Detalle día a día con camiones/conductores asignados (previsualización). */
+  days: WeeklyPlanValidationDay[];
 }
 
 export function weeklyPlanValidationWorkdayWarning(summary: WeeklyPlanValidationSummary): string | null {

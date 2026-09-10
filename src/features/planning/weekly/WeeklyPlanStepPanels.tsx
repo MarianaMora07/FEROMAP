@@ -1,9 +1,7 @@
-import { A } from '@solidjs/router';
-import { ArrowRight, CheckCircle2 } from 'lucide-solid';
-import { For, Show } from 'solid-js';
+import { useNavigate } from '@solidjs/router';
+import { ArrowRight, CheckCircle2, Eye } from 'lucide-solid';
+import { Show } from 'solid-js';
 import { Button, LoadingPanel } from '../../../design-system/components';
-import { optimizationDateHref, todayIso } from '../../../core/planning/planningUx';
-import { formatWeekdayLabel } from '../../../core/planning/weeklyPlanCalendar';
 import {
   buildWeeklyPlanPostApprovalChecklist,
   weeklyPlanApproveBlockReason,
@@ -11,14 +9,17 @@ import {
 } from '../../../core/planning/weeklyPlanUx';
 import type { WeeklyPlan } from '../../../core/api/planning';
 import type { ScenarioId } from '../../../data/types/simulation';
-import { weeklyPlanState } from '../../../core/stores/weeklyPlanStore';
+import { weeklyPlanState, generateWeeklyOperationalPlanForWeek } from '../../../core/stores/weeklyPlanStore';
+import { optimizationHref } from '../../../core/planning/operationalLinks';
 import { WeeklyPlanConfigurePanel } from './WeeklyPlanConfigurePanel';
 import {
   WeeklyPlanApproveBlockedPanel,
+  WeeklyPlanDayPreviewPanel,
   WeeklyPlanPostApprovalChecklist,
   WeeklyPlanValidationResultPanel,
 } from './WeeklyPlanClosurePanels';
 import { WeeklyPlanOperationalSection } from './WeeklyPlanOperationalSection';
+import { WeeklyPlanDaySectorsPanel } from './WeeklyPlanDaySectorsPanel';
 
 interface WeeklyPlanStepPanelsProps {
   step: number;
@@ -33,10 +34,35 @@ interface WeeklyPlanStepPanelsProps {
 }
 
 export function WeeklyPlanStepPanels(props: WeeklyPlanStepPanelsProps) {
+  const navigate = useNavigate();
   const totalPoints = () => weeklyPlanScheduledPointCount(props.plan);
   const validationSummary = () => weeklyPlanState.validationSummary;
   const approveBlockReason = () => weeklyPlanApproveBlockReason(weeklyPlanState.validationCompleted);
   const postApprovalSteps = () => buildWeeklyPlanPostApprovalChecklist();
+
+  // El plan operativo ya generado habilita la aprobación; si no, "Ver plan" lo genera
+  // y abre la planificación operativa para revisarlo antes de aprobar.
+  const planGenerated = () => (props.plan.operationalPlan?.days?.length ?? 0) > 0;
+
+  const handleViewPlan = async () => {
+    try {
+      const days = await generateWeeklyOperationalPlanForWeek();
+      const target = days.find((day) => day.dailyPlanId != null) ?? days[0];
+      if (target?.operationDate) {
+        navigate(
+          optimizationHref({
+            date: target.operationDate,
+            dailyPlanId: target.dailyPlanId ?? undefined,
+          }),
+        );
+        return;
+      }
+      const firstDay = props.plan.days?.[0]?.operationDate;
+      if (firstDay) navigate(optimizationHref({ date: firstDay }));
+    } catch {
+      // El store ya expone el error en `weeklyPlanState.error`.
+    }
+  };
 
   return (
     <>
@@ -65,18 +91,7 @@ export function WeeklyPlanStepPanels(props: WeeklyPlanStepPanelsProps) {
             </p>
           </div>
 
-          <div class="grid gap-2 sm:grid-cols-5">
-            <For each={props.plan.days ?? []}>
-              {(day) => (
-                <div class="rounded-lg border border-border px-3 py-2 text-center dark:border-dark-border">
-                  <p class="text-xs font-semibold text-text-primary dark:text-white">
-                    {formatWeekdayLabel(day.weekday)}
-                  </p>
-                  <p class="text-lg font-bold text-text-primary dark:text-white">{day.collectionPointIds.length}</p>
-                </div>
-              )}
-            </For>
-          </div>
+          <WeeklyPlanDaySectorsPanel days={props.plan.days ?? []} />
 
           <Show when={weeklyPlanState.isValidating}>
             <LoadingPanel label="Validando con simulación ACO…" progress={weeklyPlanState.validationProgress} />
@@ -120,21 +135,56 @@ export function WeeklyPlanStepPanels(props: WeeklyPlanStepPanelsProps) {
             {(summary) => <WeeklyPlanValidationResultPanel summary={summary()} />}
           </Show>
 
+          <Show when={(validationSummary()?.days?.length ?? 0) > 0}>
+            <WeeklyPlanDayPreviewPanel days={validationSummary()!.days} />
+          </Show>
+
+          <Show when={props.editable && weeklyPlanState.isGeneratingOperational}>
+            <div class="space-y-1">
+              <div class="flex items-center justify-between text-xs text-text-muted">
+                <span>{weeklyPlanState.operationalPhase}</span>
+                <span>{weeklyPlanState.operationalProgress}%</span>
+              </div>
+              <div class="h-2 w-full overflow-hidden rounded-full bg-elevated">
+                <div
+                  class="h-full rounded-full bg-fero-green-dark transition-all"
+                  style={{ width: `${Math.max(4, weeklyPlanState.operationalProgress)}%` }}
+                />
+              </div>
+            </div>
+          </Show>
+
           <Show when={props.editable && approveBlockReason()}>
             {(reason) => <WeeklyPlanApproveBlockedPanel reason={reason()} />}
           </Show>
 
           <Show when={props.editable && weeklyPlanState.validationCompleted}>
-            <Button
-              variant="primary"
-              class="gap-2"
-              loading={weeklyPlanState.isApproving}
-              onClick={() => props.onApprove()}
-              data-testid="weekly-plan-primary-cta"
+            <Show
+              when={planGenerated()}
+              fallback={
+                <Button
+                  variant="primary"
+                  class="gap-2"
+                  icon={<Eye size={14} />}
+                  loading={weeklyPlanState.isGeneratingOperational}
+                  data-testid="weekly-plan-review-cta"
+                  onClick={() => void handleViewPlan()}
+                >
+                  Ver plan
+                </Button>
+              }
             >
-              Aprobar plan
-              <ArrowRight size={14} />
-            </Button>
+              <Button
+                variant="primary"
+                class="gap-2"
+                loading={weeklyPlanState.isApproving}
+                onClick={() => props.onApprove()}
+                data-testid="weekly-plan-primary-cta"
+              >
+                Aprobar plan
+                <ArrowRight size={14} />
+              </Button>
+            </Show>
           </Show>
         </div>
       </Show>
@@ -161,12 +211,6 @@ export function WeeklyPlanStepPanels(props: WeeklyPlanStepPanelsProps) {
               planId={props.plan.id}
               operationalPlan={props.plan.operationalPlan ?? null}
             />
-            <A href={optimizationDateHref(todayIso())}>
-              <Button variant="primary" class="gap-2" data-testid="weekly-plan-primary-cta">
-                Ir a planificación operativa
-                <ArrowRight size={14} />
-              </Button>
-            </A>
           </Show>
         </div>
       </Show>

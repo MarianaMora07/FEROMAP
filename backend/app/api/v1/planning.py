@@ -208,10 +208,10 @@ def generate_weekly_operational(plan_id: int, db: DbSession, _: PlannerOrAdmin):
     plan = db.get(WeeklyPlan, plan_id)
     if plan is None:
         raise HTTPException(status_code=404, detail="Plan semanal no encontrado")
-    if plan.status != "approved":
+    if plan.status not in ("draft", "approved"):
         raise HTTPException(
             status_code=400,
-            detail="Primero aprueba el plan semanal para generar el plan operativo",
+            detail="Solo se puede generar el plan operativo de un borrador o de una semana aprobada",
         )
     job = start_weekly_operational_plan_job(plan_id)
     return {"jobId": job.id, "weeklyPlanId": plan_id}

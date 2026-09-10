@@ -32,6 +32,7 @@ import {
   weekDaysFromMonday,
   type DailyCalendarStatus,
 } from '../planning/dailyPlanningUx';
+import { todayIso } from '../planning/planningUx';
 import { mergeRouteCollections } from '../api/routes';
 import { fetchSimulationDetail } from '../api/simulationOperations';
 import type { KpiMetrics, ScenarioId, AcoConvergencePoint } from '../../data/types/simulation';
@@ -295,6 +296,8 @@ export async function initOptimizationPage(operationDate?: string): Promise<void
     saveOptimizationPreset(optimizationState.preset);
     await refreshWeekCalendar(mondayOfDate(dateValue));
     contextLoaded = true;
+    // Día ya optimizado (p. ej. recién generado desde "Ver plan"): notificar automático.
+    void autoDispatchOptimizedDay();
   } catch (error) {
     setState({
       error: error instanceof Error ? error.message : 'No se pudo cargar el contexto de optimización',
@@ -507,6 +510,7 @@ export async function executeOptimization(): Promise<void> {
     }
     await refreshOptimizationHistory();
     await refreshWeekCalendar();
+    await autoDispatchOptimizedDay();
   } catch (error) {
     if (error instanceof OptimizationCancelledError) {
       setState({
@@ -626,9 +630,32 @@ export async function dispatchOptimizationResult(): Promise<void> {
   }
 }
 
+let autoDispatchDate: string | null = null;
+
+/**
+ * Notifica (despacha) automáticamente al cargar/optimizar un día que ya tiene rutas.
+ * Idempotente: solo actúa si el plan del día está ``optimized`` y la semana está aprobada;
+ * tras despachar el estado pasa a ``dispatched`` y no se repite.
+ */
+export async function autoDispatchOptimizedDay(): Promise<void> {
+  const plan = optimizationState.dailyPlan;
+  if (!plan || plan.status !== 'optimized') return;
+  if (plan.operationDate < todayIso()) return; // no notificar días pasados
+  if (optimizationState.isDispatching || optimizationState.isOptimizing) return;
+  if (!optimizationState.weeklyPlanApproved) return;
+  if (optimizationState.lastSimulationId == null && optimizationState.kpis == null) return;
+  if (autoDispatchDate === plan.operationDate) return;
+  autoDispatchDate = plan.operationDate;
+  try {
+    await dispatchOptimizationResult();
+  } catch {
+    // Permite reintento manual con el botón "Notificar a conductores".
+    autoDispatchDate = null;
+  }
+}
+
 export async function refreshOptimizationHistory(): Promise<void> {
-  const history = await fetchOptimizationHistory();
-  setState('history', history);
+  setState('history', await fetchOptimizationHistory());
 }
 
 function delay(ms: number) {

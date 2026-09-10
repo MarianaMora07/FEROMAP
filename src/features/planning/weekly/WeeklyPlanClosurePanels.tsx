@@ -1,11 +1,13 @@
 import { A } from '@solidjs/router';
-import { AlertTriangle, Check, ExternalLink } from 'lucide-solid';
+import { AlertTriangle, Check, ExternalLink, Truck, UserRound } from 'lucide-solid';
 import { For, Show } from 'solid-js';
 import {
   weeklyPlanValidationWorkdayWarning,
   type WeeklyPlanPostApprovalStep,
+  type WeeklyPlanValidationDay,
   type WeeklyPlanValidationSummary,
 } from '../../../core/planning/weeklyPlanUx';
+import { formatWeekdayLabel, isoWeekdayMon0 } from '../../../core/planning/weeklyPlanCalendar';
 import { simulationResultsHref } from '../../../core/utils/simulationLinks';
 
 interface WeeklyPlanValidationResultPanelProps {
@@ -73,6 +75,129 @@ export function WeeklyPlanValidationResultPanel(props: WeeklyPlanValidationResul
       <p class="text-xs text-text-muted">
         El detalle técnico abre en simulación de escenarios; no sustituye este flujo operativo de aprobación.
       </p>
+    </div>
+  );
+}
+
+interface WeeklyPlanDayPreviewPanelProps {
+  days: WeeklyPlanValidationDay[];
+}
+
+function formatMinutes(totalMinutes: number): string {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = Math.round(totalMinutes % 60);
+  return hours > 0 ? `${hours} h ${minutes} min` : `${minutes} min`;
+}
+
+/**
+ * Previsualización por día del plan que calcularía el motor ACO (no persistida):
+ * qué se hará (paradas/km), quién (camión y conductor) y cuándo (día).
+ */
+export function WeeklyPlanDayPreviewPanel(props: WeeklyPlanDayPreviewPanelProps) {
+  const sortedDays = () =>
+    [...props.days].sort((a, b) => a.operationDate.localeCompare(b.operationDate));
+
+  return (
+    <div
+      class="space-y-3 rounded-xl border border-border bg-surface/40 p-4 dark:border-dark-border"
+      data-testid="weekly-plan-day-preview"
+    >
+      <div>
+        <p class="text-sm font-semibold text-text-primary dark:text-white">Plan previsto por día</p>
+        <p class="mt-0.5 text-xs text-text-muted">
+          Previsualización del motor ACO: qué se hará (paradas y km), quién (camión y conductor) y
+          cuándo. Es un simulacro para revisar antes de aprobar; el plan operativo definitivo se
+          genera tras la aprobación.
+        </p>
+      </div>
+
+      <div class="space-y-2">
+        <For each={sortedDays()}>
+          {(day) => {
+            const vehicles = () => day.vehicles ?? [];
+            const statusLabel = () =>
+              day.skipped
+                ? 'Sin puntos'
+                : day.error
+                  ? 'Error'
+                  : day.feasible
+                    ? 'OK'
+                    : 'Revisar';
+            const statusClass = () =>
+              day.skipped
+                ? 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                : day.error || !day.feasible
+                  ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+                  : 'bg-fero-green/15 text-fero-green-dark dark:text-fero-green-mid';
+            return (
+              <details class="group rounded-lg border border-border bg-app/40 dark:border-dark-border">
+                <summary class="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-3 py-2 marker:content-none">
+                  <span class="flex items-baseline gap-2">
+                    <span class="text-sm font-semibold text-text-primary dark:text-white">
+                      {formatWeekdayLabel(isoWeekdayMon0(day.operationDate))}
+                    </span>
+                    <span class="text-xs text-text-muted">{day.operationDate}</span>
+                    <span class={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusClass()}`}>
+                      {statusLabel()}
+                    </span>
+                  </span>
+                  <span class="text-xs text-text-muted">
+                    {vehicles().length} camión(es)
+                    <Show when={day.distanceKm != null}>
+                      {' '}
+                      · {Number(day.distanceKm).toFixed(1)} km
+                    </Show>
+                    <Show when={day.durationHours != null}>
+                      {' '}
+                      · {Number(day.durationHours).toFixed(1)} h
+                    </Show>
+                  </span>
+                </summary>
+
+                <div class="space-y-2 border-t border-border px-3 py-2 dark:border-dark-border">
+                  <Show when={day.error}>
+                    {(message) => (
+                      <p class="text-xs font-medium text-red-600 dark:text-red-300">{message()}</p>
+                    )}
+                  </Show>
+
+                  <Show when={!day.skipped && !day.error && vehicles().length > 0}>
+                    <ul class="space-y-1.5">
+                      <For each={vehicles()}>
+                        {(vehicle) => (
+                          <li class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border bg-surface/60 px-2.5 py-1.5 text-xs dark:border-dark-border">
+                            <span class="inline-flex items-center gap-1 font-semibold text-text-primary dark:text-white">
+                              <Truck size={13} class="text-fero-green-dark" aria-hidden="true" />
+                              {vehicle.vehicleCode}
+                            </span>
+                            <span class="inline-flex items-center gap-1 text-text-secondary">
+                              <UserRound size={13} class="text-text-muted" aria-hidden="true" />
+                              {vehicle.driverName ?? 'Sin conductor'}
+                            </span>
+                            <span class="text-text-muted">{vehicle.stops} paradas</span>
+                            <span class="text-text-muted">{vehicle.distanceKm.toFixed(1)} km</span>
+                            <span class="text-text-muted">{formatMinutes(vehicle.durationMin)}</span>
+                          </li>
+                        )}
+                      </For>
+                    </ul>
+                  </Show>
+
+                  <Show when={day.skipped}>
+                    <p class="text-xs text-text-muted">Sin puntos programados este día.</p>
+                  </Show>
+
+                  <Show when={!day.skipped && !day.error && vehicles().length === 0}>
+                    <p class="text-xs text-text-muted">
+                      El motor no asignó rutas para este día (revisa la cobertura o la flota).
+                    </p>
+                  </Show>
+                </div>
+              </details>
+            );
+          }}
+        </For>
+      </div>
     </div>
   );
 }
