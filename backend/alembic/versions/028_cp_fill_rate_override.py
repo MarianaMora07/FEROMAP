@@ -5,7 +5,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "028_collection_point_fill_rate_override"
+revision: str = "028_cp_fill_rate_override"
 down_revision: Union[str, None] = "027_sector_fill_rate_factor"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
