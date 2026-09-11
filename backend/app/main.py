@@ -56,5 +56,5 @@ def health():
 def seed_not_found_handler(_, exc: FileNotFoundError):
     return JSONResponse(
         status_code=500,
-        content={"detail": str(exc), "hint": "Ejecuta npm run export-seeds en el host"},
+        content={"detail": str(exc), "hint": "Revisa data/seeds/ y vuelve a sembrar con: just seed"},
     )

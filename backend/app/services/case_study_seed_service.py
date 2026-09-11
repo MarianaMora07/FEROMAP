@@ -20,7 +20,7 @@ SEEDS_DIR = Path(settings.data_dir) / "seeds"
 def _load_json(name: str):
     path = SEEDS_DIR / name
     if not path.exists():
-        raise FileNotFoundError(f"No existe {path}. Ejecuta: npm run export-seeds")
+        raise FileNotFoundError(f"No existe {path}. Revisa data/seeds/")
     return json.loads(path.read_text(encoding="utf-8"))
 
 

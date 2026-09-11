@@ -7,7 +7,6 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "export-seeds": "tsx scripts/export-seeds.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",

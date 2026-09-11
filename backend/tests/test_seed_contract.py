@@ -40,7 +40,7 @@ MIN_COUNTS = {
 
 def _load_seed(name: str):
     path = SEEDS_DIR / name
-    assert path.exists(), f"Falta {path}. Ejecuta: npm run export-seeds"
+    assert path.exists(), f"Falta {path}. Revisa data/seeds/"
     return json.loads(path.read_text(encoding="utf-8"))
 
 

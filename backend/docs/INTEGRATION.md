@@ -12,7 +12,7 @@ just init-env
 just setup          # up + wait-db + health
 
 # 3. Datos reproducibles
-just integration-setup   # export-seeds + migrate + seed
+just integration-setup   # migrate + seed
 
 # 4. Verificación end-to-end
 just demo-verify
@@ -22,15 +22,14 @@ just demo-verify
 
 | Comando | Acción |
 |---------|--------|
-| `npm run export-seeds` | Exporta mocks TS → `data/seeds/*.json` |
 | `just migrate` | `alembic upgrade head` (migraciones 001–008) |
 | `just seed` | `python -m scripts.seed_from_mocks` |
-| `just integration-setup` | Los tres anteriores en secuencia |
+| `just integration-setup` | Los dos anteriores en secuencia |
 | `just demo-verify` | Curl: login, sectores, optimize, dashboard |
 
 ## Archivos de seed requeridos
 
-Generados en `data/seeds/`:
+Fuente de verdad en `data/seeds/`:
 
 | Archivo | Contenido |
 |---------|-----------|
@@ -50,7 +49,7 @@ Generados en `data/seeds/`:
 Si falta algún archivo, `seed_from_mocks.py` falla con:
 
 ```
-No existe data/seeds/<archivo>.json. Ejecuta: npm run export-seeds
+No existe data/seeds/<archivo>.json. Revisa data/seeds/
 ```
 
 ## Migraciones Alembic
@@ -166,7 +165,6 @@ Guía completa del mapa operativo: `docs/mapa-operativo-unare.md`.
 ## CI sugerido
 
 ```yaml
-- run: npm run export-seeds
 - run: cd backend && python -m pytest tests/test_seed_contract.py tests/ -v
 ```
 

@@ -44,13 +44,9 @@ seed: _check
 warm-graph: _check
     {{compose}} exec api python -c "from app.services.graph_service import warm_road_graph_cache; print(warm_road_graph_cache())"
 
-# Exporta mocks TS → data/seeds/*.json (en el host).
-export-seeds:
-    npm run export-seeds
-
 # Entorno reproducible para integración: seeds + migraciones + población BD.
-integration-setup: export-seeds migrate seed
-    @echo "✅ Entorno de integración listo (seeds + migrate + seed)"
+integration-setup: migrate seed
+    @echo "✅ Entorno de integración listo (migrate + seed)"
 
 # Reinicio completo: borra BD, levanta stack, migra y seed.
 db-reset: down-volumes up wait-db migrate seed

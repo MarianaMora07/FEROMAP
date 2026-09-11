@@ -271,10 +271,9 @@ Proxy de Vite: `/api` → `http://localhost:8000`.
 
 ## Datos y base de datos
 
-Seeds iniciales en `data/seeds/*.json` (exportables desde mocks TS):
+Seeds iniciales en `data/seeds/*.json` (fuente de verdad del seed):
 
 ```bash
-just export-seeds
 just db-reset
 ```
 
