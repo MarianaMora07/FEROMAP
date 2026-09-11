@@ -21,6 +21,7 @@ from app.services.collection_point_service import (
     delete_collection_point,
     export_collection_points_csv,
     fill_status_from_level,
+    list_sector_options,
     serialize_collection_point_detail,
     update_collection_point,
     _validate_coordinates,
@@ -58,8 +59,10 @@ def _point(
 
 
 def test_fill_status_from_level_buckets():
+    # Fase 1: el nivel crítico se alinea a 80 % (antes > 90).
     assert fill_status_from_level(95) == "critico"
-    assert fill_status_from_level(80) == "lleno"
+    assert fill_status_from_level(80) == "critico"
+    assert fill_status_from_level(79) == "lleno"
     assert fill_status_from_level(50) == "normal"
     assert fill_status_from_level(10) == "parcial"
     assert fill_status_from_level(50, point_status="inactive") == "fueraDeServicio"
@@ -96,7 +99,7 @@ def test_collection_points_summary_scopes_resident_sector():
     summary = collection_points_summary(db, resident)
 
     assert summary["kpis"]["total"] == 1
-    assert summary["kpis"]["lleno"] == 1
+    assert summary["kpis"]["critico"] == 1
     stmt = db.scalars.call_args[0][0]
     assert "collection_points.sector_id" in str(stmt).lower() or stmt is not None
 
@@ -330,6 +333,7 @@ def test_collection_points_optimization_context_counts_critical_and_boost():
     db.scalars.side_effect = [
         MagicMock(all=MagicMock(return_value=points)),
         MagicMock(unique=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[route])))),
+        MagicMock(all=MagicMock(return_value=[])),
     ]
     db.scalar.return_value = latest_at
 
@@ -339,3 +343,59 @@ def test_collection_points_optimization_context_counts_critical_and_boost():
     assert context["priorityBoostCodes"] == ["CNT-002"]
     assert context["lastOptimizedCodes"] == ["CNT-001"]
     assert context["lastOptimizedAt"] is not None
+    assert context["overloadedCodes"] == []
+
+
+def test_serialize_collection_point_exposes_fill_rate_factor():
+    point = _point("CNT-001", fill_pct=50)
+    point.sector.fill_rate_factor = Decimal("1.50")
+
+    detail = serialize_collection_point_detail(point)
+    assert detail["fillRateFactor"] == pytest.approx(1.5)
+    assert detail["fillRateFactorOverride"] is None
+
+    point.fill_rate_factor_override = Decimal("2.00")
+    detail = serialize_collection_point_detail(point)
+    assert detail["fillRateFactor"] == pytest.approx(2.0)
+    assert detail["fillRateFactorOverride"] == pytest.approx(2.0)
+
+
+@patch("app.services.collection_point_service._persist_point")
+def test_update_collection_point_sets_fill_rate_override(mock_persist):
+    db = MagicMock()
+    point = _point("CNT-001")
+    db.scalar.return_value = point
+    mock_persist.return_value = {"code": "CNT-001"}
+
+    update_collection_point(db, "CNT-001", CollectionPointUpdate(fill_rate_factor_override=1.5))
+
+    assert float(point.fill_rate_factor_override) == pytest.approx(1.5)
+    mock_persist.assert_called_once()
+
+
+@patch("app.services.collection_point_service._persist_point")
+def test_update_collection_point_clears_fill_rate_override(mock_persist):
+    db = MagicMock()
+    point = _point("CNT-001")
+    point.fill_rate_factor_override = Decimal("2.00")
+    db.scalar.return_value = point
+    mock_persist.return_value = {"code": "CNT-001"}
+
+    update_collection_point(db, "CNT-001", CollectionPointUpdate(fill_rate_factor_override=None))
+
+    assert point.fill_rate_factor_override is None
+
+
+def test_list_sector_options_includes_fill_rate_factor():
+    db = MagicMock()
+    db.scalars.return_value.all.return_value = [
+        SimpleNamespace(id=1, name="Unare I", fill_rate_factor=Decimal("1.50")),
+        SimpleNamespace(id=2, name="Unare II", fill_rate_factor=None),
+    ]
+
+    options = list_sector_options(db)
+
+    assert options == [
+        {"id": 1, "name": "Unare I", "fillRateFactor": 1.5},
+        {"id": 2, "name": "Unare II", "fillRateFactor": 1.0},
+    ]

@@ -17,11 +17,11 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Iterable
 
+# Reexport de la fuente única de verdad (``app.domain.criticality``).
+from app.domain.criticality import CRITICAL_FILL_PCT
+
 # Horas por defecto que tarda un contenedor en llenarse por completo (fallback).
 DEFAULT_FILL_HOURS = 72.0
-
-# Umbral de llenado considerado "crítico" (%).
-CRITICAL_FILL_PCT = 80.0
 
 
 def _as_float(value: Any, default: float = 0.0) -> float:
@@ -51,10 +51,31 @@ def capacity_kg(point: Any) -> float:
     return _as_float(getattr(point, "max_capacity_kg", None))
 
 
+def effective_fill_rate_factor(point: Any) -> float:
+    """Factor de velocidad de llenado: override del punto > factor del sector > 1.0.
+
+    ``> 1`` = se llena más rápido (p. ej. zona poblada). Duck-typed: tolera objetos
+    parciales sin ``fill_rate_factor_override`` ni ``sector``.
+    """
+    override = _as_float(getattr(point, "fill_rate_factor_override", None))
+    if override > 0:
+        return override
+    sector = getattr(point, "sector", None)
+    sector_factor = _as_float(getattr(sector, "fill_rate_factor", None))
+    if sector_factor > 0:
+        return sector_factor
+    return 1.0
+
+
+def effective_fill_hours(point: Any) -> float:
+    """Horas efectivas para llenarse: baseline ajustado por el factor de la zona/punto."""
+    return estimated_fill_hours(point) / effective_fill_rate_factor(point)
+
+
 def generation_rate_kg_per_hour(point: Any) -> float:
-    """Tasa lineal: capacidad / horas_para_llenarse."""
+    """Tasa lineal: capacidad / horas efectivas para llenarse."""
     cap = capacity_kg(point)
-    hours = estimated_fill_hours(point)
+    hours = effective_fill_hours(point)
     if cap <= 0 or hours <= 0:
         return 0.0
     return cap / hours
@@ -96,7 +117,12 @@ def projected_fill_level_pct(point: Any, *, at: datetime | None = None) -> int:
     return int(round(fill / cap * 100))
 
 
-def hours_until_critical(point: Any, *, at: datetime | None = None) -> float | None:
+def hours_until_critical(
+    point: Any,
+    *,
+    at: datetime | None = None,
+    threshold_pct: float = CRITICAL_FILL_PCT,
+) -> float | None:
     """Horas desde ``at`` hasta cruzar el umbral crítico (None si no aplica).
 
     Para contenedores nunca vaciados se toma como base el llenado sembrado; para
@@ -109,7 +135,7 @@ def hours_until_critical(point: Any, *, at: datetime | None = None) -> float | N
     if rate <= 0:
         return None
 
-    threshold_kg = cap * CRITICAL_FILL_PCT / 100.0
+    threshold_kg = cap * threshold_pct / 100.0
     at = _as_utc(at) or datetime.now(timezone.utc)
     last_emptied = _as_utc(getattr(point, "last_emptied_at", None))
     if last_emptied is not None:

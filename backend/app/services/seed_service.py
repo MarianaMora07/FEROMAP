@@ -36,6 +36,11 @@ from app.db.models import (
     WeeklyPlanDay,
 )
 from app.db.session import SessionLocal
+from app.domain.visit_schedule_distribution import (
+    baseline_fill_hours,
+    point_fill_rate_override,
+    sector_fill_rate_factor,
+)
 from app.services.admin_service import ensure_default_settings
 from app.services.alert_service import seed_alerts_from_json
 from app.services.case_study_seed_service import case_study_seed_summary, seed_case_studies
@@ -117,7 +122,11 @@ def seed_into_session(session: Session) -> dict[str, Any]:
 
     sector_by_name: dict[str, Sector] = {}
     for row in sectors_data:
-        sector = Sector(parish_id=parish.id, name=row["name"])
+        sector = Sector(
+            parish_id=parish.id,
+            name=row["name"],
+            fill_rate_factor=Decimal(str(sector_fill_rate_factor(row["name"]))),
+        )
         session.add(sector)
         sector_by_name[row["name"]] = sector
     session.flush()
@@ -234,6 +243,7 @@ def seed_into_session(session: Session) -> dict[str, Any]:
             raise ValueError(f"Sector desconocido: {row['sectorName']}")
         max_kg = Decimal(str(row["maxCapacityKg"]))
         fill_pct = Decimal(str(row["fillLevelPct"]))
+        override = point_fill_rate_override(row["code"])
         point = CollectionPoint(
             sector_id=sector.id,
             code=row["code"],
@@ -241,6 +251,8 @@ def seed_into_session(session: Session) -> dict[str, Any]:
             longitude=Decimal(str(row["longitude"])),
             max_capacity_kg=max_kg,
             current_fill_level_kg=(max_kg * fill_pct / Decimal("100")).quantize(Decimal("0.01")),
+            estimated_fill_hours=Decimal(str(baseline_fill_hours(row["code"]))),
+            fill_rate_factor_override=Decimal(str(override)) if override is not None else None,
             status="active",
             last_emptied_at=parse_dt(row.get("lastCollection")),
         )

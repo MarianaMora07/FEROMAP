@@ -129,6 +129,26 @@ Fuente: `data/seeds/scenarios.json`, `optimization_service.run_optimization_engi
 
 ---
 
+## Actualización criticidad, frecuencia y riesgo (Fases 0–8, 2026-09-11)
+
+Modelo único de criticidad documentado en [adr-criticidad.md](./adr-criticidad.md).
+
+| Elemento | Estado | Efecto |
+|----------|--------|--------|
+| Umbral crítico `CRITICAL_FILL_PCT=80` | **Conectada** | Única fuente en `domain/criticality.py` |
+| `fill_threshold_pct` (admin) | **Conectada** | Gobierno del umbral crítico (`resolve_critical_threshold`) |
+| `fill_rate_factor` por zona | **Conectada** | Horas efectivas de llenado (>1 = más rápido) |
+| `fill_rate_factor_override` por contenedor | **Conectada** | Override sobre el factor del sector |
+| Frecuencia requerida vs declarada | **Conectada** | `requiredVisitsPerWeek` (física) vs `visitsPerWeek`; `overloaded` |
+| `at_risk_before_next_visit` | **Conectada** | KPI "En riesgo de rebose"; prioriza ACO y genera alertas |
+| `priorityFillLevel` (toggle) | **Conectada** | Activa el sesgo ACO (riesgo `eta×1.5`, llenado `×1.35/1.10`) |
+| `criticalCoveragePct` (KPI) | **Conectada** | % contenedores ≥80 % atendidos (sin cambio de semántica) |
+| `atRiskContainers` / `mapMetrics["at_risk"]` | **Conectada** | KPI nuevo; no altera "Contenedores críticos" |
+| Alerta categoría `agenda` | **Conectada** | Puntos no críticos que rebosarán antes de la próxima visita |
+| `CRITICALITY_MODEL` (`state`/`risk`) | **Config** | `state` por defecto (sin cambio de comportamiento) |
+
+---
+
 | Fase | Variables a tratar |
 |------|-------------------|
 | **Fase 2** | Documentar en UI el mapeo condición → escenario derivado |

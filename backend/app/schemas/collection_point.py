@@ -11,6 +11,7 @@ class CollectionPointCreate(CamelModel):
     max_capacity_kg: float = Field(gt=0)
     current_fill_level_kg: float | None = Field(default=None, ge=0)
     status: str | None = Field(default="active", max_length=50)
+    fill_rate_factor_override: float | None = Field(default=None, gt=0, le=10)
 
     @field_validator("code")
     @classmethod
@@ -26,6 +27,7 @@ class CollectionPointUpdate(CamelModel):
     current_fill_level_kg: float | None = Field(default=None, ge=0)
     status: str | None = Field(default=None, max_length=50)
     priority_boost: bool | None = None
+    fill_rate_factor_override: float | None = Field(default=None, gt=0, le=10)
 
 
 class CollectionPointOptimizationContext(CamelModel):
@@ -33,6 +35,7 @@ class CollectionPointOptimizationContext(CamelModel):
     last_optimized_at: str | None
     priority_boost_codes: list[str]
     critical_count: int
+    overloaded_codes: list[str] = []
 
 
 class CollectionPointOut(CamelModel):
@@ -57,3 +60,5 @@ class CollectionPointOut(CamelModel):
     priority: str | None = None
     road_node_id: int | None = None
     priority_boost: bool = False
+    fill_rate_factor_override: float | None = None
+    fill_rate_factor: float = 1.0

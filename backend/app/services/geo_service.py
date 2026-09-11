@@ -63,6 +63,7 @@ def sectors_geojson(db: Session) -> dict[str, Any]:
                     "name": sector.name,
                     "population": meta.get("population", 0),
                     "avgWasteKg": meta.get("avgWasteKg", 0),
+                    "fillRateFactor": float(getattr(sector, "fill_rate_factor", None) or 1.0),
                 },
                 "geometry": geometry,
             }

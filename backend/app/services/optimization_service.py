@@ -16,7 +16,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
-from app.db.models import CollectionPoint, OptimizedRoute, RouteWaypoint, Sector, Simulation, Vehicle
+from app.db.models import CollectionPoint, OptimizedRoute, RouteWaypoint, Sector, Simulation, Vehicle, VisitSchedule
+from app.domain.criticality import is_at_risk_before_next_visit, is_critical_now
 from app.domain.crew_service_time import (
     BASE_SERVICE_SECONDS,
     DEFAULT_IDEAL_OPERATORS,
@@ -130,6 +131,7 @@ class CustomerNode:
     lon: float
     lat: float
     sector_id: int | None = None
+    at_risk: bool = False
 
 
 @dataclass
@@ -528,6 +530,7 @@ def _optimize_by_sector_assignment(
         local_landfill = local_n + 1
         local_demands = [customers[idx - 1].demand_kg for idx in customer_globals]
         local_fill = [customers[idx - 1].fill_pct for idx in customer_globals]
+        local_risk = [customers[idx - 1].at_risk for idx in customer_globals]
         local_heuristic = build_fill_level_heuristic_matrix(
             local_dist,
             local_fill,
@@ -574,6 +577,7 @@ def _optimize_by_sector_assignment(
             window_ends=window_ends,
             fill_pcts=local_fill,
             priority_fill_level=priority_fill_level,
+            at_risk_flags=local_risk,
         )
 
         if local_solution.vehicle_routes:
@@ -1016,6 +1020,7 @@ def _aco_cvrp(
     window_ends: list[float] | None = None,
     fill_pcts: list[int] | None = None,
     priority_fill_level: bool = False,
+    at_risk_flags: list[bool] | None = None,
 ) -> RouteSolution:
     """Ant Colony Optimization para CVRP multi-viaje con vertedero y jornada."""
     parallel_workers = resolve_aco_parallel_workers(aco_ants)
@@ -1070,6 +1075,7 @@ def _aco_cvrp(
                 window_ends=window_ends,
                 fill_pcts=fill_pcts,
                 priority_fill_level=priority_fill_level,
+                at_risk_flags=at_risk_flags,
             )
             for routes, cost, _dur, uncovered in ant_results:
                 if cost < iteration_cost or (cost == iteration_cost and len(uncovered) < len(iteration_uncovered)):
@@ -1283,7 +1289,7 @@ def _baseline_route(
 
 
 def _critical_coverage_pct(customers: list[CustomerNode], served_codes: set[str]) -> int:
-    critical = [c for c in customers if c.fill_pct >= 80]
+    critical = [c for c in customers if is_critical_now(c.fill_pct)]
     if not critical:
         return 100
     served = sum(1 for c in critical if c.code in served_codes)
@@ -2070,6 +2076,17 @@ def run_optimization_engine(
     )
 
     customers: list[CustomerNode] = []
+    weekdays_by_point: dict[int, list[int]] = {}
+    for schedule in db.scalars(select(VisitSchedule)).all():
+        raw = getattr(schedule, "weekdays_json", None)
+        point_id = getattr(schedule, "collection_point_id", None)
+        if raw is None or point_id is None:
+            continue
+        try:
+            weekdays_by_point[point_id] = [int(value) for value in json.loads(raw)]
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+
     for point in points:
         membership = memberships.get(point.id)
         demand, boosted_pct = resolve_customer_demand(
@@ -2077,6 +2094,8 @@ def run_optimization_engine(
             membership,
             fill_boost=fill_boost,
         )
+        weekdays = weekdays_by_point.get(point.id)
+        at_risk = bool(weekdays) and is_at_risk_before_next_visit(point, weekdays=weekdays)
         customers.append(
             CustomerNode(
                 point_id=point.id,
@@ -2087,6 +2106,7 @@ def run_optimization_engine(
                 lon=float(point.longitude),
                 lat=float(point.latitude),
                 sector_id=point.sector_id,
+                at_risk=at_risk,
             )
         )
 
@@ -2330,6 +2350,7 @@ def run_optimization_engine(
         )
     else:
         fill_pcts = [customer.fill_pct for customer in customers]
+        at_risk_flags = [customer.at_risk for customer in customers]
         heuristic_matrix = build_fill_level_heuristic_matrix(
             dist_matrix,
             fill_pcts,
@@ -2359,6 +2380,7 @@ def run_optimization_engine(
             window_ends=window_ends,
             fill_pcts=fill_pcts,
             priority_fill_level=resolved_priority_fill_level,
+            at_risk_flags=at_risk_flags,
         )
     if not math.isfinite(optimized_solution.distance_m) or not optimized_solution.vehicle_routes:
         report(

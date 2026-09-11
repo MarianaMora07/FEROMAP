@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import CollectionPoint, OptimizedRoute, RouteWaypoint, User, UserRole
+from app.db.models import CollectionPoint, OptimizedRoute, RouteWaypoint, User, UserRole, VisitSchedule
+from app.domain.criticality import is_at_risk_before_next_visit
 from app.services.geo_service import fill_level_pct
 from app.services.resident_proximity_service import build_resident_proximity
 from app.services.resident_schedule_service import build_resident_schedule
@@ -81,6 +83,31 @@ def resident_overview(db: Session, user: User) -> dict[str, Any]:
 
     schedule = build_resident_schedule(db, sector_id=user.sector_id)
 
+    schedules = db.scalars(
+        select(VisitSchedule).where(
+            VisitSchedule.collection_point_id.in_([getattr(point, "id", None) for point in points])
+        )
+    ).all()
+    weekdays_by_point: dict[int, list[int]] = {}
+    for visit_schedule in schedules:
+        raw = getattr(visit_schedule, "weekdays_json", None)
+        if raw is None:
+            continue
+        try:
+            weekdays_by_point[visit_schedule.collection_point_id] = [int(value) for value in json.loads(raw)]
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+
+    at_risk_points = 0
+    for point in points:
+        pct = fill_level_pct(point)
+        if getattr(point, "status", "active") != "active" or pct >= 80:
+            continue
+        point_id = getattr(point, "id", None)
+        weekdays = weekdays_by_point.get(point_id) if point_id is not None else None
+        if weekdays and is_at_risk_before_next_visit(point, weekdays=weekdays):
+            at_risk_points += 1
+
     alerts = []
     if schedule.get("hasSchedule"):
         alerts.append(
@@ -110,6 +137,7 @@ def resident_overview(db: Session, user: User) -> dict[str, Any]:
         "stats": {
             "totalPoints": len(collection_points),
             "criticalPoints": sum(1 for p in collection_points if p["fillLevel"] >= 80),
+            "atRiskPoints": at_risk_points,
             "routesServingSector": len(sector_routes),
         },
     }

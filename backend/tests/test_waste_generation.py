@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 
 from app.domain.waste_generation import (
     DEFAULT_FILL_HOURS,
     critical_day_offset,
+    effective_fill_hours,
+    effective_fill_rate_factor,
     estimated_fill_hours,
     fill_events_cycle_daily_values,
     generation_rate_kg_per_hour,
@@ -47,6 +50,53 @@ def test_generation_rate_is_capacity_over_hours():
     rate = generation_rate_kg_per_hour(_point(capacity=1000.0, hours=100.0))
     assert rate == pytest.approx(10.0)
     assert generation_rate_kg_per_hour(_point(capacity=0)) == 0.0
+
+
+# --- Factor de velocidad de llenado (zona / contenedor) ----------------------
+
+
+def test_effective_fill_rate_factor_defaults_to_1():
+    point = _point(capacity=1000.0, hours=100.0)
+    assert effective_fill_rate_factor(point) == 1.0
+    assert effective_fill_hours(point) == pytest.approx(100.0)
+
+
+def test_sector_factor_speeds_up_generation():
+    point = _point(capacity=1000.0, hours=100.0)
+    point.sector = SimpleNamespace(fill_rate_factor=1.5)
+
+    assert effective_fill_rate_factor(point) == pytest.approx(1.5)
+    assert effective_fill_hours(point) == pytest.approx(100.0 / 1.5)
+    assert generation_rate_kg_per_hour(point) == pytest.approx(15.0)
+
+
+def test_container_override_wins_over_sector():
+    point = _point(capacity=1000.0, hours=100.0)
+    point.sector = SimpleNamespace(fill_rate_factor=1.5)
+    point.fill_rate_factor_override = 2.0
+
+    assert effective_fill_rate_factor(point) == pytest.approx(2.0)
+    assert effective_fill_hours(point) == pytest.approx(50.0)
+    assert generation_rate_kg_per_hour(point) == pytest.approx(20.0)
+
+
+def test_invalid_factors_fall_back_to_default():
+    point = _point(capacity=1000.0, hours=100.0)
+    point.sector = SimpleNamespace(fill_rate_factor=0)
+    point.fill_rate_factor_override = 0
+
+    assert effective_fill_rate_factor(point) == 1.0
+    assert generation_rate_kg_per_hour(point) == pytest.approx(10.0)
+
+
+def test_factor_shortens_hours_until_critical():
+    baseline = _point(fill_kg=600.0, capacity=1000.0, hours=100.0)
+    faster = _point(fill_kg=600.0, capacity=1000.0, hours=100.0)
+    faster.sector = SimpleNamespace(fill_rate_factor=2.0)
+
+    # 80 % = 800 kg; faltan 200 kg. A 10 kg/h → 20 h; a 20 kg/h → 10 h.
+    assert hours_until_critical(baseline, at=_now()) == pytest.approx(20.0)
+    assert hours_until_critical(faster, at=_now()) == pytest.approx(10.0)
 
 
 # --- Proyección --------------------------------------------------------------

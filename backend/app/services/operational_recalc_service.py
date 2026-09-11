@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import CollectionPoint, DailyPlan, OptimizedRoute, RouteWaypoint
+from app.domain.criticality import is_critical_now
 from app.services.geo_service import fill_level_pct
 from app.services.notification_service import notify_routes_dispatched
 from app.services.optimization_service import run_optimization_engine
@@ -116,7 +117,7 @@ def _run_critical_container_recalc(
     fill_level = fill_level_pct(point)
     # En simulación se admite cualquier punto ("¿y si este contenedor se llena?");
     # el recálculo real solo aplica a contenedores ya en nivel crítico.
-    if fill_level < 80 and not dry_run:
+    if not is_critical_now(fill_level) and not dry_run:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"El contenedor {collection_point_code} no está en nivel crítico ({fill_level}%)",

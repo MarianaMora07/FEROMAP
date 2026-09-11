@@ -25,6 +25,13 @@ export function PlannerOverviewSection() {
   const kpis = () => view()?.kpis ?? mockDashboardKpis;
   const activeRoutes = (): DashboardActiveRoute[] => view()?.activeRoutes ?? mockActiveRoutes;
   const criticalContainers = () => view()?.summary?.metrics?.criticalContainers ?? 0;
+  const atRiskContainers = () => view()?.summary?.metrics?.atRiskContainers ?? 0;
+  const soonestRiskHours = () => {
+    const values = (view()?.summary?.atRiskContainers ?? [])
+      .map((item) => item.hoursUntilCritical)
+      .filter((value): value is number => value != null);
+    return values.length > 0 ? Math.min(...values) : null;
+  };
   const lastOptimization = () => view()?.lastOptimization ?? null;
   const driversOnShift = () => view()?.summary?.fleet?.driversOnShift ?? 0;
   const lastRoute = () => activeRoutes().at(-1) ?? null;
@@ -91,12 +98,31 @@ export function PlannerOverviewSection() {
           icon={<Trash2 size={28} />}
           iconTone="red"
           footer={
-            <A
-              href="/collection-points"
-              class="text-sm font-medium text-fero-blue underline-offset-2 hover:underline"
-            >
-              Revisar contenedores
-            </A>
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs font-semibold uppercase tracking-wide text-red-600">
+                Crítico ahora
+              </span>
+              <A
+                href="/collection-points"
+                class="text-sm font-medium text-fero-blue underline-offset-2 hover:underline"
+              >
+                Revisar
+              </A>
+            </div>
+          }
+        />
+        <KpiCard
+          title="En riesgo de rebose"
+          value={atRiskContainers()}
+          unit="contenedores"
+          icon={<AlertTriangle size={28} />}
+          iconTone="amber"
+          footer={
+            <span class="text-sm text-text-muted">
+              {soonestRiskHours() != null
+                ? `Se llena en ~${Math.max(0, Math.round(soonestRiskHours()!))} h`
+                : 'Se llenarán antes de la próxima visita'}
+            </span>
           }
         />
         <DashboardPlanVsRealKpi />

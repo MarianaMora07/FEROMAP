@@ -21,6 +21,8 @@ class CollectionPoint(Base):
     estimated_fill_hours: Mapped[Decimal] = mapped_column(
         Numeric(6, 1), nullable=False, server_default="72"
     )
+    # Override por contenedor del factor de llenado; NULL = hereda del sector.
+    fill_rate_factor_override: Mapped[Decimal | None] = mapped_column(Numeric(4, 2), nullable=True)
     status: Mapped[str] = mapped_column(String(50), nullable=False, server_default="active")
     priority_boost: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     last_emptied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import CollectionPoint, User, UserRole, Vehicle
+from app.domain.criticality import is_critical_now
 from app.services.geo_service import fill_level_pct
 from app.services.map_context_service import map_operational_context
 from app.services.alert_service import list_alerts as list_persisted_alerts
@@ -27,7 +28,8 @@ def monitoring_status(db: Session, *, current_user: User | None = None) -> dict[
     critical = sum(
         1
         for p in points
-        if p.max_capacity_kg > 0 and float(p.current_fill_level_kg / p.max_capacity_kg) >= 0.8
+        if p.max_capacity_kg > 0
+        and is_critical_now(float(p.current_fill_level_kg / p.max_capacity_kg) * 100)
     )
 
     kpis = [

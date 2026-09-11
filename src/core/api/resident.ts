@@ -66,6 +66,7 @@ export interface ResidentOverview {
   stats: {
     totalPoints: number;
     criticalPoints: number;
+    atRiskPoints?: number;
     routesServingSector: number;
   };
 }

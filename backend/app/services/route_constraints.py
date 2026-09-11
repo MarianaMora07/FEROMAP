@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-FILL_LEVEL_CRITICAL_PCT = 80
-FILL_LEVEL_HIGH_PCT = 60
+from app.domain.criticality import CRITICAL_FILL_PCT, HIGH_FILL_PCT
+
+# Alias al dominio: una sola fuente de verdad para los umbrales de llenado.
+FILL_LEVEL_CRITICAL_PCT = CRITICAL_FILL_PCT
+FILL_LEVEL_HIGH_PCT = HIGH_FILL_PCT
 
 # Ventanas amplias por sector (segundos desde inicio de jornada 06:00)
 MORNING_WINDOW = (0, 6 * 3600)  # 06:00–12:00

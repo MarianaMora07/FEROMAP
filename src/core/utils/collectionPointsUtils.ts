@@ -175,6 +175,9 @@ export interface CollectionPointDetail {
   longitude: number;
   priority?: string;
   priorityBoost?: boolean;
+  fillRateFactorOverride?: number | null;
+  /** Factor efectivo (override del punto o del sector). */
+  fillRateFactor?: number;
 }
 
 export interface CollectionPointFillHistory {
@@ -411,6 +414,7 @@ export interface CollectionPointOptimizationContext {
   lastOptimizedAt: string | null;
   priorityBoostCodes: string[];
   criticalCount: number;
+  overloadedCodes: string[];
 }
 
 export function enrichCollectionPointsWithOptimization(

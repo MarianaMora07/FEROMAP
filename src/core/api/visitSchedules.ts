@@ -5,6 +5,8 @@ export interface VisitSchedule {
   collectionPointId: number;
   pointCode: string;
   visitsPerWeek: number;
+  requiredVisitsPerWeek?: number;
+  overloaded?: boolean;
   weekdays: number[];
   isExtraVisit: boolean;
   effectiveFrom: string;

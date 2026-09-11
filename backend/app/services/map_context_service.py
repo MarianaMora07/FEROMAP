@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import CollectionPoint, DailyPlan, OptimizedRoute, RouteWaypoint, Vehicle
+from app.domain.criticality import HIGH_FILL_PCT, is_critical_now
 from app.services.contingency_service import list_recent_incidents
 from app.services.geo_service import collection_points_geojson, fill_level_pct
 from app.services.operations_service import live_fleet_view
@@ -69,9 +70,9 @@ def _in_bbox(lng: float, lat: float, bbox: tuple[float, float, float, float]) ->
 
 
 def _container_bucket(fill_level: int) -> str:
-    if fill_level >= 80:
+    if is_critical_now(fill_level):
         return "critical"
-    if fill_level >= 60:
+    if fill_level >= HIGH_FILL_PCT:
         return "full"
     if fill_level >= 40:
         return "normal"
@@ -213,9 +214,9 @@ def _build_map_metrics(db: Session, *, active_routes: int) -> list[dict[str, Any
     full = 0
     for point in points:
         pct = fill_level_pct(point)
-        if pct >= 90:
+        if is_critical_now(pct):
             critical += 1
-        elif pct >= 70:
+        elif pct >= HIGH_FILL_PCT:
             full += 1
     in_route = sum(1 for vehicle in vehicles if vehicle.status == "in_route")
 

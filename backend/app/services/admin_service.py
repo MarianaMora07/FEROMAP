@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.security import hash_password
 from app.db.models import AuditLog, SystemSettings, User, UserRole
+from app.domain.criticality import normalize_critical_threshold
 from app.schemas.admin import (
     AdminRole,
     AdminUser,
@@ -55,6 +56,9 @@ DEFAULT_INTEGRATIONS: dict[str, Any] = {
     "gis_enabled": True,
     "telemetry_enabled": True,
 }
+
+# Cache de proceso del umbral de criticidad (se invalida al actualizar la config).
+_critical_threshold_cache: float | None = None
 
 ROLE_DEFINITIONS = [
     AdminRole(
@@ -273,6 +277,7 @@ def update_operational_settings(
     changes = payload.model_dump(exclude_unset=True)
     operational.update(changes)
     _save_settings_blob(db, blob)
+    invalidate_critical_threshold_cache()
     log_audit(
         db,
         actor=actor,
@@ -283,6 +288,25 @@ def update_operational_settings(
         ip_address=ip_address,
     )
     return OperationalSettings(**operational)
+
+
+def resolve_critical_threshold(db: Session) -> float:
+    """Umbral de criticidad (%) desde la config operativa, con cache de proceso.
+
+    El dominio (``app.domain.criticality``) no toca la BD: los servicios resuelven
+    aquí el umbral y lo inyectan en ``evaluate_criticality`` / ``fill_status_from_level``.
+    """
+    global _critical_threshold_cache
+    if _critical_threshold_cache is None:
+        raw = get_operational_settings(db).fill_threshold_pct
+        _critical_threshold_cache = normalize_critical_threshold(raw)
+    return _critical_threshold_cache
+
+
+def invalidate_critical_threshold_cache() -> None:
+    """Invalida el cache del umbral (tras cambiar la config operativa)."""
+    global _critical_threshold_cache
+    _critical_threshold_cache = None
 
 
 def get_integration_settings(db: Session) -> IntegrationSettings:
