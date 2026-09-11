@@ -25,6 +25,8 @@ from app.db.models import (
     WeeklyPlan,
     WeeklyPlanDay,
 )
+from app.domain.criticality import HIGH_FILL_PCT, is_critical_now, is_overloaded, required_visits_per_week
+from app.domain.visit_schedule_distribution import planned_visits_and_weekdays
 from app.services.case_study_planning import (
     effective_case_study_id,
     resolve_case_study_active_point_ids,
@@ -851,6 +853,7 @@ def compute_pending_priority(
     point: CollectionPoint | None = None,
     *,
     reason: str = "not_visited",
+    overloaded: bool = False,
 ) -> int:
     days_old = max(0, (date.today() - origin_operation_date).days)
     priority = 100 + days_old * 10
@@ -861,6 +864,8 @@ def compute_pending_priority(
         "manual_escalation": 25,
     }
     priority += reason_weights.get(reason, 0)
+    if overloaded:
+        priority += 25
     if point is not None:
         if bool(getattr(point, "priority_boost", False)):
             priority += 50
@@ -870,9 +875,9 @@ def compute_pending_priority(
             from app.domain.waste_generation import projected_fill_level_pct
 
             fill_level = projected_fill_level_pct(point)
-            if fill_level >= 80:
+            if is_critical_now(fill_level):
                 priority += 30
-            elif fill_level >= 60:
+            elif fill_level >= HIGH_FILL_PCT:
                 priority += 15
     return priority
 
@@ -883,11 +888,22 @@ def _refresh_open_pending_priorities(db: Session) -> None:
         .where(PendingVisit.status == "open")
         .options(joinedload(PendingVisit.collection_point))
     ).all()
+    point_ids = [visit.collection_point_id for visit in visits]
+    schedules = db.scalars(
+        select(VisitSchedule).where(VisitSchedule.collection_point_id.in_(point_ids))
+    ).all()
+    declared_by_point = {
+        schedule.collection_point_id: schedule.visits_per_week for schedule in schedules
+    }
     for visit in visits:
+        point = visit.collection_point
+        required = required_visits_per_week(point) if point is not None else 0
+        overloaded = is_overloaded(required, declared_by_point.get(visit.collection_point_id))
         visit.priority = compute_pending_priority(
             visit.origin_operation_date,
-            visit.collection_point,
+            point,
             reason=visit.reason,
+            overloaded=overloaded,
         )
     db.flush()
 
@@ -1230,6 +1246,11 @@ def create_pending_visit(
         return existing
 
     point = db.get(CollectionPoint, collection_point_id)
+    schedule = db.scalar(
+        select(VisitSchedule).where(VisitSchedule.collection_point_id == collection_point_id)
+    )
+    declared = schedule.visits_per_week if schedule is not None else None
+    overloaded = point is not None and is_overloaded(required_visits_per_week(point), declared)
     visit = PendingVisit(
         collection_point_id=collection_point_id,
         origin_operation_date=origin_operation_date,
@@ -1238,7 +1259,7 @@ def create_pending_visit(
         source_waypoint_id=source_waypoint_id,
         source_incident_id=source_incident_id,
         status="open",
-        priority=compute_pending_priority(origin_operation_date, point),
+        priority=compute_pending_priority(origin_operation_date, point, overloaded=overloaded),
     )
     db.add(visit)
     db.flush()
@@ -1311,17 +1332,23 @@ def close_daily_plan(db: Session, daily_plan_id: int, *, user_id: int | None = N
 
 def seed_visit_schedules(db: Session, rows: list[dict[str, Any]]) -> None:
     for row in rows:
-        point = db.scalar(select(CollectionPoint).where(CollectionPoint.code == row["pointCode"]))
+        point = db.scalar(
+            select(CollectionPoint)
+            .where(CollectionPoint.code == row["pointCode"])
+            .options(joinedload(CollectionPoint.sector))
+        )
         if point is None:
             continue
         existing = db.scalar(select(VisitSchedule).where(VisitSchedule.collection_point_id == point.id))
         if existing is not None:
             continue
+        # Frecuencia declarada derivada de la física (híbrida); ver Fase 5.
+        visits, weekdays = planned_visits_and_weekdays(point)
         db.add(
             VisitSchedule(
                 collection_point_id=point.id,
-                visits_per_week=int(row.get("visitsPerWeek", 1)),
-                weekdays_json=json.dumps(row.get("weekdays", [])),
+                visits_per_week=visits,
+                weekdays_json=json.dumps(weekdays),
                 is_extra_visit=bool(row.get("isExtraVisit", False)),
                 effective_from=date.fromisoformat(row["effectiveFrom"]),
                 effective_until=date.fromisoformat(row["effectiveUntil"]) if row.get("effectiveUntil") else None,

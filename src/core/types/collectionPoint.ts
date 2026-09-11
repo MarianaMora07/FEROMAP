@@ -20,9 +20,10 @@ export interface CollectionPoint {
 }
 
 export function fillStatusFromLevel(level: number, outOfService = false): FillStatus {
+  // Alineado con el backend (CRITICAL_FILL_PCT=80, HIGH_FILL_PCT=60).
   if (outOfService) return 'fuera-de-servicio';
-  if (level > 90) return 'critico';
-  if (level >= 70) return 'lleno';
+  if (level >= 80) return 'critico';
+  if (level >= 60) return 'lleno';
   if (level >= 30) return 'normal';
   return 'parcial';
 }

@@ -11,6 +11,7 @@ export interface CollectionPointFormValues {
   longitude: number;
   maxCapacityKg: number;
   status: 'active' | 'inactive';
+  fillRateFactorOverride: number | null;
 }
 
 interface CollectionPointFormModalProps {
@@ -36,6 +37,7 @@ function defaultValues(
     longitude: draftCoords?.lng ?? UNARE_CENTER[0],
     maxCapacityKg: 1100,
     status: 'active',
+    fillRateFactorOverride: null,
   };
 }
 
@@ -47,6 +49,7 @@ function valuesFromDetail(detail: CollectionPointDetail): CollectionPointFormVal
     longitude: detail.longitude,
     maxCapacityKg: detail.capacityKg,
     status: detail.active ? 'active' : 'inactive',
+    fillRateFactorOverride: detail.fillRateFactorOverride ?? null,
   };
 }
 
@@ -69,6 +72,9 @@ export function CollectionPointFormModal(props: CollectionPointFormModalProps) {
   const patch = (partial: Partial<CollectionPointFormValues>) => {
     setForm((current) => ({ ...current, ...partial }));
   };
+
+  const inheritedFactor = () =>
+    props.sectorOptions.find((sector) => sector.id === form().sectorId)?.fillRateFactor ?? 1;
 
   const handleSubmit = async (event: Event) => {
     event.preventDefault();
@@ -161,6 +167,28 @@ export function CollectionPointFormModal(props: CollectionPointFormModalProps) {
             <option value="active">Activo</option>
             <option value="inactive">Fuera de servicio</option>
           </SelectField>
+        </div>
+
+        <div class="space-y-1">
+          <TextField
+            label="Factor de llenado (opcional)"
+            name="fillRateFactorOverride"
+            type="number"
+            min="0.1"
+            max="10"
+            step="0.1"
+            value={form().fillRateFactorOverride == null ? '' : String(form().fillRateFactorOverride)}
+            disabled={props.submitting}
+            placeholder={`Heredar del sector (${inheritedFactor().toFixed(2)}×)`}
+            onInput={(e) => {
+              const raw = e.currentTarget.value;
+              patch({ fillRateFactorOverride: raw === '' ? null : Number(raw) });
+            }}
+          />
+          <p class="text-xs text-text-muted">
+            &gt; 1 = se llena más rápido. Vacío hereda el factor de la zona (
+            {inheritedFactor().toFixed(2)}×).
+          </p>
         </div>
 
         <Show when={props.mode === 'create' && props.draftCoords}>

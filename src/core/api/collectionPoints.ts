@@ -134,6 +134,7 @@ export async function fetchCollectionPointsForPlanning(): Promise<PlanningCollec
 export interface SectorOption {
   id: number;
   name: string;
+  fillRateFactor?: number;
 }
 
 export interface CollectionPointWritePayload {
@@ -144,6 +145,7 @@ export interface CollectionPointWritePayload {
   maxCapacityKg: number;
   currentFillLevelKg?: number;
   status?: string;
+  fillRateFactorOverride?: number | null;
 }
 
 export interface CollectionPointUpdatePayload {
@@ -154,6 +156,7 @@ export interface CollectionPointUpdatePayload {
   currentFillLevelKg?: number;
   status?: string;
   priorityBoost?: boolean;
+  fillRateFactorOverride?: number | null;
 }
 
 export interface CollectionPointOptimizationContext {
@@ -161,6 +164,7 @@ export interface CollectionPointOptimizationContext {
   lastOptimizedAt: string | null;
   priorityBoostCodes: string[];
   criticalCount: number;
+  overloadedCodes: string[];
 }
 
 const MOCK_SECTOR_OPTIONS: SectorOption[] = [
@@ -226,6 +230,23 @@ export function fetchSectorOptions(): Promise<SectorOption[]> {
   );
 }
 
+/** Factores de velocidad de llenado por zona (planner/admin). */
+export function fetchSectorFillRateFactors(): Promise<SectorOption[]> {
+  return withMockFallback(
+    'collection-point-sector-options',
+    () => apiGet<SectorOption[]>('/api/v1/sectors/fill-rate-factors'),
+    MOCK_SECTOR_OPTIONS,
+  );
+}
+
+/** > 1 = la zona se llena más rápido (más poblada). */
+export function updateSectorFillRateFactor(
+  sectorId: number,
+  fillRateFactor: number,
+): Promise<SectorOption> {
+  return apiPatch<SectorOption>(`/api/v1/sectors/${sectorId}/fill-rate-factor`, { fillRateFactor });
+}
+
 export function createCollectionPoint(
   payload: CollectionPointWritePayload & { code: string },
 ): Promise<CollectionPointDetail> {
@@ -282,6 +303,7 @@ function buildMockOptimizationContext(points: CollectionPoint[]): CollectionPoin
     lastOptimizedAt: null,
     priorityBoostCodes,
     criticalCount: points.filter((point) => point.status === 'critico').length,
+    overloadedCodes: [],
   };
 }
 

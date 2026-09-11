@@ -10,6 +10,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import CollectionPoint, Sector
+from app.domain.visit_schedule_distribution import (
+    baseline_fill_hours,
+    point_fill_rate_override,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -166,9 +170,9 @@ def _build_point_for_sector(
 
     fill_pct = Decimal(str(20 + ((code_serial * 13) % 55)))
     max_capacity_kg = Decimal("1000")
-    # Horas estimadas para llenarse: determinístico por punto (72–119 h) para que
-    # la proyección de llenado varíe entre contenedores (Tarea 3).
-    estimated_fill_hours = Decimal(str(72 + ((code_serial * 7) % 48)))
+    # Horas base de llenado y override puntual coherentes con las frecuencias.
+    estimated_fill_hours = Decimal(str(baseline_fill_hours(code)))
+    override = point_fill_rate_override(code)
 
     return (
         CollectionPoint(
@@ -181,6 +185,7 @@ def _build_point_for_sector(
                 Decimal("0.01")
             ),
             estimated_fill_hours=estimated_fill_hours,
+            fill_rate_factor_override=Decimal(str(override)) if override is not None else None,
             status="active",
         ),
         code_serial,

@@ -1,6 +1,6 @@
 export type AlertPriority = 'critica' | 'advertencia' | 'informativa';
 export type AlertStatus = 'nueva' | 'en-progreso' | 'informativa' | 'resuelta';
-export type AlertCategory = 'contenedores' | 'trafico' | 'vehiculos' | 'mantenimiento' | 'sistema';
+export type AlertCategory = 'contenedores' | 'agenda' | 'trafico' | 'vehiculos' | 'mantenimiento' | 'sistema';
 
 export interface SystemAlert {
   id: string;

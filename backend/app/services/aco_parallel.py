@@ -7,6 +7,7 @@ import random
 from typing import TYPE_CHECKING
 
 from app.config import settings
+from app.domain.criticality import CRITICAL_FILL_PCT, HIGH_FILL_PCT
 from app.services.route_constraints import elapsed_after_visit, is_visit_feasible_with_window
 
 if TYPE_CHECKING:
@@ -91,17 +92,23 @@ def _pick_candidate(
     beta: float,
     fill_pcts: list[int] | None = None,
     priority_fill_level: bool = False,
+    at_risk_flags: list[bool] | None = None,
 ) -> int:
     weights = []
     for c in candidates:
         tau = pheromone[current][c] ** alpha
         eta = (1.0 / max(dist_matrix[current][c], 1.0)) ** beta
-        if priority_fill_level and fill_pcts is not None and 1 <= c <= len(fill_pcts):
-            fill_pct = fill_pcts[c - 1]
-            if fill_pct >= 80:
-                eta *= 1.35
-            elif fill_pct >= 60:
-                eta *= 1.10
+        if priority_fill_level:
+            # El riesgo de calendario (rebose antes de la próxima visita) domina
+            # sobre el llenado puntual cuando está disponible.
+            if at_risk_flags is not None and 1 <= c <= len(at_risk_flags) and at_risk_flags[c - 1]:
+                eta *= 1.50
+            elif fill_pcts is not None and 1 <= c <= len(fill_pcts):
+                fill_pct = fill_pcts[c - 1]
+                if fill_pct >= CRITICAL_FILL_PCT:
+                    eta *= 1.35
+                elif fill_pct >= HIGH_FILL_PCT:
+                    eta *= 1.10
         weights.append(tau * eta)
     total = sum(weights)
     if total <= 0:
@@ -177,6 +184,7 @@ def build_ant_solution(
     window_ends: list[float] | None = None,
     fill_pcts: list[int] | None = None,
     priority_fill_level: bool = False,
+    at_risk_flags: list[bool] | None = None,
     alpha: float = ACO_ALPHA,
     beta: float = ACO_BETA,
 ) -> AntSolution:
@@ -249,6 +257,7 @@ def build_ant_solution(
                 beta=beta,
                 fill_pcts=fill_pcts,
                 priority_fill_level=priority_fill_level,
+                at_risk_flags=at_risk_flags,
             )
             travel = time_matrix[current][chosen]
             route.append(chosen)
@@ -306,6 +315,7 @@ def _ant_task_payload(
     window_ends: list[float] | None,
     fill_pcts: list[int] | None,
     priority_fill_level: bool,
+    at_risk_flags: list[bool] | None,
 ) -> AntSolution:
     return build_ant_solution(
         ant_seed,
@@ -324,6 +334,7 @@ def _ant_task_payload(
         window_ends=window_ends,
         fill_pcts=fill_pcts,
         priority_fill_level=priority_fill_level,
+        at_risk_flags=at_risk_flags,
     )
 
 
@@ -347,6 +358,7 @@ def run_ant_solutions(
     window_ends: list[float] | None = None,
     fill_pcts: list[int] | None = None,
     priority_fill_level: bool = False,
+    at_risk_flags: list[bool] | None = None,
 ) -> list[AntSolution]:
     from concurrent.futures import ProcessPoolExecutor
 
@@ -371,6 +383,7 @@ def run_ant_solutions(
                 window_ends=window_ends,
                 fill_pcts=fill_pcts,
                 priority_fill_level=priority_fill_level,
+                at_risk_flags=at_risk_flags,
             )
             for seed in ant_seeds
         ]
@@ -397,6 +410,7 @@ def run_ant_solutions(
                 window_ends,
                 fill_pcts,
                 priority_fill_level,
+                at_risk_flags,
             )
             for seed in ant_seeds
         ]

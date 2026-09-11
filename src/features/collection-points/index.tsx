@@ -95,6 +95,7 @@ import {
   type CollectionPointFormValues,
 } from './CollectionPointFormModal';
 import { CollectionPointsStatsStrip } from './CollectionPointsStatsStrip';
+import { SectorFillRatePanel } from './SectorFillRatePanel';
 
 function TableRowSkeleton() {
   return (
@@ -435,6 +436,7 @@ export default function CollectionPointsPage() {
       longitude: values.longitude,
       maxCapacityKg: values.maxCapacityKg,
       status: values.status,
+      fillRateFactorOverride: values.fillRateFactorOverride,
     };
     if (mode === 'create') {
       return { ...base, currentFillLevelKg: 0 };
@@ -686,6 +688,9 @@ export default function CollectionPointsPage() {
             </div>
           </div>
         </div>
+      </Show>
+      <Show when={canManage() && !isResidentView()}>
+        <SectorFillRatePanel />
       </Show>
       <Show when={pointsError()}>
         <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900/50 dark:bg-red-950/30">

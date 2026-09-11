@@ -49,7 +49,9 @@ def test_resident_overview_scopes_points_and_routes(schedule_builder, proximity_
     points_result.all.return_value = [point_in]
     routes_result = MagicMock()
     routes_result.unique.return_value.all.return_value = [route_in_sector, route_other_sector]
-    db.scalars.side_effect = [points_result, routes_result]
+    schedules_result = MagicMock()
+    schedules_result.all.return_value = []
+    db.scalars.side_effect = [points_result, routes_result, schedules_result]
     schedule_builder.return_value = sample_schedule()
     proximity_builder.return_value = sample_proximity()
 
@@ -78,7 +80,9 @@ def test_resident_overview_alert_when_no_schedule(schedule_builder, proximity_bu
     empty_points.all.return_value = []
     empty_routes = MagicMock()
     empty_routes.unique.return_value.all.return_value = []
-    db.scalars.side_effect = [empty_points, empty_routes]
+    empty_schedules = MagicMock()
+    empty_schedules.all.return_value = []
+    db.scalars.side_effect = [empty_points, empty_routes, empty_schedules]
     schedule_builder.return_value = sample_schedule(has_schedule=False)
     proximity_builder.return_value = sample_proximity(status="no_active_route")
 

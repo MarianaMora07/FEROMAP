@@ -56,6 +56,7 @@ export interface DashboardSummary {
   metrics: {
     totalContainers: number;
     criticalContainers: number;
+    atRiskContainers?: number;
     fullContainers: number;
     activeVehicles: number;
     routesInProgress: number;
@@ -70,6 +71,13 @@ export interface DashboardSummary {
     sector: string;
     fillLevel: number;
     priority: string;
+  }>;
+  atRiskContainers?: Array<{
+    id: string;
+    sector: string;
+    fillLevel: number;
+    hoursUntilCritical: number | null;
+    hoursUntilNextVisit: number | null;
   }>;
   sectorFillLevels: Array<{ name: string; pct: number }>;
   mapMetrics: DashboardMapMetric[];

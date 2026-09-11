@@ -14,6 +14,12 @@ def _default_aco_for_env() -> tuple[int, int]:
 
 _DEFAULT_ACO_ANTS, _DEFAULT_ACO_ITERATIONS = _default_aco_for_env()
 
+# Modelo de criticidad de contenedores (ver docs/fase-0/adr-criticidad.md).
+# `state` conserva el comportamiento actual (llenado >= umbral); `risk` incluirá
+# además el riesgo de rebose antes de la próxima visita programada.
+CRITICALITY_MODELS = ("state", "risk")
+DEFAULT_CRITICALITY_MODEL = "state"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -21,6 +27,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://feromap:feromap@db:5432/feromap"
     data_dir: str = "/app/data"
     app_env: str = "local"
+    criticality_model: str = DEFAULT_CRITICALITY_MODEL
     jwt_secret: str = "feromap-dev-secret-change-in-production"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24
@@ -43,6 +50,7 @@ settings = Settings(
     database_url=os.getenv("DATABASE_URL", "postgresql+psycopg://feromap:feromap@db:5432/feromap"),
     data_dir=os.getenv("DATA_DIR", "/app/data"),
     app_env=os.getenv("APP_ENV", "local"),
+    criticality_model=os.getenv("CRITICALITY_MODEL", DEFAULT_CRITICALITY_MODEL),
     jwt_secret=os.getenv("JWT_SECRET", "feromap-dev-secret-change-in-production"),
     jwt_algorithm=os.getenv("JWT_ALGORITHM", "HS256"),
     jwt_expire_minutes=int(os.getenv("JWT_EXPIRE_MINUTES", str(60 * 24))),
@@ -56,3 +64,10 @@ settings = Settings(
     driver_webhook_url=os.getenv("DRIVER_WEBHOOK_URL") or None,
     unare_mbtiles_path=os.getenv("UNARE_MBTILES_PATH") or None,
 )
+
+
+def resolve_criticality_model(value: str | None = None) -> str:
+    """Normaliza ``CRITICALITY_MODEL``; cae a ``state`` si el valor no es válido."""
+    candidate = value if value is not None else os.getenv("CRITICALITY_MODEL", settings.criticality_model)
+    normalized = (candidate or "").strip().lower()
+    return normalized if normalized in CRITICALITY_MODELS else DEFAULT_CRITICALITY_MODEL

@@ -2,7 +2,7 @@ import type { SystemAlert, AlertPriority, AlertCategory, AlertStatus } from '../
 import type { ResidentActiveRoute, ResidentOverview, ResidentProximity } from '../api/resident';
 import { UNARE_CENTER } from '../../data/types/geo';
 
-export type ResidentAlertKind = 'horario' | 'retraso' | 'critico' | 'servicio';
+export type ResidentAlertKind = 'horario' | 'retraso' | 'critico' | 'agenda' | 'servicio';
 
 export interface ResidentAlertContext {
   sectorName?: string | null;
@@ -33,6 +33,7 @@ const INTERNAL_FLEET_PATTERN =
 const KIND_SORT: Record<ResidentSectorAlert['kind'], number> = {
   retraso: 100,
   critico: 95,
+  agenda: 90,
   servicio: 70,
   horario: 65,
   sistema: 50,
@@ -182,6 +183,8 @@ function kindToCategory(kind: ResidentSectorAlert['kind']): AlertCategory {
   switch (kind) {
     case 'critico':
       return 'contenedores';
+    case 'agenda':
+      return 'agenda';
     case 'retraso':
       return 'trafico';
     case 'horario':
@@ -236,6 +239,22 @@ export function buildResidentDerivedAlerts(overview: ResidentOverview): Resident
         title: `${count} contenedor${count === 1 ? '' : 'es'} crítico${count === 1 ? '' : 's'} en ${sector}`,
         detail: 'Nivel de llenado ≥ 80 % en contenedores de tu sector.',
         priority: 'critica',
+        location: sector,
+        source: 'Contenedores del sector',
+        status: 'nueva',
+      }),
+    );
+  }
+
+  const atRisk = overview.stats.atRiskPoints ?? 0;
+  if (atRisk > 0) {
+    alerts.push(
+      baseResidentAlert({
+        id: 'resident-agenda',
+        kind: 'agenda',
+        title: `${atRisk} contenedor${atRisk === 1 ? '' : 'es'} se llenará${atRisk === 1 ? '' : 'n'} antes de la próxima visita`,
+        detail: 'Rebosarán antes de la recolección programada en tu sector.',
+        priority: 'advertencia',
         location: sector,
         source: 'Contenedores del sector',
         status: 'nueva',

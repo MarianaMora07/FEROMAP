@@ -156,6 +156,7 @@ export function computeAlertsDistribution(alerts: SystemAlert[]) {
 export function computeAlertsByCategory(alerts: SystemAlert[]) {
   const categories: Record<string, { label: string; color: string }> = {
     contenedores: { label: 'Contenedores', color: '#ef4444' },
+    agenda: { label: 'Agenda', color: '#f59e0b' },
     trafico: { label: 'Tráfico', color: '#f59e0b' },
     vehiculos: { label: 'Vehículos', color: '#1143F3' },
     mantenimiento: { label: 'Mantenimiento', color: '#7c3aed' },

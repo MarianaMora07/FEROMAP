@@ -72,11 +72,11 @@ function ScenarioInfoCard(props: { optimizedRoutes: RouteCollection | null }) {
   const dailyPlan = () => optimizationState.dailyPlan;
   const kpis = () => optimizationState.kpis;
 
-  // Valores **del día**: puntos programados y críticos (>90 % de llenado) del plan.
+  // Valores **del día**: puntos programados y críticos (≥ 80 % de llenado) del plan.
   const dayPointCount = () =>
     dailyPlan()?.finalPointIds?.length ?? dailyPlan()?.scheduledPoints?.length ?? 0;
   const dayCriticalCount = () =>
-    (dailyPlan()?.scheduledPoints ?? []).filter((point) => (point.fillLevelPct ?? 0) > 90).length;
+    (dailyPlan()?.scheduledPoints ?? []).filter((point) => (point.fillLevelPct ?? 0) >= 80).length;
 
   // La duración del motor es la **suma de toda la flota**; aquí también mostramos
   // la jornada del camión más cargado, que es lo que se interpreta como "el día".

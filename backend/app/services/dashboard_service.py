@@ -9,7 +9,14 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import CollectionPoint, Driver, OptimizedRoute, RouteWaypoint, Simulation, User, UserRole, Vehicle, Vehicle
+from app.db.models import CollectionPoint, Driver, OptimizedRoute, RouteWaypoint, Simulation, User, UserRole, Vehicle, Vehicle, VisitSchedule
+from app.domain.criticality import (
+    HIGH_FILL_PCT,
+    hours_until_next_visit,
+    is_at_risk_before_next_visit,
+    is_critical_now,
+)
+from app.domain.waste_generation import hours_until_critical
 from app.services.auth_service import role_label
 from app.services.geo_service import fill_level_pct, fleet_summary, route_geojson, seed_meta_by_code
 from app.services.resident_schedule_service import build_resident_schedule
@@ -277,7 +284,7 @@ def dashboard_summary(db: Session, *, current_user: User | None = None) -> dict[
     full_count = 0
     for point in points:
         pct = fill_level_pct(point)
-        if pct >= 80:
+        if is_critical_now(pct):
             meta = meta_by_code.get(point.code, {})
             critical.append(
                 {
@@ -287,8 +294,37 @@ def dashboard_summary(db: Session, *, current_user: User | None = None) -> dict[
                     "priority": meta.get("priority", "critica"),
                 }
             )
-        if pct >= 60:
+        if pct >= HIGH_FILL_PCT:
             full_count += 1
+
+    weekdays_by_point: dict[int, list[int]] = {}
+    for schedule in db.scalars(select(VisitSchedule)).all():
+        raw = getattr(schedule, "weekdays_json", None)
+        point_id = getattr(schedule, "collection_point_id", None)
+        if raw is None or point_id is None:
+            continue
+        try:
+            weekdays_by_point[point_id] = [int(value) for value in json.loads(raw)]
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+
+    at_risk: list[dict[str, Any]] = []
+    for point in points:
+        weekdays = weekdays_by_point.get(point.id)
+        if not weekdays or point.status != "active":
+            continue
+        if is_at_risk_before_next_visit(point, weekdays=weekdays):
+            hours_next = hours_until_next_visit(weekdays=weekdays)
+            hours_critical = hours_until_critical(point)
+            at_risk.append(
+                {
+                    "id": point.code,
+                    "sector": point.sector.name if point.sector else "",
+                    "fillLevel": fill_level_pct(point),
+                    "hoursUntilCritical": round(hours_critical, 1) if hours_critical is not None else None,
+                    "hoursUntilNextVisit": round(hours_next, 1) if hours_next is not None else None,
+                }
+            )
 
     sector_fill: dict[str, list[int]] = {}
     for point in points:
@@ -346,12 +382,14 @@ def dashboard_summary(db: Session, *, current_user: User | None = None) -> dict[
         "metrics": {
             "totalContainers": len(points),
             "criticalContainers": len(critical),
+            "atRiskContainers": len(at_risk),
             "fullContainers": full_count,
             "activeVehicles": fleet["activeVehicles"],
             "routesInProgress": routes_in_progress,
         },
         "fleet": fleet,
         "criticalContainerList": critical,
+        "atRiskContainers": at_risk,
         "sectorFillLevels": sector_fill_levels,
         "mapMetrics": [
             {"id": "total", "label": "Contenedores totales", "value": len(points), "tone": "green", "icon": "trash"},
@@ -360,6 +398,13 @@ def dashboard_summary(db: Session, *, current_user: User | None = None) -> dict[
                 "label": "Contenedores críticos",
                 "value": len(critical),
                 "tone": "red",
+                "icon": "trash",
+            },
+            {
+                "id": "at_risk",
+                "label": "En riesgo de rebose",
+                "value": len(at_risk),
+                "tone": "amber",
                 "icon": "trash",
             },
             {"id": "full", "label": "Contenedores llenos", "value": full_count, "tone": "amber", "icon": "trash"},

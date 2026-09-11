@@ -7,6 +7,7 @@ vi.mock('../api/client', () => ({
 vi.mock('./appStore', () => ({
   loadRoutesOnMap: vi.fn().mockResolvedValue(undefined),
   showOptimizedRoute: vi.fn(),
+  setRoutes: vi.fn(),
 }));
 
 vi.mock('./dashboardStore', () => ({

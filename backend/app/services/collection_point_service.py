@@ -15,10 +15,17 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import CollectionPoint, OptimizedRoute, RouteWaypoint, Sector, User, UserRole
+from app.db.models import CollectionPoint, OptimizedRoute, RouteWaypoint, Sector, User, UserRole, VisitSchedule
+from app.domain.criticality import (
+    fill_status_from_level,
+    is_critical_now,
+    is_overloaded,
+    required_visits_per_week,
+)
 from app.domain.waste_generation import (
     CRITICAL_FILL_PCT,
     critical_day_offset,
+    effective_fill_rate_factor,
     fill_events_cycle_daily_values,
     projected_fill_level_kg,
 )
@@ -39,19 +46,6 @@ STATUS_LABELS: dict[str, str] = {
 DISTRIBUTION_ORDER = ("critico", "lleno", "normal", "parcial", "fueraDeServicio")
 
 MONTHS_ES = ("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
-
-
-def fill_status_from_level(level: int, *, point_status: str = "active") -> str:
-    """Alineado con fillStatusFromLevel del frontend."""
-    if point_status != "active":
-        return "fueraDeServicio"
-    if level > 90:
-        return "critico"
-    if level >= 70:
-        return "lleno"
-    if level >= 30:
-        return "normal"
-    return "parcial"
 
 
 def _empty_summary() -> dict[str, Any]:
@@ -208,6 +202,12 @@ def serialize_collection_point_detail(point: CollectionPoint) -> dict[str, Any]:
         "priority": meta.get("priority") or priority_from_fill(fill_level),
         "roadNodeId": point.road_node_id,
         "priorityBoost": bool(getattr(point, "priority_boost", False)),
+        "fillRateFactorOverride": (
+            float(point.fill_rate_factor_override)
+            if getattr(point, "fill_rate_factor_override", None) is not None
+            else None
+        ),
+        "fillRateFactor": effective_fill_rate_factor(point),
     }
 
 
@@ -369,7 +369,14 @@ def list_sector_options(db: Session) -> list[dict[str, Any]]:
     sectors = db.scalars(
         select(Sector).where(Sector.deleted_at.is_(None)).order_by(Sector.name)
     ).all()
-    return [{"id": sector.id, "name": sector.name} for sector in sectors]
+    return [
+        {
+            "id": sector.id,
+            "name": sector.name,
+            "fillRateFactor": float(getattr(sector, "fill_rate_factor", None) or 1.0),
+        }
+        for sector in sectors
+    ]
 
 
 def _get_point_by_code(db: Session, code: str) -> CollectionPoint:
@@ -460,6 +467,11 @@ def create_collection_point(db: Session, payload: CollectionPointCreate) -> dict
         current_fill_level_kg=fill,
         status=payload.status or "active",
         road_node_id=_snap_road_node(payload.longitude, payload.latitude),
+        fill_rate_factor_override=(
+            Decimal(str(payload.fill_rate_factor_override))
+            if payload.fill_rate_factor_override is not None
+            else None
+        ),
     )
     return _persist_point(db, point)
 
@@ -506,6 +518,10 @@ def update_collection_point(
 
     if "priority_boost" in data and data["priority_boost"] is not None:
         point.priority_boost = data["priority_boost"]
+
+    if "fill_rate_factor_override" in data:
+        raw = data["fill_rate_factor_override"]
+        point.fill_rate_factor_override = Decimal(str(raw)) if raw is not None else None
 
     return _persist_point(db, point)
 
@@ -666,18 +682,32 @@ def collection_points_optimization_context(db: Session, user: User) -> dict[str,
     points = _scoped_active_points(db, user)
     last_codes, last_at = _last_optimization_point_codes(db)
 
+    schedules = db.scalars(
+        select(VisitSchedule).where(
+            VisitSchedule.collection_point_id.in_([point.id for point in points])
+        )
+    ).all()
+    declared_by_point = {
+        schedule.collection_point_id: schedule.visits_per_week for schedule in schedules
+    }
+
     critical_count = 0
     priority_boost_codes: list[str] = []
+    overloaded_codes: list[str] = []
     for point in points:
         if bool(getattr(point, "priority_boost", False)):
             priority_boost_codes.append(point.code)
         fill_level = fill_level_pct(point)
-        if point.status == "active" and fill_level > 90:
+        if point.status == "active" and is_critical_now(fill_level):
             critical_count += 1
+        required = required_visits_per_week(point)
+        if is_overloaded(required, declared_by_point.get(point.id)):
+            overloaded_codes.append(point.code)
 
     return {
         "lastOptimizedCodes": sorted(last_codes),
         "lastOptimizedAt": last_at.isoformat() if last_at else None,
         "priorityBoostCodes": sorted(priority_boost_codes),
         "criticalCount": critical_count,
+        "overloadedCodes": sorted(overloaded_codes),
     }

@@ -21,7 +21,7 @@ export async function ensurePlannerSession(page: Page, landingPath = '/optimizat
 
   if (page.url().includes('/login')) {
     await page.getByRole('button', { name: 'Planificador' }).click();
-    await page.getByLabel('Contraseña').fill(PLAN_PASSWORD);
+    await page.getByRole('textbox', { name: 'Contraseña' }).fill(PLAN_PASSWORD);
     await page.getByRole('button', { name: 'Iniciar sesión' }).click();
     await page.waitForURL((url) => url.pathname.startsWith(pathOnly), { timeout: 20_000 });
   }

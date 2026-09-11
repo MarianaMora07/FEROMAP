@@ -98,30 +98,51 @@ Grupo **Tesis y demostración → Simulación ACO** (`/simulation`):
 
 > La simulación **no despacha rutas** ni sustituye la operación diaria (banner explícito). El plan semanal vive en su módulo propio (`/planning/weekly`); las URLs antiguas `?view=weekly` redirigen solas.
 
-## 9. Catálogos
+## 9. Criticidad, frecuencia y riesgo de rebose
+
+FEROMAP trata la criticidad como un **estado temporal**, no como un atributo fijo:
+
+- **Contenedores críticos** (Dashboard): contenedores que **ahora** están al ≥ 80 % de llenado. La tarjeta indica "Crítico ahora".
+- **En riesgo de rebose** (Dashboard): contenedores que **se llenarán antes de su próxima recolección programada**, aunque aún no estén críticos. Muestra cuánto falta ("Se llena en ~X h").
+- El umbral crítico es configurable en **Administración → General → Umbral de llenado (%)** (por defecto 80).
+
+**Velocidad de llenado (factores)**
+
+- Por **zona**: en *Puntos de Recolección* hay un panel "Velocidad de llenado por zona" (> 1 = la zona se llena más rápido; útil en barrios densos).
+- Por **contenedor**: al crear/editar un punto, el campo "Factor de llenado (opcional)" reemplaza al de la zona; vacío = hereda.
+
+**Frecuencia híbrida**
+
+- En el detalle de un punto, "Frecuencia semanal" declara las visitas por semana. El sistema las compara con las que **exige la física** (`requiredVisitsPerWeek`); si son insuficientes muestra el aviso *"la frecuencia declarada podría ser insuficiente"* (sobrecarga).
+
+**Alertas**
+
+- Categoría **Agenda** ("Rebosará antes de la próxima visita"): puntos no críticos que no alcanzarán a vaciarse a tiempo.
+
+## 10. Catálogos
 
 **Vehículos**, **Conductores** y **Puntos de Recolección** (grupo Catálogos) se gestionan poco:
 
 - Vehículos: estado/disponibilidad y edición (sin alta/baja masiva). En el detalle de cada vehículo, la pestaña **Territorio** fija los **sectores preferentes** de ese camión (vía su conductor): el motor los respeta cuando el día tiene territorio completo; si no, el ACO reparte libre.
 - Conductores: crear/editar y asignar credencial.
-- Puntos de Recolección: CRUD completo, ubicación en mapa y **frecuencias semanales** por punto (alimentan el Autocompletar del Plan semanal).
+- Puntos de Recolección: CRUD completo, ubicación en mapa, **frecuencias semanales** por punto (alimentan el Autocompletar del Plan semanal) y **factores de velocidad de llenado** por zona y por contenedor (ver §9).
 
 **Alertas** se atienden desde los paneles del Dashboard/Monitoreo (no tiene ítem propio en este menú).
 
-## 10. Reportes y administración
+## 11. Reportes y administración
 
 - **Reportes**: período → Generar/Descargar (CSV/PDF) → Guardados.
 - **Administración** (solo admin): General · Usuarios y Roles · Auditoría (sin pestañas placeholder).
 - La **Analítica** con datos ilustrativos ya no está en el menú; usa Reportes o el Dashboard para KPIs.
 
-## 11. Conductor y residente
+## 12. Conductor y residente
 
 | Rol | Home | Menú |
 |-----|------|------|
 | Conductor | `/operator` — Mi operación (ruta del día, averías) | Mi operación · Mapa GIS · Alertas |
 | Residente | `/resident` — Mi Recolección (horario, camión, sector) | Mi zona · Mapa mi sector · Puntos · Alertas |
 
-## 12. Solución de problemas
+## 13. Solución de problemas
 
 | Problema | Acción |
 |----------|--------|
@@ -130,13 +151,14 @@ Grupo **Tesis y demostración → Simulación ACO** (`/simulation`):
 | Error al cargar | `just health` y `just defense-verify` en el servidor. |
 | Pantalla en blanco tras login | Compruebe el stack (`just up`). |
 
-## 13. Modo oscuro
+## 14. Modo oscuro
 
 - Alternar claro/oscuro: menú del usuario (esquina superior).
 - Elegir Sistema/Claro/Oscuro: **Perfil → Preferencias del sistema → Tema → Guardar** (persiste tras F5).
 
-## 14. Documentación relacionada
+## 15. Documentación relacionada
 
+- [Modelo de criticidad (ADR-002)](../fase-0/adr-criticidad.md)
 - [Arquitectura de navegación (fuente de verdad IA)](../ux/arquitectura-navegacion.md)
 - [Estado de módulos (matriz de trazabilidad)](../estado-modulos.md)
 - [Guión demo defensa](./guion-demo-defensa.md)

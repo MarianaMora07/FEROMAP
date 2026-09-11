@@ -65,6 +65,7 @@ function overview(partial: Partial<ResidentOverview> = {}): ResidentOverview {
     stats: {
       totalPoints: 12,
       criticalPoints: 3,
+      atRiskPoints: 2,
       routesServingSector: 1,
     },
     ...partial,
@@ -76,6 +77,7 @@ describe('residentAlertsUx', () => {
     const alerts = buildResidentDerivedAlerts(overview());
     expect(alerts.some((alert) => alert.kind === 'horario' && alert.title.includes('L-X-V'))).toBe(true);
     expect(alerts.some((alert) => alert.kind === 'critico' && alert.title.includes('3 contenedores'))).toBe(true);
+    expect(alerts.some((alert) => alert.kind === 'agenda' && alert.title.includes('2 contenedores'))).toBe(true);
     expect(alerts.some((alert) => alert.kind === 'retraso' && alert.title.includes('TR-08'))).toBe(true);
   });
 

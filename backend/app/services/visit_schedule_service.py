@@ -11,9 +11,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import CollectionPoint, VisitSchedule
+from app.domain.criticality import is_overloaded, required_visits_per_week
 from app.domain.visit_schedule_distribution import (
     DEFAULT_EFFECTIVE_FROM,
-    build_visit_schedule_row,
+    planned_visits_and_weekdays,
 )
 
 
@@ -24,11 +25,14 @@ def _serialize_schedule(schedule: VisitSchedule, point: CollectionPoint) -> dict
             weekdays = [int(value) for value in json.loads(schedule.weekdays_json)]
         except (TypeError, ValueError, json.JSONDecodeError):
             weekdays = []
+    required = required_visits_per_week(point)
     return {
         "id": schedule.id,
         "collectionPointId": schedule.collection_point_id,
         "pointCode": point.code,
         "visitsPerWeek": schedule.visits_per_week,
+        "requiredVisitsPerWeek": required,
+        "overloaded": is_overloaded(required, schedule.visits_per_week),
         "weekdays": weekdays,
         "isExtraVisit": schedule.is_extra_visit,
         "effectiveFrom": schedule.effective_from.isoformat(),
@@ -99,7 +103,7 @@ def list_active_visit_schedules(db: Session, *, reference: date | None = None) -
     ref = reference or date.today()
     schedules = db.scalars(
         select(VisitSchedule)
-        .options(joinedload(VisitSchedule.collection_point))
+        .options(joinedload(VisitSchedule.collection_point).joinedload(CollectionPoint.sector))
         .order_by(VisitSchedule.collection_point_id)
     ).all()
     active: list[dict[str, Any]] = []
@@ -121,6 +125,7 @@ def ensure_visit_schedules_coverage(db: Session) -> dict[str, int]:
     points = db.scalars(
         select(CollectionPoint)
         .where(CollectionPoint.deleted_at.is_(None), CollectionPoint.status == "active")
+        .options(joinedload(CollectionPoint.sector))
         .order_by(CollectionPoint.code)
     ).all()
 
@@ -128,12 +133,12 @@ def ensure_visit_schedules_coverage(db: Session) -> dict[str, int]:
     for point in points:
         if point.id in scheduled_ids:
             continue
-        row = build_visit_schedule_row(point.code, effective_from=DEFAULT_EFFECTIVE_FROM)
+        visits, weekdays = planned_visits_and_weekdays(point)
         db.add(
             VisitSchedule(
                 collection_point_id=point.id,
-                visits_per_week=int(row["visitsPerWeek"]),
-                weekdays_json=json.dumps(row["weekdays"]),
+                visits_per_week=visits,
+                weekdays_json=json.dumps(weekdays),
                 is_extra_visit=False,
                 effective_from=DEFAULT_EFFECTIVE_FROM,
                 effective_until=None,

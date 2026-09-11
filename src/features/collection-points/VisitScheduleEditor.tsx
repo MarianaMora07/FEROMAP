@@ -84,6 +84,14 @@ export function VisitScheduleEditor(props: VisitScheduleEditorProps) {
           value={visitsPerWeek()}
           onInput={(e) => setVisitsPerWeek(e.currentTarget.value)}
         />
+        <Show when={schedule()?.requiredVisitsPerWeek != null}>
+          <p class={`text-xs ${schedule()?.overloaded ? 'text-amber-600' : 'text-text-muted'}`}>
+            La física requiere ~{schedule()!.requiredVisitsPerWeek} visitas/semana
+            {schedule()!.overloaded
+              ? ' — la frecuencia declarada podría ser insuficiente.'
+              : '.'}
+          </p>
+        </Show>
         <div>
           <p class="mb-2 text-sm font-medium text-text-secondary">Días de recolección</p>
           <div class="flex flex-wrap gap-2">
