@@ -90,7 +90,7 @@ test.describe('Planificación operativa — flujo semanal', () => {
 
     await page.getByTestId('weekly-plan-stepper').getByRole('button', { name: 'Validar' }).click();
     await page.getByTestId('weekly-plan-primary-cta').click();
-    await expect(page.getByTestId('weekly-plan-validation-result')).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId('weekly-plan-forecast')).toBeVisible({ timeout: 60_000 });
 
     await page.getByTestId('weekly-plan-stepper').getByRole('button', { name: 'Aprobar' }).click();
     await expect(page.getByTestId('weekly-plan-approve-blocked')).toHaveCount(0);

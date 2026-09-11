@@ -173,11 +173,13 @@ export function WeeklyPlanTab(props: WeeklyPlanTabProps) {
                   </div>
                 </Show>
 
-                <WeeklyPlanFleetEditor
-                  value={plan()?.fleetByType}
-                  editable={editable()}
-                  onChange={(fleet) => updateWeeklyPlanFleet(fleet)}
-                />
+                <Show when={viewStep() === 1}>
+                  <WeeklyPlanFleetEditor
+                    value={plan()?.fleetByType}
+                    editable={editable()}
+                    onChange={(fleet) => updateWeeklyPlanFleet(fleet)}
+                  />
+                </Show>
 
                 <WeeklyPlanStepPanels
                   step={viewStep()}

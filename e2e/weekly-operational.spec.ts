@@ -32,7 +32,7 @@ test.describe('Plan operativo semanal — generar, abrir y notificar', () => {
     // Validar y aprobar la semana
     await page.getByTestId('weekly-plan-stepper').getByRole('button', { name: 'Validar' }).click();
     await page.getByTestId('weekly-plan-primary-cta').click();
-    await expect(page.getByTestId('weekly-plan-validation-result')).toBeVisible({
+    await expect(page.getByTestId('weekly-plan-forecast')).toBeVisible({
       timeout: 600_000,
     });
 

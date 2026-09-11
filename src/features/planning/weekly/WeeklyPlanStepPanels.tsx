@@ -16,10 +16,8 @@ import { optimizationHref } from '../../../core/planning/operationalLinks';
 import { WeeklyPlanConfigurePanel } from './WeeklyPlanConfigurePanel';
 import {
   WeeklyPlanApproveBlockedPanel,
-  WeeklyPlanDayPreviewPanel,
   WeeklyPlanPostApprovalChecklist,
   WeeklyPlanPreflightWarningPanel,
-  WeeklyPlanValidationResultPanel,
 } from './WeeklyPlanClosurePanels';
 import { WeeklyPlanForecastPanel } from './WeeklyPlanForecastPanel';
 import { WeeklyPlanOperationalSection } from './WeeklyPlanOperationalSection';
@@ -110,7 +108,9 @@ export function WeeklyPlanStepPanels(props: WeeklyPlanStepPanelsProps) {
           </Show>
 
           <Show when={!weeklyPlanState.isValidating && validationSummary()}>
-            {(summary) => <WeeklyPlanValidationResultPanel summary={summary()} />}
+            <p class="text-sm text-text-secondary">
+              Validación completada. Revisa las mejoras previstas en el paso «Aprobar».
+            </p>
           </Show>
 
           <Show when={props.editable && totalPoints() > 0 && !weeklyPlanState.isValidating}>
@@ -137,21 +137,15 @@ export function WeeklyPlanStepPanels(props: WeeklyPlanStepPanelsProps) {
       <Show when={props.step === 3}>
         <div class="space-y-4" data-testid="weekly-plan-step-3">
           <Show
-            when={validationSummary()}
+            when={liveForecast()}
             fallback={
               <p class="text-sm text-text-secondary">
-                Completa la validación en el paso anterior para ver los indicadores.
+                Completa la validación en el paso anterior para ver las mejoras previstas.
               </p>
             }
           >
-            {(summary) => <WeeklyPlanValidationResultPanel summary={summary()} />}
+            <WeeklyPlanForecastPanel forecast={liveForecast()} source="Validación en curso" />
           </Show>
-
-          <Show when={(validationSummary()?.days?.length ?? 0) > 0}>
-            <WeeklyPlanDayPreviewPanel days={validationSummary()!.days} />
-          </Show>
-
-          <WeeklyPlanForecastPanel forecast={liveForecast()} source="Validación en curso" />
 
           <Show when={props.editable && weeklyPlanState.isGeneratingOperational}>
             <div class="space-y-1">
