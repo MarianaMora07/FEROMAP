@@ -51,7 +51,6 @@ export interface DashboardSummary {
   subtitle: string;
   dateLabel: string;
   notifications: number;
-  operatorsOnline: number;
   user: { name: string; role: string; initials: string };
   metrics: {
     totalContainers: number;
