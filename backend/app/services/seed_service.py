@@ -1,10 +1,9 @@
-"""Pobla PostgreSQL desde data/seeds/*.json (generados con npm run export-seeds)."""
+"""Pobla PostgreSQL desde data/seeds/*.json (fuente de verdad del seed)."""
 
 from __future__ import annotations
 
 import json
-import math
-from datetime import datetime, timedelta, timezone, date
+from datetime import datetime, timedelta, date
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -19,18 +18,13 @@ from app.db.models import (
     CollectionPoint,
     DailyPlan,
     Driver,
-    OptimizedRoute,
     Parish,
     PendingVisit,
     PlanVersion,
-    RouteWaypoint,
     Sector,
-    Simulation,
-    SystemAlert,
     User,
     UserRole,
     Vehicle,
-    VehicleIncident,
     VisitSchedule,
     WeeklyPlan,
     WeeklyPlanDay,
@@ -42,13 +36,11 @@ from app.domain.visit_schedule_distribution import (
     sector_fill_rate_factor,
 )
 from app.services.admin_service import ensure_default_settings
-from app.services.alert_service import seed_alerts_from_json
 from app.services.case_study_seed_service import case_study_seed_summary, seed_case_studies
 from app.services.collection_point_seed_service import ensure_collection_points_coverage
 from app.services.visit_schedule_service import ensure_visit_schedules_coverage
 from app.services.planning_service import (
     seed_daily_plan_demo,
-    seed_optimized_daily_playback_demo,
     seed_pending_visits_demo,
     seed_visit_schedules,
     seed_weekly_plan_demo,
@@ -64,7 +56,7 @@ DEMO_PASSWORD_HASH = hash_password(DEMO_PASSWORD)
 def load_json(name: str):
     path = SEEDS_DIR / name
     if not path.exists():
-        raise FileNotFoundError(f"No existe {path}. Ejecuta: npm run export-seeds")
+        raise FileNotFoundError(f"No existe {path}. Revisa data/seeds/")
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -72,19 +64,6 @@ def parse_dt(value: str | None) -> datetime | None:
     if not value:
         return None
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
-
-
-def nearest_collection_point_id(
-    lng: float, lat: float, points: list[CollectionPoint]
-) -> int | None:
-    best_id: int | None = None
-    best_dist = math.inf
-    for point in points:
-        dist = (float(point.longitude) - lng) ** 2 + (float(point.latitude) - lat) ** 2
-        if dist < best_dist:
-            best_dist = dist
-            best_id = point.id
-    return best_id
 
 
 def clear_tables(session: Session) -> None:
@@ -111,8 +90,6 @@ def seed_into_session(session: Session) -> dict[str, Any]:
     points_data = load_json("collection_points.json")
     vehicles_data = load_json("vehicles.json")
     drivers_data = load_json("drivers.json")
-    routes_data = load_json("routes.json")
-    simulations_data = load_json("simulations.json")
 
     clear_tables(session)
 
@@ -210,11 +187,6 @@ def seed_into_session(session: Session) -> dict[str, Any]:
         driver_by_name[full_name] = driver
     session.flush()
 
-    default_driver = driver_by_name.get(
-        f"{conductor_row['firstName']} {conductor_row['lastName']}".strip()
-    )
-
-    vehicle_by_code: dict[str, Vehicle] = {}
     for row in vehicles_data:
         driver_name = row.get("driverName")
         default_driver_row = driver_by_name.get(driver_name) if driver_name else None
@@ -233,7 +205,6 @@ def seed_into_session(session: Session) -> dict[str, Any]:
             status=row.get("status", "available"),
         )
         session.add(vehicle)
-        vehicle_by_code[row["code"]] = vehicle
     session.flush()
 
     collection_points: list[CollectionPoint] = []
@@ -272,117 +243,9 @@ def seed_into_session(session: Session) -> dict[str, Any]:
     studies_by_code = seed_case_studies(session, collection_points=collection_points)
     case_study_stats = case_study_seed_summary(studies_by_code)
 
-    in_route_vehicles = [
-        vehicle
-        for vehicle in vehicle_by_code.values()
-        if vehicle.status == "in_route" and vehicle.default_driver_id is not None
-    ]
-    for index, vehicle in enumerate(in_route_vehicles):
-        route_points = collection_points[index * 3 : index * 3 + 3]
-        if len(route_points) < 2:
-            continue
-        route = OptimizedRoute(
-            vehicle_id=vehicle.id,
-            driver_id=vehicle.default_driver_id,
-            route_kind="optimized",
-            total_distance_meters=Decimal("12500"),
-            estimated_duration_seconds=90 * 60,
-            status="in_progress",
-        )
-        session.add(route)
-        session.flush()
-
-        for sequence, point in enumerate(route_points, start=1):
-            session.add(
-                RouteWaypoint(
-                    route_id=route.id,
-                    collection_point_id=point.id,
-                    sequence_order=sequence,
-                    status="completed" if sequence == 1 else "pending",
-                )
-            )
-
-    for route_row in routes_data:
-        fallback_vehicle = session.scalar(select(Vehicle).limit(1))
-        if fallback_vehicle is None or default_driver is None:
-            raise RuntimeError("Se requiere al menos un vehículo y un conductor para rutas históricas")
-
-        route = OptimizedRoute(
-            vehicle_id=fallback_vehicle.id,
-            driver_id=default_driver.id,
-            route_kind=route_row.get("kind", "optimized"),
-            total_distance_meters=Decimal(str(route_row["distanceKm"])) * Decimal("1000"),
-            estimated_duration_seconds=int(route_row["durationMin"]) * 60,
-            status="completed",
-        )
-        session.add(route)
-        session.flush()
-
-        seen_points: set[int] = set()
-        sequence = 1
-        for coord in route_row.get("coordinates", []):
-            if not isinstance(coord, list) or len(coord) < 2:
-                continue
-            lng, lat = float(coord[0]), float(coord[1])
-            point_id = nearest_collection_point_id(lng, lat, collection_points)
-            if point_id is None or point_id in seen_points:
-                continue
-            seen_points.add(point_id)
-            session.add(
-                RouteWaypoint(
-                    route_id=route.id,
-                    collection_point_id=point_id,
-                    sequence_order=sequence,
-                    status="completed",
-                )
-            )
-            sequence += 1
-
-    maintenance_vehicle = vehicle_by_code.get("TR-07")
-    if maintenance_vehicle is not None:
-        session.add(
-            VehicleIncident(
-                vehicle_id=maintenance_vehicle.id,
-                incident_type="scheduled_maintenance",
-                description="Revisión programada de frenos y sistema hidráulico.",
-                affects_active_route=False,
-            )
-        )
-        session.add(
-            VehicleIncident(
-                vehicle_id=maintenance_vehicle.id,
-                incident_type="preventive_service",
-                description="Cambio de aceite y filtros completado.",
-                affects_active_route=False,
-                resolved_at=datetime.now(timezone.utc),
-            )
-        )
-
-    broken_vehicle = vehicle_by_code.get("TR-19")
-    if broken_vehicle is not None:
-        session.add(
-            VehicleIncident(
-                vehicle_id=broken_vehicle.id,
-                incident_type="breakdown",
-                description="Falla en transmisión reportada durante ruta.",
-                affects_active_route=True,
-            )
-        )
-
-    for index, row in enumerate(simulations_data):
-        executed_at = datetime.now(timezone.utc) - timedelta(days=len(simulations_data) - index)
-        session.add(
-            Simulation(
-                scenario_name=row["scenarioName"],
-                executed_at=executed_at,
-                parameters_json=json.dumps(row.get("parameters", {}), ensure_ascii=False),
-                kpi_total_distance_historical=Decimal(str(row["kpiTotalDistanceHistorical"])),
-                kpi_total_distance_optimized=Decimal(str(row["kpiTotalDistanceOptimized"])),
-                kpi_saving_percentage=Decimal(str(row["kpiSavingPercentage"])),
-            )
-        )
-
-    alerts_count = seed_alerts_from_json(session)
+    # Seed limpio operativo: no se siembran rutas (ni en curso ni históricas), simulaciones,
+    # alertas ni incidencias de vehículo. El dashboard arranca en 0 actividad y la operación
+    # (o la demo) las genera en vivo.
 
     for user in session.scalars(select(User)).all():
         ensure_user_preferences(session, user)
@@ -440,6 +303,8 @@ def seed_into_session(session: Session) -> dict[str, Any]:
                 }
             )
         seed_pending_visits_demo(session, pending_rows)
+        # El plan del día de hoy queda en borrador: la demo crea la semana y optimiza
+        # el día en vivo. Sembrarlo "optimized" sin semana aprobada era incoherente.
         seed_daily_plan_demo(
             session,
             {
@@ -447,16 +312,6 @@ def seed_into_session(session: Session) -> dict[str, Any]:
                 "status": "draft",
             },
         )
-        first_simulation = session.scalar(select(Simulation).order_by(Simulation.id).limit(1))
-        if first_simulation is not None:
-            seed_optimized_daily_playback_demo(
-                session,
-                operation_date=date.today(),
-                simulation_id=first_simulation.id,
-                vehicles=list(vehicle_by_code.values()),
-                drivers=list(driver_by_name.values()),
-                collection_points=collection_points,
-            )
     except FileNotFoundError:
         pass
 
@@ -472,9 +327,9 @@ def seed_into_session(session: Session) -> dict[str, Any]:
         "vehicles": len(vehicles_data),
         "drivers": len(drivers_data),
         "users": 3 + len(drivers_data),
-        "optimizedRoutes": len(routes_data),
-        "simulations": len(simulations_data),
-        "systemAlerts": alerts_count,
+        "optimizedRoutes": 0,
+        "simulations": 0,
+        "systemAlerts": 0,
         "demoPassword": DEMO_PASSWORD,
         **case_study_stats,
     }

@@ -27,21 +27,5 @@
       "collectionPointCodes": ["CNT-002", "CNT-003", "CNT-017", "CNT-019", "CNT-020"]
     }
   ],
-  "pendingVisits": [
-    {
-      "pointCode": "CNT-016",
-      "reason": "not_visited",
-      "originOperationDate": "2026-03-08"
-    },
-    {
-      "pointCode": "CNT-017",
-      "reason": "skipped_breakdown",
-      "originOperationDate": "2026-03-08"
-    },
-    {
-      "pointCode": "CNT-018",
-      "reason": "not_visited",
-      "originOperationDate": "2026-03-07"
-    }
-  ]
+  "pendingVisits": []
 }

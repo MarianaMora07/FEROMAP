@@ -1456,6 +1456,7 @@ def seed_optimized_daily_playback_demo(
             scenario_id=weekly_plan.scenario_id if weekly_plan else "normal",
             simulation_id=simulation_id,
             scheduled_point_ids_json=_dump_json_list(scheduled_ids),
+            final_point_ids_json=_dump_json_list(scheduled_ids),
         )
         db.add(plan)
         db.flush()
@@ -1465,6 +1466,8 @@ def seed_optimized_daily_playback_demo(
         if weekly_plan:
             plan.scenario_id = weekly_plan.scenario_id
             plan.weekly_plan_id = weekly_plan.id
+        if not _json_list(plan.final_point_ids_json):
+            plan.final_point_ids_json = _dump_json_list(scheduled_ids)
         db.flush()
 
     linked_routes = db.scalar(
