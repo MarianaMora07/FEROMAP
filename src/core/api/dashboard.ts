@@ -59,6 +59,8 @@ export interface DashboardSummary {
     fullContainers: number;
     activeVehicles: number;
     routesInProgress: number;
+    routesCompleted?: number;
+    routesPlanned?: number;
   };
   fleet: {
     activeVehicles: number;
@@ -114,6 +116,14 @@ export interface DashboardViewModel {
   lastOptimization: DashboardSummary['lastOptimization'];
 }
 
+/** KPIs en cero: lo que se muestra antes de que carguen los datos reales (sin inventar). */
+export const emptyDashboardKpis: typeof dashboardKpis = {
+  wasteTons: { value: '0.00', unit: 'toneladas', trend: 0 },
+  routes: { done: 0, total: 0 },
+  vehicles: { active: 0, total: 0 },
+  alerts: { count: 0 },
+};
+
 function mapSummaryToViewModel(summary: DashboardSummary): DashboardViewModel {
   const lastOpt = summary.lastOptimization ?? null;
   const optKpis = lastOpt?.kpis;
@@ -126,13 +136,16 @@ function mapSummaryToViewModel(summary: DashboardSummary): DashboardViewModel {
       wasteTons: {
         value: optKpis
           ? String((optKpis.distanceKm.current * 0.12).toFixed(2))
-          : String((summary.weeklyTons?.values.at(-1) ?? 28.45).toFixed(2)),
+          : String((summary.weeklyTons?.values.at(-1) ?? 0).toFixed(2)),
         unit: 'toneladas',
-        trend: lastOpt ? Math.max(0, Math.round(lastOpt.savingPercentage)) : 12,
+        trend: lastOpt ? Math.max(0, Math.round(lastOpt.savingPercentage)) : 0,
       },
       routes: {
-        done: summary.metrics.routesInProgress,
-        total: Math.max(summary.metrics.routesInProgress + 6, 24),
+        done: summary.metrics.routesCompleted ?? summary.metrics.routesInProgress,
+        total: Math.max(
+          summary.metrics.routesPlanned ?? summary.metrics.routesInProgress,
+          summary.metrics.routesCompleted ?? 0,
+        ),
       },
       vehicles: {
         active: summary.fleet.activeVehicles,
@@ -152,19 +165,10 @@ function mapSummaryToViewModel(summary: DashboardSummary): DashboardViewModel {
       ],
     },
     sectorFillLevels: summary.sectorFillLevels,
-    recentAlerts: summary.recentAlerts?.length
-      ? summary.recentAlerts
-      : summary.criticalContainerList.slice(0, 3).map((item, index) => ({
-          title: 'Contenedor crítico de llenado',
-          detail: `${item.id} · ${item.sector} · ${item.fillLevel}%`,
-          time: ['10:15 AM', '09:42 AM', '09:10 AM'][index] ?? '09:00 AM',
-          tone: (index === 0 ? 'danger' : index === 1 ? 'warning' : 'info') as
-            | 'danger'
-            | 'warning'
-            | 'info',
-        })),
-    activeRoutes: summary.activeRoutes?.length ? summary.activeRoutes : activeRoutes,
-    weeklyTons: summary.weeklyTons ?? weeklyTons,
+    // Sin datos del backend no se inventan alertas ni rutas (BD limpia = vacío real).
+    recentAlerts: summary.recentAlerts ?? [],
+    activeRoutes: summary.activeRoutes ?? [],
+    weeklyTons: summary.weeklyTons ?? { labels: [], values: [] },
   };
 }
 

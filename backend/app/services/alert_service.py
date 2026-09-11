@@ -128,8 +128,11 @@ def _compute_stats(db: Session) -> dict[str, int]:
     }
 
 
-def list_alerts_payload(db: Session, *, active_only: bool = True) -> dict[str, Any]:
-    sync_dynamic_alerts(db)
+def list_alerts_payload(db: Session, *, active_only: bool = True, sync: bool = True) -> dict[str, Any]:
+    # "sync" crea alertas derivadas del estado actual (contenedores críticos, etc.).
+    # El dashboard lo desactiva para no inventar actividad en una BD recién sembrada.
+    if sync:
+        sync_dynamic_alerts(db)
     stmt = select(SystemAlert).order_by(SystemAlert.occurred_at.desc())
     if active_only:
         stmt = stmt.where(SystemAlert.lifecycle_status != "resolved")
@@ -140,12 +143,13 @@ def list_alerts_payload(db: Session, *, active_only: bool = True) -> dict[str, A
     }
 
 
-def list_alerts(db: Session, *, active_only: bool = True) -> list[dict[str, Any]]:
-    return list_alerts_payload(db, active_only=active_only)["alerts"]
+def list_alerts(db: Session, *, active_only: bool = True, sync: bool = True) -> list[dict[str, Any]]:
+    return list_alerts_payload(db, active_only=active_only, sync=sync)["alerts"]
 
 
-def list_alert_activity(db: Session, *, limit: int = 8) -> list[dict[str, Any]]:
-    sync_dynamic_alerts(db)
+def list_alert_activity(db: Session, *, limit: int = 8, sync: bool = True) -> list[dict[str, Any]]:
+    if sync:
+        sync_dynamic_alerts(db)
     rows = db.scalars(
         select(AlertActivity)
         .join(SystemAlert)

@@ -1,11 +1,42 @@
 import { createStore } from 'solid-js/store';
-import { fetchDashboardSummary, type DashboardViewModel } from '../api/dashboard';
-import { dashboardSummary as mockSummary } from '../../data/mock/dashboard';
+import {
+  fetchDashboardSummary,
+  type DashboardSummary,
+  type DashboardViewModel,
+} from '../api/dashboard';
 
 interface DashboardState {
   data: DashboardViewModel | null;
   loading: boolean;
 }
+
+/** Resumen neutral mientras cargan los datos (no inventar métricas). */
+const EMPTY_SUMMARY: DashboardSummary = {
+  greeting: '',
+  subtitle: '',
+  dateLabel: '',
+  notifications: 0,
+  user: { name: '', role: '', initials: '' },
+  metrics: {
+    totalContainers: 0,
+    criticalContainers: 0,
+    atRiskContainers: 0,
+    fullContainers: 0,
+    activeVehicles: 0,
+    routesInProgress: 0,
+    routesCompleted: 0,
+    routesPlanned: 0,
+  },
+  fleet: { activeVehicles: 0, totalVehicles: 0, driversOnShift: 0 },
+  criticalContainerList: [],
+  atRiskContainers: [],
+  sectorFillLevels: [],
+  mapMetrics: [],
+  fleetStatus: { total: 0, items: [] },
+  activeRoutes: [],
+  weeklyTons: { labels: [], values: [] },
+  recentAlerts: [],
+};
 
 const [state, setState] = createStore<DashboardState>({
   data: null,
@@ -23,20 +54,7 @@ export async function loadDashboardData(): Promise<void> {
 }
 
 export function dashboardSummary() {
-  return state.data?.summary ?? {
-    ...mockSummary,
-    metrics: {
-      totalContainers: 20,
-      criticalContainers: 6,
-      fullContainers: 10,
-      activeVehicles: 3,
-      routesInProgress: 3,
-    },
-    fleet: { activeVehicles: 3, totalVehicles: 10, driversOnShift: 3 },
-    criticalContainerList: [],
-    sectorFillLevels: [],
-    mapMetrics: [],
-  };
+  return state.data?.summary ?? EMPTY_SUMMARY;
 }
 
 export function dashboardView() {

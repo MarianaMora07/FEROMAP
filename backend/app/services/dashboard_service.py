@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import CollectionPoint, Driver, OptimizedRoute, RouteWaypoint, Simulation, User, UserRole, Vehicle, Vehicle, VisitSchedule
+from app.db.models import CollectionPoint, DailyPlan, Driver, OptimizedRoute, RouteWaypoint, Simulation, User, UserRole, Vehicle, Vehicle, VisitSchedule
 from app.domain.criticality import (
     HIGH_FILL_PCT,
     hours_until_next_visit,
@@ -239,14 +239,31 @@ def _fleet_status_breakdown(db: Session) -> dict[str, Any]:
     return {"total": total, "items": items}
 
 
+def _today_route_counts(db: Session) -> tuple[int, int]:
+    """(completadas, planificadas) de las rutas del plan del día de hoy.
+
+    En una BD recién sembrada (sin plan del día) devuelve (0, 0), para no
+    presentar actividad inventada en el resumen.
+    """
+    plan = db.scalar(select(DailyPlan).where(DailyPlan.operation_date == date.today()))
+    if plan is None:
+        return (0, 0)
+    routes = db.scalars(
+        select(OptimizedRoute).where(OptimizedRoute.daily_plan_id == plan.id)
+    ).all()
+    completed = sum(1 for route in routes if route.status == "completed")
+    return (completed, len(routes))
+
+
 def _weekly_tons_from_simulations(db: Session) -> dict[str, Any]:
     simulations = db.scalars(
         select(Simulation).order_by(Simulation.executed_at.desc()).limit(7)
     ).all()
     if not simulations:
+        # Sin corridas no hay recolección que reportar: no inventar valores demo.
         return {
             "labels": ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"],
-            "values": [18.0, 19.5, 20.1, 21.0, 22.4, 24.0, 25.0],
+            "values": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         }
     simulations = list(reversed(simulations))
     labels = []
@@ -260,7 +277,9 @@ def _weekly_tons_from_simulations(db: Session) -> dict[str, Any]:
 
 
 def _recent_alerts_view(db: Session) -> list[dict[str, Any]]:
-    alerts = list_persisted_alerts(db, active_only=True)[:3]
+    # Sin sync: no derivar alertas del estado de contenedores/vehículos; el dashboard solo
+    # muestra alertas persistidas (0 en una BD recién sembrada).
+    alerts = list_persisted_alerts(db, active_only=True, sync=False)[:3]
     tones = ["danger", "warning", "info"]
     return [
         {
@@ -343,6 +362,7 @@ def dashboard_summary(db: Session, *, current_user: User | None = None) -> dict[
             select(OptimizedRoute).where(OptimizedRoute.status == "in_progress")
         ).all()
     )
+    routes_completed, routes_planned = _today_route_counts(db)
     now = datetime.now(timezone.utc)
 
     if current_user is not None:
@@ -385,6 +405,8 @@ def dashboard_summary(db: Session, *, current_user: User | None = None) -> dict[
             "fullContainers": full_count,
             "activeVehicles": fleet["activeVehicles"],
             "routesInProgress": routes_in_progress,
+            "routesCompleted": routes_completed,
+            "routesPlanned": routes_planned,
         },
         "fleet": fleet,
         "criticalContainerList": critical,
