@@ -45,6 +45,8 @@ export interface PlanningDashboardSnapshot {
     status: string;
     daysConfigured: number;
     scheduledPoints: number;
+    /** La semana mostrada es la próxima (la semana en curso no tiene plan). */
+    isUpcoming?: boolean;
   } | null;
   dailyPlan: {
     id: number;

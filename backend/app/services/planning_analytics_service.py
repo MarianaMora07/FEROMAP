@@ -472,6 +472,21 @@ def planning_dashboard_snapshot(db: Session, *, reference: date | None = None) -
         .options(joinedload(WeeklyPlan.days))
     )
 
+    # Sin plan en la semana en curso, el hub refleja la próxima semana planificada
+    # (viernes/fin de semana, cuando ya se planificó la semana que entra).
+    weekly_is_upcoming = False
+    if weekly is None:
+        next_week_start, _ = week_range(week_start + timedelta(days=7))
+        weekly = db.scalar(
+            select(WeeklyPlan)
+            .where(
+                WeeklyPlan.week_start_date == next_week_start,
+                WeeklyPlan.status.in_(["approved", "draft"]),
+            )
+            .options(joinedload(WeeklyPlan.days))
+        )
+        weekly_is_upcoming = weekly is not None
+
     daily = db.scalar(select(DailyPlan).where(DailyPlan.operation_date == ref))
     open_incidents = db.scalar(
         select(func.count()).select_from(VehicleIncident).where(VehicleIncident.resolved_at.is_(None))
@@ -489,6 +504,7 @@ def planning_dashboard_snapshot(db: Session, *, reference: date | None = None) -
             "status": weekly.status,
             "daysConfigured": len(weekly.days),
             "scheduledPoints": _weekly_scheduled_point_count(weekly),
+            "isUpcoming": weekly_is_upcoming,
         }
 
     daily_block = None
