@@ -376,7 +376,6 @@ def dashboard_summary(db: Session, *, current_user: User | None = None) -> dict[
         "subtitle": "Resumen general del sistema de recolección de residuos.",
         "dateLabel": now.strftime("%d/%m/%Y"),
         "notifications": len(critical),
-        "operatorsOnline": 12,
         "user": user_block,
         "residentSchedule": resident_schedule,
         "metrics": {

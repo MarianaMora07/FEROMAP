@@ -19,11 +19,10 @@ import {
   CalendarDays,
 } from 'lucide-solid';
 import { authUser } from '../../core/stores/authStore';
-import { isOperationalSupervisor, sidebarNavLayout } from '../../core/auth/permissions';
+import { sidebarNavLayout } from '../../core/auth/permissions';
 import { SidebarHeader } from './sidebar/SidebarHeader';
 import { SidebarNavLink } from './sidebar/SidebarNavLink';
 import { SidebarCollapsibleGroup } from './sidebar/SidebarCollapsibleGroup';
-import { SidebarOperatorsWidget } from './sidebar/SidebarOperatorsWidget';
 import { isNavItemActive, navHrefPath } from './sidebar/navUtils';
 
 const NAV_ICONS: Record<string, typeof LayoutDashboard> = {
@@ -96,12 +95,6 @@ export function Sidebar(props: SidebarProps) {
           )}
         </For>
       </nav>
-
-      <Show when={isOperationalSupervisor(authUser()?.role)}>
-        <div class="border-t border-sidebar-divider p-3">
-          <SidebarOperatorsWidget />
-        </div>
-      </Show>
     </aside>
   );
 }

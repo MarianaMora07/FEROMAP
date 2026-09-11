@@ -3,7 +3,6 @@ export const dashboardSummary = {
   subtitle: 'Resumen general del sistema de recolección de residuos.',
   dateLabel: '25 de junio, 2026',
   notifications: 3,
-  operatorsOnline: 12,
   user: { name: 'Mariana Mora', role: 'Administrador', initials: 'MM' },
 };
 
