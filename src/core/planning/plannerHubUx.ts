@@ -33,6 +33,19 @@ export function deriveNextPlannerAction(snapshot: PlanningDashboardSnapshot): Pl
     };
   }
 
+  if (weekly.isUpcoming) {
+    const approved = weekly.status !== 'draft';
+    return {
+      message: approved ? 'Próxima semana aprobada' : 'Próxima semana en borrador',
+      detail: approved
+        ? `Semana ${weekly.weekStartDate} lista para operar. La semana en curso no tiene plan.`
+        : `Borrador ${weekly.weekStartDate} — valida y aprueba antes de operar.`,
+      href: planningWeeklyPath,
+      label: 'Ver plan semanal',
+      tone: approved ? 'info' : 'warning',
+    };
+  }
+
   if (weekly.status === 'draft') {
     return {
       message: 'Semana sin aprobar',

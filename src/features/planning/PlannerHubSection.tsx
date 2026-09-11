@@ -102,6 +102,11 @@ export function PlannerHubSection() {
                     <span class="text-sm font-semibold text-text-primary dark:text-white">
                       {plan().weekStartDate} → {plan().weekEndDate}
                     </span>
+                    <Show when={plan().isUpcoming}>
+                      <span class="rounded-full bg-fero-blue/10 px-2 py-0.5 text-[10px] font-semibold text-fero-blue">
+                        Próxima semana
+                      </span>
+                    </Show>
                   </div>
                   <PlanningStatusBadge status={plan().status} />
                   <p class="text-sm text-text-secondary">
