@@ -6,6 +6,7 @@ import { Button, Drawer } from '../../design-system/components';
 import { canOptimize } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
 import {
+  approveCurrentWeekFromDay,
   dispatchOptimizationResult,
   executeOptimization,
   openOptimizationPlayback,
@@ -363,11 +364,13 @@ export function OptimizationDailyBanner() {
     scenarioId();
 
   return (
-    <div class="border-t border-default px-4 md:px-6">
+    <div class="space-y-3">
       <DailyScenarioBanner
         scenarioId={scenarioId()}
         scenarioLabel={scenarioLabel()}
         weeklyPlanApproved={optimizationState.weeklyPlanApproved}
+        approving={optimizationState.isApprovingWeek}
+        onApprove={() => void approveCurrentWeekFromDay()}
         pendingCount={dailyPlan()?.pendingPoints.length ?? 0}
         weeklyHref={weeklyPlanWeekHref(mondayOfDate(optimizationState.preset.operationDate))}
       />

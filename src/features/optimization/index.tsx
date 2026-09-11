@@ -41,7 +41,7 @@ import { optimizationHref, operationalMapHref } from '../../core/planning/operat
 import { parsePlaybackQueryParam } from '../../core/planning/operationalFlowUx';
 import { PlanningContextualCta } from '../planning/PlanningContextualCta';
 import { AppShellSubheader } from '../../design-system/layout/pageChromeSlots';
-import { OptimizationHeaderBar } from './OptimizationHeaderChrome';
+import { OptimizationHeaderBar, OptimizationDailyBanner } from './OptimizationHeaderChrome';
 import { OptimizationRouteMap } from './OptimizationRouteMap';
 import { OptimizationPlaybackPanel } from './OptimizationPlaybackPanel';
 import { OptimizationPendingSection } from './OptimizationPendingSection';
@@ -377,6 +377,8 @@ export default function OptimizationPage() {
       <AppShellSubheader>
         <OptimizationHeaderBar />
       </AppShellSubheader>
+
+      <OptimizationDailyBanner />
 
       <OptimizationDispatchBanner />
 
