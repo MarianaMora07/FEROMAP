@@ -2,38 +2,15 @@ import { ChevronDown } from 'lucide-solid';
 import { For, Show, createMemo } from 'solid-js';
 import type { WeeklyPlanDay } from '../../../core/api/planning';
 import { formatWeekdayLabel } from '../../../core/planning/weeklyPlanCalendar';
+import { buildWeeklyPlanSectorRows } from '../../../core/planning/weeklyPlanSectors';
 import { getCollectionPointRef } from '../../../core/stores/weeklyPlanStore';
 
 interface WeeklyPlanDaySectorsPanelProps {
   days: WeeklyPlanDay[];
 }
 
-interface SectorRow {
-  name: string;
-  count: number;
-}
-
-/**
- * Agrupa los puntos programados de una jornada por sector para poder revisar
- * qué zonas se visitarán. Usa el catálogo de puntos cargado en el store; los
- * puntos sin sector resuelto se agrupan bajo «Sin sector».
- */
-function buildSectorRows(day: WeeklyPlanDay): SectorRow[] {
-  const counts = new Map<string, number>();
-  let unresolved = 0;
-  for (const pointId of day.collectionPointIds) {
-    const name = getCollectionPointRef(pointId)?.sectorName?.trim();
-    if (!name) {
-      unresolved += 1;
-      continue;
-    }
-    counts.set(name, (counts.get(name) ?? 0) + 1);
-  }
-  const rows = Array.from(counts.entries())
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-  if (unresolved > 0) rows.push({ name: 'Sin sector', count: unresolved });
-  return rows;
+function buildSectorRows(day: WeeklyPlanDay) {
+  return buildWeeklyPlanSectorRows(day, getCollectionPointRef);
 }
 
 export function WeeklyPlanDaySectorsPanel(props: WeeklyPlanDaySectorsPanelProps) {

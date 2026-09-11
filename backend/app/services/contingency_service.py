@@ -10,7 +10,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import CollectionPoint, OptimizedRoute, RouteWaypoint, Simulation, SystemAlert, Vehicle, VehicleIncident
+from app.db.models import CollectionPoint, DailyPlan, OptimizedRoute, RouteWaypoint, Simulation, SystemAlert, Vehicle, VehicleIncident
 from app.services.operations_service import dispatch_optimized_routes
 from app.services.optimization_service import run_optimization_engine
 
@@ -96,7 +96,43 @@ def handle_vehicle_breakdown(
     route_id: int | None = None,
     description: str | None = None,
 ) -> dict[str, Any]:
-    """Reporta avería, interrumpe ruta y relanza optimización con flota restante."""
+    """Reporta avería (real): interrumpe ruta, recalcula y **persiste** los cambios."""
+    outcome = _run_vehicle_breakdown(
+        db, vehicle_id=vehicle_id, route_id=route_id, description=description, dry_run=False
+    )
+    db.commit()
+    return outcome
+
+
+def simulate_vehicle_breakdown(
+    db: Session,
+    *,
+    vehicle_id: str,
+    route_id: int | None = None,
+    description: str | None = None,
+) -> dict[str, Any]:
+    """Simula la avería **sin persistir**: calcula el plan alternativo y revierte la sesión."""
+    try:
+        return _run_vehicle_breakdown(
+            db, vehicle_id=vehicle_id, route_id=route_id, description=description, dry_run=True
+        )
+    finally:
+        db.rollback()
+
+
+def _run_vehicle_breakdown(
+    db: Session,
+    *,
+    vehicle_id: str,
+    route_id: int | None,
+    description: str | None,
+    dry_run: bool,
+) -> dict[str, Any]:
+    """Núcleo compartido: muta la sesión (incidente, waypoints, recálculo) sin commitear.
+
+    El camino real (``handle_vehicle_breakdown``) confirma; el de simulación
+    (``simulate_vehicle_breakdown``) revierte para no tocar las rutas reales.
+    """
     vehicle = _resolve_vehicle(db, vehicle_id)
     route = _resolve_route(db, vehicle, route_id)
 
@@ -138,12 +174,12 @@ def handle_vehicle_breakdown(
     pending_point_ids = list(dict.fromkeys(pending_point_ids))
 
     if not pending_point_ids:
-        db.commit()
         return {
             "incident": _incident_payload(incident, vehicle, route, related_alert_id=related_alert_id),
             "skippedWaypoints": skipped_waypoints,
             "pendingPoints": 0,
             "recalculation": None,
+            "simulated": dry_run,
             "message": "Avería registrada. No había paradas pendientes para recalcular.",
         }
 
@@ -171,7 +207,12 @@ def handle_vehicle_breakdown(
             "skippedWaypoints": skipped_waypoints,
             "pendingPoints": len(pending_point_ids),
             "recalculation": None,
-            "message": "Avería registrada. Sin vehículos disponibles; puntos quedaron como pendientes.",
+            "simulated": dry_run,
+            "message": (
+                "Avería registrada. Sin vehículos disponibles; puntos quedaron como pendientes."
+                if not dry_run
+                else "Simulación: sin vehículos disponibles; esos puntos quedarían pendientes."
+            ),
         }
 
     before_km = float(parent_simulation.kpi_total_distance_optimized or 0) if parent_simulation else 0
@@ -191,12 +232,10 @@ def handle_vehicle_breakdown(
             "skippedWaypoints": skipped_waypoints,
             "beforeDistanceKm": before_km,
         },
-        auto_dispatch=True,
+        auto_dispatch=not dry_run,
         planning_level="operational",
         auto_commit=False,
     )
-
-    db.commit()
 
     after_km = recalc["kpis"]["distanceKm"]["optimized"]
     recalc["comparison"] = {
@@ -214,10 +253,132 @@ def handle_vehicle_breakdown(
         "pendingPoints": len(pending_point_ids),
         "recalculation": recalc,
         "comparison": recalc["comparison"],
+        "simulated": dry_run,
         "message": (
             f"Avería en {vehicle.code}: {len(pending_point_ids)} puntos reasignados "
             f"a {len(available_vehicles)} vehículo(s) disponible(s)."
+            if not dry_run
+            else f"Simulación de avería en {vehicle.code}: {len(pending_point_ids)} puntos "
+            f"se reasignarían a {len(available_vehicles)} vehículo(s)."
         ),
+    }
+
+
+def _pick_plan_vehicle_code(db: Session, daily_plan_id: int) -> str | None:
+    """Primer vehículo con ruta optimizada del plan del día (para simular la avería)."""
+    route = db.scalar(
+        select(OptimizedRoute)
+        .where(
+            OptimizedRoute.daily_plan_id == daily_plan_id,
+            OptimizedRoute.route_kind == "optimized",
+        )
+        .order_by(OptimizedRoute.id)
+        .limit(1)
+    )
+    if route is None:
+        return None
+    vehicle = db.get(Vehicle, route.vehicle_id)
+    return vehicle.code if vehicle else None
+
+
+def _pick_critical_point_code(db: Session, daily_plan_id: int) -> str | None:
+    """Punto programado del día con mayor llenado (para simular contenedor crítico)."""
+    from app.services.geo_service import fill_level_pct
+    from app.services.operational_recalc_service import collect_remaining_day_point_ids
+
+    point_ids = collect_remaining_day_point_ids(db, daily_plan_id)
+    if not point_ids:
+        return None
+    points = db.scalars(select(CollectionPoint).where(CollectionPoint.id.in_(point_ids))).all()
+    if not points:
+        return None
+    best = max(points, key=lambda point: fill_level_pct(point))
+    return best.code
+
+
+def simulate_daily_contingency(
+    db: Session,
+    *,
+    daily_plan_id: int,
+    contingency_type: str,
+    vehicle_id: str | None = None,
+    collection_point_code: str | None = None,
+) -> dict[str, Any]:
+    """Simulación **dry-run** de una contingencia sobre el plan del día.
+
+    Devuelve el plan alternativo (antes/después) sin persistir nada: el recálculo
+    corre con ``auto_dispatch=False`` y la sesión se revierte al terminar.
+    """
+    from app.services.operational_recalc_service import simulate_critical_container_recalc
+
+    plan = db.get(DailyPlan, daily_plan_id)
+    if plan is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Plan del día no encontrado",
+        )
+
+    if contingency_type == "critical_container":
+        point_code = collection_point_code or _pick_critical_point_code(db, daily_plan_id)
+        if not point_code:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No hay puntos pendientes en el día para simular el contenedor crítico",
+            )
+        raw = simulate_critical_container_recalc(
+            db,
+            collection_point_code=point_code,
+            daily_plan_id=daily_plan_id,
+        )
+        recalc = raw.get("recalculation") or {}
+        kpis = recalc.get("kpis") or {}
+        after_km = (kpis.get("distanceKm") or {}).get("optimized")
+        return {
+            "type": "critical_container",
+            "simulated": True,
+            "dailyPlanId": plan.id,
+            "vehicleId": None,
+            "pointCode": point_code,
+            "beforeDistanceKm": None,
+            "afterDistanceKm": round(float(after_km), 1) if after_km is not None else None,
+            "distanceDeltaKm": None,
+            "reassignedPoints": int(raw.get("remainingPoints") or 0),
+            "remainingVehicles": None,
+            "skippedWaypoints": 0,
+            "message": raw.get("message") or "Simulación de contenedor crítico completada.",
+        }
+
+    if contingency_type != "breakdown":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Tipo de contingencia no soportado: {contingency_type}",
+        )
+
+    vehicle_code = vehicle_id or _pick_plan_vehicle_code(db, daily_plan_id)
+    if not vehicle_code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No hay rutas con vehículo en el día para simular la avería",
+        )
+    raw = simulate_vehicle_breakdown(
+        db,
+        vehicle_id=vehicle_code,
+        description="Simulación de avería (dry-run)",
+    )
+    comparison = raw.get("comparison") or {}
+    return {
+        "type": "breakdown",
+        "simulated": True,
+        "dailyPlanId": plan.id,
+        "vehicleId": vehicle_code,
+        "pointCode": None,
+        "beforeDistanceKm": comparison.get("beforeDistanceKm"),
+        "afterDistanceKm": comparison.get("afterDistanceKm"),
+        "distanceDeltaKm": comparison.get("distanceDeltaKm"),
+        "reassignedPoints": int(raw.get("pendingPoints") or 0),
+        "remainingVehicles": comparison.get("remainingVehicles"),
+        "skippedWaypoints": int(raw.get("skippedWaypoints") or 0),
+        "message": raw.get("message") or "Simulación de avería completada.",
     }
 
 

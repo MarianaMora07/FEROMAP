@@ -45,6 +45,13 @@ import { loadDashboardData } from './dashboardStore';
 import { writeLastOptimizedCodes } from '../utils/collectionPointsOptimization';
 import { recordOperationalRun } from '../utils/operationalHistory';
 import { fetchDailyRoutePlayback } from '../api/routePlayback';
+import {
+  recalcCriticalContainer,
+  reportVehicleBreakdown,
+  simulateDailyContingency,
+  type ContingencySimulationRequest,
+  type ContingencySimulationResult,
+} from '../api/contingencies';
 import { globalToast } from './toastStore';
 import type { ExecutionPhaseId } from '../../features/simulation/executionPhases';
 import { resolvePhaseFromLogMessage } from '../../features/simulation/executionPhases';
@@ -86,6 +93,11 @@ interface OptimizationState {
   history: Awaited<ReturnType<typeof fetchOptimizationHistory>>;
   lastDispatch: OptimizationDispatchNotice | null;
   playbackOpen: boolean;
+  /** Plan alternativo de una contingencia simulada (dry-run), pendiente de aplicar. */
+  contingencySimulation: ContingencySimulationResult | null;
+  isSimulatingContingency: boolean;
+  isApplyingContingency: boolean;
+  contingencyError: string | null;
   error: string | null;
 }
 
@@ -113,6 +125,10 @@ const [optimizationState, setState] = createStore<OptimizationState>({
   history: [],
   lastDispatch: null,
   playbackOpen: false,
+  contingencySimulation: null,
+  isSimulatingContingency: false,
+  isApplyingContingency: false,
+  contingencyError: null,
   error: null,
 });
 
@@ -179,6 +195,14 @@ async function resolveWeeklyPlanApproved(operationDate: string): Promise<boolean
     return true;
   } catch {
     return false;
+  }
+}
+
+/** Relee si la semana de la fecha está aprobada y actualiza el gate si cambió. */
+async function refreshWeeklyPlanApproval(operationDate: string): Promise<void> {
+  const approved = await resolveWeeklyPlanApproved(operationDate);
+  if (approved !== optimizationState.weeklyPlanApproved) {
+    setState({ weeklyPlanApproved: approved });
   }
 }
 
@@ -266,7 +290,18 @@ function assertPlausibleOptimizationResult(kpis: KpiMetrics, pointCount: number)
 
 export async function initOptimizationPage(operationDate?: string): Promise<void> {
   const dateValue = operationDate ?? optimizationState.preset.operationDate;
-  if (contextLoaded && optimizationState.context && optimizationState.dailyPlan?.operationDate === dateValue) return;
+  if (contextLoaded && optimizationState.context && optimizationState.dailyPlan?.operationDate === dateValue) {
+    // La semana pudo aprobarse mientras se navegaba en otra vista: refrescar el gate
+    // y, si acaba de aprobarse, releer el día (pudo quedar notificado) antes de intentar
+    // la notificación automática.
+    const wasApproved = optimizationState.weeklyPlanApproved;
+    await refreshWeeklyPlanApproval(dateValue);
+    if (!wasApproved && optimizationState.weeklyPlanApproved) {
+      await refreshDailyPlan();
+      void autoDispatchOptimizedDay();
+    }
+    return;
+  }
   setState({ isLoadingContext: true, isLoadingDailyPlan: true, error: null });
   try {
     const [context, history, dailyPlan, weeklyPlanApproved] = await Promise.all([
@@ -316,6 +351,8 @@ export function selectOperationDate(operationDate: string): void {
     kpis: null,
     logs: [],
     playbackOpen: false,
+    contingencySimulation: null,
+    contingencyError: null,
   });
   updateOptimizationPreset({ operationDate });
 }
@@ -681,7 +718,70 @@ export async function closeOptimizationDay(): Promise<void> {
       },
     ],
   });
+  // Recarga el plan para traer el resultado real consolidado (`actualKpis`, Fase 4).
+  await refreshDailyPlan();
   await refreshWeekCalendar();
+}
+
+/**
+ * Simula una contingencia del día en **dry-run**: calcula el plan alternativo sin
+ * despachar ni persistir rutas. El resultado queda en `contingencySimulation`.
+ */
+export async function simulateContingency(payload: ContingencySimulationRequest): Promise<void> {
+  const planId = optimizationState.dailyPlan?.id;
+  if (!planId) throw new Error('No hay plan del día para simular');
+  setState({ isSimulatingContingency: true, contingencyError: null });
+  try {
+    const result = await simulateDailyContingency(planId, payload);
+    setState({ contingencySimulation: result });
+  } catch (error) {
+    setState({
+      contingencyError:
+        error instanceof Error ? error.message : 'No se pudo simular la contingencia',
+    });
+    throw error;
+  } finally {
+    setState({ isSimulatingContingency: false });
+  }
+}
+
+/** Descarta la simulación sin aplicarla. */
+export function clearContingencySimulation(): void {
+  setState({ contingencySimulation: null, contingencyError: null });
+}
+
+/** Aplica la contingencia simulada con los endpoints reales (despacha/notifica). */
+export async function applyContingencySimulation(): Promise<void> {
+  const simulation = optimizationState.contingencySimulation;
+  if (!simulation) throw new Error('No hay simulación de contingencia para aplicar');
+  setState({ isApplyingContingency: true, contingencyError: null });
+  try {
+    if (simulation.type === 'breakdown') {
+      if (!simulation.vehicleId) throw new Error('La simulación no tiene vehículo para aplicar');
+      await reportVehicleBreakdown({
+        vehicleId: simulation.vehicleId,
+        description: 'Contingencia simulada aplicada desde el plan del día',
+      });
+    } else {
+      if (!simulation.pointCode) throw new Error('La simulación no tiene punto para aplicar');
+      await recalcCriticalContainer({
+        collectionPointCode: simulation.pointCode,
+        dailyPlanId: simulation.dailyPlanId,
+      });
+    }
+    globalToast.addToast('Contingencia aplicada: rutas recalculadas.', 'success');
+    setState({ contingencySimulation: null });
+    await refreshDailyPlan();
+    await refreshWeekCalendar();
+  } catch (error) {
+    setState({
+      contingencyError:
+        error instanceof Error ? error.message : 'No se pudo aplicar la contingencia',
+    });
+    throw error;
+  } finally {
+    setState({ isApplyingContingency: false });
+  }
 }
 
 export { optimizationState };

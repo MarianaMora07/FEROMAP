@@ -3,6 +3,7 @@ from datetime import date
 from fastapi import APIRouter, HTTPException, Query, Response
 
 from app.api.deps import CurrentUser, DbSession, PlannerOrAdmin
+from app.schemas.contingency import ContingencySimulationRequest
 from app.schemas.route_constraints import DailyOptimizeRequest
 from app.schemas.planning import (
     DailyPlanPointsUpdate,
@@ -51,7 +52,12 @@ from app.services.planning_service import (
     validate_weekly_plan_days,
 )
 from app.services.operator_service import operator_route_snapshot_or_403
-from app.services.planning_analytics_service import planning_analytics_summary, planning_dashboard_snapshot
+from app.services.planning_analytics_service import (
+    plan_vs_real_csv,
+    plan_vs_real_report,
+    planning_analytics_summary,
+    planning_dashboard_snapshot,
+)
 from app.services.planning_reports_service import export_daily_plan_pdf, export_weekly_plan_pdf
 from app.services.route_playback_service import build_daily_route_playback
 from app.services.visit_schedule_service import list_active_visit_schedules
@@ -158,6 +164,23 @@ def patch_weekly(plan_id: int, body: WeeklyPlanUpdate, db: DbSession, _: Planner
     result = update_weekly_plan(db, plan_id, **update_kwargs)
     db.commit()
     return result
+
+
+@router.post("/weekly/{plan_id}/preflight")
+def compute_weekly_preflight(plan_id: int, db: DbSession, _: PlannerOrAdmin):
+    """Recalcula el pre-flight heurístico (demanda vs. flota) de un plan en borrador.
+
+    Permite mostrar viabilidad en el paso de configuración antes de validar; el
+    resultado se persiste en ``preflight_json`` y se reutiliza al validar/aprobar.
+    """
+    from app.db.models import WeeklyPlan
+
+    db_plan = db.get(WeeklyPlan, plan_id)
+    if db_plan is None:
+        raise HTTPException(status_code=404, detail="Plan semanal no encontrado")
+    payload = preflight_weekly_feasibility(db, db_plan)
+    db.commit()
+    return payload
 
 
 @router.post("/weekly/{plan_id}/validate")
@@ -379,6 +402,40 @@ def dispatch_daily(daily_plan_id: int, db: DbSession, _: PlannerOrAdmin):
     return result
 
 
+@router.post("/daily/{daily_plan_id}/simulate-contingency")
+def simulate_contingency_daily(
+    daily_plan_id: int,
+    body: ContingencySimulationRequest,
+    _: PlannerOrAdmin,
+):
+    """Simula una contingencia del día **sin despachar** (job asíncrono, dry-run).
+
+    Devuelve un plan alternativo (antes/después) para revisar antes de comprometer
+    las rutas reales; al confirmar, el front llama a los endpoints reales de
+    ``/contingencies``.
+    """
+    from app.services.contingency_service import simulate_daily_contingency
+
+    job = run_contingency_background(
+        job_type="contingency_simulation",
+        scenario_id="broken_vehicle" if body.type == "breakdown" else "saturated",
+        params={
+            "dailyPlanId": daily_plan_id,
+            "type": body.type,
+            "vehicleId": body.vehicle_id,
+            "pointCode": body.point_code,
+        },
+        runner=lambda session: simulate_daily_contingency(
+            session,
+            daily_plan_id=daily_plan_id,
+            contingency_type=body.type,
+            vehicle_id=body.vehicle_id,
+            collection_point_code=body.point_code,
+        ),
+    )
+    return {"jobId": job.id, "jobType": job.job_type, "status": "pending"}
+
+
 @router.post("/daily/{daily_plan_id}/defer-uncovered")
 def defer_uncovered_daily(
     daily_plan_id: int,
@@ -487,6 +544,34 @@ def planning_analytics(
     week_to: date | None = Query(default=None, alias="weekTo"),
 ):
     return planning_analytics_summary(db, week_from=week_from, week_to=week_to)
+
+
+@router.get("/analytics/plan-vs-real")
+def planning_plan_vs_real(
+    db: DbSession,
+    _: PlannerOrAdmin,
+    week_from: date | None = Query(default=None, alias="weekFrom"),
+    week_to: date | None = Query(default=None, alias="weekTo"),
+    limit: int = Query(default=60, ge=1, le=365),
+):
+    return plan_vs_real_report(db, week_from=week_from, week_to=week_to, limit=limit)
+
+
+@router.get("/analytics/plan-vs-real.csv")
+def planning_plan_vs_real_csv(
+    db: DbSession,
+    _: PlannerOrAdmin,
+    week_from: date | None = Query(default=None, alias="weekFrom"),
+    week_to: date | None = Query(default=None, alias="weekTo"),
+):
+    report = plan_vs_real_report(db, week_from=week_from, week_to=week_to, limit=365)
+    return Response(
+        content=plan_vs_real_csv(report["items"]),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": 'attachment; filename="feromap-previsto-vs-real.csv"'
+        },
+    )
 
 
 @router.get("/dashboard-snapshot")

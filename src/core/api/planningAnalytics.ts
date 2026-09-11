@@ -1,4 +1,4 @@
-import { apiGet, withMockFallback } from './client';
+import { apiDownload, apiGet, withMockFallback } from './client';
 
 export interface PlanningLevelMetrics {
   weeklyCompliancePct?: number;
@@ -148,4 +148,86 @@ export interface IncidentTrace {
 
 export function fetchIncidentTrace(incidentId: number): Promise<IncidentTrace> {
   return apiGet<IncidentTrace>(`/api/v1/planning/trace/incident/${incidentId}`);
+}
+
+export interface PlanVsRealIncident {
+  id: number;
+  vehicleId: string;
+  incidentType: string;
+  description: string | null;
+  reportedAt: string | null;
+}
+
+export type PlanVsRealCause = 'none' | 'breakdown' | 'other';
+
+/** Fila por día del reporte previsto vs. real (Fase 5). */
+export interface PlanVsRealRow {
+  dailyPlanId: number;
+  operationDate: string;
+  weekStartDate: string;
+  status: string;
+  plannedDistanceKm: number | null;
+  actualDistanceKm: number | null;
+  distanceDeviationKm: number | null;
+  distanceDeviationPct: number | null;
+  plannedDurationMin: number | null;
+  actualDurationMin: number | null;
+  scheduledPoints: number | null;
+  servedPoints: number | null;
+  completionPct: number | null;
+  collectedKg: number | null;
+  incidents: PlanVsRealIncident[];
+  cause: PlanVsRealCause;
+}
+
+export interface PlanVsRealSummary {
+  range: { weekFrom: string; weekTo: string };
+  days: number;
+  avgDistanceDeviationPct: number | null;
+  avgCompletionPct: number | null;
+  daysWithIncidents: number;
+}
+
+export interface PlanVsRealReport {
+  items: PlanVsRealRow[];
+  summary: PlanVsRealSummary;
+}
+
+export interface PlanVsRealFilters {
+  weekFrom?: string;
+  weekTo?: string;
+  limit?: number;
+}
+
+const emptyPlanVsRealSummary: PlanVsRealSummary = {
+  range: { weekFrom: '', weekTo: '' },
+  days: 0,
+  avgDistanceDeviationPct: null,
+  avgCompletionPct: null,
+  daysWithIncidents: 0,
+};
+
+function buildPlanVsRealQuery(filters?: PlanVsRealFilters): string {
+  const params = new URLSearchParams();
+  if (filters?.weekFrom) params.set('weekFrom', filters.weekFrom);
+  if (filters?.weekTo) params.set('weekTo', filters.weekTo);
+  if (filters?.limit != null) params.set('limit', String(filters.limit));
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
+
+export function fetchPlanVsRealReport(filters?: PlanVsRealFilters): Promise<PlanVsRealReport> {
+  const query = buildPlanVsRealQuery(filters);
+  return withMockFallback(
+    'plan-vs-real',
+    () => apiGet<PlanVsRealReport>(`/api/v1/planning/analytics/plan-vs-real${query}`),
+    { items: [], summary: emptyPlanVsRealSummary },
+  );
+}
+
+export function downloadPlanVsRealCsv(filters?: PlanVsRealFilters): Promise<void> {
+  return apiDownload(
+    `/api/v1/planning/analytics/plan-vs-real.csv${buildPlanVsRealQuery(filters)}`,
+    'feromap-previsto-vs-real.csv',
+  );
 }

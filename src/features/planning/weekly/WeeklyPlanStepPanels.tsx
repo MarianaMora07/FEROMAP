@@ -3,8 +3,10 @@ import { ArrowRight, CheckCircle2, Eye } from 'lucide-solid';
 import { Show } from 'solid-js';
 import { Button, LoadingPanel } from '../../../design-system/components';
 import {
+  buildWeeklyPlanForecastFromValidation,
   buildWeeklyPlanPostApprovalChecklist,
   weeklyPlanApproveBlockReason,
+  weeklyPlanPreflightIssues,
   weeklyPlanScheduledPointCount,
 } from '../../../core/planning/weeklyPlanUx';
 import type { WeeklyPlan } from '../../../core/api/planning';
@@ -16,9 +18,12 @@ import {
   WeeklyPlanApproveBlockedPanel,
   WeeklyPlanDayPreviewPanel,
   WeeklyPlanPostApprovalChecklist,
+  WeeklyPlanPreflightWarningPanel,
   WeeklyPlanValidationResultPanel,
 } from './WeeklyPlanClosurePanels';
+import { WeeklyPlanForecastPanel } from './WeeklyPlanForecastPanel';
 import { WeeklyPlanOperationalSection } from './WeeklyPlanOperationalSection';
+import { WeeklyPlanApprovedDayTable } from './WeeklyPlanApprovedDayTable';
 import { WeeklyPlanDaySectorsPanel } from './WeeklyPlanDaySectorsPanel';
 
 interface WeeklyPlanStepPanelsProps {
@@ -39,6 +44,11 @@ export function WeeklyPlanStepPanels(props: WeeklyPlanStepPanelsProps) {
   const validationSummary = () => weeklyPlanState.validationSummary;
   const approveBlockReason = () => weeklyPlanApproveBlockReason(weeklyPlanState.validationCompleted);
   const postApprovalSteps = () => buildWeeklyPlanPostApprovalChecklist();
+  // Aviso de viabilidad (pre-flight) antes de validar; ya se recomputó al configurar.
+  const preflightIssues = () => weeklyPlanPreflightIssues(weeklyPlanState.preflight);
+  // Mejoras previstas de la validación en curso (no persistida) para el paso de aprobación.
+  const liveForecast = () =>
+    buildWeeklyPlanForecastFromValidation(validationSummary()?.days ?? [], props.plan.weekStartDate);
 
   // El plan operativo ya generado habilita la aprobación; si no, "Ver plan" lo genera
   // y abre la planificación operativa para revisarlo antes de aprobar.
@@ -93,6 +103,8 @@ export function WeeklyPlanStepPanels(props: WeeklyPlanStepPanelsProps) {
 
           <WeeklyPlanDaySectorsPanel days={props.plan.days ?? []} />
 
+          <WeeklyPlanPreflightWarningPanel issues={preflightIssues()} />
+
           <Show when={weeklyPlanState.isValidating}>
             <LoadingPanel label="Validando con simulación ACO…" progress={weeklyPlanState.validationProgress} />
           </Show>
@@ -138,6 +150,8 @@ export function WeeklyPlanStepPanels(props: WeeklyPlanStepPanelsProps) {
           <Show when={(validationSummary()?.days?.length ?? 0) > 0}>
             <WeeklyPlanDayPreviewPanel days={validationSummary()!.days} />
           </Show>
+
+          <WeeklyPlanForecastPanel forecast={liveForecast()} source="Validación en curso" />
 
           <Show when={props.editable && weeklyPlanState.isGeneratingOperational}>
             <div class="space-y-1">
@@ -205,11 +219,16 @@ export function WeeklyPlanStepPanels(props: WeeklyPlanStepPanelsProps) {
             </div>
           </div>
 
+          <WeeklyPlanForecastPanel forecast={props.plan.expectedKpis} source="Plan aprobado" />
+
+          <WeeklyPlanApprovedDayTable plan={props.plan} />
+
           <Show when={props.plan.status === 'approved'}>
             <WeeklyPlanPostApprovalChecklist steps={postApprovalSteps()} />
             <WeeklyPlanOperationalSection
               planId={props.plan.id}
               operationalPlan={props.plan.operationalPlan ?? null}
+              forecast={props.plan.expectedKpis}
             />
           </Show>
         </div>

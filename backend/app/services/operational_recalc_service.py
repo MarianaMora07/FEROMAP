@@ -72,9 +72,51 @@ def handle_critical_container_recalc(
     daily_plan_id: int | None = None,
     operation_date: date | None = None,
 ) -> dict[str, Any]:
+    """Recálculo real por contenedor crítico: persiste cambios y notifica."""
+    outcome = _run_critical_container_recalc(
+        db,
+        collection_point_code=collection_point_code,
+        daily_plan_id=daily_plan_id,
+        operation_date=operation_date,
+        dry_run=False,
+    )
+    db.commit()
+    return outcome
+
+
+def simulate_critical_container_recalc(
+    db: Session,
+    *,
+    collection_point_code: str,
+    daily_plan_id: int | None = None,
+    operation_date: date | None = None,
+) -> dict[str, Any]:
+    """Simulación **dry-run**: calcula el recálculo alternativo y revierte la sesión."""
+    try:
+        return _run_critical_container_recalc(
+            db,
+            collection_point_code=collection_point_code,
+            daily_plan_id=daily_plan_id,
+            operation_date=operation_date,
+            dry_run=True,
+        )
+    finally:
+        db.rollback()
+
+
+def _run_critical_container_recalc(
+    db: Session,
+    *,
+    collection_point_code: str,
+    daily_plan_id: int | None,
+    operation_date: date | None,
+    dry_run: bool,
+) -> dict[str, Any]:
     point = _resolve_collection_point(db, collection_point_code)
     fill_level = fill_level_pct(point)
-    if fill_level < 80:
+    # En simulación se admite cualquier punto ("¿y si este contenedor se llena?");
+    # el recálculo real solo aplica a contenedores ya en nivel crítico.
+    if fill_level < 80 and not dry_run:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"El contenedor {collection_point_code} no está en nivel crítico ({fill_level}%)",
@@ -106,7 +148,7 @@ def handle_critical_container_recalc(
         db,
         scenario_id,
         collection_point_ids=remaining_ids,
-        auto_dispatch=True,
+        auto_dispatch=not dry_run,
         planning_level="operational",
         daily_plan_id=plan.id,
         weekly_plan_id=plan.weekly_plan_id,
@@ -121,18 +163,18 @@ def handle_critical_container_recalc(
             "fillLevel": fill_level,
             "remainingPointsCount": len(remaining_ids),
             "dailyPlanId": plan.id,
+            "simulated": dry_run,
         },
         auto_commit=False,
     )
 
     dispatch = recalc.get("dispatch") or {}
     route_ids = dispatch.get("dispatchedRouteIds") or []
-    notifications = notify_routes_dispatched(
-        db,
-        route_ids,
-        event_type="critical_recalc",
+    notifications = (
+        []
+        if dry_run
+        else notify_routes_dispatched(db, route_ids, event_type="critical_recalc")
     )
-    db.commit()
 
     return {
         "collectionPoint": {
@@ -145,8 +187,12 @@ def handle_critical_container_recalc(
         "remainingPoints": len(remaining_ids),
         "recalculation": recalc,
         "notifications": notifications,
+        "simulated": dry_run,
         "message": (
             f"Recálculo operativo: {len(remaining_ids)} punto(s) pendiente(s) "
             f"reoptimizado(s) incluyendo {collection_point_code}."
+            if not dry_run
+            else f"Simulación: {len(remaining_ids)} punto(s) se reoptimizarían incluyendo "
+            f"{collection_point_code}."
         ),
     }

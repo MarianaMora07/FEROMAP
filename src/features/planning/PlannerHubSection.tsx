@@ -1,23 +1,19 @@
-import { For, Show, createResource } from 'solid-js';
+import { Show, createResource } from 'solid-js';
 import { A } from '@solidjs/router';
 import {
   AlertTriangle,
   ArrowRight,
   CalendarDays,
   ClipboardList,
-  History,
-  Map,
-  Radio,
   Route,
 } from 'lucide-solid';
 import { Button, Card, CardHeader, LoadingPanel, ProgressBar } from '../../design-system/components';
 import { fetchPlanningDashboardSnapshot } from '../../core/api/planningAnalytics';
 import { PLANNING_EMPTY_PRESETS } from '../../core/planning/planningEmptyStates';
-import { deriveNextPlannerAction, PLANNER_QUICK_ACTIONS } from '../../core/planning/plannerHubUx';
+import { deriveNextPlannerAction } from '../../core/planning/plannerHubUx';
 import { weeklyPlanHref } from '../../core/planning/weeklyPlanLinks';
 import { buildOperationalJourneySteps } from '../../core/planning/operationalFlowUx';
 import { PlanningEmptyState } from './PlanningEmptyState';
-import { PlanningGlossaryStrip } from './PlanningGlossaryStrip';
 import { PlanningStatusBadge } from './PlanningStatusBadge';
 import { OperationalFlowStepper } from './OperationalFlowStepper';
 
@@ -32,14 +28,6 @@ const titleClass = {
   info: 'text-fero-blue',
   success: 'text-fero-green-dark',
 };
-
-const quickActionIcons = {
-  weekly: CalendarDays,
-  today: ClipboardList,
-  pending: Route,
-  history: History,
-  monitoring: Radio,
-} as const;
 
 export function PlannerHubSection() {
   const [snapshot] = createResource(() => fetchPlanningDashboardSnapshot());
@@ -58,14 +46,8 @@ export function PlannerHubSection() {
 
   return (
     <section class="space-y-4" id="mi-planificacion" data-testid="planner-hub">
-        <div class="flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <p class="text-xs font-semibold uppercase tracking-wide text-fero-green-dark">Operación diaria</p>
-            <h2 class="font-heading text-xl font-bold text-text-primary dark:text-white">Mi planificación</h2>
-            <p class="mt-1 text-sm text-text-secondary">
-              Punto de entrada operativo — optimización y despacho del día.
-            </p>
-          </div>
+        <div>
+          <h2 class="font-heading text-xl font-bold text-text-primary dark:text-white">Mi planificación</h2>
         </div>
 
         <Show when={snapshot.loading}>
@@ -98,29 +80,11 @@ export function PlannerHubSection() {
           <OperationalFlowStepper steps={journeySteps()} title="Recorrido operativo del día" />
         </Show>
 
-        <div class="flex flex-wrap gap-2">
-          <For each={[...PLANNER_QUICK_ACTIONS]}>
-            {(item) => {
-              const Icon = quickActionIcons[item.id];
-              return (
-                <A href={item.href}>
-                  <Button variant="outline" size="sm" class="gap-2">
-                    <Icon size={14} />
-                    {item.label}
-                  </Button>
-                </A>
-              );
-            }}
-          </For>
-        </div>
-
-        <PlanningGlossaryStrip />
-
-        <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Card>
             <CardHeader
-              title="Semana actual"
-              subtitle="Nivel directivo"
+              title="Plan semanal"
+              subtitle="Condiciones y plan ACO"
               action={
                 <A href={weeklyPlanHref} class="text-xs font-medium text-fero-blue hover:underline">
                   Gestionar
@@ -150,8 +114,8 @@ export function PlannerHubSection() {
 
           <Card>
             <CardHeader
-              title="Hoy"
-              subtitle="Nivel administrativo"
+              title="Plan del día"
+              subtitle="Optimización y despacho"
               action={
                 <A href="/optimization" class="text-xs font-medium text-fero-blue hover:underline">
                   Gestionar
@@ -209,7 +173,7 @@ export function PlannerHubSection() {
           <Card>
             <CardHeader
               title="Incidencias"
-              subtitle="Nivel operativo"
+              subtitle="Contingencias en vivo"
               action={
                 <A href="/monitoring" class="text-xs font-medium text-fero-blue hover:underline">
                   Monitoreo
@@ -224,43 +188,6 @@ export function PlannerHubSection() {
                 <p class="text-3xl font-bold text-text-primary dark:text-white">{snapshot()?.openIncidents ?? 0}</p>
                 <p class="text-sm text-text-secondary">abiertas en operación</p>
               </div>
-            </div>
-          </Card>
-        </div>
-
-        <div class="grid gap-4 md:grid-cols-3">
-          <Card class="border-violet-300/40 bg-violet-50/50 dark:border-violet-900/30 dark:bg-violet-950/20">
-            <CardHeader title="Directivo" subtitle="Plan semanal" />
-            <p class="mb-3 text-sm text-text-secondary">Aprueba qué puntos visitar cada día de la semana.</p>
-            <A href={weeklyPlanHref}>
-              <Button size="sm" variant="outline" class="gap-2" icon={<CalendarDays size={14} />}>
-                Plan semanal
-              </Button>
-            </A>
-          </Card>
-          <Card class="border-fero-blue/30 bg-fero-blue/5">
-            <CardHeader title="Administrativo" subtitle="Plan del día" />
-            <p class="mb-3 text-sm text-text-secondary">Optimiza, despacha y cierra la jornada.</p>
-            <A href="/optimization">
-              <Button size="sm" variant="outline" class="gap-2" icon={<Map size={14} />}>
-                Planificación operativa
-              </Button>
-            </A>
-          </Card>
-          <Card class="border-amber-300/50 bg-amber-50/60 dark:border-amber-900/30 dark:bg-amber-950/20">
-            <CardHeader title="Operativo + historial" subtitle="Monitoreo y auditoría" />
-            <p class="mb-3 text-sm text-text-secondary">Incidencias en caliente y búsqueda unificada.</p>
-            <div class="flex flex-wrap gap-2">
-              <A href="/monitoring">
-                <Button size="sm" variant="outline" icon={<Radio size={14} />}>
-                  Monitoreo
-                </Button>
-              </A>
-              <A href="/planning/history">
-                <Button size="sm" variant="outline" icon={<History size={14} />}>
-                  Historial
-                </Button>
-              </A>
             </div>
           </Card>
         </div>

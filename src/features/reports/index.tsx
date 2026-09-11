@@ -50,6 +50,7 @@ import {
 } from '../../core/utils/analyticsFilters';
 import { parseSimulationIdParam } from '../../core/utils/simulationLinks';
 import { SimulationRunComparisonCard } from '../simulation/SimulationRunComparisonCard';
+import { ReportsPlanVsRealCard } from './ReportsPlanVsRealCard';
 
 function KpiIcon(props: { name: (typeof mockReportsKpis)[number]['icon'] }) {
   const map: Record<(typeof mockReportsKpis)[number]['icon'], () => JSX.Element> = {
@@ -188,6 +189,7 @@ export default function ReportsPage() {
   return (
     <div class="space-y-5">
       <SimulationRunComparisonCard simulationId={focusedSimulationId()} />
+      <ReportsPlanVsRealCard from={filters().from} to={filters().to} />
       <Show when={loading()}>
         <div class="text-sm text-text-muted">Cargando reportes...</div>
       </Show>

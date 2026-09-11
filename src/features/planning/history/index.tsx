@@ -111,8 +111,9 @@ export default function PlanningHistoryPage() {
   const weekStartForView = () => {
     const fromUrl = filters().weekStart;
     if (fromUrl) return mondayOfDate(fromUrl);
-    if (result()?.type === 'weekly' && result()!.data.items[0]) {
-      return result()!.data.items[0]!.weekStartDate;
+    const current = result();
+    if (current?.type === 'weekly' && current.data.items[0]) {
+      return current.data.items[0].weekStartDate;
     }
     return mondayIso();
   };

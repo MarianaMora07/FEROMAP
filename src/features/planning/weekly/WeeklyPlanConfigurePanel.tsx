@@ -3,7 +3,7 @@ import { Button, SelectField } from '../../../design-system/components';
 import { mergeWeekCalendarDays } from '../../../core/planning/weeklyPlanCalendar';
 import type { WeeklyPlan } from '../../../core/api/planning';
 import type { ScenarioId } from '../../../data/types/simulation';
-import { applyWeeklyCaseStudy, updateWeeklyPlanDay, weeklyPlanState } from '../../../core/stores/weeklyPlanStore';
+import { applyWeeklyCaseStudy, refreshWeeklyPlanPreflight, updateWeeklyPlanDay, weeklyPlanState } from '../../../core/stores/weeklyPlanStore';
 import { CaseStudySelector } from '../../case-studies/CaseStudySelector';
 import {
   WeeklyPlanDayEditorDrawer,
@@ -11,6 +11,7 @@ import {
   WeeklyPlanValidationTable,
   WeeklyPlanWeekCalendar,
 } from './WeeklyPlanConfigureStep';
+import { WeeklyPlanConditionsPanel } from './WeeklyPlanConditionsPanel';
 
 interface WeeklyPlanConfigurePanelProps {
   plan: WeeklyPlan;
@@ -36,6 +37,14 @@ export function WeeklyPlanConfigurePanel(props: WeeklyPlanConfigurePanelProps) {
 
   return (
     <div class="space-y-4" data-testid="weekly-plan-step-1">
+      <WeeklyPlanConditionsPanel
+        plan={props.plan}
+        scenarios={props.scenarios}
+        preflight={weeklyPlanState.preflight}
+        loading={weeklyPlanState.isLoadingPreflight}
+        onRefresh={() => void refreshWeeklyPlanPreflight()}
+      />
+
       <CaseStudySelector
         context="operational"
         value={weeklyPlanState.draftCaseStudy}

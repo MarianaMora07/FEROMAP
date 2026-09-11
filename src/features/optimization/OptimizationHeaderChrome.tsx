@@ -14,9 +14,9 @@ import {
   selectOperationDate,
   cancelOptimization,
 } from '../../core/stores/optimizationStore';
-import { shiftWeek } from '../../core/planning/dailyPlanningUx';
+import { shiftWeek, mondayOfDate } from '../../core/planning/dailyPlanningUx';
 import { monitoringHref, optimizationHref } from '../../core/planning/operationalLinks';
-import { weeklyPlanHref } from '../../core/planning/weeklyPlanLinks';
+import { weeklyPlanWeekHref } from '../../core/planning/weeklyPlanLinks';
 import { OptimizationWeekCalendarPopover } from './OptimizationWeekCalendarPopover';
 import { OptimizationExperienceStepper } from './OptimizationExperienceStepper';
 import {
@@ -24,12 +24,15 @@ import {
   optimizationToolbarSummary,
 } from './optimizationLayoutUx';
 import { DailyScenarioBanner } from './DailyScenarioBanner';
+import { OptimizationDayActualsPanel } from './OptimizationDayActualsPanel';
+import { OptimizationContingencySimulator } from './OptimizationContingencySimulator';
 import type { ScenarioId } from '../../data/types/simulation';
 
 export function OptimizationHeaderBar() {
   const navigate = useNavigate();
   const [stepDrawerOpen, setStepDrawerOpen] = createSignal(false);
   const [gateOpen, setGateOpen] = createSignal(false);
+  const [contingencyOpen, setContingencyOpen] = createSignal(false);
   const dailyPlan = () => optimizationState.dailyPlan;
   const selectedDate = () => optimizationState.preset.operationDate;
   const hasResults = () => optimizationState.kpis != null;
@@ -174,10 +177,24 @@ export function OptimizationHeaderBar() {
               {optimizationState.isOptimizing ? `${optimizationState.optimizationProgress}%` : generateActionLabel()}
             </Button>
           </Show>
+          <Show when={hasResults() && !isPlanClosed() && optimizationState.weeklyPlanApproved}>
+            <Button
+              variant="outline"
+              size="sm"
+              class="gap-2"
+              icon={<AlertTriangle size={14} />}
+              data-testid="optimization-contingency-open"
+              onClick={() => setContingencyOpen(true)}
+            >
+              Simular contingencia
+            </Button>
+          </Show>
           <Show
             when={isDispatched() && monitoringLink()}
             fallback={
-              <Show when={hasResults() && !isPlanClosed()}>
+              <Show
+                when={hasResults() && !isPlanClosed() && optimizationState.weeklyPlanApproved}
+              >
                 <Button
                   variant="primary"
                   size="sm"
@@ -185,11 +202,8 @@ export function OptimizationHeaderBar() {
                   disabled={
                     optimizationState.isDispatching ||
                     optimizationState.lastSimulationId == null ||
-                    !canOptimize(authUser()?.role) ||
-                    !optimizationState.weeklyPlanApproved ||
-                    !hasResults()
+                    !canOptimize(authUser()?.role)
                   }
-                  title={!optimizationState.weeklyPlanApproved ? 'Falta aprobar plan semanal' : undefined}
                   aria-label="Notificar a conductores"
                   data-testid="optimization-dispatch-route"
                   onClick={() => void dispatchOptimizationResult()}
@@ -298,7 +312,7 @@ export function OptimizationHeaderBar() {
                   data-testid="optimization-dialog-weekly"
                   onClick={() => {
                     setGateOpen(false);
-                    navigate(weeklyPlanHref);
+                    navigate(weeklyPlanWeekHref(mondayOfDate(selectedDate())));
                   }}
                 >
                   Ir al Plan semanal
@@ -329,6 +343,13 @@ export function OptimizationHeaderBar() {
           />
         </Show>
       </Drawer>
+      <Drawer
+        open={contingencyOpen()}
+        onClose={() => setContingencyOpen(false)}
+        title="Simular contingencia"
+      >
+        <OptimizationContingencySimulator onApplied={() => setContingencyOpen(false)} />
+      </Drawer>
     </>
   );
 }
@@ -348,7 +369,9 @@ export function OptimizationDailyBanner() {
         scenarioLabel={scenarioLabel()}
         weeklyPlanApproved={optimizationState.weeklyPlanApproved}
         pendingCount={dailyPlan()?.pendingPoints.length ?? 0}
+        weeklyHref={weeklyPlanWeekHref(mondayOfDate(optimizationState.preset.operationDate))}
       />
+      <OptimizationDayActualsPanel />
     </div>
   );
 }
