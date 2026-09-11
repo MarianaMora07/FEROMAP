@@ -67,7 +67,13 @@ defense-verify: _check
     bash ./scripts/defense-verify.sh
 
 # Ejecuta tests unitarios del motor y contingencias (en contenedor api).
+# Aplica migraciones primero para no fallar por esquema desactualizado; si la BD
+# no responde, avisa y ejecuta igual (los tests de integración se saltan).
 test: _check
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{compose}} exec -T api alembic upgrade head \
+      || echo "⚠️  Migración omitida (BD no disponible o sin cambios); se ejecutan los tests igual"
     {{compose}} exec -T api pytest tests/ -v --tb=short
 
 # Tests en el host (requiere pip install -r backend/requirements.txt).
