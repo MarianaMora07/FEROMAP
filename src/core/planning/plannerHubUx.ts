@@ -16,14 +16,6 @@ export interface PlannerNextAction {
   tone: 'warning' | 'info' | 'success';
 }
 
-export const PLANNER_QUICK_ACTIONS = [
-  { id: 'weekly', label: 'Plan semanal', href: planningWeeklyPath, description: 'Directivo' },
-  { id: 'today', label: 'Plan de hoy', href: optimizationDateHref(todayIso()), description: 'Administrativo' },
-  { id: 'pending', label: 'Pendientes', href: `${optimizationDateHref(todayIso())}#pendientes`, description: 'Carry-over' },
-  { id: 'history', label: 'Historial', href: '/planning/history', description: 'Buscar' },
-  { id: 'monitoring', label: 'Monitoreo', href: '/monitoring', description: 'Operativo' },
-] as const;
-
 export function deriveNextPlannerAction(snapshot: PlanningDashboardSnapshot): PlannerNextAction {
   const weekly = snapshot.weeklyPlan;
   const daily = snapshot.dailyPlan;

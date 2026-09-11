@@ -4,6 +4,7 @@ import { For, Show } from 'solid-js';
 import {
   weeklyPlanValidationWorkdayWarning,
   type WeeklyPlanPostApprovalStep,
+  type WeeklyPlanPreflightIssue,
   type WeeklyPlanValidationDay,
   type WeeklyPlanValidationSummary,
 } from '../../../core/planning/weeklyPlanUx';
@@ -224,6 +225,52 @@ export function WeeklyPlanApproveBlockedPanel(props: WeeklyPlanApproveBlockedPan
         Aprobar plan
       </button>
     </div>
+  );
+}
+
+interface WeeklyPlanPreflightWarningPanelProps {
+  issues: WeeklyPlanPreflightIssue[];
+}
+
+/**
+ * Avisa de problemas de viabilidad (sobrecapacidad o flota insuficiente) detectados
+ * por el pre-flight, antes de validar o aprobar.
+ */
+export function WeeklyPlanPreflightWarningPanel(props: WeeklyPlanPreflightWarningPanelProps) {
+  return (
+    <Show when={props.issues.length > 0}>
+      <div
+        class="flex items-start gap-2 rounded-xl border border-amber-300/70 bg-amber-50/90 px-4 py-3 dark:border-amber-900/40 dark:bg-amber-950/25"
+        role="alert"
+        data-testid="weekly-plan-preflight-warning"
+      >
+        <AlertTriangle size={18} class="mt-0.5 shrink-0 text-amber-700 dark:text-amber-200" aria-hidden="true" />
+        <div>
+          <p class="text-sm font-semibold text-amber-900 dark:text-amber-100">
+            Pre-flight: {props.issues.length} día(s) con problemas de viabilidad
+          </p>
+          <ul class="mt-1 space-y-0.5 text-sm text-amber-800 dark:text-amber-200">
+            <For each={props.issues}>
+              {(issue) => (
+                <li>
+                  {issue.operationDate}:{' '}
+                  {[
+                    issue.overloaded ? 'sobrecapacidad estimada' : null,
+                    issue.insufficientFleet ? 'flota insuficiente' : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </li>
+              )}
+            </For>
+          </ul>
+          <p class="mt-1 text-sm text-amber-800 dark:text-amber-200">
+            Ajusta la flota por tipo o la cobertura de esos días en «Configurar días» antes de
+            validar.
+          </p>
+        </div>
+      </div>
+    </Show>
   );
 }
 

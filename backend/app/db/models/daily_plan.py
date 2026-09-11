@@ -20,6 +20,10 @@ class DailyPlan(Base):
     scheduled_point_ids_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     pending_point_ids_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     final_point_ids_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Contrato PlanForecast del día (previsto por el motor) — Fase 0.
+    planned_kpis_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Contrato PlanVsReal del día (previsto vs. ejecutado) — Fase 0.
+    actual_kpis_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     dispatched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

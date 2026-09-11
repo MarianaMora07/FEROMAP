@@ -1,5 +1,5 @@
 import type { KpiMetrics } from '../../data/types/simulation';
-import { apiGet, apiPost } from './client';
+import { apiGet, apiPost, useMocks } from './client';
 import type { OptimizeResponse } from './simulation';
 import { fetchSimulationOptimizeJob } from './simulationJobs';
 
@@ -110,3 +110,58 @@ export async function recalcCriticalContainer(
 }
 
 export type { KpiMetrics };
+
+export type ContingencySimulationType = 'breakdown' | 'critical_container';
+
+export interface ContingencySimulationRequest {
+  type: ContingencySimulationType;
+  vehicleId?: string;
+  pointCode?: string;
+}
+
+/** Plan alternativo calculado en dry-run (no aplicado). */
+export interface ContingencySimulationResult {
+  type: ContingencySimulationType;
+  simulated: boolean;
+  dailyPlanId: number;
+  vehicleId: string | null;
+  pointCode: string | null;
+  beforeDistanceKm: number | null;
+  afterDistanceKm: number | null;
+  distanceDeltaKm: number | null;
+  reassignedPoints: number;
+  remainingVehicles: number | null;
+  skippedWaypoints: number;
+  message: string;
+}
+
+/**
+ * Simula una contingencia del día **sin despachar** (dry-run en el backend).
+ * Al confirmar, el llamador debe usar `reportVehicleBreakdown` / `recalcCriticalContainer`.
+ */
+export async function simulateDailyContingency(
+  dailyPlanId: number,
+  payload: ContingencySimulationRequest,
+): Promise<ContingencySimulationResult> {
+  if (useMocks) {
+    return {
+      type: payload.type,
+      simulated: true,
+      dailyPlanId,
+      vehicleId: payload.vehicleId ?? 'TR-01',
+      pointCode: payload.pointCode ?? null,
+      beforeDistanceKm: 42.5,
+      afterDistanceKm: 45.1,
+      distanceDeltaKm: 2.6,
+      reassignedPoints: 3,
+      remainingVehicles: 1,
+      skippedWaypoints: 3,
+      message: 'Simulación (demo): 3 puntos se reasignarían a 1 vehículo disponible.',
+    };
+  }
+  const { jobId } = await apiPost<{ jobId: string; status: string }>(
+    `/api/v1/planning/daily/${dailyPlanId}/simulate-contingency`,
+    payload,
+  );
+  return awaitContingencyJob<ContingencySimulationResult>(jobId);
+}

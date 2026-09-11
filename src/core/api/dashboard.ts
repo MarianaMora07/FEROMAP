@@ -30,6 +30,8 @@ export interface DashboardActiveRoute {
   progress: number;
   tone: string;
   routeId?: number;
+  waypointsDone?: number;
+  waypointsTotal?: number;
 }
 
 export interface DashboardRecentAlert {
@@ -100,7 +102,7 @@ export interface DashboardViewModel {
   fleetStatus: typeof fleetStatus;
   sectorFillLevels: typeof sectorFillLevels;
   recentAlerts: typeof recentAlerts;
-  activeRoutes: typeof activeRoutes;
+  activeRoutes: DashboardActiveRoute[];
   weeklyTons: typeof weeklyTons;
   lastOptimization: DashboardSummary['lastOptimization'];
 }

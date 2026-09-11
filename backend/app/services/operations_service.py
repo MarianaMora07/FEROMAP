@@ -34,6 +34,45 @@ def route_progress_percent(waypoints: list[RouteWaypoint]) -> int:
     return int(round(completed / len(waypoints) * 100))
 
 
+def route_actual_distance_km(route: OptimizedRoute) -> float | None:
+    """Distancia real recorrida entre las paradas completadas de una ruta (grafo vial).
+
+    No se persiste en ``optimized_routes``: se deriva al cerrar el día desde los
+    waypoints con llegada real. Devuelve ``None`` si hay menos de dos paradas
+    completadas o si el grafo no está disponible (el llamador usa el previsto).
+    """
+    completed = sorted(
+        (
+            waypoint
+            for waypoint in route.waypoints
+            if waypoint.status in {"completed", "collected"}
+            and waypoint.collection_point is not None
+        ),
+        key=lambda waypoint: waypoint.sequence_order,
+    )
+    if len(completed) < 2:
+        return None
+    try:
+        from app.services import graph_service
+
+        graph = graph_service.load_road_graph()
+        total_meters = 0.0
+        for previous, current in zip(completed, completed[1:]):
+            start = previous.collection_point
+            end = current.collection_point
+            origin = graph_service.nearest_node(graph, float(start.longitude), float(start.latitude))
+            destination = graph_service.nearest_node(
+                graph, float(end.longitude), float(end.latitude)
+            )
+            distance_m, _seconds = graph_service.path_metrics_between_nodes(
+                graph, origin, destination
+            )
+            total_meters += float(distance_m or 0)
+        return round(total_meters / 1000.0, 2) if total_meters > 0 else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _next_pending_waypoint(db: Session, route_id: int) -> RouteWaypoint | None:
     return db.scalar(
         select(RouteWaypoint)

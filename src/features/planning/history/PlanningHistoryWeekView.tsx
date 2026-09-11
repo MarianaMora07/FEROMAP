@@ -7,6 +7,7 @@ import { optimizationDateHref } from '../../../core/planning/planningUx';
 import { planningHistoryHref } from '../../../core/planning/planningHistoryLinks';
 import type { PlanningHistoryWeeklyData } from '../../../core/api/planningHistory';
 import { PlanningStatusBadge } from '../PlanningStatusBadge';
+import { PlanningHistoryPlanVsRealSection } from './PlanningHistoryPlanVsRealSection';
 
 interface PlanningHistoryWeekViewProps {
   data: PlanningHistoryWeeklyData;
@@ -126,6 +127,8 @@ export function PlanningHistoryWeekView(props: PlanningHistoryWeekViewProps) {
           </For>
         </ul>
       </Card>
+
+      <PlanningHistoryPlanVsRealSection weekStart={props.weekStart} />
     </div>
   );
 }

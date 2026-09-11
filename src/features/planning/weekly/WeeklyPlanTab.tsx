@@ -1,5 +1,6 @@
 import { ChevronDown } from 'lucide-solid';
 import { Show, createEffect, createMemo, createSignal, onMount } from 'solid-js';
+import { useSearchParams } from '@solidjs/router';
 import { Archive, Lock } from 'lucide-solid';
 import { Button, Card, CardHeader, LoadingPanel } from '../../../design-system/components';
 import {
@@ -26,6 +27,7 @@ import {
   isWeeklyPlanEditable,
   isWeeklyPlanReadOnly,
   loadWeeklyPlanVersions,
+  openWeekForApproval,
   runWeeklyValidation,
   saveWeeklyPlanDraft,
   setWeeklyScenario,
@@ -44,6 +46,7 @@ interface WeeklyPlanTabProps {
 }
 
 export function WeeklyPlanTab(props: WeeklyPlanTabProps) {
+  const [searchParams] = useSearchParams();
   const [scenarios, setScenarios] = createSignal<Array<{ id: ScenarioId; label: string }>>([]);
   const [compareA, setCompareA] = createSignal('');
   const [compareB, setCompareB] = createSignal('');
@@ -93,6 +96,15 @@ export function WeeklyPlanTab(props: WeeklyPlanTabProps) {
   onMount(async () => {
     const [scenarioRows] = await Promise.all([fetchScenarios(), initWeeklyPlanTab()]);
     setScenarios(scenarioRows.map((row) => ({ id: row.id, label: row.label })));
+    // Deep link `?week=YYYY-MM-DD`: abre esa semana (la selecciona o crea el borrador).
+    const weekParam = Array.isArray(searchParams.week) ? searchParams.week[0] : searchParams.week;
+    if (weekParam) {
+      try {
+        await openWeekForApproval(weekParam);
+      } catch {
+        // El store ya expone el error en `weeklyPlanState.error`.
+      }
+    }
     setViewStep(deriveWeeklyFlowStep());
   });
 

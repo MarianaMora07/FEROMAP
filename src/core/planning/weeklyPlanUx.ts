@@ -1,4 +1,4 @@
-import type { WeeklyPlan } from '../api/planning';
+import type { PlanForecast, WeeklyPlan, WeeklyPlanForecast, WeeklyPlanPreflight } from '../api/planning';
 import { optimizationDateHref, todayIso } from './planningUx';
 
 export type WeeklyPlanPrimaryActionId = 'autofill' | 'validate' | 'approve' | 'goToDay';
@@ -69,6 +69,7 @@ export interface WeeklyPlanValidationDay {
   feasible: boolean;
   error?: string | null;
   distanceKm?: number | null;
+  baselineDistanceKm?: number | null;
   durationHours?: number | null;
   coveragePct?: number | null;
   servedPoints?: number | null;
@@ -97,6 +98,109 @@ export function weeklyPlanValidationWorkdayWarning(summary: WeeklyPlanValidation
 export function weeklyPlanApproveBlockReason(validationCompleted: boolean): string | null {
   if (validationCompleted) return null;
   return 'Falta validar';
+}
+
+function roundTo(value: number, digits: number): number {
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
+}
+
+function savingPct(baselineKm: number | null, optimizedKm: number | null): number | null {
+  if (!baselineKm || !optimizedKm || baselineKm <= 0) return null;
+  return roundTo((1 - optimizedKm / baselineKm) * 100, 1);
+}
+
+/** Ahorro % de una ruta/día frente a su línea base; `null` si no hay base comparable. */
+export function weeklyPlanSavingPct(
+  baselineKm: number | null | undefined,
+  optimizedKm: number | null | undefined,
+): number | null {
+  if (baselineKm == null || optimizedKm == null) return null;
+  return savingPct(baselineKm, optimizedKm);
+}
+
+/**
+ * Construye el previsto semanal (`WeeklyPlanForecast`) a partir de la previsualización
+ * por día de la validación ACO. Se persiste al aprobar para que las mejoras previstas
+ * sobrevivan al recargar.
+ */
+export function buildWeeklyPlanForecastFromValidation(
+  days: WeeklyPlanValidationDay[],
+  weekStartDate: string,
+): WeeklyPlanForecast | null {
+  const active = days.filter((day) => !day.skipped && !day.error);
+  if (active.length === 0) return null;
+
+  const byDay: Record<string, PlanForecast> = {};
+  let distanceKm = 0;
+  let durationHours = 0;
+  let baselineKm = 0;
+  let hasBaseline = false;
+  let scheduledPoints = 0;
+  let coveredPoints = 0;
+  let vehicleCount = 0;
+
+  for (const day of active) {
+    const served = day.servedPoints ?? 0;
+    const uncovered = day.uncoveredPoints ?? 0;
+    const dayScheduled = served + uncovered;
+    const dayDistance = day.distanceKm ?? 0;
+    const dayBaseline = day.baselineDistanceKm ?? null;
+    byDay[day.operationDate] = {
+      distanceKm: dayDistance,
+      durationHours: day.durationHours ?? 0,
+      baselineDistanceKm: dayBaseline,
+      savingPct: savingPct(dayBaseline, dayDistance),
+      scheduledPoints: dayScheduled,
+      coveredPoints: served,
+      uncoveredPoints: uncovered,
+      coveragePct: day.coveragePct ?? null,
+      vehicleCount: day.vehicles.length,
+    };
+    distanceKm += dayDistance;
+    durationHours += day.durationHours ?? 0;
+    if (dayBaseline) {
+      baselineKm += dayBaseline;
+      hasBaseline = true;
+    }
+    scheduledPoints += dayScheduled;
+    coveredPoints += served;
+    vehicleCount += day.vehicles.length;
+  }
+
+  return {
+    weekStartDate,
+    distanceKm: roundTo(distanceKm, 1),
+    durationHours: roundTo(durationHours, 2),
+    baselineDistanceKm: hasBaseline ? roundTo(baselineKm, 1) : null,
+    savingPct: hasBaseline ? savingPct(baselineKm, distanceKm) : null,
+    scheduledPoints,
+    coveredPoints,
+    uncoveredPoints: Math.max(0, scheduledPoints - coveredPoints),
+    coveragePct: scheduledPoints > 0 ? roundTo((coveredPoints / scheduledPoints) * 100, 1) : null,
+    vehicleCount,
+    days: byDay,
+  };
+}
+
+export interface WeeklyPlanPreflightIssue {
+  operationDate: string;
+  overloaded: boolean;
+  insufficientFleet: boolean;
+}
+
+/** Días con problemas de viabilidad (sobrecapacidad o flota insuficiente). */
+export function weeklyPlanPreflightIssues(
+  preflight: WeeklyPlanPreflight | null | undefined,
+): WeeklyPlanPreflightIssue[] {
+  if (!preflight?.rows?.length) return [];
+  return preflight.rows
+    .filter((row) => row.overloaded || row.insufficientFleet)
+    .map((row) => ({
+      operationDate: row.operationDate ?? '—',
+      overloaded: Boolean(row.overloaded),
+      insufficientFleet: Boolean(row.insufficientFleet),
+    }));
 }
 
 export interface WeeklyPlanPostApprovalStep {

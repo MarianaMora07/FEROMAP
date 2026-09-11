@@ -7,15 +7,19 @@ import {
   notifyWeeklyOperationalDays,
   type WeeklyOperationalPlan,
   type WeeklyPlanDayOperational,
+  type WeeklyPlanForecast,
 } from '../../../core/api/planning';
 import { generateWeeklyOperationalPlanForWeek, selectWeeklyPlan } from '../../../core/stores/weeklyPlanStore';
 import { optimizationHref, monitoringHref } from '../../../core/planning/operationalLinks';
 import { optimizationDateHref, todayIso } from '../../../core/planning/planningUx';
 import { WEEKDAY_LABELS } from '../../../core/planning/weeklyPlanCalendar';
+import { weeklyPlanSavingPct } from '../../../core/planning/weeklyPlanUx';
 
 interface WeeklyPlanOperationalSectionProps {
   planId: number;
   operationalPlan?: WeeklyOperationalPlan | null;
+  /** Mejoras previstas de la semana (Fase 2); aporta la línea base para el ahorro. */
+  forecast?: WeeklyPlanForecast | null;
 }
 
 function formatShortDate(iso: string): string {
@@ -383,6 +387,22 @@ export function WeeklyPlanOperationalSection(props: WeeklyPlanOperationalSection
                           </p>
                           <p>{totals.stops} pts</p>
                         </Show>
+                      </td>
+                    );
+                  }}
+                </For>
+              </tr>
+
+              <tr>
+                <td class="px-2 py-1.5 text-xs text-text-muted">Ahorro</td>
+                <For each={planDays()}>
+                  {(day) => {
+                    const baseline =
+                      props.forecast?.days?.[day.operationDate]?.baselineDistanceKm ?? null;
+                    const saving = weeklyPlanSavingPct(baseline, day.distanceKm ?? null);
+                    return (
+                      <td class="px-2 py-1.5 text-center text-xs font-semibold text-fero-green-dark">
+                        {saving != null ? `${saving.toFixed(1)}%` : '—'}
                       </td>
                     );
                   }}

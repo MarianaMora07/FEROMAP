@@ -1,4 +1,5 @@
-import { mondayIso } from '../api/planning';
+import { mondayIso } from './isoDate';
+import { addDaysToIso } from './weeklyPlanCalendar';
 
 export type DailyCalendarStatus = 'none' | 'draft' | 'optimized' | 'dispatched' | 'closed';
 
@@ -41,13 +42,7 @@ export function mapDailyStatusToCalendar(status: string | null | undefined): Dai
 }
 
 export function weekDaysFromMonday(weekStartIso: string): string[] {
-  const days: string[] = [];
-  for (let offset = 0; offset < 7; offset += 1) {
-    const date = new Date(weekStartIso);
-    date.setDate(date.getDate() + offset);
-    days.push(date.toISOString().slice(0, 10));
-  }
-  return days;
+  return Array.from({ length: 7 }, (_, offset) => addDaysToIso(weekStartIso, offset));
 }
 
 export function weekDayLabels(): string[] {
@@ -55,13 +50,11 @@ export function weekDayLabels(): string[] {
 }
 
 export function mondayOfDate(isoDate: string): string {
-  return mondayIso(new Date(isoDate));
+  return mondayIso(isoDate);
 }
 
 export function shiftWeek(weekStartIso: string, weeks: number): string {
-  const date = new Date(weekStartIso);
-  date.setDate(date.getDate() + weeks * 7);
-  return date.toISOString().slice(0, 10);
+  return addDaysToIso(weekStartIso, weeks * 7);
 }
 
 export type DailyTimelineStepId = 'open' | 'optimize' | 'dispatch' | 'close';

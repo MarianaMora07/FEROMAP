@@ -30,6 +30,12 @@ from app.services.case_study_planning import (
     resolve_case_study_active_point_ids,
     resolve_weekly_day_point_ids,
 )
+from app.domain.plan_kpis import (
+    dump_kpi_json,
+    forecast_from_routes,
+    parse_kpi_json,
+    plan_vs_real_from_routes,
+)
 
 _UNSET = object()
 
@@ -281,6 +287,8 @@ def _daily_plan_payload(db: Session, plan: DailyPlan) -> dict[str, Any]:
         "pendingPoints": [_serialize_pending(db, visit) for visit in open_pending],
         "pendingPointIds": pending_ids,
         "finalPointIds": final_ids,
+        "plannedKpis": parse_kpi_json(plan.planned_kpis_json),
+        "actualKpis": parse_kpi_json(plan.actual_kpis_json),
         "dispatchedAt": plan.dispatched_at.isoformat() if plan.dispatched_at else None,
         "closedAt": plan.closed_at.isoformat() if plan.closed_at else None,
         "notes": plan.notes,
@@ -725,6 +733,7 @@ def validate_weekly_plan_days(db: Session, *, plan_id: int) -> dict[str, Any]:
                 {
                     "scenarioId": scenario_id,
                     "distanceKm": round(kpis["distanceKm"]["optimized"], 1),
+                    "baselineDistanceKm": round(float((kpis.get("distanceKm") or {}).get("current") or 0), 1),
                     "durationHours": kpis["durationHours"]["optimized"],
                     "coveragePct": kpis.get("coveragePct"),
                     "uncoveredPoints": kpis.get("uncoveredPoints"),
@@ -1246,8 +1255,8 @@ def close_daily_plan(db: Session, daily_plan_id: int, *, user_id: int | None = N
     routes = db.scalars(
         select(OptimizedRoute)
         .where(OptimizedRoute.daily_plan_id == daily_plan_id)
-        .options(joinedload(OptimizedRoute.waypoints))
-    ).all()
+        .options(joinedload(OptimizedRoute.waypoints).joinedload(RouteWaypoint.collection_point))
+    ).unique().all()
 
     new_pending = 0
     for route in routes:
@@ -1266,6 +1275,24 @@ def close_daily_plan(db: Session, daily_plan_id: int, *, user_id: int | None = N
 
     plan.closed_at = datetime.now(timezone.utc)
     plan.status = "partial" if new_pending else "completed"
+
+    # Resultado real (Fase 4): consolida previsto vs. ejecutado desde los waypoints.
+    from app.services.operations_service import route_actual_distance_km
+
+    scheduled_ids = _json_list(plan.final_point_ids_json) or _json_list(
+        plan.scheduled_point_ids_json
+    )
+    actual_km_values = [
+        km for route in routes if (km := route_actual_distance_km(route)) is not None
+    ]
+    plan.actual_kpis_json = dump_kpi_json(
+        plan_vs_real_from_routes(
+            routes,
+            scheduled_points=len(scheduled_ids),
+            actual_distance_km=sum(actual_km_values) if actual_km_values else None,
+        )
+    )
+
     _record_version(
         db,
         entity_type="daily_plan",
@@ -1468,6 +1495,15 @@ def seed_optimized_daily_playback_demo(
                     estimated_arrival_at=arrival,
                 )
             )
+
+    db.flush()
+    seeded_routes = db.scalars(
+        select(OptimizedRoute).where(OptimizedRoute.daily_plan_id == plan.id)
+    ).all()
+    plan.planned_kpis_json = dump_kpi_json(
+        forecast_from_routes(seeded_routes, scheduled_points=len(scheduled_ids))
+    )
+    db.flush()
 
     return plan.id
 

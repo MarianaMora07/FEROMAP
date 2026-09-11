@@ -1,5 +1,7 @@
 import { Show } from 'solid-js';
+import { A } from '@solidjs/router';
 import { CloudRain } from 'lucide-solid';
+import { Button } from '../../design-system/components';
 import type { ScenarioId } from '../../data/types/simulation';
 
 interface DailyScenarioBannerProps {
@@ -7,6 +9,8 @@ interface DailyScenarioBannerProps {
   scenarioLabel: string;
   weeklyPlanApproved: boolean;
   pendingCount: number;
+  /** Deep link a la semana del día para aprobarla. */
+  weeklyHref?: string;
 }
 
 export function DailyScenarioBanner(props: DailyScenarioBannerProps) {
@@ -42,9 +46,22 @@ export function DailyScenarioBanner(props: DailyScenarioBannerProps) {
         </Show>
       </div>
       <Show when={!props.weeklyPlanApproved}>
-        <p class="mt-2 text-xs font-medium text-amber-700 dark:text-amber-200">
-          Aprueba el plan semanal para habilitar optimización y simulación de recorrido.
-        </p>
+        <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <p class="text-xs font-medium text-amber-700 dark:text-amber-200">
+            Aprueba el plan semanal para habilitar optimización y simulación de recorrido.
+          </p>
+          <Show when={props.weeklyHref}>
+            <A href={props.weeklyHref!}>
+              <Button
+                variant="primary"
+                size="sm"
+                data-testid="daily-banner-approve-week"
+              >
+                Aprobar plan semanal
+              </Button>
+            </A>
+          </Show>
+        </div>
       </Show>
     </div>
   );

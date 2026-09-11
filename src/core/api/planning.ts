@@ -1,8 +1,80 @@
 import { apiDelete, apiGet, apiPatch, apiPost, useMocks } from './client';
 import { tomorrowIso } from '../planning/planningUx';
+import {
+  addWeeksToMonday,
+  formatIsoDateLocal,
+  mondayIso,
+  parseIsoDateLocal,
+} from '../planning/isoDate';
 import type { ScenarioId } from '../../data/types/simulation';
 
+export { addWeeksToMonday, mondayIso };
+
 export type WeeklyPlanPointSource = 'case_study' | 'manual';
+
+/** Contrato del previsto por el motor para un día (compartido con el backend). */
+export interface PlanForecast {
+  distanceKm: number;
+  durationHours: number;
+  baselineDistanceKm?: number | null;
+  savingPct?: number | null;
+  scheduledPoints: number;
+  coveredPoints: number;
+  uncoveredPoints: number;
+  coveragePct?: number | null;
+  vehicleCount: number;
+}
+
+/** Previsto agregado de la semana, con desglose por día (`operationDate`). */
+export interface WeeklyPlanForecast extends PlanForecast {
+  weekStartDate: string;
+  days: Record<string, PlanForecast>;
+}
+
+/** Cierre del ciclo: previsto vs. ejecutado de un día (compartido con el backend). */
+export interface PlanVsReal {
+  plannedDistanceKm?: number | null;
+  actualDistanceKm?: number | null;
+  plannedDurationMin?: number | null;
+  actualDurationMin?: number | null;
+  scheduledPoints: number;
+  servedPoints: number;
+  collectedKg: number;
+  completionPct?: number | null;
+}
+
+/** Pre-flight heurístico por día (demanda estimada vs. capacidad de flota). */
+export interface WeeklyPlanPreflightRow {
+  operationDate?: string;
+  pointCount?: number;
+  scenarioId?: string;
+  demandKg?: number;
+  capacityKg?: number;
+  expectedVehicles?: number;
+  availableVehicles?: number;
+  overloaded?: boolean;
+  insufficientFleet?: boolean;
+}
+
+export interface WeeklyPlanPreflight {
+  feasible: boolean;
+  rows: WeeklyPlanPreflightRow[];
+  simulation?: {
+    feasible?: boolean;
+    rows?: Array<{
+      operationDate?: string;
+      scenarioId?: string;
+      distanceKm?: number;
+      durationHours?: number;
+      coveragePct?: number | null;
+      uncoveredPoints?: number | null;
+      servedPoints?: number;
+      feasible?: boolean;
+      skipped?: boolean;
+      error?: string;
+    }>;
+  } | null;
+}
 
 export interface WeeklyPlanDay {
   id?: number;
@@ -78,34 +150,9 @@ export interface WeeklyPlan {
   fleetByType?: Record<string, number> | null;
   /** Resumen del plan operativo generado (camión × día). */
   operationalPlan?: WeeklyOperationalPlan | null;
-  expectedKpis?: Record<string, unknown> | null;
-  preflight?: {
-    feasible?: boolean;
-    rows?: Array<{
-      operationDate?: string;
-      demandKg?: number;
-      capacityKg?: number;
-      expectedVehicles?: number;
-      availableVehicles?: number;
-      overloaded?: boolean;
-      insufficientFleet?: boolean;
-    }>;
-    simulation?: {
-      feasible?: boolean;
-      rows?: Array<{
-        operationDate?: string;
-        scenarioId?: string;
-        distanceKm?: number;
-        durationHours?: number;
-        coveragePct?: number | null;
-        uncoveredPoints?: number | null;
-        servedPoints?: number;
-        feasible?: boolean;
-        skipped?: boolean;
-        error?: string;
-      }>;
-    };
-  } | null;
+  /** Mejoras previstas de la semana (Fase 0: contrato `WeeklyPlanForecast`). */
+  expectedKpis?: WeeklyPlanForecast | null;
+  preflight?: WeeklyPlanPreflight | null;
   preflightFeasible?: boolean | null;
   notes?: string | null;
   approvedAt?: string | null;
@@ -134,6 +181,10 @@ export interface DailyPlan {
   pendingPoints: PendingVisit[];
   pendingPointIds: number[];
   finalPointIds: number[];
+  /** Previsto del día por el motor (Fase 0: contrato `PlanForecast`). */
+  plannedKpis?: PlanForecast | null;
+  /** Previsto vs. real del día (Fase 0: contrato `PlanVsReal`). */
+  actualKpis?: PlanVsReal | null;
   dispatchedAt?: string | null;
   closedAt?: string | null;
   notes?: string | null;
@@ -143,22 +194,6 @@ export interface DailyCloseResult {
   closedAt: string;
   newPendingVisits: number;
   status: string;
-}
-
-function mondayIso(value = new Date()): string {
-  const date = new Date(value);
-  const day = date.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  date.setDate(date.getDate() + diff);
-  return date.toISOString().slice(0, 10);
-}
-
-export { mondayIso };
-
-export function addWeeksToMonday(weekStartIso: string, weeks: number): string {
-  const date = new Date(weekStartIso);
-  date.setDate(date.getDate() + weeks * 7);
-  return date.toISOString().slice(0, 10);
 }
 
 export function isPastWeek(weekStartDate: string, reference = new Date()): boolean {
@@ -194,11 +229,11 @@ function mockWeeklyPlan(): WeeklyPlan {
   const start = mondayIso();
   const days: WeeklyPlanDay[] = [];
   for (let offset = 0; offset < 5; offset += 1) {
-    const date = new Date(start);
+    const date = parseIsoDateLocal(start);
     date.setDate(date.getDate() + offset);
     days.push({
-      operationDate: date.toISOString().slice(0, 10),
-      weekday: date.getDay() === 0 ? 6 : date.getDay() - 1,
+      operationDate: formatIsoDateLocal(date),
+      weekday: offset,
       sectorIds: [],
       collectionPointIds: [1 + offset, 2 + offset, 3 + offset],
       status: 'planned',
@@ -210,6 +245,19 @@ function mockWeeklyPlan(): WeeklyPlan {
     weekEndDate: days[4]!.operationDate,
     status: 'approved',
     scenarioId: 'normal',
+    expectedKpis: {
+      weekStartDate: start,
+      distanceKm: 72.5,
+      durationHours: 21.5,
+      baselineDistanceKm: 96,
+      savingPct: 24.5,
+      scheduledPoints: 15,
+      coveredPoints: 15,
+      uncoveredPoints: 0,
+      coveragePct: 100,
+      vehicleCount: 5,
+      days: {},
+    },
     days,
   };
 }
@@ -218,19 +266,19 @@ let mockWeeklyPlanItems: WeeklyPlan[] | null = null;
 let mockWeeklyPlanNextId = 10;
 
 function weekEndFromStart(weekStart: string): string {
-  const date = new Date(`${weekStart}T12:00:00`);
+  const date = parseIsoDateLocal(weekStart);
   date.setDate(date.getDate() + 4);
-  return date.toISOString().slice(0, 10);
+  return formatIsoDateLocal(date);
 }
 
 function buildMockAutofillDays(weekStartDate: string): WeeklyPlanDay[] {
   const pointIds = [1, 2, 3, 4, 5];
   const chunk = Math.max(1, Math.ceil(pointIds.length / 5));
   return Array.from({ length: 5 }, (_, offset) => {
-    const date = new Date(`${weekStartDate}T12:00:00`);
+    const date = parseIsoDateLocal(weekStartDate);
     date.setDate(date.getDate() + offset);
     return {
-      operationDate: date.toISOString().slice(0, 10),
+      operationDate: formatIsoDateLocal(date),
       weekday: offset,
       sectorIds: [],
       collectionPointIds: pointIds.slice(offset * chunk, (offset + 1) * chunk),
@@ -308,6 +356,29 @@ function mockDailyPlan(operationDate: string): DailyPlan {
     ],
     pendingPointIds: [16],
     finalPointIds: [1, 2, 16],
+    plannedKpis: {
+      distanceKm: 14.5,
+      durationHours: 4.3,
+      baselineDistanceKm: 19.2,
+      savingPct: 24.5,
+      scheduledPoints: 2,
+      coveredPoints: 2,
+      uncoveredPoints: 0,
+      coveragePct: 100,
+      vehicleCount: 1,
+    },
+    actualKpis: demoClosed
+      ? {
+          plannedDistanceKm: 14.5,
+          actualDistanceKm: null,
+          plannedDurationMin: 260,
+          actualDurationMin: 288,
+          scheduledPoints: 2,
+          servedPoints: 1,
+          collectedKg: 245.6,
+          completionPct: 50,
+        }
+      : null,
   };
 }
 
@@ -426,12 +497,12 @@ export function fetchDailyPlansInRange(
 ): Promise<{ items: DailyPlanSummary[] }> {
   if (useMocks) {
     const items: DailyPlanSummary[] = [];
-    const start = new Date(fromDate);
-    const end = new Date(toDate);
+    const start = parseIsoDateLocal(fromDate);
+    const end = parseIsoDateLocal(toDate);
     const statuses = ['draft', 'optimized', 'dispatched', 'completed', 'draft', 'none', 'none'] as const;
     let index = 0;
     for (let cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
-      const operationDate = cursor.toISOString().slice(0, 10);
+      const operationDate = formatIsoDateLocal(cursor);
       const status = statuses[index % statuses.length];
       if (status !== 'none') {
         items.push({
@@ -525,6 +596,15 @@ export function validateWeeklyPlan(planId: number): Promise<{ jobId: string; wee
   return apiPost(`/api/v1/planning/weekly/${planId}/validate`, {});
 }
 
+/**
+ * Recalcula el pre-flight (demanda vs. flota) de un plan en borrador. Se usa en el
+ * paso de configuración para mostrar viabilidad antes de validar.
+ */
+export function fetchWeeklyPlanPreflight(planId: number): Promise<WeeklyPlanPreflight> {
+  if (useMocks) return Promise.resolve({ feasible: true, rows: [] });
+  return apiPost(`/api/v1/planning/weekly/${planId}/preflight`, {});
+}
+
 export function generateWeeklyOperationalPlan(
   planId: number,
 ): Promise<{ jobId: string; weeklyPlanId: number }> {
@@ -550,7 +630,7 @@ export function notifyWeeklyOperationalDays(
 
 export function approveWeeklyPlan(
   planId: number,
-  payload?: { referenceSimulationId?: number; expectedKpis?: Record<string, unknown> },
+  payload?: { referenceSimulationId?: number; expectedKpis?: WeeklyPlanForecast },
 ): Promise<WeeklyPlan> {
   if (useMocks) {
     const existing = findMockWeeklyPlan(planId) ?? { ...mockWeeklyPlan(), id: planId };
