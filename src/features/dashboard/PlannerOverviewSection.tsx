@@ -3,12 +3,8 @@ import { A } from '@solidjs/router';
 import { AlertTriangle, FileBarChart, History, Map, Route, Trash2, Truck } from 'lucide-solid';
 import { Badge, Button, Card, CardHeader, KpiCard, ProgressBar } from '../../design-system/components';
 import { dashboardView } from '../../core/stores/dashboardStore';
-import type { DashboardActiveRoute } from '../../core/api/dashboard';
+import { emptyDashboardKpis, type DashboardActiveRoute } from '../../core/api/dashboard';
 import { driverDisplayName, fetchDrivers } from '../../core/api/drivers';
-import {
-  activeRoutes as mockActiveRoutes,
-  dashboardKpis as mockDashboardKpis,
-} from '../../data/mock/dashboard';
 import { DashboardPlanVsRealKpi } from './DashboardPlanVsRealKpi';
 
 function initials(firstName: string, lastName: string): string {
@@ -22,8 +18,8 @@ function initials(firstName: string, lastName: string): string {
  */
 export function PlannerOverviewSection() {
   const view = () => dashboardView();
-  const kpis = () => view()?.kpis ?? mockDashboardKpis;
-  const activeRoutes = (): DashboardActiveRoute[] => view()?.activeRoutes ?? mockActiveRoutes;
+  const kpis = () => view()?.kpis ?? emptyDashboardKpis;
+  const activeRoutes = (): DashboardActiveRoute[] => view()?.activeRoutes ?? [];
   const criticalContainers = () => view()?.summary?.metrics?.criticalContainers ?? 0;
   const atRiskContainers = () => view()?.summary?.metrics?.atRiskContainers ?? 0;
   const soonestRiskHours = () => {
@@ -52,12 +48,20 @@ export function PlannerOverviewSection() {
           unit={kpis().wasteTons.unit}
           icon={<Trash2 size={28} />}
           iconTone="green"
-          trend={{ value: kpis().wasteTons.trend, direction: 'up' }}
+          trend={
+            kpis().wasteTons.trend > 0
+              ? { value: kpis().wasteTons.trend, direction: 'up' }
+              : undefined
+          }
           trendLabel="vs ayer"
         />
         <KpiCard
           title="Rutas completadas"
-          value={`${kpis().routes.done} de ${kpis().routes.total}`}
+          value={
+            kpis().routes.total > 0
+              ? `${kpis().routes.done} de ${kpis().routes.total}`
+              : String(kpis().routes.done)
+          }
           icon={<Route size={28} />}
           iconTone="green"
           footer={

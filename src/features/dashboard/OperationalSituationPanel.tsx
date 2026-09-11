@@ -3,14 +3,11 @@ import { A } from '@solidjs/router';
 import { AlertTriangle, ArrowRight, ChevronDown, Truck } from 'lucide-solid';
 import { KpiCard } from '../../design-system/components';
 import { dashboardView } from '../../core/stores/dashboardStore';
-import {
-  activeRoutes as mockActiveRoutes,
-  dashboardKpis as mockDashboardKpis,
-} from '../../data/mock/dashboard';
+import { emptyDashboardKpis } from '../../core/api/dashboard';
 
 export function OperationalSituationPanel() {
-  const kpis = () => dashboardView()?.kpis ?? mockDashboardKpis;
-  const activeRoutes = () => dashboardView()?.activeRoutes ?? mockActiveRoutes;
+  const kpis = () => dashboardView()?.kpis ?? emptyDashboardKpis;
+  const activeRoutes = () => dashboardView()?.activeRoutes ?? [];
   const routesInProgress = () => activeRoutes().length;
   const alertCount = () => kpis().alerts.count;
 
