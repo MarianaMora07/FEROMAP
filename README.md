@@ -210,6 +210,9 @@ Documentación de implementación (fases 0–7): [docs/fase-0/README.md](docs/fa
 | `just rebuild-prod` | Producción: build estático + API empaquetados |
 | `just health` | Comprueba API y frontend |
 | `just defense-verify` | Pre-defensa: health + login + optimize (+ Nginx en prod) |
+| `just prod-verify` | Producción: `defense-verify` + `/metrics` + verificación de `X-Request-ID` |
+| `just backup` | Respalda PostgreSQL (`pg_dump -Fc`) en `backups/` con retención |
+| `just restore <file>` | Restaura un backup de PostgreSQL |
 | `just demo-verify` | Flujo demo rápido (GIS + optimización) |
 | `just test` | Tests unitarios (motor ACO + contingencias) |
 | `just migrate` | Alembic `upgrade head` |
@@ -239,7 +242,7 @@ Lista completa: `just` o `just --list`.
 | `VITE_USE_MOCKS` | `false` (API real) | `false` |
 | `VITE_API_URL` | `http://localhost:8000` | **vacío** (mismo origen vía Nginx) |
 | `CORS_ORIGINS` | `http://localhost:5173` | `http://localhost:8080` |
-| `JWT_SECRET` | valor de `.env.example` | **cambiar en despliegue real** |
+| `JWT_SECRET` | valor de desarrollo (implícito) | **obligatorio** — el API no arranca sin él |
 
 No subas `.env` al repositorio (está en `.gitignore`).
 
@@ -312,7 +315,7 @@ FEROMAP/
 ├── deploy/nginx/         # SPA + proxy /api (prod)
 ├── docs/                 # Fases 0–B, manual, guion demo, IA (ux/), estado de módulos
 ├── src/                  # Frontend SolidJS
-├── scripts/              # compose.sh, defense-verify.sh
+├── scripts/              # compose.sh, defense-verify.sh, prod-verify.sh
 ├── compose.yml           # Servicios base
 ├── compose.dev.yml       # Dev: volúmenes + Vite
 ├── compose.prod.yml      # Prod: imágenes + Nginx
