@@ -31,6 +31,16 @@ def _parse_date(value: date | str | None) -> date | None:
     return date.fromisoformat(value)
 
 
+def _numeric_kpi(value: Any) -> float:
+    """Normaliza un KPI que puede venir como número o como contrato {current, optimized}."""
+    if isinstance(value, dict):
+        value = value.get("optimized", value.get("current"))
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _weekly_scheduled_point_count(plan: WeeklyPlan) -> int:
     point_ids: set[int] = set()
     for day in plan.days:
@@ -51,13 +61,13 @@ def _daily_executed_metrics(db: Session, plan: DailyPlan) -> tuple[float, float,
     if simulation.parameters_json:
         params = json.loads(simulation.parameters_json)
         kpis = params.get("kpis") or {}
-        duration_h = float(kpis.get("durationHours", {}).get("optimized", 0) or 0)
+        duration_h = _numeric_kpi(kpis.get("durationHours"))
 
     routes = db.scalars(
         select(OptimizedRoute)
         .where(OptimizedRoute.daily_plan_id == plan.id)
         .options(joinedload(OptimizedRoute.waypoints))
-    ).all()
+    ).unique().all()
     visited = 0
     scheduled = 0
     for route in routes:
@@ -126,8 +136,8 @@ def planning_analytics_summary(
     for plan in weekly_plans:
         if plan.expected_kpis_json:
             kpis = json.loads(plan.expected_kpis_json)
-            planned_km += float(kpis.get("distanceKm", 0) or 0)
-            planned_hours += float(kpis.get("durationHours", 0) or 0)
+            planned_km += _numeric_kpi(kpis.get("distanceKm"))
+            planned_hours += _numeric_kpi(kpis.get("durationHours"))
 
     executed_km = 0.0
     executed_hours = 0.0
@@ -252,7 +262,7 @@ def _planning_trends(
 
         planned = 0.0
         if plan.expected_kpis_json:
-            planned = float(json.loads(plan.expected_kpis_json).get("distanceKm", 0) or 0)
+            planned = _numeric_kpi(_parse_kpi_json(plan.expected_kpis_json).get("distanceKm"))
         executed = 0.0
         for daily in week_dailies:
             km, _, _, _ = _daily_executed_metrics(db, daily)

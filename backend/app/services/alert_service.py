@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -110,6 +111,11 @@ def _compute_stats(db: Session) -> dict[str, int]:
     active = db.scalars(
         select(SystemAlert).where(SystemAlert.lifecycle_status != "resolved")
     ).all()
+    return _stats_from_alerts(db, active)
+
+
+def _stats_from_alerts(db: Session, alerts: list[SystemAlert]) -> dict[str, int]:
+    active = [alert for alert in alerts if alert.lifecycle_status != "resolved"]
     today = datetime.now(timezone.utc).date()
     resolved_today = db.scalar(
         select(func.count())
@@ -128,7 +134,42 @@ def _compute_stats(db: Session) -> dict[str, int]:
     }
 
 
-def list_alerts_payload(db: Session, *, active_only: bool = True, sync: bool = True) -> dict[str, Any]:
+def _contains_token(text: str, needle: str) -> bool:
+    """Coincidencia por límite de palabra (evita que 'Unare I' matchee 'Unare II')."""
+    token = needle.strip().lower()
+    if not token:
+        return True
+    return re.search(rf"(?<![0-9a-z]){re.escape(token)}(?![0-9a-z])", text) is not None
+
+
+def alert_matches_scope(
+    alert: SystemAlert,
+    *,
+    sector: str | None = None,
+    vehicle: str | None = None,
+) -> bool:
+    """Scoping de alertas por sector y/o vehículo (F6).
+
+    El modelo de ``SystemAlert`` no tiene FK a sector/vehículo, así que se compara
+    contra ``location`` (sector/dirección) y ``source`` (p. ej. "Vehículo TR-06").
+    """
+    location = (alert.location or "").lower()
+    source = (alert.source or "").lower()
+    if sector and not _contains_token(location, sector):
+        return False
+    if vehicle and not (_contains_token(source, vehicle) or _contains_token(location, vehicle)):
+        return False
+    return True
+
+
+def list_alerts_payload(
+    db: Session,
+    *,
+    active_only: bool = True,
+    sync: bool = True,
+    sector: str | None = None,
+    vehicle: str | None = None,
+) -> dict[str, Any]:
     # "sync" crea alertas derivadas del estado actual (contenedores críticos, etc.).
     # El dashboard lo desactiva para no inventar actividad en una BD recién sembrada.
     if sync:
@@ -136,10 +177,16 @@ def list_alerts_payload(db: Session, *, active_only: bool = True, sync: bool = T
     stmt = select(SystemAlert).order_by(SystemAlert.occurred_at.desc())
     if active_only:
         stmt = stmt.where(SystemAlert.lifecycle_status != "resolved")
-    alerts = db.scalars(stmt).all()
+    alerts = list(db.scalars(stmt).all())
+    if sector or vehicle:
+        alerts = [
+            alert
+            for alert in alerts
+            if alert_matches_scope(alert, sector=sector, vehicle=vehicle)
+        ]
     return {
         "alerts": [serialize_alert(alert) for alert in alerts],
-        "stats": _compute_stats(db),
+        "stats": _stats_from_alerts(db, alerts),
     }
 
 

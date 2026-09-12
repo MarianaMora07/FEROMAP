@@ -44,22 +44,16 @@ import type { AnalyticsGranularity, AnalyticsHeatmapGeoJson } from '../../core/t
 import { defaultDateRange } from '../../core/utils/analyticsFilters';
 import { parseSimulationIdParam } from '../../core/utils/simulationLinks';
 import { SimulationRunComparisonCard } from '../simulation/SimulationRunComparisonCard';
-import { ModuleScopeBanner } from '../../core/demo/ModuleScopeBanner';
 import { PlanningAnalyticsSection } from './PlanningAnalyticsSection';
-import {
-  analyticsEfficiencyIndicators as mockEfficiency,
-  analyticsInsights as mockInsights,
-  analyticsKpis as mockKpis,
-  analyticsRoutePerformance as mockRoutePerformance,
-  analyticsWasteTypes as mockWasteTypes,
-  evolutionSeries as mockEvolution,
-  hourlyDistribution as mockHourly,
-  hourlyMetricOptions,
-  type HourlyMetricId,
-} from '../../data/mock/analytics';
+import { hourlyMetricOptions, type HourlyMetricId } from '../../data/mock/analytics';
+import type { AnalyticsSummary } from '../../core/api/analytics';
 
-function KpiIcon(props: { name: (typeof mockKpis)[number]['icon'] }) {
-  const map: Record<(typeof mockKpis)[number]['icon'], () => JSX.Element> = {
+type KpiIconName = AnalyticsSummary['kpis'][number]['icon'];
+type KpiTone = AnalyticsSummary['kpis'][number]['iconTone'];
+type InsightIconName = AnalyticsSummary['insights'][number]['icon'];
+
+function KpiIcon(props: { name: KpiIconName }) {
+  const map: Record<KpiIconName, () => JSX.Element> = {
     trash: () => <Trash2 size={22} />,
     truck: () => <Truck size={22} />,
     route: () => <Route size={22} />,
@@ -97,14 +91,14 @@ function Sparkline(props: { values: number[]; color: string }) {
   );
 }
 
-const sparkColor: Record<(typeof mockKpis)[number]['iconTone'], string> = {
+const sparkColor: Record<KpiTone, string> = {
   green: '#34D634',
   blue: '#1143F3',
   amber: '#f59e0b',
   purple: '#7c3aed',
 };
 
-function InsightIcon(props: { icon: (typeof mockInsights)[number]['icon']; tone: string }) {
+function InsightIcon(props: { icon: InsightIconName; tone: string }) {
   const cls = props.tone;
   switch (props.icon) {
     case 'trend':
@@ -141,13 +135,27 @@ export default function AnalyticsPage() {
   const [dateTo, setDateTo] = createSignal(defaultRange.to);
   const [hourlyMetric, setHourlyMetric] = createSignal<HourlyMetricId>('toneladas');
   const [mapReady, setMapReady] = createSignal(false);
-  const [kpis, setKpis] = createSignal(mockKpis);
-  const [evolutionSeries, setEvolutionSeries] = createSignal(mockEvolution);
-  const [analyticsWasteTypes, setAnalyticsWasteTypes] = createSignal(mockWasteTypes);
-  const [analyticsRoutePerformance, setAnalyticsRoutePerformance] = createSignal(mockRoutePerformance);
-  const [hourlyDistribution, setHourlyDistribution] = createSignal(mockHourly);
-  const [analyticsEfficiencyIndicators, setAnalyticsEfficiencyIndicators] = createSignal(mockEfficiency);
-  const [analyticsInsights, setAnalyticsInsights] = createSignal(mockInsights);
+  const [analyticsError, setAnalyticsError] = createSignal(false);
+  const [kpis, setKpis] = createSignal<AnalyticsSummary['kpis']>([]);
+  const [evolutionSeries, setEvolutionSeries] = createSignal<AnalyticsSummary['evolutionSeries']>({
+    labels: [],
+    collections: [],
+    tons: [],
+  });
+  const [analyticsWasteTypes, setAnalyticsWasteTypes] = createSignal<AnalyticsSummary['wasteTypes']>({
+    totalLabel: '0',
+    items: [],
+  });
+  const [analyticsRoutePerformance, setAnalyticsRoutePerformance] = createSignal<
+    AnalyticsSummary['routePerformance']
+  >([]);
+  const [hourlyDistribution, setHourlyDistribution] = createSignal<
+    AnalyticsSummary['hourlyDistribution']
+  >({ labels: [], toneladas: [], recolecciones: [] });
+  const [analyticsEfficiencyIndicators, setAnalyticsEfficiencyIndicators] = createSignal<
+    AnalyticsSummary['efficiencyIndicators']
+  >([]);
+  const [analyticsInsights, setAnalyticsInsights] = createSignal<AnalyticsSummary['insights']>([]);
   const [heatmapPoints, setHeatmapPoints] = createSignal<Array<{ lng: number; lat: number }>>([]);
 
   const filters = createMemo(() => ({
@@ -217,20 +225,25 @@ export default function AnalyticsPage() {
 
   createEffect(() => {
     const activeFilters = filters();
-    void fetchAnalyticsSummary(activeFilters).then((summary) => {
-      setKpis(summary.kpis);
-      setEvolutionSeries(summary.evolutionSeries);
-      setAnalyticsWasteTypes(summary.wasteTypes);
-      setAnalyticsRoutePerformance(summary.routePerformance);
-      setHourlyDistribution(summary.hourlyDistribution);
-      setAnalyticsEfficiencyIndicators(summary.efficiencyIndicators);
-      setAnalyticsInsights(summary.insights);
-    });
-    void fetchAnalyticsHeatmap(activeFilters).then((geojson) => {
-      if (mapReady()) {
-        applyHeatmapData(geojson);
-      }
-    });
+    void fetchAnalyticsSummary(activeFilters)
+      .then((summary) => {
+        setAnalyticsError(false);
+        setKpis(summary.kpis);
+        setEvolutionSeries(summary.evolutionSeries);
+        setAnalyticsWasteTypes(summary.wasteTypes);
+        setAnalyticsRoutePerformance(summary.routePerformance);
+        setHourlyDistribution(summary.hourlyDistribution);
+        setAnalyticsEfficiencyIndicators(summary.efficiencyIndicators);
+        setAnalyticsInsights(summary.insights);
+      })
+      .catch(() => setAnalyticsError(true));
+    void fetchAnalyticsHeatmap(activeFilters)
+      .then((geojson) => {
+        if (mapReady()) {
+          applyHeatmapData(geojson);
+        }
+      })
+      .catch(() => setAnalyticsError(true));
   });
 
   onMount(() => {
@@ -259,7 +272,7 @@ export default function AnalyticsPage() {
       map.resize();
       setupAnalyticsHeatmap(map);
       setMapReady(true);
-      void fetchAnalyticsHeatmap(filters()).then(applyHeatmapData);
+      void fetchAnalyticsHeatmap(filters()).then(applyHeatmapData).catch(() => setAnalyticsError(true));
     });
 
     const ro = new ResizeObserver(() => mapRef.current?.resize());
@@ -323,8 +336,16 @@ export default function AnalyticsPage() {
   const maxTons = () => Math.max(...analyticsRoutePerformance().map((r) => r.tons), 1);
 
   return (
-    <div class="space-y-5">
-      <ModuleScopeBanner scope="analytics-mock" linkHref="/reports" linkLabel="Ver reportes operativos" />
+    <div class="space-y-5" data-testid="analytics-page">
+      <Show when={analyticsError()}>
+        <div
+          role="alert"
+          data-testid="analytics-error"
+          class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
+        >
+          No se pudo cargar la analítica desde el API. Verifica la conexión.
+        </div>
+      </Show>
       <SimulationRunComparisonCard simulationId={focusedSimulationId()} />
       <Show when={focusCollectionPoints()}>
         <div class="rounded-xl border border-fero-blue/30 bg-fero-blue/10 px-4 py-3">
@@ -377,6 +398,11 @@ export default function AnalyticsPage() {
           </select>
         </div>
       </div>
+      <Show when={!analyticsError() && kpis().length === 0}>
+        <p class="text-sm text-text-muted" data-testid="analytics-empty">
+          Sin datos para el rango seleccionado. Ejecuta una simulación o ajusta el filtro.
+        </p>
+      </Show>
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <For each={kpis()}>
           {(kpi) => (

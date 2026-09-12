@@ -27,10 +27,14 @@ def get_alerts(
     db: DbSession,
     _user: CurrentUser,
     active_only: bool = Query(True),
+    sector: str | None = Query(None),
+    vehicle: str | None = Query(None),
 ):
-    """Lectura para cualquier rol autenticado; el UI acota por rol."""
+    """Lectura para cualquier rol autenticado; admite scoping por sector/vehículo (F6)."""
     # sync=False: la vista de alertas solo muestra alertas persistidas (0 en BD limpia).
-    return list_alerts_payload(db, active_only=active_only, sync=False)
+    return list_alerts_payload(
+        db, active_only=active_only, sync=False, sector=sector, vehicle=vehicle
+    )
 
 
 @router.patch("/{alert_id}")
