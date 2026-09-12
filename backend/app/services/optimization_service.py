@@ -36,6 +36,7 @@ from app.domain.traffic_profile import (
     normalize_departure_hour,
 )
 from app.services.operational_facilities_service import resolve_operational_facilities
+from app.services.zone_config_service import parish_for_sectors, sector_windows
 from app.services.route_constraints import (
     build_applied_route_constraints,
     build_customer_time_windows,
@@ -497,6 +498,7 @@ def _optimize_by_sector_assignment(
     on_iteration: Callable[[int, int, float, float], None] | None = None,
     priority_fill_level: bool = False,
     time_window_enabled: bool = False,
+    zone_windows: dict[int, tuple[int, int]] | None = None,
 ) -> RouteSolution:
     """Optimiza una ruta por vehículo solo con puntos de los sectores de su conductor."""
     n_customers = len(customers)
@@ -539,6 +541,7 @@ def _optimize_by_sector_assignment(
         window_starts, window_ends = build_customer_time_windows(
             [customers[idx - 1].sector_id for idx in customer_globals],
             enabled=time_window_enabled,
+            zone_windows=zone_windows,
         )
 
         def vehicle_progress(
@@ -2011,6 +2014,7 @@ def run_optimization_engine(
             priority_fill_level=resolved_priority_fill_level,
             time_window_enabled=resolved_time_window_enabled,
             kpi_view=resolved_kpi_view,
+            time_window_model="zone",
         ),
     }
     if case_context is not None:
@@ -2129,7 +2133,13 @@ def run_optimization_engine(
     vehicles = _resolve_fleet_crew(vehicles, shortage)
     shortage_for_engine = None
 
-    facilities = resolve_operational_facilities(db)
+    # Configuración por zona (F8): depósito/vertedero y ventanas horarias de la
+    # parroquia de los clientes (si todos comparten una).
+    sector_ids = [customer.sector_id for customer in customers]
+    parish_id = parish_for_sectors(db, sector_ids)
+    zone_windows = sector_windows(db, sector_ids) if resolved_time_window_enabled else {}
+
+    facilities = resolve_operational_facilities(db, parish_id=parish_id)
     depot_lon, depot_lat = facilities.depot
     landfill_lon, landfill_lat = facilities.landfill
     unload_seconds = facilities.unload_seconds
@@ -2352,6 +2362,7 @@ def run_optimization_engine(
             on_iteration=aco_progress,
             priority_fill_level=resolved_priority_fill_level,
             time_window_enabled=resolved_time_window_enabled,
+            zone_windows=zone_windows,
         )
     else:
         fill_pcts = [customer.fill_pct for customer in customers]
@@ -2364,6 +2375,7 @@ def run_optimization_engine(
         window_starts, window_ends = build_customer_time_windows(
             [customer.sector_id for customer in customers],
             enabled=resolved_time_window_enabled,
+            zone_windows=zone_windows,
         )
         optimized_solution = _aco_cvrp(
             len(customers),

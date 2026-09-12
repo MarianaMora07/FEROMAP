@@ -36,6 +36,7 @@ import {
   type ProfileSession,
 } from '../../core/api/profile';
 import { applyThemePreference, appState, setThemePreference } from '../../core/stores/appStore';
+import { setLocale } from '../../core/i18n';
 import { logout, userInitials } from '../../core/stores/authStore';
 import {
   profileDefaultViewOptions,
@@ -194,6 +195,7 @@ function applyProfileToState(
   setters.setAvatarPreview(resolveAvatarUrl(profile.avatarUrl));
   setters.setSecurity(profile.security);
   applyThemePreference(profile.preferences.theme);
+  setLocale(profile.preferences.language);
 }
 
 export default function ProfilePage() {
@@ -751,6 +753,7 @@ export default function ProfilePage() {
                     .then((saved) => {
                       setPrefs(saved);
                       applyThemePreference(saved.theme);
+                      setLocale(saved.language);
                       showFlash('Preferencias guardadas.');
                     })
                     .catch(() => showFlash('No se pudieron guardar las preferencias.'))

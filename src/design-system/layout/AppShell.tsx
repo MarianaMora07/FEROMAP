@@ -10,6 +10,7 @@ import {
   setSidebarOpen,
 } from '../../core/stores/appStore';
 import { globalToast } from '../../core/stores/toastStore';
+import { useLocale } from '../../core/i18n/solid';
 
 interface AppShellProps {
   children: JSX.Element;
@@ -20,6 +21,7 @@ interface AppShellProps {
 
 export function AppShell(props: AppShellProps) {
   const location = useLocation();
+  const tr = useLocale();
   const isMapView = () => props.fullWidth || location.pathname === '/map';
   const isOptimization = () => location.pathname === '/optimization';
 
@@ -31,6 +33,12 @@ export function AppShell(props: AppShellProps) {
   return (
     <HeaderChromeProvider>
     <div class="flex h-full overflow-hidden bg-app">
+      <a
+        href="#main-content"
+        class="absolute left-2 top-2 z-50 -translate-y-16 rounded-md border border-default bg-elevated px-3 py-2 text-sm font-medium text-text-primary shadow transition-transform focus:translate-y-0"
+      >
+        {tr('shell.skipToContent')}
+      </a>
       <Sidebar open={appState.sidebarOpen} />
 
       <Show when={appState.sidebarOpen}>
@@ -52,6 +60,7 @@ export function AppShell(props: AppShellProps) {
         </Show>
 
         <main
+          id="main-content"
           class={`min-h-0 flex-1 ${
             isMapView()
               ? 'overflow-hidden p-0'

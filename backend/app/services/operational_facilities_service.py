@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.db.models import Parish
 from app.domain.landfill_service_time import (
     DEFAULT_DEPOT_LAT,
     DEFAULT_DEPOT_LON,
@@ -60,8 +61,25 @@ def _normalize_lon_lat(
     return resolved_lon, resolved_lat
 
 
-def resolve_operational_facilities(db: Session) -> ResolvedOperationalFacilities:
-    """Lee settings de BD con fallback a constantes de contrato (ADR-004)."""
+def _prefer_zone(
+    zone_lon: float | None,
+    zone_lat: float | None,
+    fallback: tuple[float, float],
+) -> tuple[float, float]:
+    """Usa las coordenadas de la zona si están completas; si no, el valor global."""
+    if zone_lon is not None and zone_lat is not None:
+        return float(zone_lon), float(zone_lat)
+    return fallback
+
+
+def resolve_operational_facilities(
+    db: Session, *, parish_id: int | None = None
+) -> ResolvedOperationalFacilities:
+    """Lee settings de BD con fallback a constantes de contrato (ADR-004).
+
+    Con `parish_id` (F8), el depósito y el vertedero configurados en la zona
+    sobreescriben los globales; los campos no configurados heredan el global.
+    """
     settings = get_operational_settings(db)
     work_start = settings.work_start or DEFAULT_WORK_START
     work_end = settings.work_end or DEFAULT_WORK_END
@@ -78,6 +96,15 @@ def resolve_operational_facilities(db: Session) -> ResolvedOperationalFacilities
         default_lon=DEFAULT_LANDFILL_LON,
         default_lat=DEFAULT_LANDFILL_LAT,
     )
+
+    if parish_id is not None:
+        parish = db.get(Parish, parish_id)
+        if parish is not None:
+            depot_lon, depot_lat = _prefer_zone(parish.depot_lon, parish.depot_lat, (depot_lon, depot_lat))
+            landfill_lon, landfill_lat = _prefer_zone(
+                parish.landfill_lon, parish.landfill_lat, (landfill_lon, landfill_lat)
+            )
+
     return ResolvedOperationalFacilities(
         depot=(depot_lon, depot_lat),
         landfill=(landfill_lon, landfill_lat),

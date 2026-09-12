@@ -3,6 +3,7 @@ import { adminPageMeta, adminTabs, type AdminTabId } from '../../data/mock/admin
 import { AdminAuditLogPanel } from './AdminAuditLogPanel';
 import { AdminOperationalSettings } from './AdminOperationalSettings';
 import { AdminUsersPanel } from './AdminUsersPanel';
+import { AdminZonesPanel } from './AdminZonesPanel';
 
 export default function AdminPage() {
   const [tab, setTab] = createSignal<AdminTabId>('general');
@@ -51,6 +52,7 @@ export default function AdminPage() {
 
       <Show when={tab() === 'general'}>
         <AdminOperationalSettings onFlash={flashMessage} />
+        <AdminZonesPanel onFlash={flashMessage} />
       </Show>
 
       <Show when={tab() === 'users'}>

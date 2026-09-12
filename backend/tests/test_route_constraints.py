@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from app.domain.zone_window import DAY_WINDOW_SECONDS
 from app.services.route_constraints import (
     AFTERNOON_WINDOW,
     MORNING_WINDOW,
+    build_applied_route_constraints,
     build_customer_time_windows,
     build_fill_level_heuristic_matrix,
     fill_level_distance_factor,
@@ -42,6 +44,33 @@ def test_build_customer_time_windows_when_enabled():
     starts, ends = build_customer_time_windows([2, 3], enabled=True)
     assert starts == [float(MORNING_WINDOW[0]), float(AFTERNOON_WINDOW[0])]
     assert ends == [float(MORNING_WINDOW[1]), float(AFTERNOON_WINDOW[1])]
+
+
+def test_build_customer_time_windows_uses_zone_configuration():
+    # Sector 10 tiene ventana 06:00–12:00; sector 11 no tiene → sin restricción.
+    starts, ends = build_customer_time_windows(
+        [10, 11], enabled=True, zone_windows={10: (0, 6 * 3600)}
+    )
+    assert starts == [0.0, 0.0]
+    assert ends == [float(6 * 3600), float(DAY_WINDOW_SECONDS)]
+
+
+def test_build_customer_time_windows_disabled_returns_none():
+    assert build_customer_time_windows([10], enabled=False, zone_windows={10: (0, 3600)}) == (
+        None,
+        None,
+    )
+
+
+def test_build_applied_route_constraints_reports_zone_model():
+    constraints = build_applied_route_constraints(
+        priority_fill_level=False,
+        time_window_enabled=True,
+        kpi_view="distance",
+        time_window_model="zone",
+    )
+    assert constraints["timeWindowModel"] == "zone"
+    assert constraints["timeWindowEnabled"] is True
 
 
 def test_visit_feasible_within_window():

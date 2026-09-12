@@ -52,15 +52,19 @@ export interface NavItemDef {
   href: string;
   label: string;
   roles: UserRole[];
+  /** Clave i18n de la etiqueta; `label` es el respaldo en español (F8). */
+  labelKey?: string;
   /** Texto secundario bajo la etiqueta en el menú lateral */
   description?: string;
+  /** Clave i18n de la descripción; `description` es el respaldo (F8). */
+  descriptionKey?: string;
   /** Enlace visible siempre en la parte superior del sidebar */
   sidebarPrimary?: boolean;
   /** Clasificación demo/producto mostrada como badge solo para admin (docs/ux §3) */
   kind?: 'demo' | 'producto';
 }
 
-export const DEMO_NAV_HIDDEN_HREFS = new Set<string>(['/analytics']);
+export const DEMO_NAV_HIDDEN_HREFS = new Set<string>();
 
 /**
  * Grupos colapsables del sidebar (admin/planificador).
@@ -68,9 +72,16 @@ export const DEMO_NAV_HIDDEN_HREFS = new Set<string>(['/analytics']);
  * Orden de los primarios = ciclo planificar → operar → supervisar.
  */
 export const SIDEBAR_SECTION_GROUPS: Record<string, readonly string[]> = {
-  'Consulta y reportes': ['/planning/history', '/reports'],
+  'Consulta y reportes': ['/planning/history', '/reports', '/analytics'],
   Catálogos: ['/vehicles', '/drivers', '/collection-points'],
   'Tesis y demostración': ['/simulation', '/case-studies', '/demostracion'],
+};
+
+/** Clave i18n de cada sección del sidebar (la clave del mapa sigue siendo la ES). */
+export const SIDEBAR_SECTION_LABEL_KEYS: Record<string, string> = {
+  'Consulta y reportes': 'sections.consulta',
+  Catálogos: 'sections.catalogos',
+  'Tesis y demostración': 'sections.tesis',
 };
 
 export interface SidebarNavSection {
@@ -96,61 +107,96 @@ export function sidebarNavLayout(role: UserRole | undefined): {
 }
 
 export const MAIN_NAV_ITEMS: NavItemDef[] = [
-  { href: '/', label: 'Dashboard', sidebarPrimary: true, roles: ['administrador', 'planificador', 'conductor'] },
+  {
+    href: '/',
+    label: 'Dashboard',
+    labelKey: 'nav.dashboard',
+    sidebarPrimary: true,
+    roles: ['administrador', 'planificador', 'conductor'],
+  },
   {
     href: '/planning/weekly',
     label: 'Plan semanal',
+    labelKey: 'nav.weekly',
     description: 'Directivo — configura, valida y aprueba la semana',
+    descriptionKey: 'nav.weekly.description',
     sidebarPrimary: true,
     roles: ['administrador', 'planificador'],
   },
   {
     href: '/optimization',
     label: 'Plan del día',
+    labelKey: 'nav.day',
     description: 'Optimiza, simula y despacha la jornada',
+    descriptionKey: 'nav.day.description',
     sidebarPrimary: true,
     roles: ['administrador', 'planificador'],
   },
   {
     href: '/monitoring',
     label: 'Monitoreo',
+    labelKey: 'nav.monitoring',
     description: 'Flota, rutas e incidencias del día',
+    descriptionKey: 'nav.monitoring.description',
     sidebarPrimary: true,
     roles: ['administrador', 'planificador', 'conductor'],
   },
-  { href: '/map', label: 'Mapa GIS', sidebarPrimary: true, roles: ['administrador', 'planificador', 'conductor'] },
+  {
+    href: '/map',
+    label: 'Mapa GIS',
+    labelKey: 'nav.map',
+    sidebarPrimary: true,
+    roles: ['administrador', 'planificador', 'conductor'],
+  },
   {
     href: '/planning/history',
     label: 'Historial unificado',
+    labelKey: 'nav.history',
     description: 'Semana, día e incidencias',
+    descriptionKey: 'nav.history.description',
     roles: ['administrador', 'planificador'],
   },
-  { href: '/reports', label: 'Reportes', roles: ['administrador', 'planificador'] },
-  { href: '/vehicles', label: 'Vehículos', roles: ['administrador', 'planificador'] },
-  { href: '/drivers', label: 'Conductores', roles: ['administrador', 'planificador'] },
+  { href: '/reports', label: 'Reportes', labelKey: 'nav.reports', roles: ['administrador', 'planificador'] },
+  {
+    href: '/analytics',
+    label: 'Analítica',
+    labelKey: 'nav.analytics',
+    description: 'KPIs agregados del histórico operativo',
+    descriptionKey: 'nav.analytics.description',
+    roles: ['administrador', 'planificador'],
+  },
+  { href: '/vehicles', label: 'Vehículos', labelKey: 'nav.vehicles', roles: ['administrador', 'planificador'] },
+  { href: '/drivers', label: 'Conductores', labelKey: 'nav.drivers', roles: ['administrador', 'planificador'] },
   {
     href: '/collection-points',
     label: 'Puntos de Recolección',
+    labelKey: 'nav.collectionPoints',
     roles: ['administrador', 'planificador'],
   },
   {
     href: '/simulation',
     label: 'Simulación ACO',
+    labelKey: 'nav.simulation',
     description: 'Baseline vs ACO — escenario normal',
+    descriptionKey: 'nav.simulation.description',
     kind: 'demo',
     roles: ['administrador', 'planificador'],
   },
   {
     href: '/case-studies',
     label: 'Casos de estudio',
+    labelKey: 'nav.caseStudies',
     description: 'Subconjuntos aislados para la tesis',
+    descriptionKey: 'nav.caseStudies.description',
     kind: 'demo',
     roles: ['administrador', 'planificador'],
   },
   {
     href: '/demostracion',
     label: 'Demostración ACO',
+    labelKey: 'nav.demostracion',
     description: 'Convergencia del algoritmo (~2 min)',
+    descriptionKey: 'nav.demostracion.description',
     kind: 'demo',
     roles: ['administrador', 'planificador'],
   },
@@ -161,28 +207,36 @@ export const RESIDENT_MAIN_NAV_ITEMS: NavItemDef[] = [
   {
     href: '/resident',
     label: 'Mi Recolección',
+    labelKey: 'nav.residentHome',
     description: 'Horario y estado en tu sector',
+    descriptionKey: 'nav.residentHome.description',
     sidebarPrimary: true,
     roles: ['residente'],
   },
   {
     href: '/map?scope=sector',
     label: 'Mapa mi sector',
+    labelKey: 'nav.residentMap',
     description: 'Camión y contenedores',
+    descriptionKey: 'nav.residentMap.description',
     sidebarPrimary: true,
     roles: ['residente'],
   },
   {
     href: '/collection-points',
     label: 'Puntos de recolección',
+    labelKey: 'nav.residentPoints',
     description: 'Contenedores de tu barrio',
+    descriptionKey: 'nav.residentPoints.description',
     sidebarPrimary: true,
     roles: ['residente'],
   },
   {
     href: '/alerts?scope=sector',
     label: 'Alertas',
+    labelKey: 'nav.alerts',
     description: 'Avisos de tu sector',
+    descriptionKey: 'nav.alerts.description',
     sidebarPrimary: true,
     roles: ['residente'],
   },
@@ -190,21 +244,28 @@ export const RESIDENT_MAIN_NAV_ITEMS: NavItemDef[] = [
 
 /** Nav lateral reducida para conductores en campo. */
 export const OPERATOR_MAIN_NAV_ITEMS: NavItemDef[] = [
-  { href: '/', label: 'Dashboard', sidebarPrimary: true, roles: ['conductor'] },
+  { href: '/', label: 'Dashboard', labelKey: 'nav.dashboard', sidebarPrimary: true, roles: ['conductor'] },
   {
     href: '/operator',
     label: 'Mi operación',
+    labelKey: 'nav.operatorHome',
     description: 'Tu ruta en campo',
+    descriptionKey: 'nav.operatorHome.description',
     sidebarPrimary: true,
     roles: ['conductor'],
   },
-  { href: '/map', label: 'Mapa GIS', sidebarPrimary: true, roles: ['conductor'] },
-  { href: '/alerts', label: 'Alertas', sidebarPrimary: true, roles: ['conductor'] },
+  { href: '/map', label: 'Mapa GIS', labelKey: 'nav.map', sidebarPrimary: true, roles: ['conductor'] },
+  { href: '/alerts', label: 'Alertas', labelKey: 'nav.alerts', sidebarPrimary: true, roles: ['conductor'] },
 ];
 
 export const BOTTOM_NAV_ITEMS: NavItemDef[] = [
-  { href: '/admin', label: 'Administración', roles: ['administrador'] },
-  { href: '/profile', label: 'Perfil', roles: ['administrador', 'planificador', 'conductor', 'residente'] },
+  { href: '/admin', label: 'Administración', labelKey: 'nav.admin', roles: ['administrador'] },
+  {
+    href: '/profile',
+    label: 'Perfil',
+    labelKey: 'nav.profile',
+    roles: ['administrador', 'planificador', 'conductor', 'residente'],
+  },
 ];
 
 export function navItemsForRole(role: UserRole | undefined) {

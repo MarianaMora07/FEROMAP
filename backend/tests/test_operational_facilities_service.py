@@ -10,6 +10,19 @@ from app.services.admin_service import get_operational_settings, update_operatio
 from app.services.operational_facilities_service import resolve_operational_facilities
 
 
+def _settings_db_with_parish(blob: dict, parish):
+    db, row = _settings_db(blob)
+    original_get = db.get
+
+    def get(model, pk):
+        if getattr(model, "__name__", "") == "Parish":
+            return parish
+        return original_get(model, pk)
+
+    db.get = get
+    return db, row
+
+
 def _settings_db(blob: dict):
     row = SimpleNamespace(settings_json=json.dumps(blob))
 
@@ -81,3 +94,32 @@ def test_resolve_operational_facilities_normalizes_legacy_swapped_coordinates():
     facilities = resolve_operational_facilities(db)
     assert facilities.depot == (-62.715, 8.295)
     assert facilities.landfill == (-62.69, 8.28)
+
+
+def test_resolve_operational_facilities_prefers_zone_facilities():
+    parish = SimpleNamespace(
+        depot_lat=8.1, depot_lon=-62.1, landfill_lat=8.2, landfill_lon=-62.2
+    )
+    db, _ = _settings_db_with_parish(
+        {"operational": {"system_name": "FEROMAP"}, "integrations": {}}, parish
+    )
+
+    facilities = resolve_operational_facilities(db, parish_id=7)
+
+    assert facilities.depot == (-62.1, 8.1)
+    assert facilities.landfill == (-62.2, 8.2)
+
+
+def test_resolve_operational_facilities_partial_zone_inherits_global():
+    # Sin vertedero propio, la zona hereda el global; el depósito sí es de la zona.
+    parish = SimpleNamespace(
+        depot_lat=8.1, depot_lon=-62.1, landfill_lat=None, landfill_lon=None
+    )
+    db, _ = _settings_db_with_parish(
+        {"operational": {"system_name": "FEROMAP"}, "integrations": {}}, parish
+    )
+
+    facilities = resolve_operational_facilities(db, parish_id=7)
+
+    assert facilities.depot == (-62.1, 8.1)
+    assert facilities.landfill == (-62.690, 8.280)

@@ -19,7 +19,8 @@ import {
   CalendarDays,
 } from 'lucide-solid';
 import { authUser } from '../../core/stores/authStore';
-import { sidebarNavLayout } from '../../core/auth/permissions';
+import { sidebarNavLayout, SIDEBAR_SECTION_LABEL_KEYS } from '../../core/auth/permissions';
+import { useLocale } from '../../core/i18n/solid';
 import { SidebarHeader } from './sidebar/SidebarHeader';
 import { SidebarNavLink } from './sidebar/SidebarNavLink';
 import { SidebarCollapsibleGroup } from './sidebar/SidebarCollapsibleGroup';
@@ -51,8 +52,17 @@ interface SidebarProps {
 
 export function Sidebar(props: SidebarProps) {
   const location = useLocation();
-  const layout = createMemo(() => sidebarNavLayout(authUser()?.role));
+  const tr = useLocale();
+  const layout = createMemo(() => {
+    tr(''); // dependencia reactiva: recalcula al cambiar el idioma
+    return sidebarNavLayout(authUser()?.role);
+  });
   const showKinds = () => authUser()?.role === 'administrador';
+
+  const navLabel = (item: { label: string; labelKey?: string }) =>
+    tr(item.labelKey ?? '', item.label);
+  const navDescription = (item: { description?: string; descriptionKey?: string }) =>
+    item.description ? tr(item.descriptionKey ?? '', item.description) : undefined;
 
   return (
     <aside
@@ -74,8 +84,8 @@ export function Sidebar(props: SidebarProps) {
                 href={item.href}
                 active={active()}
                 icon={<Icon size={18} class="shrink-0" />}
-                label={item.label}
-                description={item.description}
+                label={navLabel(item)}
+                description={navDescription(item)}
                 kind={showKinds() ? (item.kind ?? 'producto') : undefined}
               />
             );
@@ -87,7 +97,7 @@ export function Sidebar(props: SidebarProps) {
         <For each={layout().sections}>
           {(section) => (
             <SidebarCollapsibleGroup
-              label={section.label}
+              label={tr(SIDEBAR_SECTION_LABEL_KEYS[section.label] ?? '', section.label)}
               items={section.items}
               iconMap={NAV_ICONS}
               showKinds={showKinds()}
