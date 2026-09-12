@@ -128,6 +128,7 @@ export default function CaseStudiesListPage() {
 
       <Show when={alertMsg()}>
         <div
+          data-testid={alertType() === 'error' ? 'case-studies-error' : 'case-studies-success'}
           class={`rounded-lg border px-4 py-3 text-sm ${
             alertType() === 'error'
               ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300'

@@ -8,6 +8,7 @@ import {
 interface DashboardState {
   data: DashboardViewModel | null;
   loading: boolean;
+  error: boolean;
 }
 
 /** Resumen neutral mientras cargan los datos (no inventar métricas). */
@@ -17,6 +18,7 @@ const EMPTY_SUMMARY: DashboardSummary = {
   dateLabel: '',
   notifications: 0,
   user: { name: '', role: '', initials: '' },
+  roleKpis: [],
   metrics: {
     totalContainers: 0,
     criticalContainers: 0,
@@ -41,13 +43,17 @@ const EMPTY_SUMMARY: DashboardSummary = {
 const [state, setState] = createStore<DashboardState>({
   data: null,
   loading: false,
+  error: false,
 });
 
 export async function loadDashboardData(): Promise<void> {
   setState('loading', true);
   try {
     const data = await fetchDashboardSummary();
-    setState('data', data);
+    setState({ data, error: false });
+  } catch {
+    // Sin mocks, un fallo de API deja el resumen neutral (no datos demo).
+    setState({ data: null, error: true });
   } finally {
     setState('loading', false);
   }

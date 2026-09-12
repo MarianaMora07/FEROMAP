@@ -48,7 +48,6 @@ import {
   alertCategoryOptions,
   alertStatusOptions,
   alertsKpis,
-  alertsList,
   mapAlertLegend,
   priorityColor,
   type AlertPriority,
@@ -166,8 +165,28 @@ export default function AlertsPage() {
   const markers: Marker[] = [];
 
   const [refreshToken, setRefreshToken] = createSignal(0);
-  const [alertsData] = createResource(refreshToken, () => fetchAlerts());
-  const [activityData] = createResource(refreshToken, () => fetchAlertActivity());
+  const [alertsFailed, setAlertsFailed] = createSignal(false);
+  const [activityFailed, setActivityFailed] = createSignal(false);
+  const [alertsData] = createResource(refreshToken, async () => {
+    try {
+      const data = await fetchAlerts();
+      setAlertsFailed(false);
+      return data;
+    } catch {
+      setAlertsFailed(true);
+      return undefined;
+    }
+  });
+  const [activityData] = createResource(refreshToken, async () => {
+    try {
+      const data = await fetchAlertActivity();
+      setActivityFailed(false);
+      return data;
+    } catch {
+      setActivityFailed(true);
+      return undefined;
+    }
+  });
   const [routeSnapshot] = createResource(
     () => (operatorScope() ? operationDate() : null),
     (date) => (date ? fetchOperatorRouteSnapshot(date) : Promise.resolve(undefined)),
@@ -194,7 +213,7 @@ export default function AlertsPage() {
   const [actionLoading, setActionLoading] = createSignal<string | null>(null);
   const [openMenuId, setOpenMenuId] = createSignal<string | null>(null);
 
-  const alertsListData = () => alertsData()?.alerts ?? alertsList.filter((a) => a.status !== 'resuelta');
+  const alertsListData = () => alertsData()?.alerts ?? [];
   const operatorAlertsList = createMemo(() => {
     if (!operatorScope()) return alertsListData();
     return filterOperatorAlerts(alertsListData(), operatorAlertContext());
@@ -233,7 +252,9 @@ export default function AlertsPage() {
     if ((operatorScope() || residentScope()) && activeAlertsList().length > 0) {
       return computeAlertsKpis(activeAlertsList());
     }
-    return alertsData()?.stats ? statsToKpis(alertsData()!.stats) : alertsKpis;
+    return alertsData()?.stats
+      ? statsToKpis(alertsData()!.stats)
+      : alertsKpis.map((kpi) => ({ ...kpi, value: 0 }));
   };
   const recentActivity = () => activityData() ?? [];
   const alertsDistribution = () =>
@@ -406,6 +427,15 @@ export default function AlertsPage() {
 
   return (
     <div class="space-y-5">
+      <Show when={alertsFailed() || activityFailed()}>
+        <div
+          role="alert"
+          data-testid="alerts-error"
+          class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
+        >
+          No se pudieron cargar las alertas. Verifica la conexión con el API.
+        </div>
+      </Show>
       <Show when={operatorScope() && !residentScope()}>
         <div class="rounded-xl border border-fero-blue/30 bg-fero-blue/5 px-4 py-3">
           <p class="text-sm font-semibold text-fero-blue">Alertas que te afectan hoy</p>
