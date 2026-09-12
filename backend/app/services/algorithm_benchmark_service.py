@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from app.config import settings
+from app.domain.vrp_heuristics import plan_stability_pct
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,16 @@ ACO_ITERATIONS = 20
 GA_POPULATION = 34
 GA_GENERATIONS = 70
 
-FAMILIES = ("aco", "clarke_wright", "genetic")
+FAMILIES = ("aco", "clarke_wright", "genetic", "regret", "alns")
+
+FAMILY_LABELS = {
+    "aco": "ACO (12×20)",
+    "clarke_wright": "Clarke-Wright",
+    "genetic": f"GA ({GA_POPULATION}×{GA_GENERATIONS})",
+    "regret": "Regret-insertion",
+    "alns": "ALNS",
+    "ortools": "OR-Tools (CP-SAT)",
+}
 
 # Vertedero co-ubicado con el depósito: el ACO modela la descarga final como parte
 # de la jornada; así el costo de esa descarga no penaliza a ninguna familia.
@@ -147,7 +157,12 @@ def _run_aco(instance: dict[str, Any], scenario: dict[str, Any], seed: int) -> d
 
 
 def _run_family(instance: dict[str, Any], family: str, seed: int) -> dict[str, Any]:
-    from app.domain.vrp_heuristics import clarke_wright_cvrp, genetic_algorithm_cvrp
+    from app.domain.vrp_heuristics import (
+        alns_cvrp,
+        clarke_wright_cvrp,
+        genetic_algorithm_cvrp,
+        regret_insertion_cvrp,
+    )
 
     n = instance["n_customers"]
     started = time.perf_counter()
@@ -159,6 +174,27 @@ def _run_family(instance: dict[str, Any], family: str, seed: int) -> dict[str, A
             instance["dist"],
             instance["time"],
             seed=seed,
+        )
+    elif family == "regret":
+        solution = regret_insertion_cvrp(
+            n,
+            instance["demands"],
+            instance["capacities"],
+            instance["dist"],
+            instance["time"],
+            seed=seed,
+            k=settings.regret_k,
+        )
+    elif family == "alns":
+        solution = alns_cvrp(
+            n,
+            instance["demands"],
+            instance["capacities"],
+            instance["dist"],
+            instance["time"],
+            seed=seed,
+            iterations=settings.alns_iterations,
+            k=settings.regret_k,
         )
     else:
         solution = genetic_algorithm_cvrp(
@@ -179,11 +215,39 @@ def _run_family(instance: dict[str, Any], family: str, seed: int) -> dict[str, A
     }
 
 
+def _run_ortools(instance: dict[str, Any], seed: int) -> dict[str, Any]:
+    from app.domain.ortools_baseline import solve_cvrp_ortools
+
+    started = time.perf_counter()
+    solution = solve_cvrp_ortools(
+        instance["n_customers"],
+        instance["demands"],
+        instance["capacities"],
+        instance["dist"],
+        instance["time"],
+        seed=seed,
+        time_limit_seconds=settings.ortools_time_limit_seconds,
+    )
+    cpu = time.perf_counter() - started
+    return {
+        "routes": solution.vehicle_routes,
+        "uncovered": list(solution.uncovered),
+        "cpuSeconds": round(cpu, 4),
+    }
+
+
 def run_algorithms_benchmark() -> dict[str, Any]:
     """Corre familias × escenarios × instancias y persiste el JSON de evidencia."""
     runs: list[dict[str, Any]] = []
+    aco_routes: dict[tuple[str, int], list[list[list[int]]]] = {}
     started = datetime.now(timezone.utc)
     clock_started = time.perf_counter()
+
+    families: list[str] = list(FAMILIES)
+    from app.domain.ortools_baseline import available as ortools_available
+
+    if ortools_available():
+        families.append("ortools")
 
     for scenario in BENCHMARK_SCENARIOS:
         traffic = float(scenario["trafficFactor"])
@@ -195,13 +259,17 @@ def run_algorithms_benchmark() -> dict[str, Any]:
                     [row_value * traffic for row_value in row] for row in instance["time"]
                 ]
                 matrix = {**instance, "time": time_scaled}
-                for family in FAMILIES:
+                for family in families:
                     run_seed = seed + n_customers
-                    outcome = (
-                        _run_aco(matrix, scenario, run_seed)
-                        if family == "aco"
-                        else _run_family(matrix, family, run_seed)
-                    )
+                    if family == "aco":
+                        outcome = _run_aco(matrix, scenario, run_seed)
+                        aco_routes.setdefault((scenario["id"], n_customers), []).append(
+                            outcome["routes"]
+                        )
+                    elif family == "ortools":
+                        outcome = _run_ortools(matrix, run_seed)
+                    else:
+                        outcome = _run_family(matrix, family, run_seed)
                     runs.append(
                         {
                             "scenarioId": scenario["id"],
@@ -209,11 +277,7 @@ def run_algorithms_benchmark() -> dict[str, Any]:
                             "instanceSize": n_customers,
                             "seed": seed,
                             "family": family,
-                            "familyLabel": {
-                                "aco": "ACO (12×20)",
-                                "clarke_wright": "Clarke-Wright",
-                                "genetic": f"GA ({GA_POPULATION}×{GA_GENERATIONS})",
-                            }[family],
+                            "familyLabel": FAMILY_LABELS[family],
                             "distanceKm": _route_distance_km(outcome["routes"], matrix["dist"]),
                             "cpuSeconds": outcome["cpuSeconds"],
                             "uncoveredCount": len(outcome["uncovered"]),
@@ -223,9 +287,24 @@ def run_algorithms_benchmark() -> dict[str, Any]:
                                 "acoIterations": ACO_ITERATIONS,
                                 "population": GA_POPULATION,
                                 "generations": GA_GENERATIONS,
+                                "regretK": settings.regret_k,
+                                "alnsIterations": settings.alns_iterations,
                             },
                         }
                     )
+
+    # Estabilidad del plan ACO: Jaccard de arcos entre semillas de la misma instancia.
+    for entry in runs:
+        if entry["family"] != "aco":
+            entry["stabilityPct"] = 100.0
+            continue
+        samples = aco_routes.get((entry["scenarioId"], entry["instanceSize"]), [])
+        if len(samples) >= 2:
+            base = samples[0]
+            values = [plan_stability_pct(base, sample) for sample in samples[1:]]
+            entry["stabilityPct"] = round(sum(values) / len(values), 1)
+        else:
+            entry["stabilityPct"] = 100.0
 
     finished = datetime.now(timezone.utc)
     payload: dict[str, Any] = {
@@ -238,7 +317,7 @@ def run_algorithms_benchmark() -> dict[str, Any]:
         "scenarios": [s["id"] for s in BENCHMARK_SCENARIOS],
         "instanceSizes": INSTANCE_SIZES,
         "seeds": INSTANCE_SEEDS,
-        "families": list(FAMILIES),
+        "families": families,
         "runs": runs,
     }
     save_algorithms_benchmark(payload)
