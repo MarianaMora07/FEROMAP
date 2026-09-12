@@ -39,7 +39,11 @@ class WeeklyPlanForecast(PlanForecast, total=False):
 
 
 class PlanVsReal(TypedDict, total=False):
-    """Comparación previsto vs. real de un día."""
+    """Comparación previsto vs. real de un día.
+
+    Incluye desglose de paradas (completadas/saltadas/pendientes), visitas al
+    vertedero, causa por incidencia y motivos de visitas pendientes generadas.
+    """
 
     plannedDistanceKm: float | None
     actualDistanceKm: float | None
@@ -47,8 +51,15 @@ class PlanVsReal(TypedDict, total=False):
     actualDurationMin: float | None
     scheduledPoints: int
     servedPoints: int
+    completedPoints: int
+    skippedPoints: int
+    pendingPoints: int
+    landfillStops: int
     collectedKg: float
     completionPct: float | None
+    incidents: dict[str, Any]
+    pendingVisitsByReason: dict[str, int]
+    closeStatus: str
 
 
 def _as_float(value: Any) -> float | None:
@@ -127,11 +138,15 @@ def plan_vs_real_from_routes(
     *,
     scheduled_points: int = 0,
     actual_distance_km: float | None = None,
+    incidents: Iterable[Any] | None = None,
+    pending_visits: dict[str, int] | None = None,
+    close_status: str | None = None,
 ) -> PlanVsReal:
     """Cierra el ciclo comparando el previsto (rutas) con lo ejecutado (waypoints).
 
-    La distancia real se recibe ya derivada del recorrido ejecutado (grafo vial);
-    la duración real se estima con la primera y la última llegada registradas.
+    Casos borde cubiertos: paradas saltadas (``skipped``), paradas aún pendientes
+    al cierre, visitas al vertedero (waypoints ``landfill``, que no cuentan como
+    contenedores servidos) y causa por incidencia (``incidents``).
     """
     route_list = list(routes)
     planned_distance_km = (
@@ -142,22 +157,44 @@ def plan_vs_real_from_routes(
     )
 
     served = 0
+    skipped = 0
+    pending = 0
+    landfill_stops = 0
     collected_kg = 0.0
     arrivals: list[datetime] = []
     for route in route_list:
         for waypoint in getattr(route, "waypoints", None) or []:
-            if getattr(waypoint, "status", None) in {"completed", "collected"}:
-                served += 1
-            weight = _as_float(getattr(waypoint, "collected_weight_kg", None))
-            if weight:
-                collected_kg += weight
+            status = getattr(waypoint, "status", None)
+            waypoint_type = getattr(waypoint, "waypoint_type", None) or "collection"
             arrival = _as_utc(getattr(waypoint, "actual_arrival_at", None))
             if arrival is not None:
                 arrivals.append(arrival)
 
+            if waypoint_type == "landfill":
+                # Descarga en vertedero: no es un contenedor servido.
+                if status in {"completed", "collected"}:
+                    landfill_stops += 1
+                continue
+
+            if status in {"completed", "collected"}:
+                served += 1
+            elif status == "skipped":
+                skipped += 1
+            elif status == "pending":
+                pending += 1
+
+            weight = _as_float(getattr(waypoint, "collected_weight_kg", None))
+            if weight:
+                collected_kg += weight
+
     actual_duration_min = None
     if len(arrivals) >= 2:
         actual_duration_min = round((max(arrivals) - min(arrivals)).total_seconds() / 60.0, 1)
+
+    incident_counts: dict[str, int] = {}
+    for incident in incidents or []:
+        incident_type = str(getattr(incident, "incident_type", None) or "otro")
+        incident_counts[incident_type] = incident_counts.get(incident_type, 0) + 1
 
     scheduled = max(0, int(scheduled_points))
     completion_pct = round(served / scheduled * 100, 1) if scheduled > 0 else None
@@ -168,8 +205,15 @@ def plan_vs_real_from_routes(
         actualDurationMin=actual_duration_min,
         scheduledPoints=scheduled,
         servedPoints=served,
+        completedPoints=served,
+        skippedPoints=skipped,
+        pendingPoints=pending,
+        landfillStops=landfill_stops,
         collectedKg=round(collected_kg, 2),
         completionPct=completion_pct,
+        incidents={"total": sum(incident_counts.values()), "byType": incident_counts},
+        pendingVisitsByReason=dict(pending_visits or {}),
+        closeStatus=close_status or "",
     )
 
 

@@ -22,11 +22,18 @@ def _route(distance_m: float, duration_s: int, *, waypoints: list | None = None)
     )
 
 
-def _waypoint(status: str, *, weight: float | None = None, arrival: datetime | None = None) -> SimpleNamespace:
+def _waypoint(
+    status: str,
+    *,
+    weight: float | None = None,
+    arrival: datetime | None = None,
+    waypoint_type: str = "collection",
+) -> SimpleNamespace:
     return SimpleNamespace(
         status=status,
         collected_weight_kg=weight,
         actual_arrival_at=arrival,
+        waypoint_type=waypoint_type,
     )
 
 
@@ -115,6 +122,72 @@ def test_plan_vs_real_uses_provided_actual_distance():
     result = plan_vs_real_from_routes(routes, scheduled_points=2, actual_distance_km=8.4)
     assert result["actualDistanceKm"] == 8.4
     assert result["plannedDistanceKm"] == 10.0
+
+
+def test_plan_vs_real_excludes_landfill_from_served():
+    routes = [
+        _route(
+            1000,
+            0,
+            waypoints=[
+                _waypoint("completed", weight=50.0),
+                _waypoint("completed", waypoint_type="landfill"),
+            ],
+        )
+    ]
+    result = plan_vs_real_from_routes(routes, scheduled_points=2)
+
+    assert result["servedPoints"] == 1
+    assert result["landfillStops"] == 1
+    assert result["collectedKg"] == 50.0
+    assert result["completionPct"] == 50.0
+
+
+def test_plan_vs_real_separates_skipped_and_pending():
+    routes = [
+        _route(
+            1000,
+            0,
+            waypoints=[
+                _waypoint("completed", weight=10.0),
+                _waypoint("skipped"),
+                _waypoint("pending"),
+            ],
+        )
+    ]
+    result = plan_vs_real_from_routes(routes, scheduled_points=3)
+
+    assert result["completedPoints"] == 1
+    assert result["skippedPoints"] == 1
+    assert result["pendingPoints"] == 1
+    assert result["completionPct"] == 33.3
+
+
+def test_plan_vs_real_reports_incidents_and_pending_reasons():
+    incidents = [
+        SimpleNamespace(incident_type="breakdown"),
+        SimpleNamespace(incident_type="breakdown"),
+        SimpleNamespace(incident_type="critical_container"),
+    ]
+    result = plan_vs_real_from_routes(
+        [_route(1000, 0, waypoints=[_waypoint("completed")])],
+        scheduled_points=2,
+        incidents=incidents,
+        pending_visits={"not_visited": 1, "skipped_breakdown": 2},
+        close_status="partial",
+    )
+
+    assert result["incidents"]["total"] == 3
+    assert result["incidents"]["byType"] == {"breakdown": 2, "critical_container": 1}
+    assert result["pendingVisitsByReason"] == {"not_visited": 1, "skipped_breakdown": 2}
+    assert result["closeStatus"] == "partial"
+
+
+def test_plan_vs_real_without_incidents_reports_empty_cause():
+    result = plan_vs_real_from_routes([_route(1000, 0)], scheduled_points=1)
+
+    assert result["incidents"] == {"total": 0, "byType": {}}
+    assert result["pendingVisitsByReason"] == {}
 
 
 def test_parse_and_dump_kpi_json_round_trip():
