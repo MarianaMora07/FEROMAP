@@ -62,6 +62,18 @@ demo-verify: _check
 defense-verify: _check
     bash ./scripts/defense-verify.sh
 
+# Verificación de producción: defense-verify + observabilidad (/metrics, request-id).
+prod-verify: _check
+    bash ./scripts/prod-verify.sh
+
+# Respalda PostgreSQL (formato custom) con retención de copias (BACKUP_KEEP=14).
+backup: _check
+    bash ./scripts/backup.sh
+
+# Restaura un backup: just restore backups/feromap-YYYYmmdd-HHMMSS.dump
+restore file:
+    bash ./scripts/restore.sh {{file}}
+
 # Ejecuta tests unitarios del motor y contingencias (en contenedor api).
 # Aplica migraciones primero para no fallar por esquema desactualizado; si la BD
 # no responde, avisa y ejecuta igual (los tests de integración se saltan).
@@ -79,6 +91,10 @@ test-local:
 # Benchmark ACO: 5 escenarios × 3 perfiles → data/cache/benchmarks/aco_latest.json
 benchmark-aco: _check
     {{compose}} exec api python -m scripts.benchmark_aco
+
+# Benchmark comparativo de familias (F7): ACO vs heurísticas vs OR-Tools (si está instalado).
+benchmark-algorithms: _check
+    {{compose}} exec api python -m scripts.benchmark_algorithms
 
 # Sensibilidad ACO (6 corridas: hormigas 8/12/20 + iteraciones 10/20/40)
 phase3-sensitivity: _check
