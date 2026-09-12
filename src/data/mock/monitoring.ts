@@ -1,6 +1,6 @@
 export const monitoringPageMeta = {
-  title: 'Monitoreo en Tiempo Real',
-  subtitle: 'Visualiza la ubicación y estado de tu flota en tiempo real.',
+  title: 'Monitoreo de flota',
+  subtitle: 'Estado de la flota, rutas e incidencias del día.',
 };
 
 export type FleetLiveStatus = 'en-ruta' | 'mantenimiento' | 'detenido' | 'disponible';

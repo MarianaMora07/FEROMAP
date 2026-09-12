@@ -53,7 +53,7 @@ export function MonitoringContextPanel(props: MonitoringContextPanelProps) {
 
       <div class="grid gap-4 border-t border-default p-4 md:grid-cols-2 xl:grid-cols-4">
         <Card>
-          <CardHeader title="Actividades en tiempo real" />
+          <CardHeader title="Actividad reciente" />
           <ul class="space-y-3">
             <For each={props.activities}>
               {(a) => (

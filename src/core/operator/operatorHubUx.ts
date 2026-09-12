@@ -18,7 +18,7 @@ export function getOperatorQuickActions(params: {
       id: 'monitoring',
       label: 'Monitoreo',
       href: operatorMonitoringHref(params),
-      description: 'Mapa en vivo',
+      description: 'Mapa',
     },
     {
       id: 'map',
@@ -129,7 +129,7 @@ export function deriveNextOperatorAction(
 
   return {
     message: 'Ruta activa',
-    detail: 'Abre monitoreo para ver tu vehículo y el mapa en vivo.',
+    detail: 'Abre monitoreo para ver tu vehículo y el mapa.',
     href: operatorMonitoringHref(links),
     label: 'Abrir monitoreo',
     tone: 'info',

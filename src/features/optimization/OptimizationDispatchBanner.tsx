@@ -34,8 +34,8 @@ export function OptimizationDispatchBanner() {
                 </Show>
               </p>
               <p class="text-xs text-text-secondary">
-                Cada conductor ya puede consultar su recorrido asignado. Sigue el avance en
-                tiempo real desde Monitoreo.
+                Cada conductor ya puede consultar su recorrido asignado. Sigue el avance desde
+                Monitoreo.
               </p>
             </div>
           </div>

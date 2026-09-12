@@ -178,7 +178,7 @@ export function PlannerHubSection() {
           <Card>
             <CardHeader
               title="Incidencias"
-              subtitle="Contingencias en vivo"
+              subtitle="Contingencias recientes"
               action={
                 <A href="/monitoring" class="text-xs font-medium text-fero-blue hover:underline">
                   Monitoreo

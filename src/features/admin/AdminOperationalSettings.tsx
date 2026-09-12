@@ -156,7 +156,7 @@ export function AdminOperationalSettings(props: { onFlash: (message: string) => 
             </h3>
             <div class="grid gap-4 sm:grid-cols-2">
               <SelectField
-                label="Actualización en tiempo real (s)"
+                label="Actualización de la vista (s)"
                 value={String(s().refreshSeconds)}
                 onChange={(e) => patch({ refreshSeconds: Number(e.currentTarget.value) })}
               >

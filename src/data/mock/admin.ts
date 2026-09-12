@@ -32,7 +32,6 @@ export type AdminCategoryId =
   | 'channels'
   | 'alerts-cfg'
   | 'gis'
-  | 'telemetry'
   | 'roles'
   | 'accounts'
   | 'auth'
@@ -77,7 +76,6 @@ export const adminCategories: AdminCategory[] = [
   { id: 'alerts-cfg', label: 'Alertas automáticas', icon: 'bell', tab: 'notifications' },
 
   { id: 'gis', label: 'GIS / Mapas', icon: 'plug', tab: 'integrations' },
-  { id: 'telemetry', label: 'Telemetría', icon: 'plug', tab: 'integrations' },
 
   { id: 'roles', label: 'Roles y permisos', icon: 'users', tab: 'users' },
   { id: 'accounts', label: 'Cuentas', icon: 'users', tab: 'users' },

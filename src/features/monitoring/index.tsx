@@ -502,7 +502,7 @@ export default function MonitoringPage() {
   const monitoringBannerTitle = () => {
     if (isConductor(authUser()?.role)) return 'Operación en campo';
     if (isOperationalSupervisor(authUser()?.role)) return 'Supervisión operativa';
-    return 'Monitoreo en tiempo real';
+    return 'Monitoreo de flota';
   };
 
   const fleetEmptyPreset = () => {
@@ -560,7 +560,7 @@ export default function MonitoringPage() {
               : 'border-transparent text-text-muted hover:text-text-secondary'
           }`}
         >
-          Mapa en vivo
+          Mapa
         </button>
         <button
           type="button"

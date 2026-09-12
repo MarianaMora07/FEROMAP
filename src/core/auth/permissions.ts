@@ -113,8 +113,8 @@ export const MAIN_NAV_ITEMS: NavItemDef[] = [
   },
   {
     href: '/monitoring',
-    label: 'Monitoreo en vivo',
-    description: 'Flota, rutas e incidencias en tiempo real',
+    label: 'Monitoreo',
+    description: 'Flota, rutas e incidencias del día',
     sidebarPrimary: true,
     roles: ['administrador', 'planificador', 'conductor'],
   },

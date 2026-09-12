@@ -33,7 +33,7 @@ export function VehiclesFleetIntro(props: VehiclesFleetIntroProps) {
           href="/monitoring"
           class="inline-flex items-center gap-1 text-sm font-medium text-fero-blue hover:underline"
         >
-          Monitoreo en vivo
+          Monitoreo
           <ArrowRight size={14} aria-hidden="true" />
         </A>
         <Show when={props.showSimulationLink}>

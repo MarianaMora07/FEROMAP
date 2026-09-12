@@ -136,7 +136,7 @@ export function PlannerOverviewSection() {
         <Card class="w-full">
           <CardHeader
             title="Última ruta"
-            subtitle="Seguimiento en vivo"
+            subtitle="Último estado"
             action={
               <A href="/monitoring" class="text-xs font-medium text-fero-blue hover:underline">
                 Monitoreo
