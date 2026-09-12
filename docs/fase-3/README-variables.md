@@ -14,7 +14,7 @@ Ver [README-rigor.md](./README-rigor.md) para la Fase 3 de rigor algorítmico (2
 | Objetivo (Optimización UI) | **Próximamente** | Bloque informativo |
 | Fecha operación | **Informativa** | Solo `localStorage` |
 | Restricciones `avoid_traffic` / `critical_first` | **Conectada** | Inferencia de escenario en módulo operativo |
-| Restricciones `fill_level` / `time_window` | **Próximamente** | Deshabilitadas en UI |
+| Restricciones `fill_level` / `time_window` | **Conectada** | Ambas llegan al motor; `time_window` es opt-in y por defecto off → [ADR-006](./adr-006-ventanas-horarias.md) |
 
 ## Matriz actualizada
 

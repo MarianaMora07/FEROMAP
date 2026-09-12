@@ -41,7 +41,7 @@ El motor resuelve un **CVRP** (ruteo con capacidad, múltiples vehículos, verte
 
 | Ítem | Motivo |
 |------|--------|
-| **VRPTW** (ventanas horarias) | Toggle en UI deshabilitado; sin lógica en el solver |
+| **VRPTW completo** (ventanas operativas) | Fuera de alcance. Sí existe **VRPTW light** opt-in (ventanas amplias mañana/tarde por sector, desactivado por defecto) → [ADR-006](../fase-3/adr-006-ventanas-horarias.md) |
 | **Optimización multi-objetivo** | El ACO minimiza distancia; CO₂/tiempo son KPIs derivados (`kpiView`) → [backlog](../post-grado/multi-objetivo-solver.md) |
 | **OR-Tools u otro solver exacto** | Fuera de alcance; solo ACO en producción → [backlog post-grado](../post-grado/or-tools-baseline.md) |
 | **Tráfico en vivo** (OSRM, Google, Waze) | Solo multiplicadores de escenario → [backlog post-grado](../post-grado/trafico-en-vivo.md) |
@@ -49,6 +49,10 @@ El motor resuelve un **CVRP** (ruteo con capacidad, múltiples vehículos, verte
 | **Garantía de cobertura total** | El solver puede dejar puntos no cubiertos si la flota o jornada no alcanzan |
 
 Cualquier ampliación posterior (Fases 1–4 del plan de fortalecimiento) **no modifica** este alcance base sin actualizar este documento.
+
+> **Actualizado 2026-09-11 (ADR-006):** las ventanas horarias dejan de figurar como "sin lógica en el solver".
+> El alcance congelado sigue siendo **CVRP**; el soporte **VRPTW light** queda documentado como capacidad
+> opt-in, no como VRPTW completo.
 
 **Roadmap post-grado / producción:** ítems explícitamente diferidos hasta después de la defensa → [docs/post-grado/README.md](../post-grado/README.md).
 
@@ -91,7 +95,7 @@ Cualquier ampliación posterior (Fases 1–4 del plan de fortalecimiento) **no m
 2. En escenario **normal**, destacar cobertura y distribución multi-vehículo.
 3. En escenario **saturado**, explicar viajes al vertedero antes de comparar kilómetros.
 4. Usar el término **“mejor ruta encontrada”**, no “óptima”.
-5. Si preguntan por ventanas horarias u OR-Tools → remitir a la tabla de exclusión (§2).
+5. Si preguntan por ventanas horarias → aclarar que hay **VRPTW light** opt-in (ventanas amplias por sector, no ventanas operativas reales); OR-Tools sigue fuera de alcance (§2).
 
 ---
 

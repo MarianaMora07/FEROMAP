@@ -24,9 +24,9 @@ FEROMAP implementa un **CVRP** (Capacitated Vehicle Routing Problem) sobre la re
 | Limitación | Implicación para la tesis |
 |------------|-------------------------|
 | **Optimalidad global** | ACO es heurístico; entrega soluciones de alta calidad, no garantía óptima |
-| **VRPTW** | Sin ventanas horarias por contenedor o sector |
+| **VRPTW completo** | Sin ventanas operativas por contenedor. Soporte opt-in **VRPTW light** con **ventana por zona** (parroquia), default off → [ADR-006](./adr-006-ventanas-horarias.md) · [ADR-008](./adr-008-ventanas-por-zona.md) |
 | **Multi-objetivo** | No optimiza simultáneamente CO₂, tiempo y distancia en el fitness |
-| **OR-Tools / solver exacto** | No hay comparación con branch-and-cut o CP-SAT |
+| **OR-Tools / solver exacto** | No en el camino de producción; baseline CP-SAT **opcional** disponible para el benchmark comparativo post-defensa → [ADR-009](./adr-009-baseline-ortools-y-recuperacion.md) |
 | **Tráfico en vivo** | Solo multiplicadores estáticos por escenario |
 | **Cobertura forzada** | Puede dejar puntos no cubiertos si flota o jornada no alcanzan |
 | **GA / SA** | Eliminados del UI operativo; solo ACO en producción |
