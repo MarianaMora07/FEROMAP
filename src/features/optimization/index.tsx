@@ -51,6 +51,7 @@ import { UncoveredPointsActionsPanel } from '../landfill/UncoveredPointsActionsP
 import { OptimizationParametersSheet } from './OptimizationParametersSheet';
 import { OptimizationProgressPanel } from './OptimizationProgressPanel';
 import { OptimizationDispatchBanner } from './OptimizationDispatchBanner';
+import { NotificationDeliveryPanel } from './NotificationDeliveryPanel';
 import { OptimizationComparisonPanel } from './OptimizationComparisonPanel';
 import { OptimizationConvergencePanel } from './OptimizationConvergencePanel';
 import { useGenerateButtonVisibility } from './useGenerateButtonVisibility';
@@ -389,6 +390,8 @@ export default function OptimizationPage() {
       <OptimizationDailyBanner />
 
       <OptimizationDispatchBanner />
+
+      <NotificationDeliveryPanel />
 
       <div class="flex items-center justify-between gap-2 border-b border-default">
         <div
