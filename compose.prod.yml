@@ -36,6 +36,10 @@ services:
       APP_ENV: ${APP_ENV:-production}
       DATABASE_URL: postgresql+psycopg://${DB_USERNAME:-feromap}:${DB_PASSWORD}@db:5432/${DB_DATABASE:-feromap}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+      # Secretos de sesión: obligatorios con APP_ENV=production (ver app/config.py).
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-1440}
+      JWT_COOKIE_NAME: ${JWT_COOKIE_NAME:-feromap_access_token}
       DATA_DIR: /app/data
       ACO_ANTS: ${ACO_ANTS:-12}
       ACO_ITERATIONS: ${ACO_ITERATIONS:-20}

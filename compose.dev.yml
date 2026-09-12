@@ -38,6 +38,10 @@ services:
       APP_ENV: ${APP_ENV:-local}
       DATABASE_URL: postgresql+psycopg://${DB_USERNAME:-feromap}:${DB_PASSWORD}@db:5432/${DB_DATABASE:-feromap}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      # Secretos de sesión: en local hay fallback, pero .env puede sobreescribirlos.
+      JWT_SECRET: ${JWT_SECRET:-feromap-dev-secret-change-in-production}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-1440}
+      JWT_COOKIE_NAME: ${JWT_COOKIE_NAME:-feromap_access_token}
       DATA_DIR: /app/data
       ACO_ANTS: ${ACO_ANTS:-6}
       ACO_ITERATIONS: ${ACO_ITERATIONS:-10}
