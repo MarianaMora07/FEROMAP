@@ -68,8 +68,12 @@ jobs:
         run: pip install -r requirements.txt
       - name: Migraciones
         run: alembic upgrade head
-      - name: Pytest (unit + integración sin fase lenta)
-        run: pytest tests/ -q -m "not slow and not phase_a and not phase_b"
+      - name: Pytest (unit, BD limpia)
+        run: pytest tests/ -q -m "not integration and not slow and not phase_a and not phase_b"
+      - name: Seed demo (integración)
+        run: python -c "from app.services.seed_service import run_seed; print(run_seed())"
+      - name: Pytest (integración, BD sembrada)
+        run: pytest tests/ -q -m "integration and not slow and not phase_a and not phase_b"
 
   # E2E estricto (F1): requiere el stack completo con seed y caché del grafo.
   # Se deja como job manual hasta estabilizar el arranque en CI (ver riesgo de F3).

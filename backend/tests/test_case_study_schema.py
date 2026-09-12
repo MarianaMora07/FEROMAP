@@ -20,7 +20,10 @@ def _database_available() -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(not _database_available(), reason="PostgreSQL no disponible")
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(not _database_available(), reason="PostgreSQL no disponible"),
+]
 
 
 def test_case_study_tables_exist(db: Session):
