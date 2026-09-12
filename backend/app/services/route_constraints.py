@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from app.domain.criticality import CRITICAL_FILL_PCT, HIGH_FILL_PCT
+from app.domain.zone_window import DAY_WINDOW_SECONDS
 
 # Alias al dominio: una sola fuente de verdad para los umbrales de llenado.
 FILL_LEVEL_CRITICAL_PCT = CRITICAL_FILL_PCT
@@ -25,12 +27,29 @@ def fill_level_distance_factor(fill_pct: int) -> float:
 
 
 def sector_time_window_secs(sector_id: int | None) -> tuple[int, int]:
-    """Asigna ventana mañana/tarde según sector (VRPTW light)."""
+    """Ventana mañana/tarde por paridad de sector.
+
+    **Legado (F8):** se conserva solo como respaldo cuando el llamador no aporta la
+    configuración por zona. El motor real usa `zone_config_service.sector_windows`.
+    """
     if sector_id is None:
         return MORNING_WINDOW
     if sector_id % 2 == 0:
         return MORNING_WINDOW
     return AFTERNOON_WINDOW
+
+
+def _resolve_sector_window(
+    sector_id: int | None,
+    zone_windows: Mapping[int, tuple[int, int]] | None,
+) -> tuple[int, int]:
+    if zone_windows is None:
+        # Legado: sin configuración por zona, se mantiene la paridad (VRPTW light).
+        return sector_time_window_secs(sector_id)
+    if sector_id is not None and sector_id in zone_windows:
+        return zone_windows[sector_id]
+    # Zona sin ventana configurada → sin restricción horaria dentro de la jornada.
+    return (0, DAY_WINDOW_SECONDS)
 
 
 def build_fill_level_heuristic_matrix(
@@ -59,15 +78,22 @@ def build_customer_time_windows(
     sector_ids: list[int | None],
     *,
     enabled: bool,
+    zone_windows: Mapping[int, tuple[int, int]] | None = None,
 ) -> tuple[list[float] | None, list[float] | None]:
+    """Ventanas por cliente.
+
+    Con `zone_windows` (F8) usa la ventana configurada de la zona de cada sector; un
+    sector sin ventana queda sin restricción. Sin `zone_windows` cae al legado por
+    paridad de sector.
+    """
     if not enabled:
         return None, None
     starts: list[float] = []
     ends: list[float] = []
     for sector_id in sector_ids:
-        window_start, window_end = sector_time_window_secs(sector_id)
-        starts.append(float(window_start))
-        ends.append(float(window_end))
+        window = _resolve_sector_window(sector_id, zone_windows)
+        starts.append(float(window[0]))
+        ends.append(float(window[1]))
     return starts, ends
 
 
@@ -113,11 +139,13 @@ def build_applied_route_constraints(
     priority_fill_level: bool,
     time_window_enabled: bool,
     kpi_view: str,
+    time_window_model: str | None = None,
 ) -> dict[str, Any]:
+    model = time_window_model or "sector_morning_afternoon"
     return {
         "priorityFillLevel": priority_fill_level,
         "timeWindowEnabled": time_window_enabled,
         "kpiView": kpi_view,
-        "timeWindowModel": "sector_morning_afternoon" if time_window_enabled else None,
+        "timeWindowModel": model if time_window_enabled else None,
         "fillLevelThresholdPct": FILL_LEVEL_CRITICAL_PCT if priority_fill_level else None,
     }

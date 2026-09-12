@@ -40,6 +40,7 @@ export function SidebarNavLink(props: SidebarNavLinkProps) {
     <A
       href={props.href}
       class={sidebarNavLinkClass(active())}
+      aria-current={active() ? 'page' : undefined}
       data-testid={`sidebar-nav-${navHrefPath(props.href).replace(/^\//, '').replace(/\//g, '-') || 'home'}`}
     >
       {props.icon}

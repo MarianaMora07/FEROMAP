@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { DEMO_NAV_HIDDEN_HREFS, sidebarNavLayout } from './permissions';
 
 describe('permissions — arquitectura de navegación (IA)', () => {
-  it('hides analytics from planner sidebar', () => {
+  it('exposes analytics in the planner sidebar (F6)', () => {
     const layout = sidebarNavLayout('planificador');
     const hrefs = layout.sections.flatMap((section) => section.items.map((item) => item.href));
-    expect(hrefs).not.toContain('/analytics');
-    expect(DEMO_NAV_HIDDEN_HREFS.has('/analytics')).toBe(true);
+    expect(hrefs).toContain('/analytics');
+    expect(DEMO_NAV_HIDDEN_HREFS.has('/analytics')).toBe(false);
   });
 
   it('orders planner primaries as planificar → operar → supervisar', () => {
@@ -29,7 +29,11 @@ describe('permissions — arquitectura de navegación (IA)', () => {
     ]);
 
     const [reportes, catalogos, tesis] = layout.sections;
-    expect(reportes.items.map((item) => item.href)).toEqual(['/planning/history', '/reports']);
+    expect(reportes.items.map((item) => item.href)).toEqual([
+      '/planning/history',
+      '/reports',
+      '/analytics',
+    ]);
     expect(catalogos.items.map((item) => item.href)).toEqual([
       '/vehicles',
       '/drivers',

@@ -11,6 +11,7 @@ from app.api.v1 import (
     dashboard,
     drivers,
     notifications,
+    parishes,
     planning,
     profile,
     reports,
@@ -21,6 +22,7 @@ from app.api.v1 import (
     benchmarks,
     case_studies,
     map_tiles,
+    telemetry,
 )
 
 api_router = APIRouter(prefix="/api/v1")
@@ -31,6 +33,7 @@ api_router.include_router(auth.router)
 api_router.include_router(profile.router)
 api_router.include_router(contingencies.router)
 api_router.include_router(notifications.router)
+api_router.include_router(parishes.router)
 api_router.include_router(sectors.router)
 api_router.include_router(collection_points.router)
 api_router.include_router(routes.router)
@@ -44,3 +47,4 @@ api_router.include_router(reports.router)
 api_router.include_router(analytics.router)
 api_router.include_router(resident.router)
 api_router.include_router(map_tiles.router)
+api_router.include_router(telemetry.router)

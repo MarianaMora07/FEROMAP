@@ -4,6 +4,7 @@ import { useLocation } from '@solidjs/router';
 import { SidebarNavLink } from './SidebarNavLink';
 import { isNavItemActive } from './navUtils';
 import type { NavItemDef } from '../../../core/auth/permissions';
+import { useLocale } from '../../../core/i18n/solid';
 import type { LucideProps } from 'lucide-solid';
 
 type IconComponent = (props: LucideProps) => import('solid-js').JSX.Element;
@@ -18,6 +19,9 @@ interface SidebarCollapsibleGroupProps {
 
 export function SidebarCollapsibleGroup(props: SidebarCollapsibleGroupProps) {
   const location = useLocation();
+  const tr = useLocale();
+  const panelId = () =>
+    `sidebar-section-${props.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}`;
   const hasActiveChild = () =>
     props.items.some((item) => isNavItemActive(item.href, location.pathname));
   const [open, setOpen] = createSignal(props.defaultOpen ?? hasActiveChild());
@@ -27,6 +31,8 @@ export function SidebarCollapsibleGroup(props: SidebarCollapsibleGroupProps) {
       <button
         type="button"
         onClick={() => setOpen(!open())}
+        aria-expanded={open()}
+        aria-controls={panelId()}
         class={`flex w-full items-center justify-between rounded-md px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider transition-all duration-200 hover:bg-sidebar-elevated
           ${hasActiveChild() ? 'text-nav-active-text' : 'text-nav-section'}`}
       >
@@ -37,6 +43,7 @@ export function SidebarCollapsibleGroup(props: SidebarCollapsibleGroupProps) {
         />
       </button>
       <div
+        id={panelId()}
         class="overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out"
         style={{
           'max-height': open() ? `${props.items.length * 52}px` : '0px',
@@ -52,8 +59,14 @@ export function SidebarCollapsibleGroup(props: SidebarCollapsibleGroupProps) {
                   href={item.href}
                   active={isNavItemActive(item.href, location.pathname)}
                   icon={Icon ? <Icon size={18} class="shrink-0" /> : null}
-                  label={item.label}
-                  description={item.description}
+                  label={item.labelKey ? tr(item.labelKey, item.label) : item.label}
+                  description={
+                    item.description
+                      ? item.descriptionKey
+                        ? tr(item.descriptionKey, item.description)
+                        : item.description
+                      : undefined
+                  }
                   kind={props.showKinds ? (item.kind ?? 'producto') : undefined}
                 />
               );

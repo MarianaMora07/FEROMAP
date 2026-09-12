@@ -1,4 +1,5 @@
 import { type JSX, Show, For, createSignal } from 'solid-js';
+import { useLocale } from '../../core/i18n/solid';
 
 type ToastVariant = 'success' | 'error' | 'warning' | 'info';
 
@@ -37,8 +38,14 @@ const variantStyles: Record<ToastVariant, { bg: string; border: string; icon: st
 };
 
 export function ToastContainer(props: ToastProps) {
+  const tr = useLocale();
   return (
-    <div class="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+    <div
+      role="status"
+      aria-live="polite"
+      aria-label={tr('shell.notifications')}
+      class="fixed bottom-4 right-4 z-50 flex flex-col gap-2"
+    >
       <For each={props.toasts}>
         {(toast) => {
           const style = variantStyles[toast.variant];
@@ -51,6 +58,7 @@ export function ToastContainer(props: ToastProps) {
               <button
                 type="button"
                 onClick={() => props.onDismiss(toast.id)}
+                aria-label={tr('shell.dismiss')}
                 class="text-text-muted hover:text-text-primary text-lg leading-none"
               >
                 ×
