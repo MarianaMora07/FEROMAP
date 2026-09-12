@@ -47,3 +47,6 @@ playwright/.cache/
 
 # Tesis
 tesis/
+
+# Backups de base de datos (F5)
+backups/

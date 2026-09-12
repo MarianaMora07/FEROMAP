@@ -1278,17 +1278,20 @@ def close_daily_plan(db: Session, daily_plan_id: int, *, user_id: int | None = N
     ).unique().all()
 
     new_pending = 0
+    pending_reasons: dict[str, int] = {}
     for route in routes:
         for waypoint in route.waypoints:
             if waypoint.status not in {"pending", "skipped"}:
                 continue
+            reason = "skipped_breakdown" if waypoint.status == "skipped" else "not_visited"
             create_pending_visit(
                 db,
                 collection_point_id=waypoint.collection_point_id,
                 origin_operation_date=plan.operation_date,
-                reason="skipped_breakdown" if waypoint.status == "skipped" else "not_visited",
+                reason=reason,
                 source_waypoint_id=waypoint.id,
             )
+            pending_reasons[reason] = pending_reasons.get(reason, 0) + 1
             new_pending += 1
 
     plan.closed_at = datetime.now(timezone.utc)
@@ -1303,11 +1306,19 @@ def close_daily_plan(db: Session, daily_plan_id: int, *, user_id: int | None = N
     actual_km_values = [
         km for route in routes if (km := route_actual_distance_km(route)) is not None
     ]
+    incident_rows = db.scalars(
+        select(VehicleIncident)
+        .join(OptimizedRoute, VehicleIncident.route_id == OptimizedRoute.id)
+        .where(OptimizedRoute.daily_plan_id == daily_plan_id)
+    ).all()
     plan.actual_kpis_json = dump_kpi_json(
         plan_vs_real_from_routes(
             routes,
             scheduled_points=len(scheduled_ids),
             actual_distance_km=sum(actual_km_values) if actual_km_values else None,
+            incidents=incident_rows,
+            pending_visits=pending_reasons,
+            close_status=plan.status,
         )
     )
 
