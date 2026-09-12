@@ -6,8 +6,10 @@ import { getStoredThemePreference } from '../core/theme/themePreference';
 import { initAppData, applyThemePreference } from '../core/stores/appStore';
 import { initSimulationData } from '../core/stores/simulationStore';
 import { initAuth } from '../core/stores/authStore';
+import { installGlobalErrorHandlers } from '../core/errors/errorReporter';
 
 logMockModeEnabled();
+installGlobalErrorHandlers();
 
 // Sincroniza store con clase ya aplicada en index.html (anti-flash).
 applyThemePreference(getStoredThemePreference());

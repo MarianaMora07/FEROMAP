@@ -417,6 +417,16 @@ def _run_background_worker(job_id: str, runner: Callable[[Any], dict[str, Any]])
         db.close()
 
 
+def count_jobs_by_status() -> dict[str, int]:
+    """Conteo de jobs en memoria por estado (para métricas de observabilidad)."""
+    with _jobs_lock:
+        jobs = list(_jobs.values())
+    counts: dict[str, int] = {}
+    for job in jobs:
+        counts[job.status] = counts.get(job.status, 0) + 1
+    return counts
+
+
 def get_optimization_job(job_id: str) -> OptimizationJob | None:
     with _jobs_lock:
         return _jobs.get(job_id)
