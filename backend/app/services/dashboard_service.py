@@ -29,6 +29,44 @@ from app.services.seed_loader import load_seed
 from app.services.simulation_parsing import _case_study_fields, parse_simulation
 
 
+def role_kpis(
+    role: UserRole | str | None,
+    *,
+    total_containers: int,
+    critical: int,
+    at_risk: int,
+    active_vehicles: int,
+    routes_in_progress: int,
+    routes_completed: int,
+    routes_planned: int,
+) -> list[dict[str, Any]]:
+    """KPIs agregados por rol para el dashboard (F6)."""
+    value = role.value if isinstance(role, UserRole) else role
+    if value == "administrador":
+        return [
+            {"id": "containers", "label": "Contenedores", "value": total_containers, "tone": "green", "icon": "trash"},
+            {"id": "vehicles", "label": "Vehículos activos", "value": active_vehicles, "tone": "blue", "icon": "truck"},
+            {"id": "routes", "label": "Rutas planificadas", "value": routes_planned, "tone": "amber", "icon": "route"},
+        ]
+    if value == "planificador":
+        return [
+            {"id": "critical", "label": "Contenedores críticos", "value": critical, "tone": "red", "icon": "trash"},
+            {"id": "at_risk", "label": "En riesgo de rebose", "value": at_risk, "tone": "amber", "icon": "trash"},
+            {"id": "completed", "label": "Rutas completadas", "value": routes_completed, "tone": "green", "icon": "route"},
+        ]
+    if value == "conductor":
+        return [
+            {"id": "routes", "label": "Rutas en ejecución", "value": routes_in_progress, "tone": "blue", "icon": "route"},
+            {"id": "critical", "label": "Contenedores críticos", "value": critical, "tone": "red", "icon": "trash"},
+        ]
+    if value == "residente":
+        return [
+            {"id": "containers", "label": "Contenedores del sector", "value": total_containers, "tone": "green", "icon": "trash"},
+            {"id": "critical", "label": "Críticos en tu sector", "value": critical, "tone": "red", "icon": "trash"},
+        ]
+    return []
+
+
 # --- Comparativas multi-corrida (Tarea 5) ------------------------------------
 
 
@@ -397,6 +435,16 @@ def dashboard_summary(db: Session, *, current_user: User | None = None) -> dict[
         "dateLabel": now.strftime("%d/%m/%Y"),
         "notifications": len(critical),
         "user": user_block,
+        "roleKpis": role_kpis(
+            current_user.role if current_user is not None else None,
+            total_containers=len(points),
+            critical=len(critical),
+            at_risk=len(at_risk),
+            active_vehicles=fleet["activeVehicles"],
+            routes_in_progress=routes_in_progress,
+            routes_completed=routes_completed,
+            routes_planned=routes_planned,
+        ),
         "residentSchedule": resident_schedule,
         "metrics": {
             "totalContainers": len(points),
