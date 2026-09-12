@@ -20,6 +20,9 @@ osmnx>=2.0.0
 shapely>=2.0.0
 scikit-learn>=1.5.0
 
+# Baseline exacto F7 (post-defensa). Opcional: el benchmark lo omite si falta.
+# ortools>=9.10.0
+
 # Reportes
 fpdf2>=2.8.0
 

@@ -238,3 +238,187 @@ def genetic_algorithm_cvrp(
     solution.label = "genetic"
     solution.uncovered = uncovered
     return solution
+
+
+# --- Inserción por arrepentimiento (regret) y ALNS (F7) ----------------------
+
+
+def _routes_cost(routes: list[list[int]], dist: list[list[float]]) -> float:
+    total = 0.0
+    for route in routes:
+        full = [0] + route + [0]
+        total += sum(dist[a][b] for a, b in zip(full, full[1:]))
+    return total
+
+
+def _split_routes(solution: HeuristicSolution) -> list[list[int]]:
+    return [[customer for customer in route if customer != 0] for route in solution.vehicle_routes if any(c != 0 for c in route)]
+
+
+def _insertion_options(
+    customer: int,
+    routes: list[list[int]],
+    loads: list[float],
+    demands: list[float],
+    capacity: float,
+    vehicles: int,
+    dist: list[list[float]],
+) -> list[tuple[float, int, int]]:
+    demand = _demand(customer, demands)
+    options: list[tuple[float, int, int]] = []
+    for idx, route in enumerate(routes):
+        if loads[idx] + demand > capacity:
+            continue
+        for pos in range(len(route) + 1):
+            prev = route[pos - 1] if pos > 0 else 0
+            nxt = route[pos] if pos < len(route) else 0
+            delta = dist[prev][customer] + dist[customer][nxt] - dist[prev][nxt]
+            options.append((delta, idx, pos))
+    if len(routes) < vehicles:
+        options.append((dist[0][customer] + dist[customer][0], len(routes), 0))
+    options.sort()
+    return options
+
+
+def _regret_insert(
+    pending: list[int],
+    routes: list[list[int]],
+    loads: list[float],
+    demands: list[float],
+    capacity: float,
+    vehicles: int,
+    dist: list[list[float]],
+    k: int,
+) -> list[int]:
+    """Inserta los clientes pendientes por mayor arrepentimiento. Devuelve los no insertados."""
+    remaining = list(pending)
+    while remaining:
+        best_customer: int | None = None
+        best_key: tuple[float, float, int] | None = None
+        best_option: tuple[float, int, int] | None = None
+        for customer in remaining:
+            options = _insertion_options(customer, routes, loads, demands, capacity, vehicles, dist)
+            if not options:
+                continue
+            best_delta = options[0][0]
+            kth_delta = options[min(k, len(options)) - 1][0]
+            regret = kth_delta - best_delta
+            key = (regret, -best_delta, -customer)
+            if best_key is None or key > best_key:
+                best_key = key
+                best_customer = customer
+                best_option = options[0]
+        if best_customer is None or best_option is None:
+            break
+        _delta, idx, pos = best_option
+        if idx == len(routes):
+            routes.append([best_customer])
+            loads.append(_demand(best_customer, demands))
+        else:
+            routes[idx].insert(pos, best_customer)
+            loads[idx] += _demand(best_customer, demands)
+        remaining.remove(best_customer)
+    return remaining
+
+
+def regret_insertion_cvrp(
+    n_customers: int,
+    demands: list[float],
+    capacities: list[float],
+    dist: list[list[float]],
+    time: list[list[float]],
+    *,
+    seed: int = 1,
+    k: int = 3,
+) -> HeuristicSolution:
+    """Inserción por arrepentimiento (regret-k). Determinista; `seed` por compatibilidad."""
+    if n_customers <= 0 or not capacities:
+        return HeuristicSolution(label="regret")
+    capacity = max(1.0, float(capacities[0]))
+    vehicles = len(capacities)
+    routes: list[list[int]] = []
+    loads: list[float] = []
+    leftover = _regret_insert(
+        list(range(1, n_customers + 1)), routes, loads, demands, capacity, vehicles, dist, k
+    )
+    solution = _wrap_routes(routes, dist, time)
+    solution.label = "regret"
+    solution.uncovered = sorted(leftover)
+    return solution
+
+
+def alns_cvrp(
+    n_customers: int,
+    demands: list[float],
+    capacities: list[float],
+    dist: list[list[float]],
+    time: list[list[float]],
+    *,
+    seed: int = 1,
+    iterations: int = 40,
+    destroy_fraction: float = 0.3,
+    k: int = 3,
+) -> HeuristicSolution:
+    """ALNS: parte de regret y alterna destrucción aleatoria + reparación regret.
+
+    Determinista por semilla. Mejora monótona sobre el plan inicial (acepta sólo
+    si no empeora), por lo que la distancia nunca es peor que la de regret.
+    """
+    base = regret_insertion_cvrp(n_customers, demands, capacities, dist, time, seed=seed, k=k)
+    if n_customers <= 0 or not capacities:
+        base.label = "alns"
+        return base
+
+    capacity = max(1.0, float(capacities[0]))
+    vehicles = len(capacities)
+    rng = random.Random(seed)
+    routes = _split_routes(base)
+    current_cost = _routes_cost(routes, dist)
+    best_routes = [list(route) for route in routes]
+    best_cost = current_cost
+
+    for _ in range(max(0, iterations)):
+        assigned = [customer for route in routes for customer in route]
+        if len(assigned) < 2:
+            break
+        quantity = max(1, int(len(assigned) * destroy_fraction))
+        removed = rng.sample(assigned, min(quantity, len(assigned)))
+        candidate = [list(route) for route in routes]
+        for customer in removed:
+            for route in candidate:
+                if customer in route:
+                    route.remove(customer)
+                    break
+        candidate = [route for route in candidate if route]
+        loads = [sum(_demand(customer, demands) for customer in route) for route in candidate]
+        _regret_insert(removed, candidate, loads, demands, capacity, vehicles, dist, k)
+        candidate_cost = _routes_cost(candidate, dist)
+        if candidate_cost <= current_cost:
+            routes = candidate
+            current_cost = candidate_cost
+            if candidate_cost < best_cost:
+                best_cost = candidate_cost
+                best_routes = [list(route) for route in candidate]
+
+    solution = _wrap_routes(best_routes, dist, time)
+    solution.label = "alns"
+    solution.uncovered = list(base.uncovered)
+    return solution
+
+
+def _customer_edges(routes: list[list[int]]) -> set[tuple[int, int]]:
+    edges: set[tuple[int, int]] = set()
+    for route in routes:
+        sequence = [customer for customer in route if customer != 0]
+        edges.update(zip(sequence, sequence[1:]))
+    return edges
+
+
+def plan_stability_pct(routes_a: list[list[int]], routes_b: list[list[int]]) -> float:
+    """Estabilidad del plan: % de arcos entre clientes compartidos (índice de Jaccard)."""
+    edges_a = _customer_edges(routes_a)
+    edges_b = _customer_edges(routes_b)
+    union = edges_a | edges_b
+    if not union:
+        return 100.0
+    return round(len(edges_a & edges_b) / len(union) * 100, 1)
