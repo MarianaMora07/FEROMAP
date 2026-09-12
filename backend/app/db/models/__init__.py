@@ -3,6 +3,8 @@ from app.db.models.collection_point import CollectionPoint
 from app.db.models.driver_notification import DriverNotification
 from app.db.models.daily_plan import DailyPlan
 from app.db.models.driver import Driver
+from app.db.models.idempotency import IdempotencyRecord
+from app.db.models.notification_outbox import NotificationOutbox
 from app.db.models.optimization_job import OptimizationJobRecord
 from app.db.models.optimized_route import OptimizedRoute
 from app.db.models.parish import Parish
@@ -52,4 +54,6 @@ __all__ = [
     "VisitSchedule",
     "PlanVersion",
     "DriverNotification",
+    "IdempotencyRecord",
+    "NotificationOutbox",
 ]

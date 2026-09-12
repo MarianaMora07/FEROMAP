@@ -19,6 +19,8 @@ from app.db.models import (
     VisitSchedule,
 )
 from app.domain.criticality import is_at_risk_before_next_visit
+from app.config import settings
+from app.core.idempotency import run_idempotent
 from app.services.geo_service import fill_level_pct
 from app.services.seed_loader import load_seed
 
@@ -92,6 +94,30 @@ def _next_pending_waypoint(db: Session, route_id: int) -> RouteWaypoint | None:
 
 
 def dispatch_optimized_routes(
+    db: Session,
+    *,
+    preserve_active: bool = False,
+    daily_plan_id: int | None = None,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """Despacha rutas optimizadas garantizando un único efecto por idempotency key."""
+    scope = f"dispatch:{daily_plan_id if daily_plan_id is not None else 'all'}"
+
+    def _run() -> dict[str, Any]:
+        return _dispatch_optimized_routes_impl(
+            db, preserve_active=preserve_active, daily_plan_id=daily_plan_id
+        )
+
+    return run_idempotent(
+        db,
+        scope=scope,
+        key=idempotency_key,
+        handler=_run,
+        enabled=settings.dispatch_idempotency_enabled,
+    )
+
+
+def _dispatch_optimized_routes_impl(
     db: Session,
     *,
     preserve_active: bool = False,

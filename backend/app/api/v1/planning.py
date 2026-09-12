@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 
 from app.api.deps import CurrentUser, DbSession, PlannerOrAdmin
 from app.schemas.contingency import ContingencySimulationRequest
@@ -392,10 +392,14 @@ def optimize_daily(
 
 
 @router.post("/daily/{daily_plan_id}/dispatch")
-def dispatch_daily(daily_plan_id: int, db: DbSession, _: PlannerOrAdmin):
+def dispatch_daily(daily_plan_id: int, request: Request, db: DbSession, _: PlannerOrAdmin):
     from app.services.notification_service import notify_routes_dispatched
 
-    result = dispatch_optimized_routes(db, daily_plan_id=daily_plan_id)
+    result = dispatch_optimized_routes(
+        db,
+        daily_plan_id=daily_plan_id,
+        idempotency_key=request.headers.get("Idempotency-Key"),
+    )
     mark_daily_plan_dispatched(db, daily_plan_id)
     result["notifications"] = notify_routes_dispatched(db, result.get("dispatchedRouteIds") or [])
     db.commit()
