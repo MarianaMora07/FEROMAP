@@ -21,6 +21,7 @@ Solo iniciar ítems de este backlog cuando:
 | 3 | Tráfico en vivo (OSRM, etc.) | [trafico-en-vivo.md](./trafico-en-vivo.md) | 10–20 días | Media-baja |
 | 4 | Multi-objetivo en el solver | [multi-objetivo-solver.md](./multi-objetivo-solver.md) | 12–20 días | Baja (investigación) |
 | 5 | Toolbar GIS completo | [toolbar-gis.md](./toolbar-gis.md) | 6–10 días | Media (operación) |
+| 6 | Capa de recuperación ante disrupciones | [recuperacion-disrupciones.md](./recuperacion-disrupciones.md) | 5–25 días | Alta (aporte académico) |
 
 ## Por qué esperar (resumen)
 
@@ -31,6 +32,7 @@ Solo iniciar ítems de este backlog cuando:
 | Tráfico en vivo | Dependencia de infraestructura externa, SLA y costos |
 | Multi-objetivo en solver | Cambio profundo del fitness ACO; contradice narrativa congelada |
 | Toolbar GIS completo | Valor operativo real, no central en el capítulo de tesis |
+| Capa de recuperación (inserción/ALNS) | Toca el corazón de la demo (avería/contenedor) y exige modelar el estado de las rutas en curso |
 
 ## Estado actual (línea base post-Fase 4)
 
@@ -41,6 +43,7 @@ Solo iniciar ítems de este backlog cuando:
 | Tiempos de viaje | Grafo OSMnx + multiplicadores escenario | OSRM / tráfico live |
 | KPIs CO₂/tiempo | Derivados post-solución (`kpiView`) | Fitness multi-objetivo |
 | Mapa operativo | Capas, playback, toggle rutas | Toolbar GIS medición/edición |
+| Contingencias | Re-solve ACO localizado (dry-run + real) | Inserción/ALNS + comparación de estabilidad |
 
 ## Comandos de referencia (tesis)
 

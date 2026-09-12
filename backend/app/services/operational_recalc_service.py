@@ -15,6 +15,7 @@ from app.services.geo_service import fill_level_pct
 from app.services.notification_service import notify_routes_dispatched
 from app.services.optimization_service import run_optimization_engine
 from app.services.planning_service import get_daily_plan_execution_context
+from app.services.route_playback_service import route_features_to_playback_models
 
 # Escenarios válidos en data/seeds/scenarios.json (el motor lanza ValueError si el
 # id no existe). La UI traduce "contenedor crítico" al escenario "saturated".
@@ -61,7 +62,8 @@ def collect_remaining_day_point_ids(db: Session, daily_plan_id: int) -> list[int
     point_ids: list[int] = []
     for route in routes:
         for waypoint in route.waypoints:
-            if waypoint.status == "pending":
+            # Los waypoints de vertedero no tienen punto de recolección.
+            if waypoint.status == "pending" and waypoint.collection_point_id is not None:
                 point_ids.append(waypoint.collection_point_id)
     return list(dict.fromkeys(point_ids))
 
@@ -103,6 +105,27 @@ def simulate_critical_container_recalc(
         )
     finally:
         db.rollback()
+
+
+def run_critical_container_recalc_dry_run(
+    db: Session,
+    *,
+    collection_point_code: str,
+    daily_plan_id: int | None = None,
+    operation_date: date | None = None,
+) -> dict[str, Any]:
+    """Contenedor crítico dry-run **sin revertir** (encadenable).
+
+    Complementa ``simulate_critical_container_recalc``: no hace rollback para poder
+    encadenar la secuencia de simulación del día en una sola transacción.
+    """
+    return _run_critical_container_recalc(
+        db,
+        collection_point_code=collection_point_code,
+        daily_plan_id=daily_plan_id,
+        operation_date=operation_date,
+        dry_run=True,
+    )
 
 
 def _run_critical_container_recalc(
@@ -167,6 +190,9 @@ def _run_critical_container_recalc(
             "simulated": dry_run,
         },
         auto_commit=False,
+        include_per_vehicle_routes=True,
+        # Contingencia: priorizar contenedores críticos / en riesgo (Fase 4 / ADR-003).
+        priority_fill_level=True,
     )
 
     dispatch = recalc.get("dispatch") or {}
@@ -175,6 +201,10 @@ def _run_critical_container_recalc(
         []
         if dry_run
         else notify_routes_dispatched(db, route_ids, event_type="critical_recalc")
+    )
+
+    alternative_routes = route_features_to_playback_models(
+        (recalc.get("routesPerVehicle") or {}).get("optimized") or []
     )
 
     return {
@@ -188,6 +218,10 @@ def _run_critical_container_recalc(
         "remainingPoints": len(remaining_ids),
         "recalculation": recalc,
         "notifications": notifications,
+        "alternativeRoutes": alternative_routes,
+        "resolution": "reassigned" if alternative_routes else "no_change",
+        "droppedPoints": [],
+        "droppedDetails": [],
         "simulated": dry_run,
         "message": (
             f"Recálculo operativo: {len(remaining_ids)} punto(s) pendiente(s) "

@@ -36,6 +36,8 @@ backend/.venv/
 *.sln
 *.sw?
 backend/cache/
+# Directorio de datos generado en dev cuando DATA_DIR cae dentro del árbol backend.
+backend/data/
 
 # Playwright
 test-results/

@@ -1210,7 +1210,6 @@ def defer_uncovered_points_from_daily_plan(
             origin_operation_date=plan.operation_date,
             target_operation_date=target_date,
             reason="uncovered_optimization",
-            priority=120,
         )
         created += 1
 
@@ -1233,7 +1232,6 @@ def create_pending_visit(
     source_waypoint_id: int | None = None,
     source_incident_id: int | None = None,
     target_operation_date: date | None = None,
-    priority: int = 100,
 ) -> PendingVisit:
     existing = db.scalar(
         select(PendingVisit).where(
@@ -1290,7 +1288,6 @@ def close_daily_plan(db: Session, daily_plan_id: int, *, user_id: int | None = N
                 origin_operation_date=plan.operation_date,
                 reason="skipped_breakdown" if waypoint.status == "skipped" else "not_visited",
                 source_waypoint_id=waypoint.id,
-                priority=100,
             )
             new_pending += 1
 
@@ -1402,7 +1399,6 @@ def seed_pending_visits_demo(db: Session, rows: list[dict[str, Any]]) -> None:
             collection_point_id=point.id,
             origin_operation_date=origin,
             reason=row.get("reason", "not_visited"),
-            priority=int(row.get("priority", 100)),
         )
 
 

@@ -86,6 +86,9 @@ def test_risk_uses_weekdays_when_hours_not_given():
 
 def _dashboard_db(points, schedules):
     db = MagicMock()
+    # `_today_route_counts` consulta el plan de hoy con `db.scalar`; en una BD
+    # fresca no hay plan → (0, 0), sin consumir un `db.scalars` extra.
+    db.scalar.return_value = None
     db.scalars.side_effect = [
         MagicMock(all=MagicMock(return_value=points)),
         MagicMock(all=MagicMock(return_value=schedules)),

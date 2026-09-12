@@ -37,7 +37,7 @@ import {
 } from '../../core/utils/optimizationResults';
 import { downloadDailyPlanPdf } from '../../core/api/planning';
 import { optimizationDateHref, tomorrowIso } from '../../core/planning/planningUx';
-import { optimizationHref, operationalMapHref } from '../../core/planning/operationalLinks';
+import { optimizationHref, operationalMapHref, daySimulationHref } from '../../core/planning/operationalLinks';
 import { parsePlaybackQueryParam } from '../../core/planning/operationalFlowUx';
 import { PlanningContextualCta } from '../planning/PlanningContextualCta';
 import { AppShellSubheader } from '../../design-system/layout/pageChromeSlots';
@@ -193,6 +193,14 @@ export default function OptimizationPage() {
     playback.pause();
     playback.reset();
     closeOptimizationPlayback();
+  };
+
+  // Simulación guionada del día: vista propia (el mapa es el protagonista).
+  const openDaySimulation = () => {
+    const plan = dailyPlan();
+    if (plan?.id == null) return;
+    if (optimizationState.playbackOpen) closeOptimizationPlayback();
+    navigate(daySimulationHref({ dailyPlanId: plan.id, date: plan.operationDate ?? selectedDate() }));
   };
   const kpis = () => optimizationState.kpis!;
   // Rutas reales de la corrida: las de la sesión (lastResult) o, si el día llegó ya
@@ -375,7 +383,7 @@ export default function OptimizationPage() {
   return (
     <div class="space-y-4 md:space-y-5">
       <AppShellSubheader>
-        <OptimizationHeaderBar />
+        <OptimizationHeaderBar onSimulateDay={openDaySimulation} />
       </AppShellSubheader>
 
       <OptimizationDailyBanner />

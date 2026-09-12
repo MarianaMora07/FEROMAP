@@ -12,6 +12,8 @@ export interface RoutePlaybackLayerProps {
   playback: RoutePlaybackController;
   showControls?: boolean;
   controlsClass?: string;
+  /** Resalta en este color las paradas ya visitadas (p. ej. rojo). */
+  passedStopColor?: string;
 }
 
 export function RoutePlaybackLayer(props: RoutePlaybackLayerProps) {
@@ -27,6 +29,7 @@ export function RoutePlaybackLayer(props: RoutePlaybackLayerProps) {
         map={props.map}
         routes={props.routes}
         routeStates={() => props.playback.routeStates()}
+        passedStopColor={props.passedStopColor}
       />
       <Show when={props.showControls !== false}>
         <RoutePlaybackControls

@@ -1,7 +1,7 @@
 import { Show, createMemo, createSignal } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { A, useNavigate } from '@solidjs/router';
-import { ChevronLeft, ChevronRight, Loader2, Radio, Send, Sparkles, AlertTriangle } from 'lucide-solid';
+import { ChevronLeft, ChevronRight, Loader2, Play, Radio, Send, Sparkles, AlertTriangle } from 'lucide-solid';
 import { Button, Drawer } from '../../design-system/components';
 import { canOptimize } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
@@ -29,7 +29,7 @@ import { OptimizationDayActualsPanel } from './OptimizationDayActualsPanel';
 import { OptimizationContingencySimulator } from './OptimizationContingencySimulator';
 import type { ScenarioId } from '../../data/types/simulation';
 
-export function OptimizationHeaderBar() {
+export function OptimizationHeaderBar(props: { onSimulateDay?: () => void } = {}) {
   const navigate = useNavigate();
   const [stepDrawerOpen, setStepDrawerOpen] = createSignal(false);
   const [gateOpen, setGateOpen] = createSignal(false);
@@ -188,6 +188,18 @@ export function OptimizationHeaderBar() {
               onClick={() => setContingencyOpen(true)}
             >
               Simular contingencia
+            </Button>
+          </Show>
+          <Show when={hasResults()}>
+            <Button
+              variant="outline"
+              size="sm"
+              class="gap-2"
+              icon={<Play size={14} />}
+              data-testid="optimization-day-simulation-open"
+              onClick={() => props.onSimulateDay?.()}
+            >
+              Simular día
             </Button>
           </Show>
           <Show

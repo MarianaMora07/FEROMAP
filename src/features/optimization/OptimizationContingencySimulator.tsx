@@ -1,6 +1,7 @@
 import { AlertTriangle, RefreshCw, Send } from 'lucide-solid';
 import { For, Show, createSignal } from 'solid-js';
 import { Button, SelectField, TextField } from '../../design-system/components';
+import { criticalityLabel } from '../route-playback/daySimulationUx';
 import type { ContingencySimulationType } from '../../core/api/contingencies';
 import {
   applyContingencySimulation,
@@ -171,6 +172,30 @@ export function OptimizationContingencySimulator(props: { onApplied?: () => void
               </div>
             </div>
             <p class="text-sm text-amber-900 dark:text-amber-100">{sim().message}</p>
+            <Show when={sim().droppedDetails.length > 0}>
+              <div class="space-y-1" data-testid="contingency-dropped">
+                <p class="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">
+                  Sin atender ({sim().droppedDetails.length})
+                </p>
+                <ul class="space-y-1">
+                  <For each={sim().droppedDetails}>
+                    {(detail) => (
+                      <li class="flex items-center justify-between gap-2 text-xs text-amber-900 dark:text-amber-100">
+                        <span class="font-medium">{detail.code}</span>
+                        <span class="text-text-muted">
+                          {detail.fillPct}% · {criticalityLabel(detail.criticality)}
+                        </span>
+                      </li>
+                    )}
+                  </For>
+                </ul>
+              </div>
+            </Show>
+            <Show when={sim().droppedDetails.length === 0 && sim().resolution === 'reassigned'}>
+              <p class="text-xs text-fero-green-dark">
+                Sin puntos sacrificados: plan reasignado completo.
+              </p>
+            </Show>
             <Show when={sim().vehicleId}>
               <p class="text-xs text-text-muted">Vehículo: {sim().vehicleId}</p>
             </Show>

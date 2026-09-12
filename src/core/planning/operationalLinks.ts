@@ -45,6 +45,15 @@ export function optimizationPlaybackHref(params: OperationalLinkParams = {}): st
   return optimizationHref({ ...params, playback: true });
 }
 
+/** Vista propia de la simulación guionada del día (mapa protagonista). */
+export function daySimulationHref(params: OperationalLinkParams = {}): string {
+  const search = new URLSearchParams();
+  if (params.date) search.set('date', params.date);
+  if (params.dailyPlanId != null) search.set('dailyPlanId', String(params.dailyPlanId));
+  const query = search.toString();
+  return query ? `/optimization/simulation?${query}` : '/optimization/simulation';
+}
+
 export function monitoringPlaybackHref(params: OperationalLinkParams = {}): string {
   return monitoringHref({ ...params, playback: true });
 }

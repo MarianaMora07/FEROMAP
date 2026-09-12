@@ -1,4 +1,5 @@
 import type { KpiMetrics } from '../../data/types/simulation';
+import type { RoutePlaybackModel } from '../route-playback/routePlaybackTypes';
 import { apiGet, apiPost, useMocks } from './client';
 import type { OptimizeResponse } from './simulation';
 import { fetchSimulationOptimizeJob } from './simulationJobs';
@@ -113,6 +114,17 @@ export type { KpiMetrics };
 
 export type ContingencySimulationType = 'breakdown' | 'critical_container';
 
+/** Cómo resolvió el motor la contingencia. */
+export type ContingencySimulationResolution = 'reassigned' | 'pending' | 'no_change';
+
+/** Punto que quedaría sin atender, con su criticidad (ADR-002). */
+export interface DroppedPointDetail {
+  code: string;
+  fillPct: number;
+  criticality: string;
+  priority: number;
+}
+
 export interface ContingencySimulationRequest {
   type: ContingencySimulationType;
   vehicleId?: string;
@@ -132,6 +144,13 @@ export interface ContingencySimulationResult {
   reassignedPoints: number;
   remainingVehicles: number | null;
   skippedWaypoints: number;
+  /** Geometría del plan alternativo por vehículo (vacía si no hubo recálculo). */
+  alternativeRoutes: RoutePlaybackModel[];
+  resolution: ContingencySimulationResolution;
+  /** Códigos de puntos que quedarían sin atender (derivados de `droppedDetails`). */
+  droppedPoints: string[];
+  /** Triage de esos puntos, ordenado por criticidad y prioridad. */
+  droppedDetails: DroppedPointDetail[];
   message: string;
 }
 
@@ -156,6 +175,10 @@ export async function simulateDailyContingency(
       reassignedPoints: 3,
       remainingVehicles: 1,
       skippedWaypoints: 3,
+      alternativeRoutes: [],
+      resolution: 'reassigned',
+      droppedPoints: [],
+      droppedDetails: [],
       message: 'Simulación (demo): 3 puntos se reasignarían a 1 vehículo disponible.',
     };
   }

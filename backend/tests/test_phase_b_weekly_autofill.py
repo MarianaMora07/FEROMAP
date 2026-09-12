@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 
 import pytest
 from sqlalchemy import select, text
@@ -83,19 +83,14 @@ def test_combinatorio_not_demo_visible(db: Session):
     assert demo_list["total"] == 3
 
 
-def test_pending_visits_reference_week_seed(db: Session):
-    pending = db.scalars(
-        select(PendingVisit).order_by(PendingVisit.id)
-    ).all()
-    assert len(pending) >= 3
+def test_pending_visits_not_fabricated_by_seed(db: Session):
+    """El seed limpio (b66477e) no fabrica pendientes: la tabla arranca vacía.
 
-    reasons = {row.reason for row in pending}
-    assert "not_visited" in reasons
-    assert "skipped_breakdown" in reasons
-
-    reference_sunday = _reference_monday() - timedelta(days=1)
-    origins = {row.origin_operation_date for row in pending}
-    assert reference_sunday in origins or (_reference_monday() - timedelta(days=2)) in origins
+    Los pendientes se crean solo en flujos reales (no visitado, avería, defer);
+    sembrarlos era actividad inventada.
+    """
+    pending = db.scalars(select(PendingVisit).order_by(PendingVisit.id)).all()
+    assert pending == []
 
 
 @pytest.fixture()
