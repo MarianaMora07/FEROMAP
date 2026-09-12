@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.core.security import hash_password, verify_password
+from app.core.security import hash_password, validate_password_policy, verify_password
 from app.db.models import User, UserPreferences, UserSession
 from app.schemas.profile import (
     AvatarUrlRequest,
@@ -23,6 +23,7 @@ from app.schemas.profile import (
     ProfileSession,
     ProfileUpdate,
 )
+from app.services.admin_service import get_operational_settings
 from app.services.auth_service import get_user_by_id, role_label
 
 ALLOWED_THEMES = {"light", "dark", "system"}
@@ -172,6 +173,7 @@ def change_password(db: Session, user: User, payload: ChangePasswordRequest) -> 
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="La nueva contraseña debe ser diferente",
         )
+    validate_password_policy(payload.new_password)
     user.password_hash = hash_password(payload.new_password)
     db.flush()
     return {"ok": True}
@@ -212,13 +214,45 @@ def create_user_session(
     return session
 
 
+def _as_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _session_timeout_minutes(db: Session) -> int | None:
+    """Timeout efectivo de sesión desde la configuración operativa.
+
+    Si la configuración no está disponible, devuelve ``None`` para no bloquear
+    sesiones por un fallo de lectura.
+    """
+    try:
+        return get_operational_settings(db).session_timeout_minutes
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def validate_session(db: Session, session_id: str | None, user_id: int) -> UserSession | None:
     if not session_id:
         return None
     session = db.get(UserSession, session_id)
     if session is None or session.user_id != user_id or session.revoked_at is not None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sesión inválida o expirada")
-    session.last_seen_at = datetime.now(timezone.utc)
+
+    now = datetime.now(timezone.utc)
+    timeout_minutes = _session_timeout_minutes(db)
+    last_seen = _as_utc(session.last_seen_at)
+    if timeout_minutes and last_seen is not None and (now - last_seen) > timedelta(minutes=timeout_minutes):
+        session.revoked_at = now
+        db.flush()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sesión expirada por inactividad",
+        )
+
+    session.last_seen_at = now
     db.flush()
     return session
 
