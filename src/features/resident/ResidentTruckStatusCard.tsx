@@ -64,7 +64,7 @@ export function ResidentTruckStatusCard(props: ResidentTruckStatusCardProps) {
         subtitle={
           proximity()?.lastUpdatedAt
             ? `Actualizado ${new Date(proximity()!.lastUpdatedAt).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })}`
-            : 'Seguimiento en vivo'
+            : 'Sin actualización reciente'
         }
       />
       <Show when={showActive()} fallback={<PlanningEmptyState {...emptyPreset()} compact />}>

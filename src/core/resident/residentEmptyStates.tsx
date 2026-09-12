@@ -47,7 +47,7 @@ export const RESIDENT_EMPTY_PRESETS = {
     testId: 'empty-resident-outside-window',
     title: 'Fuera del horario de recolección',
     description:
-      'El servicio de recolección opera en la ventana horaria de tu sector. Vuelve durante ese horario para ver el camión en vivo.',
+      'El servicio de recolección opera en la ventana horaria de tu sector. Vuelve durante ese horario para ver el recorrido de tu sector.',
     actionLabel: 'Ver horario',
     actionHref: residentHubScheduleHref(),
     icon: <Calendar size={22} />,

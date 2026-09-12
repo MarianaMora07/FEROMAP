@@ -30,8 +30,8 @@ export function MonitoringDeskIntro(props: MonitoringDeskIntroProps) {
         <div class="min-w-0 space-y-1">
           <p class="text-sm text-text-secondary">
             {props.variant === 'supervisor'
-              ? 'Supervisión operativa — flota e incidencias en tiempo real.'
-              : 'Flota en vivo — ubicación, rutas e incidencias del día.'}
+              ? 'Supervisión operativa — flota e incidencias del día.'
+              : 'Estado de la flota — rutas e incidencias del día.'}
             <span class="text-text-muted"> · {props.fleetInRoute} en ruta</span>
           </p>
           <Show when={props.dailyPlan}>

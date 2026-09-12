@@ -117,8 +117,8 @@ export const alertsList: SystemAlert[] = [
   {
     id: 'al-04',
     priority: 'critica',
-    title: 'GPS sin señal',
-    detail: 'Última posición hace 18 min',
+    title: 'Vehículo detenido en ruta',
+    detail: 'Reportado por el conductor',
     source: 'Vehículo TR-06',
     location: 'Sector Unare II',
     datetime: '25/06/2026 09:40 AM',
@@ -223,8 +223,8 @@ export const recentAlertActivity = [
   {
     id: 'ra4',
     time: '09:40 AM',
-    title: 'TR-06 sin señal GPS',
-    detail: 'Última posición hace 18 min',
+    title: 'TR-06 detenido en ruta',
+    detail: 'Reportado por el conductor',
     status: 'nueva' as AlertStatus,
   },
 ];

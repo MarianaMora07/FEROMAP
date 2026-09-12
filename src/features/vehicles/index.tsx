@@ -611,7 +611,7 @@ export default function VehiclesPage() {
                           <p class="text-xs text-text-muted">Combustible</p>
                           <Show
                             when={v().fuelPct !== null}
-                            fallback={<p class="text-sm font-medium text-text-muted">Sin dato de telemetría</p>}
+                            fallback={<p class="text-sm font-medium text-text-muted">Sin dato</p>}
                           >
                             <p class="text-sm font-semibold text-text-primary dark:text-white">
                               {v().fuelPct}%
