@@ -128,7 +128,17 @@ export default function CollectionPointsPage() {
   const [exporting, setExporting] = createSignal(false);
   const [pendingDeletePoint, setPendingDeletePoint] = createSignal<CollectionPoint | null>(null);
   const { toasts, addToast, removeToast } = createToastStore();
-  const [apiPoints, { refetch: refetchPoints }] = createResource(fetchCollectionPointsList);
+  const [pointsApiError, setPointsApiError] = createSignal(false);
+  const [apiPoints, { refetch: refetchPoints }] = createResource(async () => {
+    try {
+      const points = await fetchCollectionPointsList();
+      setPointsApiError(false);
+      return points;
+    } catch {
+      setPointsApiError(true);
+      return [] as CollectionPoint[];
+    }
+  });
   const [pointsSummary, { refetch: refetchSummary }] = createResource(fetchCollectionPointsSummary);
   const [pointDetail, { refetch: refetchDetail }] = createResource(selectedId, (id) =>
     id ? fetchCollectionPointDetail(id) : Promise.resolve(null),
@@ -159,7 +169,8 @@ export default function CollectionPointsPage() {
     () => fetchResidentOverview(),
   );
   const pointsLoading = () => apiPoints.loading;
-  const pointsError = () => apiPoints.error;
+  const pointsError = () =>
+    pointsApiError() ? new Error('No se pudo cargar el listado de puntos.') : undefined;
   const summaryLoading = () => pointsSummary.loading;
 
   const kpisData = createMemo(() => {
@@ -693,7 +704,10 @@ export default function CollectionPointsPage() {
         <SectorFillRatePanel />
       </Show>
       <Show when={pointsError()}>
-        <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900/50 dark:bg-red-950/30">
+        <div
+          data-testid="collection-points-error"
+          class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900/50 dark:bg-red-950/30"
+        >
           <p class="text-sm font-semibold text-red-700 dark:text-red-300">
             No se pudieron cargar los puntos de recolección
           </p>

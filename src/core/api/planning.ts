@@ -1,4 +1,5 @@
 import { apiDelete, apiGet, apiPatch, apiPost, useMocks } from './client';
+import { idempotencyHeaders } from './idempotency';
 import { tomorrowIso } from '../planning/planningUx';
 import {
   addWeeksToMonday,
@@ -671,7 +672,11 @@ export function optimizeDailyPlan(
 
 export function dispatchDailyPlan(dailyPlanId: number): Promise<{ dispatchedRouteIds: number[]; count: number }> {
   if (useMocks) return Promise.resolve({ dispatchedRouteIds: [1, 2], count: 2 });
-  return apiPost(`/api/v1/planning/daily/${dailyPlanId}/dispatch`, {});
+  return apiPost(
+    `/api/v1/planning/daily/${dailyPlanId}/dispatch`,
+    {},
+    { headers: idempotencyHeaders() },
+  );
 }
 
 export interface DeferUncoveredResult {

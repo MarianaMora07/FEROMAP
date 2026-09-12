@@ -41,6 +41,8 @@ interface AppState {
   fleet: FleetSummary;
   dataReady: boolean;
   dataLoading: boolean;
+  /** true si el bootstrap de datos falló (API caída sin mocks) — evita mostrar demo. */
+  dataError: boolean;
 }
 
 const LG_MIN_WIDTH_MQ = '(min-width: 1024px)';
@@ -78,7 +80,12 @@ const [state, setState] = createStore<AppState>({
   },
   dataReady: false,
   dataLoading: false,
+  dataError: false,
 });
+
+const EMPTY_CONTAINERS: ContainerCollection = { type: 'FeatureCollection', features: [] };
+const EMPTY_SECTORS: SectorCollection = { type: 'FeatureCollection', features: [] };
+const EMPTY_ROUTES: RouteCollection = { type: 'FeatureCollection', features: [] };
 
 let initPromise: Promise<void> | null = null;
 
@@ -98,14 +105,30 @@ export async function initAppData(): Promise<void> {
         sectors,
         routes,
         dataReady: true,
+        dataError: false,
       });
+    } catch {
+      // Sin mocks, un fallo de API no debe dejar datos demo ni una promesa
+      // rechazada: se vacía el estado y se marca el error para que las vistas
+      // muestren vacío/error honesto.
+      setState({
+        containers: EMPTY_CONTAINERS,
+        sectors: EMPTY_SECTORS,
+        routes: EMPTY_ROUTES,
+        dataReady: false,
+        dataError: true,
+      });
+    } finally {
+      setState('dataLoading', false);
+    }
+    try {
       await loadDashboardData();
       const view = (await import('./dashboardStore')).dashboardView();
       if (view?.summary.fleet) {
         setState('fleet', view.summary.fleet);
       }
-    } finally {
-      setState('dataLoading', false);
+    } catch {
+      // El dashboard maneja su propio vacío (dashboardStore.EMPTY_SUMMARY).
     }
   })();
 

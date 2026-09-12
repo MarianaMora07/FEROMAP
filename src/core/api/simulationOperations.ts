@@ -4,6 +4,7 @@ import { simulationHistory } from '../../data/mock/simulationScenarios';
 import { kpiByScenario } from '../../data/mock/kpis';
 import { getScenarioRoutes } from '../../data/mock/routes';
 import { apiGet, apiPost, useMocks } from './client';
+import { idempotencyHeaders } from './idempotency';
 import { mergeRouteCollections } from './routes';
 
 export interface SimulationHistoryRow {
@@ -175,5 +176,9 @@ export interface DispatchRoutesResult {
 }
 
 export function dispatchOptimizedRoutes(dailyPlanId?: number): Promise<DispatchRoutesResult> {
-  return apiPost<DispatchRoutesResult>('/api/v1/routes/dispatch', dailyPlanId ? { dailyPlanId } : {});
+  return apiPost<DispatchRoutesResult>(
+    '/api/v1/routes/dispatch',
+    dailyPlanId ? { dailyPlanId } : {},
+    { headers: idempotencyHeaders() },
+  );
 }

@@ -52,6 +52,7 @@ export interface DashboardSummary {
   dateLabel: string;
   notifications: number;
   user: { name: string; role: string; initials: string };
+  roleKpis?: Array<{ id: string; label: string; value: number; tone: string; icon: string }>;
   metrics: {
     totalContainers: number;
     criticalContainers: number;

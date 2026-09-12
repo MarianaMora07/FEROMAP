@@ -75,6 +75,7 @@ export default function ReportsPage() {
   const [format, setFormat] = createSignal<'pdf' | 'excel'>('pdf');
   const [generating, setGenerating] = createSignal(false);
   const [loading, setLoading] = createSignal(true);
+  const [error, setError] = createSignal(false);
   const [kpis, setKpis] = createSignal(mockReportsKpis);
   const [performanceSeries, setPerformanceSeries] = createSignal(mockPerformanceSeries);
   const [wasteTypeDistribution, setWasteTypeDistribution] = createSignal(mockWasteTypeDistribution);
@@ -104,7 +105,10 @@ export default function ReportsPage() {
   createEffect(() => {
     filters();
     setLoading(true);
-    void loadSummary().finally(() => setLoading(false));
+    void loadSummary()
+      .then(() => setError(false))
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
   });
 
   const handlePeriodChange = (value: string) => {
@@ -187,7 +191,19 @@ export default function ReportsPage() {
   };
 
   return (
-    <div class="space-y-5">
+    <Show
+      when={!error()}
+      fallback={
+        <div
+          role="alert"
+          data-testid="reports-error"
+          class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
+        >
+          No se pudieron cargar los reportes. Verifica la conexión con el API.
+        </div>
+      }
+    >
+    <div class="space-y-5" data-testid="reports-page">
       <SimulationRunComparisonCard simulationId={focusedSimulationId()} />
       <ReportsPlanVsRealCard from={filters().from} to={filters().to} />
       <Show when={loading()}>
@@ -537,5 +553,6 @@ export default function ReportsPage() {
         </div>
       </Card>
     </div>
+    </Show>
   );
 }
