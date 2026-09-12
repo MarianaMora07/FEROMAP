@@ -140,6 +140,49 @@ def test_routes_to_geojson_includes_landfill_stops(monkeypatch):
     assert [-62.690, 8.280] in coords
 
 
+def test_routes_to_geojson_exposes_vehicle_code(monkeypatch):
+    customers = [
+        CustomerNode(1, "C1", 0, 8.0, 50, -62.71, 8.29),
+        CustomerNode(2, "C2", 0, 8.0, 50, -62.72, 8.30),
+    ]
+    n_customers = len(customers)
+    dist, time = vrp_matrix(n_customers, base=50.0)
+    landfill_idx = _landfill_idx(n_customers)
+    solution = RouteSolution(
+        vehicle_routes=[[0, 1, landfill_idx, 2, 0]],
+        distance_m=500.0,
+        duration_s=300.0,
+    )
+    graph = MagicMock()
+
+    monkeypatch.setattr(
+        "app.services.optimization_service._route_geometry",
+        lambda *args, **kwargs: [
+            [-62.715, 8.295],
+            [-62.71, 8.29],
+            [-62.715, 8.295],
+        ],
+    )
+
+    vehicle = _vehicle()
+    vehicle.code = "TR-09"
+    geojson = _routes_to_geojson(
+        graph,
+        solution,
+        customers,
+        dist,
+        time,
+        kind="optimized",
+        label="Ruta optimizada (IA)",
+        vehicles=[vehicle],
+    )
+
+    properties = geojson["features"][0]["properties"]
+    assert properties["vehicleCode"] == "TR-09"
+    # El label genérico se conserva: vehicleCode es información aditiva.
+    assert properties["label"] == "Ruta optimizada (IA)"
+
+
 def test_route_geometry_includes_landfill_coordinates(monkeypatch):
     customers = [
         CustomerNode(1, "C1", 0, 8.0, 50, -62.71, 8.29),

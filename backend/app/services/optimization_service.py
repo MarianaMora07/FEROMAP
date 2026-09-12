@@ -1460,17 +1460,21 @@ def _routes_to_geojson(
             landfill_lon=landfill_lon,
             landfill_lat=landfill_lat,
         )
-        features.append(
-            _build_geojson_feature(
-                coords,
-                route_id=f"route-{kind}" if v_idx == 0 else f"route-{kind}-v{v_idx + 1}",
-                kind=kind,
-                label=label if v_idx == 0 else f"{label} — vehículo {v_idx + 1}",
-                distance_km=d / 1000,
-                duration_min=int(total_s / 60),
-                stops=stops,
-            )
+        feature = _build_geojson_feature(
+            coords,
+            route_id=f"route-{kind}" if v_idx == 0 else f"route-{kind}-v{v_idx + 1}",
+            kind=kind,
+            label=label if v_idx == 0 else f"{label} — vehículo {v_idx + 1}",
+            distance_km=d / 1000,
+            duration_min=int(total_s / 60),
+            stops=stops,
         )
+        # Aditivo: la identidad real del vehículo permite etiquetar correctamente las
+        # rutas alternativas de contingencia (el ``label`` es genérico por diseño).
+        vehicle_code = getattr(vehicle, "code", "") if vehicle is not None else ""
+        if vehicle_code:
+            feature["properties"]["vehicleCode"] = vehicle_code
+        features.append(feature)
     return {"type": "FeatureCollection", "features": features}
 
 
@@ -1901,6 +1905,7 @@ def run_optimization_engine(
     fleet_limit: int | None = None,
     fleet_by_type: dict[str, int] | None = None,
     sector_partition: bool | None = None,
+    include_per_vehicle_routes: bool = False,
 ) -> dict[str, Any]:
     """Ejecuta el motor real de optimización y persiste resultados."""
     computation_started = time.perf_counter()
@@ -2495,46 +2500,41 @@ def run_optimization_engine(
             "warning",
         )
 
-    current_geo = _merge_route_features(
-        _routes_to_geojson(
-            graph,
-            current_solution,
-            customers,
-            dist_matrix,
-            time_matrix,
-            kind="current",
-            label="Ruta actual (estática)",
-            vehicles=vehicles,
-            operators_shortage=shortage_for_engine,
-            depot_lon=depot_lon,
-            depot_lat=depot_lat,
-            landfill_lon=landfill_lon,
-            landfill_lat=landfill_lat,
-            unload_seconds=unload_seconds,
-        )["features"],
-        "current",
-        "Ruta actual (estática)",
-    )
-    optimized_geo = _merge_route_features(
-        _routes_to_geojson(
-            graph,
-            optimized_solution,
-            customers,
-            dist_matrix,
-            time_matrix,
-            kind="optimized",
-            label="Ruta optimizada (IA)",
-            vehicles=vehicles,
-            operators_shortage=shortage_for_engine,
-            depot_lon=depot_lon,
-            depot_lat=depot_lat,
-            landfill_lon=landfill_lon,
-            landfill_lat=landfill_lat,
-            unload_seconds=unload_seconds,
-        )["features"],
-        "optimized",
-        "Ruta optimizada (IA)",
-    )
+    current_features = _routes_to_geojson(
+        graph,
+        current_solution,
+        customers,
+        dist_matrix,
+        time_matrix,
+        kind="current",
+        label="Ruta actual (estática)",
+        vehicles=vehicles,
+        operators_shortage=shortage_for_engine,
+        depot_lon=depot_lon,
+        depot_lat=depot_lat,
+        landfill_lon=landfill_lon,
+        landfill_lat=landfill_lat,
+        unload_seconds=unload_seconds,
+    )["features"]
+    optimized_features = _routes_to_geojson(
+        graph,
+        optimized_solution,
+        customers,
+        dist_matrix,
+        time_matrix,
+        kind="optimized",
+        label="Ruta optimizada (IA)",
+        vehicles=vehicles,
+        operators_shortage=shortage_for_engine,
+        depot_lon=depot_lon,
+        depot_lat=depot_lat,
+        landfill_lon=landfill_lon,
+        landfill_lat=landfill_lat,
+        unload_seconds=unload_seconds,
+    )["features"]
+
+    current_geo = _merge_route_features(current_features, "current", "Ruta actual (estática)")
+    optimized_geo = _merge_route_features(optimized_features, "optimized", "Ruta optimizada (IA)")
 
     routes_payload = {"current": current_geo, "optimized": optimized_geo}
 
@@ -2628,7 +2628,7 @@ def run_optimization_engine(
         for index, entry in enumerate(log_entries)
     ]
 
-    return {
+    result: dict[str, Any] = {
         "simulationId": simulation.id,
         "scenarioId": normalized,
         "caseStudyId": case_study_id,
@@ -2642,3 +2642,11 @@ def run_optimization_engine(
         "engineMetrics": engine_metrics,
         "dailyPlanId": daily_plan_id,
     }
+    if include_per_vehicle_routes:
+        # Aditivo y bajo demanda: la geometría por vehículo (sin fusionar) solo la
+        # consumen las simulaciones de contingencia para animar el plan alternativo.
+        result["routesPerVehicle"] = {
+            "current": current_features,
+            "optimized": optimized_features,
+        }
+    return result

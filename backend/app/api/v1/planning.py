@@ -465,6 +465,18 @@ def daily_routes_playback(daily_plan_id: int, db: DbSession, _: PlannerOrAdmin):
     return build_daily_route_playback(db, daily_plan_id)
 
 
+@router.get("/daily/{daily_plan_id}/simulation")
+def daily_day_simulation(daily_plan_id: int, db: DbSession, _: PlannerOrAdmin):
+    """Solo lectura: secuencia guionada de contingencias del día (dry-run encadenado).
+
+    Precomputa la animación (eventos + plan alternativo) para que el frontend no
+    orqueste ACO; nada de la secuencia se persiste.
+    """
+    from app.services.day_simulation_service import build_day_simulation
+
+    return build_day_simulation(db, daily_plan_id)
+
+
 @router.get("/daily/{daily_plan_id}/export.pdf")
 def export_daily_pdf(daily_plan_id: int, db: DbSession, _: PlannerOrAdmin):
     try:

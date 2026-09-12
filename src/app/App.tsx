@@ -28,6 +28,7 @@ function lazyPage(loader: () => Promise<{ default: Component }>) {
 const DashboardPage = lazyPage(() => import('../features/dashboard'));
 const OptimizationPage = lazyPage(() => import('../features/optimization'));
 const OptimizationLevelsPage = lazyPage(() => import('../features/optimization/OptimizationLevelsPage'));
+const DaySimulationPage = lazyPage(() => import('../features/optimization/DaySimulationPage'));
 const MapPage = lazyPage(() => import('../features/map'));
 const VehiclesPage = lazyPage(() => import('../features/vehicles'));
 const DriversPage = lazyPage(() => import('../features/drivers'));
@@ -73,6 +74,7 @@ export default function App() {
       <Route path="/" component={ProtectedShell}>
         <Route path="/" component={DashboardPage} />
         <Route path="/optimization" component={OptimizationPage} />
+        <Route path="/optimization/simulation" component={DaySimulationPage} />
         <Route path="/optimization/levels" component={OptimizationLevelsPage} />
         <Route path="/operator" component={OperatorPage} />
         <Route path="/operator/plan" component={OperatorDailyPlanPage} />

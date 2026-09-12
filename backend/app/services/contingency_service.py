@@ -11,8 +11,68 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import CollectionPoint, DailyPlan, OptimizedRoute, RouteWaypoint, Simulation, SystemAlert, Vehicle, VehicleIncident
+from app.domain.contingency_simulation import ContingencySimulationResult
 from app.services.operations_service import dispatch_optimized_routes
 from app.services.optimization_service import run_optimization_engine
+from app.services.route_playback_service import route_features_to_playback_models
+
+#: Rango de criticidad para el triage (mayor = más grave). Espeja los valores de
+#: ``domain.criticality.CriticalityLevel``.
+_CRITICALITY_RANK: dict[str, int] = {
+    "critico": 4,
+    "lleno": 3,
+    "normal": 2,
+    "parcial": 1,
+    "fueraDeServicio": 0,
+}
+
+
+def _dropped_point_details(
+    db: Session,
+    point_ids: list[int],
+    *,
+    reason: str = "skipped_breakdown",
+) -> list[dict[str, Any]]:
+    """Triage de los puntos que quedarían sin atender, ordenado por criticidad.
+
+    Reutiliza el modelo único de criticidad (ADR-002) y la prioridad de
+    pendientes (``compute_pending_priority``), para que el descarte no sea
+    "sin flota → todos pendientes" sino una decisión jerarquizada.
+    """
+    if not point_ids:
+        return []
+    from app.domain.criticality import evaluate_criticality
+    from app.services.planning_service import compute_pending_priority
+
+    points = db.scalars(select(CollectionPoint).where(CollectionPoint.id.in_(point_ids))).all()
+    today = date.today()
+    details: list[dict[str, Any]] = []
+    for point in points:
+        criticality = evaluate_criticality(point)
+        details.append(
+            {
+                "code": str(point.code),
+                "fillPct": int(criticality.fill_pct),
+                "criticality": criticality.level.value,
+                "priority": int(compute_pending_priority(today, point, reason=reason)),
+            }
+        )
+    details.sort(
+        key=lambda detail: (
+            _CRITICALITY_RANK.get(str(detail["criticality"]), 0),
+            int(detail["priority"]),
+        ),
+        reverse=True,
+    )
+    return details
+
+
+def _alternative_routes_from_recalc(recalc: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Plan alternativo serializado a playback (vacío si el motor no recalculó)."""
+    if not recalc:
+        return []
+    per_vehicle = recalc.get("routesPerVehicle") or {}
+    return route_features_to_playback_models(per_vehicle.get("optimized") or [])
 
 
 def _resolve_vehicle(db: Session, vehicle_id: str) -> Vehicle:
@@ -120,6 +180,23 @@ def simulate_vehicle_breakdown(
         db.rollback()
 
 
+def run_vehicle_breakdown_dry_run(
+    db: Session,
+    *,
+    vehicle_id: str,
+    route_id: int | None = None,
+    description: str | None = None,
+) -> dict[str, Any]:
+    """Avería dry-run **sin revertir**: muta la sesión para encadenar simulaciones.
+
+    A diferencia de ``simulate_vehicle_breakdown``, no hace rollback; el llamador
+    (la secuencia de simulación del día) es responsable de revertir al terminar.
+    """
+    return _run_vehicle_breakdown(
+        db, vehicle_id=vehicle_id, route_id=route_id, description=description, dry_run=True
+    )
+
+
 def _run_vehicle_breakdown(
     db: Session,
     *,
@@ -169,7 +246,10 @@ def _run_vehicle_breakdown(
             if waypoint.status == "pending":
                 waypoint.status = "skipped"
                 skipped_waypoints += 1
-                pending_point_ids.append(waypoint.collection_point_id)
+                # Los waypoints de vertedero no tienen punto de recolección y no se
+                # reasignan; incluirlos como ``None`` rompería al motor.
+                if waypoint.collection_point_id is not None:
+                    pending_point_ids.append(waypoint.collection_point_id)
 
     pending_point_ids = list(dict.fromkeys(pending_point_ids))
 
@@ -179,6 +259,10 @@ def _run_vehicle_breakdown(
             "skippedWaypoints": skipped_waypoints,
             "pendingPoints": 0,
             "recalculation": None,
+            "alternativeRoutes": [],
+            "resolution": "no_change",
+            "droppedPoints": [],
+            "droppedDetails": [],
             "simulated": dry_run,
             "message": "Avería registrada. No había paradas pendientes para recalcular.",
         }
@@ -190,6 +274,7 @@ def _run_vehicle_breakdown(
         )
     ).all()
     if not available_vehicles:
+        dropped_details = _dropped_point_details(db, pending_point_ids)
         for point_id in pending_point_ids:
             from app.services.planning_service import create_pending_visit
 
@@ -199,14 +284,19 @@ def _run_vehicle_breakdown(
                 origin_operation_date=date.today(),
                 reason="skipped_breakdown",
                 source_incident_id=incident.id,
-                priority=120,
             )
-        db.commit()
+        if not dry_run:
+            # En simulación los pendientes solo viven en la sesión: el wrapper hace rollback.
+            db.commit()
         return {
             "incident": _incident_payload(incident, vehicle, route, related_alert_id=related_alert_id),
             "skippedWaypoints": skipped_waypoints,
             "pendingPoints": len(pending_point_ids),
             "recalculation": None,
+            "alternativeRoutes": [],
+            "resolution": "pending",
+            "droppedPoints": [detail["code"] for detail in dropped_details],
+            "droppedDetails": dropped_details,
             "simulated": dry_run,
             "message": (
                 "Avería registrada. Sin vehículos disponibles; puntos quedaron como pendientes."
@@ -235,6 +325,10 @@ def _run_vehicle_breakdown(
         auto_dispatch=not dry_run,
         planning_level="operational",
         auto_commit=False,
+        include_per_vehicle_routes=True,
+        # En contingencia, con flota justa, el ACO favorece contenedores críticos
+        # (llenado >= 80%) y en riesgo de calendario (Fase 4 / ADR-003).
+        priority_fill_level=True,
     )
 
     after_km = recalc["kpis"]["distanceKm"]["optimized"]
@@ -253,6 +347,10 @@ def _run_vehicle_breakdown(
         "pendingPoints": len(pending_point_ids),
         "recalculation": recalc,
         "comparison": recalc["comparison"],
+        "alternativeRoutes": _alternative_routes_from_recalc(recalc),
+        "resolution": "reassigned",
+        "droppedPoints": [],
+        "droppedDetails": [],
         "simulated": dry_run,
         "message": (
             f"Avería en {vehicle.code}: {len(pending_point_ids)} puntos reasignados "
@@ -303,11 +401,13 @@ def simulate_daily_contingency(
     contingency_type: str,
     vehicle_id: str | None = None,
     collection_point_code: str | None = None,
-) -> dict[str, Any]:
+) -> ContingencySimulationResult:
     """Simulación **dry-run** de una contingencia sobre el plan del día.
 
     Devuelve el plan alternativo (antes/después) sin persistir nada: el recálculo
-    corre con ``auto_dispatch=False`` y la sesión se revierte al terminar.
+    corre con ``auto_dispatch=False`` y la sesión se revierte al terminar. Incluye
+    la geometría del plan alternativo por vehículo (``alternativeRoutes``) y cómo
+    lo resolvió el motor (``resolution``/``droppedPoints``).
     """
     from app.services.operational_recalc_service import simulate_critical_container_recalc
 
@@ -345,6 +445,10 @@ def simulate_daily_contingency(
             "reassignedPoints": int(raw.get("remainingPoints") or 0),
             "remainingVehicles": None,
             "skippedWaypoints": 0,
+            "alternativeRoutes": raw.get("alternativeRoutes") or [],
+            "resolution": raw.get("resolution") or "no_change",
+            "droppedPoints": raw.get("droppedPoints") or [],
+            "droppedDetails": raw.get("droppedDetails") or [],
             "message": raw.get("message") or "Simulación de contenedor crítico completada.",
         }
 
@@ -378,6 +482,10 @@ def simulate_daily_contingency(
         "reassignedPoints": int(raw.get("pendingPoints") or 0),
         "remainingVehicles": comparison.get("remainingVehicles"),
         "skippedWaypoints": int(raw.get("skippedWaypoints") or 0),
+        "alternativeRoutes": raw.get("alternativeRoutes") or [],
+        "resolution": raw.get("resolution") or "no_change",
+        "droppedPoints": raw.get("droppedPoints") or [],
+        "droppedDetails": raw.get("droppedDetails") or [],
         "message": raw.get("message") or "Simulación de avería completada.",
     }
 

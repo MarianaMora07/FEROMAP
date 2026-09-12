@@ -120,7 +120,9 @@ El **producto mínimo viable** es el ciclo completo de las fases 0–5 (todas �
 
 **Criterio cumplido:** se ve el plan alternativo sin tocar rutas reales; al confirmar, se aplica con el flujo real.
 
-**Pendiente menor:** el playback del plan alternativo (geometría) requeriría que el dry-run devolviera las rutas; hoy se muestra la comparación (antes/después/reasignados).
+**Geometría del plan alternativo (resuelto):** el dry-run devuelve las rutas **por vehículo** (`routesPerVehicle` serializadas como modelos de playback) junto con la resolución (`reassigned`/`pending`/`no_change`) y los puntos que quedarían sin atender. Sobre eso se monta la **simulación guionada del día**: `GET /api/v1/planning/daily/{id}/simulation` precomputa una secuencia de eventos (avería del camión más cargado a ~35 % y contenedor crítico a ~70 %, encadenados) que el planificador anima en ~5 min con pausa en cada contingencia. Es de **solo lectura**: la secuencia entera se revierte en el backend.
+
+**Triage, estabilidad y prioridad (Fase 4 / [ADR-003](./fase-0/adr-contingencias.md)):** el contrato expone `droppedDetails` (los puntos que quedarían sin atender, con `fillPct`, `criticality` y `priority`, **ordenados por criticidad** según el modelo único de ADR-002) y KPIs numéricos por paso (`reassignedPoints`, `before/afterDistanceKm`, `distanceDeltaKm`, `baseStops`, `stabilityPct`). La UI de la simulación muestra **“Estabilidad del plan”** y el triage; y ambos recálculos de contingencia activan `priority_fill_level=True`, de modo que el ACO **favorece contenedores críticos** (≥ 80 %) y en riesgo cuando la flota es justa.
 
 ---
 

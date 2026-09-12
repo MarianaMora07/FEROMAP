@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import DailyPlan, OptimizedRoute, RouteWaypoint, Simulation
+from app.domain.contingency_simulation import AlternativeRoutePayload
 from app.domain.crew_service_time import (
     resolve_effective_assigned,
     service_time_seconds_per_stop,
@@ -22,6 +23,8 @@ from app.services.route_geometry_service import build_route_linestring_cached
 PLAYBACK_ROUTE_STATUSES = ("pending", "in_progress", "completed")
 MAX_PLAYBACK_ROUTES = 6
 PLAYBACK_ROUTE_COLORS = ("#34D634", "#1143F3", "#7c3aed", "#f59e0b", "#ef4444", "#06b6d4")
+#: Código canónico de la parada en vertedero (Fase 9).
+PLAYBACK_LANDFILL_CODE = "VERTEDERO"
 
 
 def _operators_shortage_from_simulation(simulation: Simulation | None) -> int | None:
@@ -62,7 +65,7 @@ def _build_stop(
             "sequence": int(waypoint.sequence_order),
             "lng": landfill_lon,
             "lat": landfill_lat,
-            "code": "VERTEDERO",
+            "code": PLAYBACK_LANDFILL_CODE,
             "serviceMinutes": landfill_service_minutes,
             "stopType": "landfill",
         }
@@ -146,6 +149,131 @@ def _serialize_route(
         "distanceKm": round(float(getattr(route, "total_distance_meters", None) or 0) / 1000, 1),
         "startTime": _resolve_start_time(plan, waypoints),
     }
+
+
+def _normalize_feature_stop(
+    raw: dict[str, Any],
+    *,
+    service_minutes: int,
+) -> dict[str, Any] | None:
+    """Parada de una feature per-vehículo → parada de playback.
+
+    El motor no emite ``serviceMinutes`` (solo el recálculo real lo resuelve por
+    tripulación); en la simulación se rellena con un valor mínimo para que el
+    contrato de playback sea válido.
+    """
+    try:
+        lng = float(raw["lng"])
+        lat = float(raw["lat"])
+        code = str(raw["code"])
+        sequence = int(raw["sequence"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not code:
+        return None
+
+    raw_service = raw.get("serviceMinutes")
+    if isinstance(raw_service, (int, float)) and raw_service > 0:
+        service = int(raw_service)
+    else:
+        service = max(1, int(service_minutes))
+
+    stop_type = raw.get("stopType")
+    if stop_type not in ("collection", "landfill"):
+        stop_type = "landfill" if code.upper() == PLAYBACK_LANDFILL_CODE else "collection"
+    return {
+        "sequence": sequence,
+        "lng": lng,
+        "lat": lat,
+        "code": code,
+        "serviceMinutes": service,
+        "stopType": stop_type,
+    }
+
+
+def _synthetic_route_id(feature_id: Any) -> int:
+    """Id numérico estable derivado del id textual de la feature (solo dry-run)."""
+    if isinstance(feature_id, str):
+        for token in reversed(feature_id.split("-")):
+            digits = token.removeprefix("v")
+            if digits.isdigit():
+                return int(digits)
+    return 1
+
+
+def route_feature_to_playback_model(
+    feature: dict[str, Any],
+    color: str,
+    *,
+    route_id: int | None = None,
+    service_minutes: int = 1,
+) -> AlternativeRoutePayload | None:
+    """Convierte una feature GeoJSON por vehículo en un modelo de playback.
+
+    Espejo backend de ``mapContextFeatureToPlaybackModel``. La geometría y las
+    paradas provienen del motor (dry-run), por lo que ``routeId``/``vehicleId``
+    son sintéticos: una simulación no persiste rutas.
+    """
+    properties = feature.get("properties") or {}
+    geometry = feature.get("geometry") or {}
+    coordinates = geometry.get("coordinates") or []
+    if geometry.get("type") != "LineString" or len(coordinates) < 2:
+        return None
+
+    stops = [
+        stop
+        for raw in (properties.get("stops") or [])
+        if (stop := _normalize_feature_stop(raw, service_minutes=service_minutes)) is not None
+    ]
+    if not stops:
+        return None
+
+    try:
+        line_coordinates = [[float(pair[0]), float(pair[1])] for pair in coordinates]
+    except (IndexError, TypeError, ValueError):
+        return None
+
+    resolved_id = route_id if route_id is not None else _synthetic_route_id(properties.get("id"))
+    duration_raw = properties.get("durationMin")
+    if isinstance(duration_raw, (int, float)) and duration_raw > 0:
+        total_duration = int(round(duration_raw))
+    else:
+        total_duration = max(1, len(stops) * max(1, int(service_minutes)))
+    distance_raw = properties.get("distanceKm")
+    distance_km = round(float(distance_raw), 1) if isinstance(distance_raw, (int, float)) else 0.0
+
+    return {
+        "routeId": resolved_id,
+        "vehicleId": resolved_id,
+        "vehicleLabel": str(
+            properties.get("vehicleCode") or properties.get("label") or f"Ruta {resolved_id}"
+        ),
+        "color": color,
+        "lineCoordinates": line_coordinates,
+        "stops": stops,
+        "totalDurationMinutes": total_duration,
+        "distanceKm": distance_km,
+        "startTime": None,
+    }
+
+
+def route_features_to_playback_models(
+    features: list[dict[str, Any]],
+    *,
+    service_minutes: int = 1,
+) -> list[AlternativeRoutePayload]:
+    """Serializa todas las features por vehículo de un recálculo a playback."""
+    models: list[AlternativeRoutePayload] = []
+    for index, feature in enumerate(features):
+        model = route_feature_to_playback_model(
+            feature,
+            PLAYBACK_ROUTE_COLORS[index % len(PLAYBACK_ROUTE_COLORS)],
+            route_id=index + 1,
+            service_minutes=service_minutes,
+        )
+        if model is not None:
+            models.append(model)
+    return models
 
 
 def build_daily_route_playback(db: Session, daily_plan_id: int) -> dict[str, Any]:

@@ -69,7 +69,6 @@ def test_defer_uncovered_creates_pending_visits():
         origin_operation_date=date(2026, 8, 27),
         target_operation_date=target,
         reason="uncovered_optimization",
-        priority=120,
     )
 
 

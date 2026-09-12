@@ -43,17 +43,32 @@ function updateStopMarkerElement(
   kind: 'completed' | 'next' | 'pending',
   color: string,
   isLandfill: boolean,
+  passedColor?: string,
 ) {
   element.className = `route-playback-stop-marker route-playback-stop-marker--${kind}${
     isLandfill ? ' route-playback-stop-marker--landfill' : ''
   }`;
   const symbol = isLandfill ? '♻' : kind === 'completed' ? '✓' : kind === 'next' ? '●' : '○';
   element.innerHTML = `<span class="route-playback-stop-marker__dot" style="border-color:${color}">${symbol}</span>`;
+  // El CSS de `--completed` fija borde/texto verde con `!important`; un estilo inline
+  // normal no le gana, así que la parada visitada se impone con prioridad explícita.
+  if (passedColor && kind === 'completed') {
+    const dot = element.querySelector<HTMLElement>('.route-playback-stop-marker__dot');
+    if (dot) {
+      dot.style.setProperty('border-color', passedColor, 'important');
+      dot.style.setProperty('color', passedColor, 'important');
+    }
+  }
 }
 
-function createStopMarker(kind: 'completed' | 'next' | 'pending', color: string, isLandfill: boolean) {
+function createStopMarker(
+  kind: 'completed' | 'next' | 'pending',
+  color: string,
+  isLandfill: boolean,
+  passedColor?: string,
+) {
   const el = document.createElement('div');
-  updateStopMarkerElement(el, kind, color, isLandfill);
+  updateStopMarkerElement(el, kind, color, isLandfill, passedColor);
   return el;
 }
 
@@ -61,6 +76,8 @@ export interface RoutePlaybackMarkersProps {
   map: () => MapLibreMap | undefined;
   routes: () => RoutePlaybackModel[];
   routeStates: () => RoutePlaybackRouteState[];
+  /** Si se indica, las paradas ya visitadas se pintan de este color (p. ej. rojo). */
+  passedStopColor?: string;
 }
 
 export function RoutePlaybackMarkers(props: RoutePlaybackMarkersProps) {
@@ -92,6 +109,7 @@ export function RoutePlaybackMarkers(props: RoutePlaybackMarkersProps) {
       const state = routeStates.find((item) => item.routeId === route.routeId);
       if (!state) continue;
 
+      const truckPosition: [number, number] = [state.position[0], state.position[1]];
       let truckMarker = truckMarkers.get(route.routeId);
       if (!truckMarker) {
         truckMarker = new maplibregl.Marker({
@@ -99,11 +117,14 @@ export function RoutePlaybackMarkers(props: RoutePlaybackMarkersProps) {
           anchor: 'center',
           rotationAlignment: 'map',
           pitchAlignment: 'map',
-        }).addTo(map);
+        })
+          // `setLngLat` antes de `addTo`: maplibre 5 falla al montar un marcador sin posición.
+          .setLngLat(truckPosition)
+          .addTo(map);
         truckMarkers.set(route.routeId, truckMarker);
       }
       updateTruckMarkerElement(truckMarker.getElement(), route, state);
-      truckMarker.setLngLat(state.position);
+      truckMarker.setLngLat(truckPosition);
     }
 
     const nextStopKeys = new Set<string>();
@@ -120,17 +141,20 @@ export function RoutePlaybackMarkers(props: RoutePlaybackMarkersProps) {
         if (index < state.completedStops) kind = 'completed';
         else if (index === state.currentStopIndex) kind = 'next';
 
+        // Las paradas ya recorridas pueden resaltarse (p. ej. contenedor pasado = rojo).
+        const passedColor = kind === 'completed' ? props.passedStopColor : undefined;
+
         let marker = stopMarkers.get(key);
         if (!marker) {
           marker = new maplibregl.Marker({
-            element: createStopMarker(kind, route.color, isLandfill),
+            element: createStopMarker(kind, route.color, isLandfill, passedColor),
             anchor: 'center',
           })
             .setLngLat([stop.lng, stop.lat])
             .addTo(map);
           stopMarkers.set(key, marker);
         } else {
-          updateStopMarkerElement(marker.getElement(), kind, route.color, isLandfill);
+          updateStopMarkerElement(marker.getElement(), kind, route.color, isLandfill, passedColor);
           marker.setLngLat([stop.lng, stop.lat]);
         }
       });
