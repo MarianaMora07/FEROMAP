@@ -114,14 +114,14 @@ def test_ensure_coverage_reaches_target_total(db: Session):
 
 def test_generate_missing_collection_points_is_idempotent_after_seed(db: Session):
     _skip_if_seeded(db)
-    sectors = _seed_minimal_sectors(db, 5)
-    ensure_collection_points_coverage(db, target_total=5)
+    _seed_minimal_sectors(db, 5)
+    ensure_collection_points_coverage(db)
     db.flush()
 
     second_pass = generate_missing_collection_points(db)
 
     assert second_pass["created"] == 0
-    assert second_pass["total_points"] == 5
+    assert second_pass["total_points"] == TARGET_COLLECTION_POINTS
 
 
 @pytest.mark.integration
