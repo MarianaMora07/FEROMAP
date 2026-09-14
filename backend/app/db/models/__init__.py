@@ -15,6 +15,7 @@ from app.db.models.road_segment import RoadSegment
 from app.db.models.route_waypoint import RouteWaypoint
 from app.db.models.sector import Sector
 from app.db.models.simulation import Simulation
+from app.db.models.statistical_validation import StatisticalValidation
 from app.db.models.system_alert import AlertActivity, SystemAlert
 from app.db.models.system_settings import AuditLog, SystemSettings
 from app.db.models.user import User, UserRole
@@ -56,4 +57,5 @@ __all__ = [
     "DriverNotification",
     "IdempotencyRecord",
     "NotificationOutbox",
+    "StatisticalValidation",
 ]

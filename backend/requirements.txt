@@ -23,6 +23,9 @@ scikit-learn>=1.5.0
 # Baseline exacto F7 (post-defensa). Opcional: el benchmark lo omite si falta.
 # ortools>=9.10.0
 
+# Validación estadística
+scipy>=1.14.0
+
 # Reportes
 fpdf2>=2.8.0
 
