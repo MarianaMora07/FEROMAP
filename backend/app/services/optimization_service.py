@@ -1579,6 +1579,10 @@ def _compute_kpis(
     active_routes = [route for route in optimized.vehicle_routes if len(route) > 2]
     vehicle_count = max(1, len(active_routes))
 
+    saving_pct_val = round((1 - opt_km / cur_km) * 100, 1) if cur_km > 0 else 0.0
+    critical_pct_opt = _critical_coverage_pct(customers, served_codes)
+    iec = round((saving_pct_val * coverage_pct * critical_pct_opt) / 10000, 2)
+
     return {
         "distanceKm": {"current": round(cur_km, 1), "optimized": round(opt_km, 1)},
         "durationHours": {"current": round(cur_h, 2), "optimized": round(opt_h, 2)},
@@ -1605,6 +1609,8 @@ def _compute_kpis(
         "unloadTimeHours": round(opt_metrics["unload_s"] / 3600, 2),
         "shiftUtilizationPct": opt_metrics["shift_utilization_pct"],
         "uncoveredPoints": len(uncovered),
+        "iec": iec,
+        "savingPct": saving_pct_val,
     }
 
 
@@ -1909,6 +1915,7 @@ def run_optimization_engine(
     fleet_by_type: dict[str, int] | None = None,
     sector_partition: bool | None = None,
     include_per_vehicle_routes: bool = False,
+    seed: int | None = None,
 ) -> dict[str, Any]:
     """Ejecuta el motor real de optimización y persiste resultados."""
     computation_started = time.perf_counter()
@@ -2390,6 +2397,7 @@ def run_optimization_engine(
             aco_ants=resolved_aco_ants,
             aco_iterations=resolved_aco_iterations,
             aco_patience=ACO_PATIENCE,
+            seed=seed if seed is not None else 42,
             cancel_check=cancelled,
             on_iteration=aco_progress,
             heuristic_matrix=heuristic_matrix,

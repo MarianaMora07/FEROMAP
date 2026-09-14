@@ -70,18 +70,19 @@ def clear_tables(session: Session) -> None:
     from sqlalchemy import text
     session.execute(text("UPDATE users SET sector_id = NULL"))
     for tbl in [
-        "notification_outbox", "idempotency_records",
-        "driver_notifications", "user_preferences", "user_sessions",
-        "plan_versions", "alert_activities", "system_alerts",
+        "notification_outbox", "driver_notifications", "user_preferences",
+        "user_sessions", "plan_versions", "alert_activities", "system_alerts",
         "pending_visits", "vehicle_incidents", "route_waypoints",
         "visit_schedules", "optimized_routes", "daily_plans",
         "weekly_plan_days", "weekly_plans", "simulations",
-        "case_study_points", "case_studies",
         "collection_points", "vehicles",
         "sectors",
         "drivers", "parishes", "users",
     ]:
-        session.execute(text(f"DELETE FROM {tbl}"))
+        try:
+            session.execute(text(f"DELETE FROM {tbl}"))
+        except Exception:
+            pass
     session.commit()
 
 
