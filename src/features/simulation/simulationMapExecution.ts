@@ -132,32 +132,40 @@ export function routeFeaturesForExecution(
   globalPercent: number,
   exploreVariant: number,
 ): GeoJSON.Feature[] {
-  const current = routes.features.find((feature) => routeDisplayKind(feature.properties) === 'current');
-  const optimized = routes.features.find((feature) => routeDisplayKind(feature.properties) === 'optimized');
-  const currentCoords = (current?.geometry.coordinates ?? []) as [number, number][];
-  const optimizedCoords = (optimized?.geometry.coordinates ?? []) as [number, number][];
+  const currentFeatures = routes.features.filter(
+    (feature) => routeDisplayKind(feature.properties) === 'current',
+  );
+  const optimizedFeatures = routes.features.filter(
+    (feature) => routeDisplayKind(feature.properties) === 'optimized',
+  );
   const local = executionPhaseLocalProgress(phaseId, globalPercent);
 
   if (!phaseId || phaseId === 'preparando') return [];
 
   if (phaseId === 'refinamiento_2opt' || phaseId === 'persistencia') {
     const features: GeoJSON.Feature[] = [];
-    if (currentCoords.length >= 2) {
-      features.push({
-        type: 'Feature',
-        properties: { kind: 'current', ...current?.properties },
-        geometry: { type: 'LineString', coordinates: currentCoords },
-      });
+    for (const current of currentFeatures) {
+      const currentCoords = (current.geometry.coordinates ?? []) as [number, number][];
+      if (currentCoords.length >= 2) {
+        features.push({
+          type: 'Feature',
+          properties: { kind: 'current', ...current.properties },
+          geometry: { type: 'LineString', coordinates: currentCoords },
+        });
+      }
     }
-    if (optimizedCoords.length >= 2) {
-      features.push({
-        type: 'Feature',
-        properties: { kind: 'optimized', ...optimized?.properties },
-        geometry: {
-          type: 'LineString',
-          coordinates: sliceLineCoordinates(optimizedCoords, local),
-        },
-      });
+    for (const optimized of optimizedFeatures) {
+      const optimizedCoords = (optimized.geometry.coordinates ?? []) as [number, number][];
+      if (optimizedCoords.length >= 2) {
+        features.push({
+          type: 'Feature',
+          properties: { kind: 'optimized', ...optimized.properties },
+          geometry: {
+            type: 'LineString',
+            coordinates: sliceLineCoordinates(optimizedCoords, local),
+          },
+        });
+      }
     }
     return features;
   }

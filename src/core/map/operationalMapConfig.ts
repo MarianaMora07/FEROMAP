@@ -37,7 +37,7 @@ export interface OperationalMapFitInput {
   vehicles?: Array<{ lng: number; lat: number }>;
   routes?: RouteCollection;
   points?: Array<{ lng: number; lat: number }>;
-  padding?: number;
+  padding?: number | maplibregl.PaddingOptions;
   maxZoom?: number;
   duration?: number;
 }

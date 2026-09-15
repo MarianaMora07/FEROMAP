@@ -72,6 +72,7 @@ from app.services.graph_service import (
 )
 from app.services.geo_service import fill_level_pct
 from app.services.operations_service import dispatch_optimized_routes
+from app.services.route_playback_service import PLAYBACK_ROUTE_COLORS
 from app.services.scenario_utils import normalize_scenario_id
 from app.services.seed_loader import load_seed
 from app.services.vehicle_service import (
@@ -1477,40 +1478,9 @@ def _routes_to_geojson(
         vehicle_code = getattr(vehicle, "code", "") if vehicle is not None else ""
         if vehicle_code:
             feature["properties"]["vehicleCode"] = vehicle_code
+        feature["properties"]["color"] = PLAYBACK_ROUTE_COLORS[v_idx % len(PLAYBACK_ROUTE_COLORS)]
         features.append(feature)
     return {"type": "FeatureCollection", "features": features}
-
-
-def _merge_route_features(features: list[dict[str, Any]], kind: str, label: str) -> dict[str, Any]:
-    if not features:
-        return {"type": "FeatureCollection", "features": []}
-    if len(features) == 1:
-        return {"type": "FeatureCollection", "features": features}
-
-    all_coords: list[list[float]] = []
-    all_stops: list[dict[str, Any]] = []
-    total_km = 0.0
-    total_min = 0
-    for feat in features:
-        coords = feat["geometry"]["coordinates"]
-        if all_coords and coords and coords[0] == all_coords[-1]:
-            coords = coords[1:]
-        all_coords.extend(coords)
-        total_km += feat["properties"]["distanceKm"]
-        total_min += feat["properties"]["durationMin"]
-        for stop in feat["properties"].get("stops", []):
-            all_stops.append({**stop, "sequence": len(all_stops) + 1})
-
-    merged = _build_geojson_feature(
-        all_coords,
-        route_id=f"route-{kind}",
-        kind=kind,
-        label=label,
-        distance_km=total_km,
-        duration_min=total_min,
-        stops=all_stops or None,
-    )
-    return {"type": "FeatureCollection", "features": [merged]}
 
 
 def _compute_kpis(
@@ -2553,8 +2523,10 @@ def run_optimization_engine(
         unload_seconds=unload_seconds,
     )["features"]
 
-    current_geo = _merge_route_features(current_features, "current", "Ruta actual (estática)")
-    optimized_geo = _merge_route_features(optimized_features, "optimized", "Ruta optimizada (IA)")
+    # Una Feature por vehículo (con color distinto) para que el mapa no fusione
+    # todas las rutas en una sola línea del mismo color.
+    current_geo = {"type": "FeatureCollection", "features": current_features}
+    optimized_geo = {"type": "FeatureCollection", "features": optimized_features}
 
     routes_payload = {"current": current_geo, "optimized": optimized_geo}
 

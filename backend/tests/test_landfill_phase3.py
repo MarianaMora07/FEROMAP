@@ -181,7 +181,52 @@ def test_routes_to_geojson_exposes_vehicle_code(monkeypatch):
     assert properties["vehicleCode"] == "TR-09"
     # El label genérico se conserva: vehicleCode es información aditiva.
     assert properties["label"] == "Ruta optimizada (IA)"
+    assert properties["color"] == "#34D634"
 
+
+def test_routes_to_geojson_assigns_distinct_colors_per_vehicle(monkeypatch):
+    customers = [
+        CustomerNode(1, "C1", 0, 8.0, 50, -62.71, 8.29),
+        CustomerNode(2, "C2", 0, 8.0, 50, -62.72, 8.30),
+    ]
+    n_customers = len(customers)
+    dist, time = vrp_matrix(n_customers, base=50.0)
+    landfill_idx = _landfill_idx(n_customers)
+    solution = RouteSolution(
+        vehicle_routes=[
+            [0, 1, landfill_idx, 0],
+            [0, 2, landfill_idx, 0],
+        ],
+        distance_m=500.0,
+        duration_s=300.0,
+    )
+    graph = MagicMock()
+    monkeypatch.setattr(
+        "app.services.optimization_service._route_geometry",
+        lambda *args, **kwargs: [
+            [-62.715, 8.295],
+            [-62.71, 8.29],
+            [-62.715, 8.295],
+        ],
+    )
+    v1 = _vehicle()
+    v1.code = "TR-01"
+    v2 = _vehicle()
+    v2.code = "TR-02"
+    geojson = _routes_to_geojson(
+        graph,
+        solution,
+        customers,
+        dist,
+        time,
+        kind="optimized",
+        label="Ruta optimizada (IA)",
+        vehicles=[v1, v2],
+    )
+    assert len(geojson["features"]) == 2
+    colors = [f["properties"]["color"] for f in geojson["features"]]
+    assert colors[0] != colors[1]
+    assert colors == ["#34D634", "#1143F3"]
 
 def test_route_geometry_includes_landfill_coordinates(monkeypatch):
     customers = [

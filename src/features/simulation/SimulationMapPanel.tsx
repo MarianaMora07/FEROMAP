@@ -360,7 +360,11 @@ export function SimulationMapPanel(props: SimulationMapPanelProps) {
         type: 'line',
         source: 'sim-routes',
         filter: ['==', ['get', 'kind'], 'optimized'],
-        paint: { 'line-color': '#34D634', 'line-width': 4, 'line-opacity': 0.95 },
+        paint: {
+          'line-color': ['coalesce', ['get', 'color'], '#34D634'],
+          'line-width': 4,
+          'line-opacity': 0.95,
+        },
       });
     }
   };
@@ -446,7 +450,7 @@ export function SimulationMapPanel(props: SimulationMapPanelProps) {
       const t = (offset + tick * 0.08 + variant * 0.05) % 1;
       const position = interpolateAlongLine(coords, t);
       const marker = new maplibregl.Marker({ element: createTruckMarker() })
-        .setLngLat(position)
+        .setLngLat([position[0], position[1]])
         .addTo(map);
       truckMarkers.push(marker);
     }
@@ -586,8 +590,29 @@ export function SimulationMapPanel(props: SimulationMapPanelProps) {
   });
 
   const activeLegend = () => activeExecutionLegend(props.executionPhase ?? null);
-  const staticRouteLegend = () =>
-    props.showBaselineRoute && !props.hasResults ? mapManualRouteLegend : mapRouteLegend;
+  const staticRouteLegend = () => {
+    if (props.showBaselineRoute && !props.hasResults) return mapManualRouteLegend;
+    if (!props.hasResults) return mapRouteLegend;
+
+    const optimized = appState.routes.features.filter(
+      (feature) => feature.properties.type === 'optimized',
+    );
+    if (optimized.length <= 1) return mapRouteLegend;
+
+    return [
+      mapRouteLegend[0]!,
+      ...optimized.map((feature, index) => ({
+        id: feature.properties.id || `optimized-${index + 1}`,
+        label:
+          feature.properties.vehicleCode ||
+          (optimized.length > 1
+            ? `Ruta optimizada ${index + 1}`
+            : 'Ruta optimizada'),
+        style: 'solid-color' as const,
+        color: feature.properties.color ?? '#34D634',
+      })),
+    ];
+  };
 
   const markerLegend = () => (props.uniformContainers ? mapPlanningMarkerLegend : mapMarkerLegend);
 
@@ -656,10 +681,17 @@ export function SimulationMapPanel(props: SimulationMapPanelProps) {
                   <span class="inline-flex items-center gap-1.5">
                     <span
                       class={`h-0.5 w-5 rounded-full ${
-                        item.style === 'solid-green'
-                          ? 'bg-fero-green-dark'
-                          : 'border-t-2 border-dashed border-slate-400 bg-transparent'
+                        item.style === 'dashed-slate'
+                          ? 'border-t-2 border-dashed border-slate-400 bg-transparent'
+                          : item.style === 'solid-green'
+                            ? 'bg-fero-green-dark'
+                            : ''
                       }`}
+                      style={
+                        item.style === 'solid-color' && 'color' in item && item.color
+                          ? { 'background-color': item.color }
+                          : undefined
+                      }
                     />
                     {item.label}
                   </span>

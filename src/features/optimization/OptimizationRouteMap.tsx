@@ -114,7 +114,11 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
         type: 'line',
         source: 'opt-routes',
         filter: ['==', ['get', 'kind'], 'optimized'],
-        paint: { 'line-color': '#34D634', 'line-width': 4, 'line-opacity': lineOpacity },
+        paint: {
+          'line-color': ['coalesce', ['get', 'color'], '#34D634'],
+          'line-width': 4,
+          'line-opacity': lineOpacity,
+        },
       });
       if (features.length > 0 && !playbackActive) {
         fitMapToOperationalData(map, {
@@ -296,7 +300,12 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
       <div class="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-default px-4 py-3 text-xs text-text-secondary">
         <For each={props.routeResults}>
           {(route) => (
-            <span class={`inline-flex items-center gap-1.5 font-medium ${vehicleLegendClass[route.tone] ?? 'text-fero-blue'}`}>
+            <span
+              class={`inline-flex items-center gap-1.5 font-medium ${
+                route.color ? '' : vehicleLegendClass[route.tone] ?? 'text-fero-blue'
+              }`}
+              style={route.color ? { color: route.color } : undefined}
+            >
               <Truck size={14} />
               {route.id}
             </span>
