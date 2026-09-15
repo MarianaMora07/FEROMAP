@@ -9,11 +9,17 @@ import pytest
 from fastapi import HTTPException
 
 from app.db.models import SystemSettings
-from app.schemas.admin import AdminUserUpdate, OperationalSettingsUpdate
+from app.schemas.admin import (
+    AdminUserUpdate,
+    AlgorithmSettingsUpdate,
+    OperationalSettingsUpdate,
+)
 from app.services.admin_service import (
     ensure_default_settings,
+    get_algorithm_settings,
     get_operational_settings,
     list_roles,
+    update_algorithm_settings,
     update_operational_settings,
     update_user,
 )
@@ -133,6 +139,59 @@ def test_update_operational_settings_persists_changes():
     assert updated.fill_threshold_pct == 90
     saved = json.loads(row.settings_json)
     assert saved["operational"]["refresh_seconds"] == 60
+    assert len(audit_entries) == 1
+
+
+def test_get_algorithm_settings_uses_environment_defaults():
+    db = SimpleNamespace()
+    db.get = lambda model, pk: None
+    db.add = lambda obj: None
+    db.flush = lambda: None
+
+    algorithm = get_algorithm_settings(db)
+
+    assert algorithm.aco_ants >= 1
+    assert algorithm.aco_iterations >= 1
+    assert algorithm.overflow_penalty_weight == 0.0
+
+
+def test_update_algorithm_settings_persists_changes():
+    blob = {"operational": {}, "integrations": {}, "algorithm": {}}
+    row = SimpleNamespace(settings_json=json.dumps(blob))
+    audit_entries = []
+    db = SimpleNamespace()
+    db.get = lambda model, pk: row if pk == 1 else None
+    db.add = lambda obj: audit_entries.append(obj)
+    db.flush = lambda: None
+
+    actor = SimpleNamespace(id=1, email="plan@fero.com")
+    updated = update_algorithm_settings(
+        db,
+        AlgorithmSettingsUpdate(
+            aco_alpha=1.2,
+            aco_beta=2.5,
+            aco_rho=0.2,
+            pheromone_q=2.0,
+            pheromone_elitist=True,
+            aco_ants=12,
+            overflow_penalty_weight=150.0,
+        ),
+        actor=actor,
+        ip_address="127.0.0.1",
+    )
+
+    assert updated.aco_ants == 12
+    assert updated.aco_alpha == 1.2
+    assert updated.aco_beta == 2.5
+    assert updated.aco_rho == 0.2
+    assert updated.pheromone_q == 2.0
+    assert updated.pheromone_elitist is True
+    assert updated.overflow_penalty_weight == 150.0
+    saved = json.loads(row.settings_json)
+    assert saved["algorithm"]["aco_ants"] == 12
+    assert saved["algorithm"]["aco_alpha"] == 1.2
+    assert saved["algorithm"]["pheromone_elitist"] is True
+    assert saved["algorithm"]["overflow_penalty_weight"] == 150.0
     assert len(audit_entries) == 1
 
 

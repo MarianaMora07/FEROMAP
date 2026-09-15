@@ -105,6 +105,52 @@ class IntegrationSettings(CamelModel):
     telemetry_enabled: bool = True
 
 
+class AlgorithmSettings(CamelModel):
+    """Parámetros del motor de optimización (editables por el planificador)."""
+
+    # ACO core
+    aco_alpha: float = 1.0
+    aco_beta: float = 3.0
+    aco_rho: float = 0.12
+    pheromone_q: float = 1.0
+    pheromone_elitist: bool = False
+    aco_ants: int = 8
+    aco_iterations: int = 20
+    aco_patience: int = 5
+    two_opt_passes: int = 10
+    # Heurístico de prioridad por llenado
+    heuristic_at_risk_multiplier: float = 1.50
+    heuristic_critical_multiplier: float = 1.35
+    heuristic_high_multiplier: float = 1.10
+    matrix_critical_factor: float = 0.70
+    matrix_high_factor: float = 0.90
+    # Penalización por rebose en la función objetivo (metros por kg rebosado).
+    overflow_penalty_weight: float = 0.0
+    # Calibración con pesos reales recolectados.
+    calibration_default_alpha: float = 0.4
+    calibration_window_days: int = 30
+
+
+class AlgorithmSettingsUpdate(CamelModel):
+    aco_alpha: float | None = Field(default=None, gt=0, le=20)
+    aco_beta: float | None = Field(default=None, ge=0, le=20)
+    aco_rho: float | None = Field(default=None, gt=0, le=1)
+    pheromone_q: float | None = Field(default=None, gt=0, le=1_000_000)
+    pheromone_elitist: bool | None = None
+    aco_ants: int | None = Field(default=None, ge=1, le=200)
+    aco_iterations: int | None = Field(default=None, ge=1, le=500)
+    aco_patience: int | None = Field(default=None, ge=0, le=100)
+    two_opt_passes: int | None = Field(default=None, ge=1, le=100)
+    heuristic_at_risk_multiplier: float | None = Field(default=None, gt=0, le=10)
+    heuristic_critical_multiplier: float | None = Field(default=None, gt=0, le=10)
+    heuristic_high_multiplier: float | None = Field(default=None, gt=0, le=10)
+    matrix_critical_factor: float | None = Field(default=None, gt=0, le=1)
+    matrix_high_factor: float | None = Field(default=None, gt=0, le=1)
+    overflow_penalty_weight: float | None = Field(default=None, ge=0, le=1_000_000)
+    calibration_default_alpha: float | None = Field(default=None, gt=0, le=1)
+    calibration_window_days: int | None = Field(default=None, ge=1, le=365)
+
+
 class IntegrationSettingsUpdate(CamelModel):
     map_provider: str | None = None
     telemetry_interval_seconds: int | None = Field(default=None, ge=5, le=3600)

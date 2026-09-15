@@ -3,7 +3,7 @@ import { useNavigate } from '@solidjs/router';
 import { Button, Card, ConfirmDialog, SelectField, TextField } from '../../design-system/components';
 import {
   fetchAdminSettings,
-  runAdminSeed,
+  resetDatabase,
   updateAdminSettings,
   type OperationalSettings,
 } from '../../core/api/admin';
@@ -93,16 +93,16 @@ export function AdminOperationalSettings(props: { onFlash: (message: string) => 
   const runSeeds = () => {
     setConfirmSeedOpen(false);
     setSeeding(true);
-    void runAdminSeed()
+    void resetDatabase()
       .then(async (result) => {
         props.onFlash(
-          `Seeds cargados: ${result.sectors} sectores, ${result.collectionPoints} puntos, ${result.vehicles} vehículos.`,
+          `Base de datos reiniciada: ${result.sectors} sectores, ${result.collectionPoints} puntos, ${result.vehicles} vehículos.`,
         );
         await logout();
         navigate('/login', { replace: true });
       })
       .catch(() => {
-        props.onFlash('No se pudieron cargar los seeds.');
+        props.onFlash('No se pudo reiniciar la base de datos.');
         setSeeding(false);
       });
   };
@@ -325,14 +325,16 @@ export function AdminOperationalSettings(props: { onFlash: (message: string) => 
 
           <Card class="space-y-3 p-4">
             <h3 class="font-heading text-base font-semibold text-text-primary dark:text-white">
-              Datos demo (seeds)
+              Base de datos
             </h3>
             <p class="text-sm text-text-muted">
-              Recarga parroquia, sectores, puntos, flota, conductores, rutas y alertas desde{' '}
-              <code class="text-xs">data/seeds</code>. Reemplaza todos los datos operativos.
+              Reinicia la base de datos: borra los datos operativos y los repuebla desde{' '}
+              <code class="text-xs">data/seeds</code> (equivalente a <code class="text-xs">just
+              db-reset</code> en datos). No recrea el esquema: las migraciones se aplican al
+              arrancar el contenedor.
             </p>
-            <Button type="button" variant="secondary" size="sm" loading={seeding()} onClick={loadSeeds}>
-              Cargar seeds
+            <Button type="button" variant="danger" size="sm" loading={seeding()} onClick={loadSeeds}>
+              Reiniciar base de datos
             </Button>
           </Card>
 
@@ -347,10 +349,10 @@ export function AdminOperationalSettings(props: { onFlash: (message: string) => 
 
       <ConfirmDialog
         open={confirmSeedOpen()}
-        title="¿Recargar datos demo (seeds)?"
-        message="Esto borra los datos actuales y recarga parroquia, sectores, puntos, flota, conductores, rutas y alertas desde data/seeds."
-        detail="Deberás iniciar sesión de nuevo (admin@fero.com)."
-        confirmLabel="Cargar seeds"
+        title="¿Reiniciar la base de datos?"
+        message="Esto borra todos los datos operativos (parroquia, sectores, puntos, flota, conductores, rutas, planes y alertas) y los repuebla desde data/seeds."
+        detail="Equivalente a `just db-reset`. Deberás iniciar sesión de nuevo (admin@fero.com)."
+        confirmLabel="Reiniciar base de datos"
         tone="danger"
         loading={seeding()}
         onConfirm={runSeeds}

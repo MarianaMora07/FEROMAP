@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.config import settings
 from app.db.models import CollectionPoint, OptimizedRoute, RouteWaypoint, Sector, Simulation, Vehicle, VisitSchedule
 from app.domain.criticality import is_at_risk_before_next_visit, is_critical_now
+from app.domain.waste_generation import generation_rate_kg_per_hour, hours_until_overflow
 from app.domain.crew_service_time import (
     BASE_SERVICE_SECONDS,
     DEFAULT_IDEAL_OPERATORS,
@@ -52,6 +53,7 @@ from app.services.scenario_parameters import (
     normalize_waste_level_pct,
 )
 from app.services.aco_parallel import resolve_aco_parallel_workers, run_ant_solutions
+from app.services.admin_service import get_algorithm_settings
 from app.services.case_study_optimization import (
     case_study_simulation_payload,
     load_optimization_collection_points,
@@ -494,11 +496,26 @@ def _optimize_by_sector_assignment(
     service_secs: list[float],
     aco_ants: int,
     aco_iterations: int,
+    aco_patience: int = ACO_PATIENCE,
     cancel_check: Callable[[], bool] | None = None,
     on_iteration: Callable[[int, int, float, float], None] | None = None,
     priority_fill_level: bool = False,
     time_window_enabled: bool = False,
     zone_windows: dict[int, tuple[int, int]] | None = None,
+    overflow_deadline_sec: list[float | None] | None = None,
+    overflow_rate_kg_per_hour: list[float] | None = None,
+    overflow_weight: float = 0.0,
+    alpha: float = ACO_ALPHA,
+    beta: float = ACO_BETA,
+    rho: float = ACO_RHO,
+    pheromone_q: float = 1.0,
+    pheromone_elitist: bool = False,
+    two_opt_passes: int = 10,
+    at_risk_multiplier: float = 1.50,
+    critical_multiplier: float = 1.35,
+    high_multiplier: float = 1.10,
+    matrix_critical_factor: float = 0.70,
+    matrix_high_factor: float = 0.90,
 ) -> RouteSolution:
     """Optimiza una ruta por vehículo solo con puntos de los sectores de su conductor."""
     n_customers = len(customers)
@@ -533,10 +550,22 @@ def _optimize_by_sector_assignment(
         local_demands = [customers[idx - 1].demand_kg for idx in customer_globals]
         local_fill = [customers[idx - 1].fill_pct for idx in customer_globals]
         local_risk = [customers[idx - 1].at_risk for idx in customer_globals]
+        local_deadline = (
+            [overflow_deadline_sec[idx - 1] for idx in customer_globals]
+            if overflow_deadline_sec is not None
+            else None
+        )
+        local_rate = (
+            [overflow_rate_kg_per_hour[idx - 1] for idx in customer_globals]
+            if overflow_rate_kg_per_hour is not None
+            else None
+        )
         local_heuristic = build_fill_level_heuristic_matrix(
             local_dist,
             local_fill,
             enabled=priority_fill_level,
+            critical_factor=matrix_critical_factor,
+            high_factor=matrix_high_factor,
         )
         window_starts, window_ends = build_customer_time_windows(
             [customers[idx - 1].sector_id for idx in customer_globals],
@@ -571,7 +600,7 @@ def _optimize_by_sector_assignment(
             service_secs=[service_secs[min(v_idx, len(service_secs) - 1)]],
             aco_ants=aco_ants,
             aco_iterations=aco_iterations,
-            aco_patience=ACO_PATIENCE,
+            aco_patience=aco_patience,
             seed=42 + v_idx * 17,
             cancel_check=cancel_check,
             on_iteration=vehicle_progress if on_iteration else None,
@@ -581,6 +610,18 @@ def _optimize_by_sector_assignment(
             fill_pcts=local_fill,
             priority_fill_level=priority_fill_level,
             at_risk_flags=local_risk,
+            overflow_deadline_sec=local_deadline,
+            overflow_rate_kg_per_hour=local_rate,
+            overflow_weight=overflow_weight,
+            alpha=alpha,
+            beta=beta,
+            rho=rho,
+            pheromone_q=pheromone_q,
+            pheromone_elitist=pheromone_elitist,
+            two_opt_passes=two_opt_passes,
+            at_risk_multiplier=at_risk_multiplier,
+            critical_multiplier=critical_multiplier,
+            high_multiplier=high_multiplier,
         )
 
         if local_solution.vehicle_routes:
@@ -1024,6 +1065,18 @@ def _aco_cvrp(
     fill_pcts: list[int] | None = None,
     priority_fill_level: bool = False,
     at_risk_flags: list[bool] | None = None,
+    overflow_deadline_sec: list[float | None] | None = None,
+    overflow_rate_kg_per_hour: list[float] | None = None,
+    overflow_weight: float = 0.0,
+    alpha: float = ACO_ALPHA,
+    beta: float = ACO_BETA,
+    rho: float = ACO_RHO,
+    pheromone_q: float = 1.0,
+    pheromone_elitist: bool = False,
+    two_opt_passes: int = 10,
+    at_risk_multiplier: float = 1.50,
+    critical_multiplier: float = 1.35,
+    high_multiplier: float = 1.10,
 ) -> RouteSolution:
     """Ant Colony Optimization para CVRP multi-viaje con vertedero y jornada."""
     parallel_workers = resolve_aco_parallel_workers(aco_ants)
@@ -1039,6 +1092,7 @@ def _aco_cvrp(
 
     best_routes: list[list[int]] = []
     best_cost = float("inf")
+    best_distance = float("inf")
     best_time = float("inf")
     best_uncovered: list[int] = list(range(1, n_customers + 1))
     stall_count = 0
@@ -1055,6 +1109,7 @@ def _aco_cvrp(
 
             iteration_best: list[list[int]] = []
             iteration_cost = float("inf")
+            iteration_distance = float("inf")
             iteration_uncovered: list[int] = list(range(1, n_customers + 1))
             improved = False
 
@@ -1079,10 +1134,20 @@ def _aco_cvrp(
                 fill_pcts=fill_pcts,
                 priority_fill_level=priority_fill_level,
                 at_risk_flags=at_risk_flags,
+                overflow_deadline_sec=overflow_deadline_sec,
+                overflow_rate_kg_per_hour=overflow_rate_kg_per_hour,
+                overflow_weight=overflow_weight,
+                at_risk_multiplier=at_risk_multiplier,
+                critical_multiplier=critical_multiplier,
+                high_multiplier=high_multiplier,
+                two_opt_passes=two_opt_passes,
+                alpha=alpha,
+                beta=beta,
             )
             for routes, cost, _dur, uncovered in ant_results:
                 if cost < iteration_cost or (cost == iteration_cost and len(uncovered) < len(iteration_uncovered)):
                     iteration_cost = cost
+                    iteration_distance, _ = _evaluate_solution(routes, dist_matrix, time_matrix)
                     iteration_best = [route[:] for route in routes]
                     iteration_uncovered = uncovered[:]
 
@@ -1091,13 +1156,14 @@ def _aco_cvrp(
                 or (iteration_cost == best_cost and len(iteration_uncovered) < len(best_uncovered))
             ):
                 best_cost = iteration_cost
+                best_distance = iteration_distance
                 best_routes = iteration_best
                 best_uncovered = iteration_uncovered
                 _, best_time = _evaluate_solution(best_routes, dist_matrix, time_matrix)
                 improved = True
 
-            record_best = best_cost if math.isfinite(best_cost) else iteration_cost
-            record_iter = iteration_cost if math.isfinite(iteration_cost) else record_best
+            record_best = best_distance if math.isfinite(best_distance) else iteration_distance
+            record_iter = iteration_distance if math.isfinite(iteration_distance) else record_best
             convergence.append(
                 {
                     "iteration": iterations_run,
@@ -1118,18 +1184,25 @@ def _aco_cvrp(
 
             for i in range(n_nodes):
                 for j in range(n_nodes):
-                    pheromone[i][j] *= 1 - ACO_RHO
+                    pheromone[i][j] *= 1 - rho
             if iteration_best:
+                deposit = pheromone_q / max(iteration_cost, 1.0)
                 for route in iteration_best:
                     for i, j in zip(route[:-1], route[1:]):
-                        pheromone[i][j] += 1.0 / max(iteration_cost, 1.0)
+                        pheromone[i][j] += deposit
+            # Variante elitista: refuerza además la mejor solución global.
+            if pheromone_elitist and best_routes:
+                elite_deposit = pheromone_q / max(best_cost, 1.0)
+                for route in best_routes:
+                    for i, j in zip(route[:-1], route[1:]):
+                        pheromone[i][j] += elite_deposit
     finally:
         if process_pool is not None:
             process_pool.shutdown(wait=True)
 
     return RouteSolution(
         vehicle_routes=best_routes,
-        distance_m=best_cost,
+        distance_m=best_distance if math.isfinite(best_distance) else best_cost,
         duration_s=best_time,
         aco_iterations_run=iterations_run,
         aco_stopped_early=stopped_early,
@@ -1976,8 +2049,32 @@ def run_optimization_engine(
     waste = normalize_waste_level_pct(resolved_params.waste_level_pct)
     duration_h = normalize_duration_hours(resolved_params.estimated_duration_hours)
     shortage = normalize_operators_shortage(resolved_params.operators_shortage)
-    resolved_aco_ants = normalize_aco_ants(resolved_params.aco_ants)
-    resolved_aco_iterations = normalize_aco_iterations(resolved_params.aco_iterations)
+    # Parámetros del algoritmo configurables por el planificador (BD) que actúan como
+    # valores por defecto cuando la corrida no los especifica.
+    algorithm_settings = get_algorithm_settings(db)
+    resolved_aco_ants = normalize_aco_ants(
+        resolved_params.aco_ants
+        if resolved_params.aco_ants is not None
+        else algorithm_settings.aco_ants
+    )
+    resolved_aco_iterations = normalize_aco_iterations(
+        resolved_params.aco_iterations
+        if resolved_params.aco_iterations is not None
+        else algorithm_settings.aco_iterations
+    )
+    aco_patience = max(0, int(algorithm_settings.aco_patience))
+    overflow_weight = float(algorithm_settings.overflow_penalty_weight)
+    aco_alpha = float(algorithm_settings.aco_alpha)
+    aco_beta = float(algorithm_settings.aco_beta)
+    aco_rho = float(algorithm_settings.aco_rho)
+    pheromone_q = float(algorithm_settings.pheromone_q)
+    pheromone_elitist = bool(algorithm_settings.pheromone_elitist)
+    two_opt_passes = max(1, int(algorithm_settings.two_opt_passes))
+    at_risk_multiplier = float(algorithm_settings.heuristic_at_risk_multiplier)
+    critical_multiplier = float(algorithm_settings.heuristic_critical_multiplier)
+    high_multiplier = float(algorithm_settings.heuristic_high_multiplier)
+    matrix_critical_factor = float(algorithm_settings.matrix_critical_factor)
+    matrix_high_factor = float(algorithm_settings.matrix_high_factor)
     resolved_priority_fill_level = (
         bool(resolved_params.priority_fill_level)
         if resolved_params.priority_fill_level is not None
@@ -2103,6 +2200,8 @@ def run_optimization_engine(
         except (TypeError, ValueError, json.JSONDecodeError):
             continue
 
+    overflow_deadlines: list[float | None] = []
+    overflow_rates: list[float] = []
     for point in points:
         membership = memberships.get(point.id)
         demand, boosted_pct = resolve_customer_demand(
@@ -2112,6 +2211,11 @@ def run_optimization_engine(
         )
         weekdays = weekdays_by_point.get(point.id)
         at_risk = bool(weekdays) and is_at_risk_before_next_visit(point, weekdays=weekdays)
+        hours_to_overflow = hours_until_overflow(point)
+        overflow_deadlines.append(
+            None if hours_to_overflow is None else hours_to_overflow * 3600.0
+        )
+        overflow_rates.append(generation_rate_kg_per_hour(point))
         customers.append(
             CustomerNode(
                 point_id=point.id,
@@ -2365,11 +2469,26 @@ def run_optimization_engine(
             service_secs=service_secs,
             aco_ants=resolved_aco_ants,
             aco_iterations=resolved_aco_iterations,
+            aco_patience=aco_patience,
             cancel_check=cancelled,
             on_iteration=aco_progress,
             priority_fill_level=resolved_priority_fill_level,
             time_window_enabled=resolved_time_window_enabled,
             zone_windows=zone_windows,
+            overflow_deadline_sec=overflow_deadlines,
+            overflow_rate_kg_per_hour=overflow_rates,
+            overflow_weight=overflow_weight,
+            alpha=aco_alpha,
+            beta=aco_beta,
+            rho=aco_rho,
+            pheromone_q=pheromone_q,
+            pheromone_elitist=pheromone_elitist,
+            two_opt_passes=two_opt_passes,
+            at_risk_multiplier=at_risk_multiplier,
+            critical_multiplier=critical_multiplier,
+            high_multiplier=high_multiplier,
+            matrix_critical_factor=matrix_critical_factor,
+            matrix_high_factor=matrix_high_factor,
         )
     else:
         fill_pcts = [customer.fill_pct for customer in customers]
@@ -2378,6 +2497,8 @@ def run_optimization_engine(
             dist_matrix,
             fill_pcts,
             enabled=resolved_priority_fill_level,
+            critical_factor=matrix_critical_factor,
+            high_factor=matrix_high_factor,
         )
         window_starts, window_ends = build_customer_time_windows(
             [customer.sector_id for customer in customers],
@@ -2396,7 +2517,7 @@ def run_optimization_engine(
             service_secs=service_secs,
             aco_ants=resolved_aco_ants,
             aco_iterations=resolved_aco_iterations,
-            aco_patience=ACO_PATIENCE,
+            aco_patience=aco_patience,
             seed=seed if seed is not None else 42,
             cancel_check=cancelled,
             on_iteration=aco_progress,
@@ -2406,6 +2527,18 @@ def run_optimization_engine(
             fill_pcts=fill_pcts,
             priority_fill_level=resolved_priority_fill_level,
             at_risk_flags=at_risk_flags,
+            overflow_deadline_sec=overflow_deadlines,
+            overflow_rate_kg_per_hour=overflow_rates,
+            overflow_weight=overflow_weight,
+            alpha=aco_alpha,
+            beta=aco_beta,
+            rho=aco_rho,
+            pheromone_q=pheromone_q,
+            pheromone_elitist=pheromone_elitist,
+            two_opt_passes=two_opt_passes,
+            at_risk_multiplier=at_risk_multiplier,
+            critical_multiplier=critical_multiplier,
+            high_multiplier=high_multiplier,
         )
     if not math.isfinite(optimized_solution.distance_m) or not optimized_solution.vehicle_routes:
         report(
@@ -2420,7 +2553,7 @@ def run_optimization_engine(
             "aco",
             (
                 f"ACO detenido por convergencia tras {optimized_solution.aco_iterations_run} "
-                f"iteraciones (paciencia={ACO_PATIENCE})"
+                f"iteraciones (paciencia={aco_patience})"
             ),
             "info",
         )
@@ -2465,7 +2598,7 @@ def run_optimization_engine(
         aco_iterations=resolved_aco_iterations,
         aco_iterations_run=optimized_solution.aco_iterations_run,
         aco_stopped_early=optimized_solution.aco_stopped_early,
-        aco_patience=ACO_PATIENCE,
+        aco_patience=aco_patience,
         matrix_cache_hit=matrix_cache_hit,
         matrix_cache_incremental=matrix_meta["matrixCacheIncremental"],
         matrix_patched_cells=matrix_meta["matrixPatchedCells"],

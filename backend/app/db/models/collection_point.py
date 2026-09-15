@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Numeric, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -23,6 +23,14 @@ class CollectionPoint(Base):
     )
     # Override por contenedor del factor de llenado; NULL = hereda del sector.
     fill_rate_factor_override: Mapped[Decimal | None] = mapped_column(Numeric(4, 2), nullable=True)
+    # Tasa absoluta de generación del contenedor (kg/día). Tiene prioridad sobre la
+    # derivada capacidad/horas. La zona puede escribirla al repartir su tasa total.
+    generation_rate_kg_per_day: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    # Población servida por el contenedor (para el reparto por población de la zona).
+    served_population: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    # Metadatos de calibración con pesos reales recolectados (EWMA).
+    last_calibrated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    calibration_samples: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(50), nullable=False, server_default="active")
     priority_boost: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     last_emptied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
