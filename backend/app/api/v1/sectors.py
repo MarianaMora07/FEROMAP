@@ -2,11 +2,13 @@ from fastapi import APIRouter, Query
 
 from app.api.deps import DbSession, OptionalUser, PlannerOrAdmin
 from app.db.models import UserRole
-from app.schemas.sector import SectorUpdate
+from app.schemas.sector import SectorGenerationRateUpdate, SectorUpdate
 from app.services.geo_service import collection_points_geojson, sectors_geojson
 from app.services.sector_service import (
     list_sectors_with_fill_rate,
+    sectors_summary,
     update_sector_fill_rate_factor,
+    update_sector_generation_config,
 )
 
 router = APIRouter(tags=["geo"])
@@ -23,6 +25,12 @@ def get_sector_fill_rate_factors(db: DbSession, _user: PlannerOrAdmin):
     return list_sectors_with_fill_rate(db)
 
 
+@router.get("/sectors/summary")
+def get_sectors_summary(db: DbSession, _user: PlannerOrAdmin):
+    """Agregado por zona: contenedores, capacidad total y generación efectiva."""
+    return sectors_summary(db)
+
+
 @router.patch("/sectors/{sector_id}/fill-rate-factor")
 def patch_sector_fill_rate_factor(
     sector_id: int,
@@ -31,6 +39,17 @@ def patch_sector_fill_rate_factor(
     _user: PlannerOrAdmin,
 ):
     return update_sector_fill_rate_factor(db, sector_id, body.fill_rate_factor)
+
+
+@router.patch("/sectors/{sector_id}/generation-rate")
+def patch_sector_generation_rate(
+    sector_id: int,
+    body: SectorGenerationRateUpdate,
+    db: DbSession,
+    _user: PlannerOrAdmin,
+):
+    """Configura la generación de la zona (tasa, per cápita y modo de reparto)."""
+    return update_sector_generation_config(db, sector_id, body)
 
 
 @router.get("/collection-points")

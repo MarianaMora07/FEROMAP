@@ -441,6 +441,9 @@ export default function CollectionPointsPage() {
   };
 
   const formValuesToPayload = (values: CollectionPointFormValues, mode: 'create' | 'edit') => {
+    const zoneManaged =
+      sectorOptionsForForm().find((sector) => sector.id === values.sectorId)
+        ?.generationRateKgPerDay != null;
     const base = {
       sectorId: values.sectorId,
       latitude: values.latitude,
@@ -448,6 +451,10 @@ export default function CollectionPointsPage() {
       maxCapacityKg: values.maxCapacityKg,
       status: values.status,
       fillRateFactorOverride: values.fillRateFactorOverride,
+      estimatedFillHours: values.estimatedFillHours,
+      // Con tasa gestionada por zona, se reenvía null para que el backend redistribuya.
+      generationRateKgPerDay: zoneManaged ? null : values.generationRateKgPerDay,
+      servedPopulation: values.servedPopulation,
     };
     if (mode === 'create') {
       return { ...base, currentFillLevelKg: 0 };

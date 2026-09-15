@@ -97,6 +97,14 @@ class Settings(BaseSettings):
     driver_webhook_url: str | None = None
     unare_mbtiles_path: str | None = None
 
+    # Generación de residuos: calibración con pesos reales y penalización por rebose.
+    # alpha del EWMA de calibración (más alto = más peso al dato reciente).
+    calibration_default_alpha: float = 0.4
+    calibration_window_days: int = 30
+    # Penalización por rebose en la función objetivo del ACO, en "metros por kg
+    # rebosado". 0 desactiva la penalización (comportamiento solo-distancia).
+    overflow_penalty_weight: float = 0.0
+
     @property
     def is_production(self) -> bool:
         return (self.app_env or "").strip().lower() in PRODUCTION_ENVS

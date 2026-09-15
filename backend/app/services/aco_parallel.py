@@ -16,6 +16,13 @@ if TYPE_CHECKING:
 ACO_ALPHA = 1.0
 ACO_BETA = 3.0
 
+# Sesgos del heurístico de prioridad por llenado (multiplican eta en la ruleta).
+HEUR_AT_RISK_MULTIPLIER = 1.50
+HEUR_CRITICAL_MULTIPLIER = 1.35
+HEUR_HIGH_MULTIPLIER = 1.10
+
+DEFAULT_TWO_OPT_PASSES = 10
+
 AntSolution = tuple[list[list[int]], float, float, list[int]]
 
 
@@ -93,6 +100,9 @@ def _pick_candidate(
     fill_pcts: list[int] | None = None,
     priority_fill_level: bool = False,
     at_risk_flags: list[bool] | None = None,
+    at_risk_multiplier: float = HEUR_AT_RISK_MULTIPLIER,
+    critical_multiplier: float = HEUR_CRITICAL_MULTIPLIER,
+    high_multiplier: float = HEUR_HIGH_MULTIPLIER,
 ) -> int:
     weights = []
     for c in candidates:
@@ -102,13 +112,13 @@ def _pick_candidate(
             # El riesgo de calendario (rebose antes de la próxima visita) domina
             # sobre el llenado puntual cuando está disponible.
             if at_risk_flags is not None and 1 <= c <= len(at_risk_flags) and at_risk_flags[c - 1]:
-                eta *= 1.50
+                eta *= at_risk_multiplier
             elif fill_pcts is not None and 1 <= c <= len(fill_pcts):
                 fill_pct = fill_pcts[c - 1]
                 if fill_pct >= CRITICAL_FILL_PCT:
-                    eta *= 1.35
+                    eta *= critical_multiplier
                 elif fill_pct >= HIGH_FILL_PCT:
-                    eta *= 1.10
+                    eta *= high_multiplier
         weights.append(tau * eta)
     total = sum(weights)
     if total <= 0:
@@ -166,6 +176,32 @@ def _close_route(
     return route, current, elapsed
 
 
+def _overflow_penalty(
+    customer_idx: int,
+    arrival_sec: float,
+    deadline_sec: list[float | None] | None,
+    rate_kg_per_hour: list[float] | None,
+    weight: float,
+) -> float:
+    """Costo por rebose de un contenedor servido en ``arrival_sec`` (segundos).
+
+    El rebose comienza al superar la capacidad (``deadline``) y crece a la tasa de
+    generación. El peso convierte kg rebosados a unidades de costo (metros).
+    """
+    if weight <= 0 or deadline_sec is None or rate_kg_per_hour is None:
+        return 0.0
+    if not (1 <= customer_idx <= min(len(deadline_sec), len(rate_kg_per_hour))):
+        return 0.0
+    deadline = deadline_sec[customer_idx - 1]
+    if deadline is None:
+        return 0.0
+    over_sec = arrival_sec - deadline
+    if over_sec <= 0:
+        return 0.0
+    overflow_kg = max(0.0, rate_kg_per_hour[customer_idx - 1]) * over_sec / 3600.0
+    return overflow_kg * weight
+
+
 def build_ant_solution(
     ant_seed: int,
     n_customers: int,
@@ -185,6 +221,13 @@ def build_ant_solution(
     fill_pcts: list[int] | None = None,
     priority_fill_level: bool = False,
     at_risk_flags: list[bool] | None = None,
+    overflow_deadline_sec: list[float | None] | None = None,
+    overflow_rate_kg_per_hour: list[float] | None = None,
+    overflow_weight: float = 0.0,
+    at_risk_multiplier: float = HEUR_AT_RISK_MULTIPLIER,
+    critical_multiplier: float = HEUR_CRITICAL_MULTIPLIER,
+    high_multiplier: float = HEUR_HIGH_MULTIPLIER,
+    two_opt_passes: int = DEFAULT_TWO_OPT_PASSES,
     alpha: float = ACO_ALPHA,
     beta: float = ACO_BETA,
 ) -> AntSolution:
@@ -196,6 +239,7 @@ def build_ant_solution(
     customer_indices = list(range(1, n_customers + 1))
     unvisited = set(customer_indices)
     routes: list[list[int]] = []
+    overflow_cost = 0.0
 
     for v_idx in range(n_vehicles):
         route = [0]
@@ -258,8 +302,19 @@ def build_ant_solution(
                 fill_pcts=fill_pcts,
                 priority_fill_level=priority_fill_level,
                 at_risk_flags=at_risk_flags,
+                at_risk_multiplier=at_risk_multiplier,
+                critical_multiplier=critical_multiplier,
+                high_multiplier=high_multiplier,
             )
             travel = time_matrix[current][chosen]
+            arrival_sec = elapsed + travel
+            overflow_cost += _overflow_penalty(
+                chosen,
+                arrival_sec,
+                overflow_deadline_sec,
+                overflow_rate_kg_per_hour,
+                overflow_weight,
+            )
             route.append(chosen)
             window_start = window_starts[chosen - 1] if window_starts is not None else None
             elapsed = elapsed_after_visit(
@@ -285,7 +340,9 @@ def build_ant_solution(
             shift_budget_sec=shift_budget_sec,
         )
         if len(route) > 2:
-            routes.append(_two_opt(route, dist_matrix, landfill_idx=landfill))
+            routes.append(
+                _two_opt(route, dist_matrix, landfill_idx=landfill, max_passes=two_opt_passes)
+            )
 
     served: set[int] = set()
     for route in routes:
@@ -294,8 +351,19 @@ def build_ant_solution(
                 served.add(idx)
     uncovered = [c for c in customer_indices if c not in served]
 
+    # Contenedores no atendidos: rebosan hasta el final de la jornada.
+    if overflow_weight > 0 and shift_budget_sec is not None:
+        for c in uncovered:
+            overflow_cost += _overflow_penalty(
+                c,
+                float(shift_budget_sec),
+                overflow_deadline_sec,
+                overflow_rate_kg_per_hour,
+                overflow_weight,
+            )
+
     cost, duration = _evaluate_solution(routes, dist_matrix, time_matrix)
-    return routes, cost, duration, uncovered
+    return routes, cost + overflow_cost, duration, uncovered
 
 
 def _ant_task_payload(
@@ -316,6 +384,15 @@ def _ant_task_payload(
     fill_pcts: list[int] | None,
     priority_fill_level: bool,
     at_risk_flags: list[bool] | None,
+    overflow_deadline_sec: list[float | None] | None,
+    overflow_rate_kg_per_hour: list[float] | None,
+    overflow_weight: float,
+    at_risk_multiplier: float,
+    critical_multiplier: float,
+    high_multiplier: float,
+    two_opt_passes: int,
+    alpha: float,
+    beta: float,
 ) -> AntSolution:
     return build_ant_solution(
         ant_seed,
@@ -335,6 +412,15 @@ def _ant_task_payload(
         fill_pcts=fill_pcts,
         priority_fill_level=priority_fill_level,
         at_risk_flags=at_risk_flags,
+        overflow_deadline_sec=overflow_deadline_sec,
+        overflow_rate_kg_per_hour=overflow_rate_kg_per_hour,
+        overflow_weight=overflow_weight,
+        at_risk_multiplier=at_risk_multiplier,
+        critical_multiplier=critical_multiplier,
+        high_multiplier=high_multiplier,
+        two_opt_passes=two_opt_passes,
+        alpha=alpha,
+        beta=beta,
     )
 
 
@@ -359,6 +445,15 @@ def run_ant_solutions(
     fill_pcts: list[int] | None = None,
     priority_fill_level: bool = False,
     at_risk_flags: list[bool] | None = None,
+    overflow_deadline_sec: list[float | None] | None = None,
+    overflow_rate_kg_per_hour: list[float] | None = None,
+    overflow_weight: float = 0.0,
+    at_risk_multiplier: float = HEUR_AT_RISK_MULTIPLIER,
+    critical_multiplier: float = HEUR_CRITICAL_MULTIPLIER,
+    high_multiplier: float = HEUR_HIGH_MULTIPLIER,
+    two_opt_passes: int = DEFAULT_TWO_OPT_PASSES,
+    alpha: float = ACO_ALPHA,
+    beta: float = ACO_BETA,
 ) -> list[AntSolution]:
     from concurrent.futures import ProcessPoolExecutor
 
@@ -384,6 +479,15 @@ def run_ant_solutions(
                 fill_pcts=fill_pcts,
                 priority_fill_level=priority_fill_level,
                 at_risk_flags=at_risk_flags,
+                overflow_deadline_sec=overflow_deadline_sec,
+                overflow_rate_kg_per_hour=overflow_rate_kg_per_hour,
+                overflow_weight=overflow_weight,
+                at_risk_multiplier=at_risk_multiplier,
+                critical_multiplier=critical_multiplier,
+                high_multiplier=high_multiplier,
+                two_opt_passes=two_opt_passes,
+                alpha=alpha,
+                beta=beta,
             )
             for seed in ant_seeds
         ]
@@ -411,6 +515,15 @@ def run_ant_solutions(
                 fill_pcts,
                 priority_fill_level,
                 at_risk_flags,
+                overflow_deadline_sec,
+                overflow_rate_kg_per_hour,
+                overflow_weight,
+                at_risk_multiplier,
+                critical_multiplier,
+                high_multiplier,
+                two_opt_passes,
+                alpha,
+                beta,
             )
             for seed in ant_seeds
         ]

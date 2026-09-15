@@ -9,13 +9,18 @@ import pytest
 
 from app.domain.waste_generation import (
     DEFAULT_FILL_HOURS,
+    KG_PER_DAY,
     critical_day_offset,
     effective_fill_hours,
     effective_fill_rate_factor,
     estimated_fill_hours,
     fill_events_cycle_daily_values,
+    generation_rate_kg_per_day,
     generation_rate_kg_per_hour,
     hours_until_critical,
+    hours_until_overflow,
+    overflow_kg,
+    overflow_ratio,
     projected_fill_level_kg,
     projected_fill_level_pct,
 )
@@ -166,3 +171,64 @@ def test_fill_cycle_requires_at_least_two_collection_days():
     point = _point(capacity=1000.0, hours=48.0)
     events = [(datetime(2026, 9, 3, 8, 0, tzinfo=timezone.utc), 500.0)]
     assert fill_events_cycle_daily_values(point, events, days=3, now=now) == []
+
+
+# --- Tasa absoluta por contenedor (kg/día) ----------------------------------
+
+
+def test_explicit_rate_overrides_capacity_and_hours():
+    point = _point(capacity=1000.0, hours=100.0)
+    point.generation_rate_kg_per_day = 240.0
+
+    assert generation_rate_kg_per_hour(point) == pytest.approx(10.0)
+    assert generation_rate_kg_per_day(point) == pytest.approx(240.0)
+    # 1000 kg a 240 kg/día = 100 h para llenarse.
+    assert effective_fill_hours(point) == pytest.approx(100.0)
+    assert generation_rate_kg_per_hour(point) * KG_PER_DAY == pytest.approx(240.0)
+
+
+def test_explicit_rate_beats_sector_factor():
+    point = _point(capacity=1000.0, hours=100.0)
+    point.sector = SimpleNamespace(fill_rate_factor=2.0)
+    point.generation_rate_kg_per_day = 480.0
+
+    assert generation_rate_kg_per_hour(point) == pytest.approx(20.0)
+    assert effective_fill_hours(point) == pytest.approx(50.0)
+
+
+def test_projected_fill_uses_explicit_rate():
+    emptied = _now() - timedelta(hours=24)
+    point = _point(capacity=1000.0, last_emptied=emptied)
+    point.generation_rate_kg_per_day = 240.0
+
+    assert float(projected_fill_level_kg(point, at=_now())) == pytest.approx(240.0)
+
+
+def test_invalid_explicit_rate_falls_back_to_derived():
+    point = _point(capacity=1000.0, hours=100.0)
+    point.generation_rate_kg_per_day = 0
+
+    assert generation_rate_kg_per_hour(point) == pytest.approx(10.0)
+
+
+# --- Rebose (capacidad) ------------------------------------------------------
+
+
+def test_no_overflow_before_capacity():
+    emptied = _now() - timedelta(hours=80)
+    point = _point(capacity=1000.0, last_emptied=emptied)
+    point.generation_rate_kg_per_day = 240.0  # 10 kg/h
+
+    assert overflow_kg(point, at=_now()) == 0
+    assert overflow_ratio(point, at=_now()) == 0.0
+    assert hours_until_overflow(point, at=_now()) == pytest.approx(20.0)
+
+
+def test_overflow_grows_after_capacity():
+    emptied = _now() - timedelta(hours=110)
+    point = _point(capacity=1000.0, last_emptied=emptied)
+    point.generation_rate_kg_per_day = 240.0  # 10 kg/h → 1100 kg a las 110 h
+
+    assert float(overflow_kg(point, at=_now())) == pytest.approx(100.0)
+    assert overflow_ratio(point, at=_now()) == pytest.approx(0.1)
+    assert hours_until_overflow(point, at=_now()) == 0.0

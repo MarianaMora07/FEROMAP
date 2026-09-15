@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String, UniqueConstraint, func
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -17,6 +17,17 @@ class Sector(Base):
     # Velocidad de llenado de la zona: > 1 = se llena más rápido (zona poblada).
     fill_rate_factor: Mapped[Decimal] = mapped_column(
         Numeric(4, 2), nullable=False, server_default="1.00"
+    )
+    # Tasa total de generación de la zona (kg/día). Si está definida, se reparte
+    # entre los contenedores activos según ``distribution_mode`` (ver sector_service).
+    generation_rate_kg_per_day: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    # Población de la zona (hab.) y tasa per cápita (kg/hab/día). Si hay per cápita,
+    # la tasa total de la zona se deriva como población × per_capita.
+    population: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    per_capita_kg_per_day: Mapped[Decimal | None] = mapped_column(Numeric(6, 3), nullable=True)
+    # equal | capacity | population.
+    distribution_mode: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="equal"
     )
     driver_id: Mapped[int | None] = mapped_column(ForeignKey("drivers.id"), nullable=True, index=True)
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())

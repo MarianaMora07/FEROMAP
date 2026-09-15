@@ -101,10 +101,12 @@ def seed_into_session(session: Session) -> dict[str, Any]:
 
     sector_by_name: dict[str, Sector] = {}
     for row in sectors_data:
+        raw_population = row.get("population")
         sector = Sector(
             parish_id=parish.id,
             name=row["name"],
             fill_rate_factor=Decimal(str(sector_fill_rate_factor(row["name"]))),
+            population=int(raw_population) if raw_population is not None else None,
         )
         session.add(sector)
         sector_by_name[row["name"]] = sector
