@@ -56,6 +56,7 @@ export const routesMock: RouteCollection = {
         label: 'Ruta optimizada (IA)',
         distanceKm: 20.1,
         durationMin: 98,
+        color: '#34D634',
       },
       geometry: {
         type: 'LineString',

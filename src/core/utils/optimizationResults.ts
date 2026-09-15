@@ -6,6 +6,8 @@ export type VehicleTone = 'blue' | 'green' | 'purple';
 export interface OptimizationRouteResult {
   id: string;
   tone: VehicleTone;
+  /** Color hex de la ruta en el mapa (si viene del backend). */
+  color?: string;
   distanceKm: number;
   duration: string;
   points: number;
@@ -274,6 +276,7 @@ export function buildRouteResults(
     return {
       id: extractVehicleId(feature.properties.label, feature.properties.id),
       tone: VEHICLE_TONES[index % VEHICLE_TONES.length]!,
+      color: feature.properties.color,
       distanceKm: feature.properties.distanceKm,
       duration: formatDurationMinutes(feature.properties.durationMin),
       points,

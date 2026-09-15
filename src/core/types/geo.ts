@@ -43,6 +43,9 @@ export interface RouteProperties {
   label: string;
   distanceKm: number;
   durationMin: number;
+  /** Color hex por vehículo/ruta (asignado en optimización). */
+  color?: string;
+  vehicleCode?: string;
   stops?: RouteStopProperties[];
 }
 
