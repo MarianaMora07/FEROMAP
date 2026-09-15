@@ -9,7 +9,7 @@ import logging
 import random
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any
+from typing import Any, Iterable
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -25,13 +25,22 @@ from app.domain.criticality import (
 from app.domain.waste_generation import (
     CRITICAL_FILL_PCT,
     critical_day_offset,
+    effective_fill_hours,
     effective_fill_rate_factor,
+    estimated_fill_hours,
     fill_events_cycle_daily_values,
+    generation_rate_kg_per_day,
+    overflow_kg,
+    overflow_ratio,
     projected_fill_level_kg,
 )
 from app.schemas.collection_point import CollectionPointCreate, CollectionPointUpdate
 from app.services.geo_service import fill_level_pct, priority_from_fill, seed_meta_by_code
 from app.services.graph_service import UNARE_BBOX, load_road_graph, nearest_node
+from app.services.sector_service import (
+    distribute_sector_generation_rate,
+    effective_zone_rate_kg_per_day,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -208,6 +217,31 @@ def serialize_collection_point_detail(point: CollectionPoint) -> dict[str, Any]:
             else None
         ),
         "fillRateFactor": effective_fill_rate_factor(point),
+        "estimatedFillHours": estimated_fill_hours(point),
+        "effectiveFillHours": effective_fill_hours(point),
+        "generationRateKgPerDay": generation_rate_kg_per_day(point),
+        "generationRateOverrideKgPerDay": (
+            float(point.generation_rate_kg_per_day)
+            if getattr(point, "generation_rate_kg_per_day", None) is not None
+            else None
+        ),
+        "servedPopulation": (
+            float(point.served_population)
+            if getattr(point, "served_population", None) is not None
+            else None
+        ),
+        "overflowKg": float(overflow_kg(point)),
+        "overflowPct": int(round(overflow_ratio(point) * 100)),
+        "lastCalibratedAt": (
+            point.last_calibrated_at.isoformat()
+            if getattr(point, "last_calibrated_at", None) is not None
+            else None
+        ),
+        "calibrationSamples": (
+            int(point.calibration_samples)
+            if getattr(point, "calibration_samples", None) is not None
+            else None
+        ),
     }
 
 
@@ -374,6 +408,18 @@ def list_sector_options(db: Session) -> list[dict[str, Any]]:
             "id": sector.id,
             "name": sector.name,
             "fillRateFactor": float(getattr(sector, "fill_rate_factor", None) or 1.0),
+            "generationRateKgPerDay": effective_zone_rate_kg_per_day(sector),
+            "perCapitaKgPerDay": (
+                float(sector.per_capita_kg_per_day)
+                if getattr(sector, "per_capita_kg_per_day", None) is not None
+                else None
+            ),
+            "population": (
+                int(sector.population)
+                if getattr(sector, "population", None) is not None
+                else None
+            ),
+            "distributionMode": getattr(sector, "distribution_mode", None) or "equal",
         }
         for sector in sectors
     ]
@@ -419,8 +465,18 @@ def _snap_road_node(longitude: float, latitude: float) -> int | None:
         return None
 
 
-def _persist_point(db: Session, point: CollectionPoint) -> dict[str, Any]:
+def _persist_point(
+    db: Session,
+    point: CollectionPoint,
+    *,
+    redistribute_sector_ids: Iterable[int] = (),
+) -> dict[str, Any]:
     db.add(point)
+    db.flush()
+    for sector_id in {sid for sid in redistribute_sector_ids if sid is not None}:
+        sector = db.get(Sector, sector_id)
+        if sector is not None:
+            distribute_sector_generation_rate(db, sector)
     db.commit()
     db.refresh(point)
     point = db.scalar(
@@ -430,6 +486,20 @@ def _persist_point(db: Session, point: CollectionPoint) -> dict[str, Any]:
     )
     assert point is not None
     return serialize_collection_point_detail(point)
+
+
+def _validate_generation_rate_scope(sector: Any, value: float | None) -> None:
+    """Una tasa por contenedor no convive con una tasa gestionada por la zona."""
+    if value is None:
+        return
+    if effective_zone_rate_kg_per_day(sector) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "La zona ya define una tasa de generación; quítala a nivel de zona "
+                "para gestionarla por contenedor"
+            ),
+        )
 
 
 def create_collection_point(db: Session, payload: CollectionPointCreate) -> dict[str, Any]:
@@ -457,6 +527,7 @@ def create_collection_point(db: Session, payload: CollectionPointCreate) -> dict
     capacity = Decimal(str(payload.max_capacity_kg))
     fill = Decimal(str(payload.current_fill_level_kg if payload.current_fill_level_kg is not None else 0))
     _validate_fill_level(fill, capacity)
+    _validate_generation_rate_scope(sector, payload.generation_rate_kg_per_day)
 
     point = CollectionPoint(
         sector_id=payload.sector_id,
@@ -472,8 +543,20 @@ def create_collection_point(db: Session, payload: CollectionPointCreate) -> dict
             if payload.fill_rate_factor_override is not None
             else None
         ),
+        generation_rate_kg_per_day=(
+            Decimal(str(payload.generation_rate_kg_per_day))
+            if payload.generation_rate_kg_per_day is not None
+            else None
+        ),
+        served_population=(
+            Decimal(str(payload.served_population))
+            if payload.served_population is not None
+            else None
+        ),
     )
-    return _persist_point(db, point)
+    if payload.estimated_fill_hours is not None:
+        point.estimated_fill_hours = Decimal(str(payload.estimated_fill_hours))
+    return _persist_point(db, point, redistribute_sector_ids=(point.sector_id,))
 
 
 def update_collection_point(
@@ -482,6 +565,7 @@ def update_collection_point(
     payload: CollectionPointUpdate,
 ) -> dict[str, Any]:
     point = _get_point_by_code(db, code)
+    previous_sector_id = point.sector_id
     data = payload.model_dump(exclude_unset=True)
 
     if "sector_id" in data:
@@ -523,14 +607,37 @@ def update_collection_point(
         raw = data["fill_rate_factor_override"]
         point.fill_rate_factor_override = Decimal(str(raw)) if raw is not None else None
 
-    return _persist_point(db, point)
+    if "estimated_fill_hours" in data and data["estimated_fill_hours"] is not None:
+        point.estimated_fill_hours = Decimal(str(data["estimated_fill_hours"]))
+
+    if "generation_rate_kg_per_day" in data:
+        raw_rate = data["generation_rate_kg_per_day"]
+        if raw_rate is not None:
+            _validate_generation_rate_scope(db.get(Sector, point.sector_id), raw_rate)
+        point.generation_rate_kg_per_day = Decimal(str(raw_rate)) if raw_rate is not None else None
+
+    if "served_population" in data:
+        raw_population = data["served_population"]
+        point.served_population = (
+            Decimal(str(raw_population)) if raw_population is not None else None
+        )
+
+    return _persist_point(
+        db,
+        point,
+        redistribute_sector_ids=(point.sector_id, previous_sector_id),
+    )
 
 
 def delete_collection_point(db: Session, code: str) -> dict[str, Any]:
     point = _get_point_by_code(db, code)
+    sector = db.get(Sector, point.sector_id)
     point.deleted_at = datetime.now(timezone.utc)
     point.status = "inactive"
     db.add(point)
+    db.flush()
+    if sector is not None:
+        distribute_sector_generation_rate(db, sector)
     db.commit()
     return {"code": point.code, "deleted": True}
 

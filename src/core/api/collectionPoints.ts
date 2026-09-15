@@ -135,6 +135,47 @@ export interface SectorOption {
   id: number;
   name: string;
   fillRateFactor?: number;
+  /** Tasa total efectiva de la zona (kg/día); null = gestionada por contenedor. */
+  generationRateKgPerDay?: number | null;
+  perCapitaKgPerDay?: number | null;
+  population?: number | null;
+  distributionMode?: DistributionMode;
+}
+
+export type DistributionMode = 'equal' | 'capacity' | 'population';
+
+/** Agregado por zona (contenedores, capacidad, generación y rebose). */
+export interface SectorSummary {
+  id: number;
+  name: string;
+  fillRateFactor: number;
+  population: number | null;
+  perCapitaKgPerDay: number | null;
+  distributionMode: DistributionMode;
+  configuredGenerationRateKgPerDay: number | null;
+  generationRateKgPerDay: number | null;
+  containerCount: number;
+  totalCapacityKg: number;
+  effectiveGenerationRateKgPerDay: number;
+  effectiveGenerationRateKgPerHour: number;
+  avgFillPct: number;
+  criticalCount: number;
+  overflowCount: number;
+}
+
+export interface SectorGenerationConfigPayload {
+  generationRateKgPerDay?: number | null;
+  perCapitaKgPerDay?: number | null;
+  distributionMode?: DistributionMode;
+}
+
+export interface CollectionPointCalibrationResult {
+  windowDays: number;
+  alpha: number;
+  calibratedCount: number;
+  skippedCount: number;
+  calibrated: { code: string; samples: number; previousRateKgPerDay: number | null; rateKgPerDay: number }[];
+  skipped: { code: string; reason: string }[];
 }
 
 export interface CollectionPointWritePayload {
@@ -146,6 +187,9 @@ export interface CollectionPointWritePayload {
   currentFillLevelKg?: number;
   status?: string;
   fillRateFactorOverride?: number | null;
+  estimatedFillHours?: number | null;
+  generationRateKgPerDay?: number | null;
+  servedPopulation?: number | null;
 }
 
 export interface CollectionPointUpdatePayload {
@@ -157,6 +201,9 @@ export interface CollectionPointUpdatePayload {
   status?: string;
   priorityBoost?: boolean;
   fillRateFactorOverride?: number | null;
+  estimatedFillHours?: number | null;
+  generationRateKgPerDay?: number | null;
+  servedPopulation?: number | null;
 }
 
 export interface CollectionPointOptimizationContext {
@@ -245,6 +292,57 @@ export function updateSectorFillRateFactor(
   fillRateFactor: number,
 ): Promise<SectorOption> {
   return apiPatch<SectorOption>(`/api/v1/sectors/${sectorId}/fill-rate-factor`, { fillRateFactor });
+}
+
+/** Agregado por zona: contenedores, capacidad total y generación efectiva. */
+export function fetchSectorsSummary(): Promise<SectorSummary[]> {
+  return withMockFallback(
+    'sectors-summary',
+    () => apiGet<SectorSummary[]>('/api/v1/sectors/summary'),
+    MOCK_SECTOR_OPTIONS.map((sector) => ({
+      id: sector.id,
+      name: sector.name,
+      fillRateFactor: 1,
+      population: null,
+      perCapitaKgPerDay: null,
+      distributionMode: 'equal' as DistributionMode,
+      configuredGenerationRateKgPerDay: null,
+      generationRateKgPerDay: null,
+      containerCount: 0,
+      totalCapacityKg: 0,
+      effectiveGenerationRateKgPerDay: 0,
+      effectiveGenerationRateKgPerHour: 0,
+      avgFillPct: 0,
+      criticalCount: 0,
+      overflowCount: 0,
+    })),
+  );
+}
+
+/** Configura la generación de la zona (tasa, per cápita y modo de reparto). */
+export function updateSectorGenerationConfig(
+  sectorId: number,
+  payload: SectorGenerationConfigPayload,
+): Promise<SectorOption & { distributedContainerCount?: number }> {
+  return apiPatch<SectorOption & { distributedContainerCount?: number }>(
+    `/api/v1/sectors/${sectorId}/generation-rate`,
+    payload,
+  );
+}
+
+/** Atajo: define la tasa manual de la zona (kg/día); null la desactiva. */
+export function updateSectorGenerationRate(
+  sectorId: number,
+  generationRateKgPerDay: number | null,
+): Promise<SectorOption & { distributedContainerCount?: number }> {
+  return updateSectorGenerationConfig(sectorId, { generationRateKgPerDay });
+}
+
+/** Calibra la tasa de generación de los contenedores con los pesos recolectados. */
+export function calibrateCollectionPoints(
+  payload: { days?: number; sectorId?: number; alpha?: number } = {},
+): Promise<CollectionPointCalibrationResult> {
+  return apiPost<CollectionPointCalibrationResult>('/api/v1/collection-points/calibrate', payload);
 }
 
 export function createCollectionPoint(

@@ -106,10 +106,34 @@ FEROMAP trata la criticidad como un **estado temporal**, no como un atributo fij
 - **En riesgo de rebose** (Dashboard): contenedores que **se llenarán antes de su próxima recolección programada**, aunque aún no estén críticos. Muestra cuánto falta ("Se llena en ~X h").
 - El umbral crítico es configurable en **Administración → General → Umbral de llenado (%)** (por defecto 80).
 
-**Velocidad de llenado (factores)**
+**Velocidad de llenado y generación de residuos**
 
-- Por **zona**: en *Puntos de Recolección* hay un panel "Velocidad de llenado por zona" (> 1 = la zona se llena más rápido; útil en barrios densos).
-- Por **contenedor**: al crear/editar un punto, el campo "Factor de llenado (opcional)" reemplaza al de la zona; vacío = hereda.
+- Por **zona**: en *Puntos de Recolección* está el panel **"Generación por zona"**. Cada fila muestra los contenedores, la capacidad total, la generación efectiva y los contenedores en rebose, y permite fijar:
+  - **Tasa zona (kg/día)**: generación total manual de la zona.
+  - **Per cápita (kg/hab/día)**: si se define, la tasa total se **deriva** como `población × per cápita` (la población viene del catálogo de sectores). Tiene prioridad sobre la tasa manual.
+  - **Reparto**: `Igual` (tasa ÷ contenedores), `Por capacidad` (proporcional al tamaño) o `Por población` (proporcional a la población servida de cada contenedor). Si faltan datos, cae a capacidad y luego a iguales.
+  - **Factor llenado** (> 1 = la zona se llena más rápido; útil en barrios densos).
+  - **Calibrar con pesos reales**: estima la tasa de cada contenedor a partir de los pesos recolectados (ver abajo).
+- Por **contenedor**: al crear/editar un punto:
+  - **Capacidad máxima (kg)**: cuánto admite el contenedor.
+  - **Tasa de generación (kg/día)**: tasa absoluta del contenedor; tiene prioridad sobre capacidad/horas. Se bloquea si la zona gestiona la tasa.
+  - **Horas base de llenado**: tiempo hasta llenarse sin factor (por defecto 72 h).
+  - **Población servida**: habitantes que sirve el contenedor; alimenta el reparto por población de la zona.
+  - **Factor de llenado (opcional)**: reemplaza al de la zona; vacío = hereda.
+
+> Precedencia de la tasa efectiva: tasa del contenedor (kg/día) > reparto de la zona (tasa ÷ peso del contenedor) > capacidad ÷ horas base ajustadas por el factor. Una tasa por contenedor y una tasa de zona no coexisten: si la zona tiene tasa, el valor por contenedor lo gestiona la zona.
+
+**Calibración con pesos reales**
+
+- Al avanzar paradas, FEROMAP guarda el **peso recolectado** de cada contenedor. El botón *Calibrar con pesos reales* estima la tasa efectiva de cada contenedor (EWMA de `peso ÷ horas` entre recolecciones consecutivas) y la escribe como tasa propia. Los contenedores de zonas con tasa gestionada se omiten.
+
+**Rebose**
+
+- Además de la criticidad (80 %), FEROMAP mide el **rebose** (llenado por encima de la capacidad). Se muestra por contenedor (`overflowKg`, `overflowPct`) y se cuenta por zona. El motor puede **penalizar el rebose** en su función objetivo, configurable desde la pestaña *Parámetros del algoritmo* (por defecto desactivado, `0`).
+
+**Parámetros del algoritmo (planificador)**
+
+- En **Plan del día → Parámetros del algoritmo** (`/optimization`) el planificador ajusta **todos** los parámetros del motor: **alpha** (feromona), **beta** (distancia), **rho** (evaporación), **Q** (depósito de feromona) y **refuerzo elitista**, **hormigas**, **iteraciones**, **paciencia**, **pasadas de 2-opt**, los **pesos heurísticos** (riesgo, crítico, lleno) y los **factores de matriz** por llenado, más la **penalización por rebose** (m/kg) y los parámetros de **calibración** (alpha y ventana). La misma pantalla muestra la **ecuación del ACO** en la parte superior y los **valores actuales** debajo, para ver de un vistazo qué combinación se está aplicando. Se guardan con auditoría y actúan como valores por defecto de la corrida (la corrida puede sobreescribir hormigas/iteraciones).
 
 **Frecuencia híbrida**
 
@@ -125,7 +149,7 @@ FEROMAP trata la criticidad como un **estado temporal**, no como un atributo fij
 
 - Vehículos: estado/disponibilidad y edición (sin alta/baja masiva). En el detalle de cada vehículo, la pestaña **Territorio** fija los **sectores preferentes** de ese camión (vía su conductor): el motor los respeta cuando el día tiene territorio completo; si no, el ACO reparte libre.
 - Conductores: crear/editar y asignar credencial.
-- Puntos de Recolección: CRUD completo, ubicación en mapa, **frecuencias semanales** por punto (alimentan el Autocompletar del Plan semanal) y **factores de velocidad de llenado** por zona y por contenedor (ver §9).
+- Puntos de Recolección: CRUD completo, ubicación en mapa, **frecuencias semanales** por punto (alimentan el Autocompletar del Plan semanal), **tasa de generación por zona/contenedor** (igual, por capacidad o por población; manual o per cápita), **rebose** y **calibración con pesos reales** (ver §9).
 
 **Alertas** se atienden desde los paneles del Dashboard/Monitoreo (no tiene ítem propio en este menú).
 
