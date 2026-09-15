@@ -1,11 +1,13 @@
 from fastapi import APIRouter, HTTPException, Query, Request, status
 
-from app.api.deps import AdminOnly, DbSession
+from app.api.deps import AdminOnly, DbSession, PlannerOrAdmin
 from app.db.session import SessionLocal
 from app.schemas.admin import (
     AdminUser,
     AdminUserCreate,
     AdminUserUpdate,
+    AlgorithmSettings,
+    AlgorithmSettingsUpdate,
     AuditLogEntry,
     IntegrationSettings,
     IntegrationSettingsUpdate,
@@ -15,12 +17,14 @@ from app.schemas.admin import (
 )
 from app.services.admin_service import (
     create_user,
+    get_algorithm_settings,
     get_integration_settings,
     get_operational_settings,
     list_audit_log,
     list_roles,
     list_users,
     log_audit,
+    update_algorithm_settings,
     update_integration_settings,
     update_operational_settings,
     update_user,
@@ -28,6 +32,21 @@ from app.services.admin_service import (
 from app.services.seed_service import run_seed
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+def _seed_payload(summary: dict) -> dict:
+    return {
+        "parishes": summary["parishes"],
+        "sectors": summary["sectors"],
+        "collection_points": summary["collectionPoints"],
+        "vehicles": summary["vehicles"],
+        "drivers": summary["drivers"],
+        "users": summary["users"],
+        "optimized_routes": summary["optimizedRoutes"],
+        "simulations": summary["simulations"],
+        "system_alerts": summary["systemAlerts"],
+        "demo_password": summary["demoPassword"],
+    }
 
 
 @router.get("/roles")
@@ -74,6 +93,27 @@ def patch_admin_user(
 @router.get("/settings", response_model=OperationalSettings)
 def get_admin_settings(db: DbSession, _user: AdminOnly):
     return get_operational_settings(db)
+
+
+@router.get("/algorithm-settings", response_model=AlgorithmSettings)
+def get_admin_algorithm_settings(db: DbSession, _user: PlannerOrAdmin):
+    """Parámetros del motor de optimización (planner/admin)."""
+    return get_algorithm_settings(db)
+
+
+@router.patch("/algorithm-settings", response_model=AlgorithmSettings)
+def patch_admin_algorithm_settings(
+    body: AlgorithmSettingsUpdate,
+    request: Request,
+    db: DbSession,
+    actor: PlannerOrAdmin,
+):
+    return update_algorithm_settings(
+        db,
+        body,
+        actor=actor,
+        ip_address=request.client.host if request.client else None,
+    )
 
 
 @router.patch("/settings", response_model=OperationalSettings)
@@ -150,15 +190,39 @@ def post_admin_seed(request: Request, actor: AdminOnly):
         )
         session.commit()
 
-    return {
-        "parishes": summary["parishes"],
-        "sectors": summary["sectors"],
-        "collection_points": summary["collectionPoints"],
-        "vehicles": summary["vehicles"],
-        "drivers": summary["drivers"],
-        "users": summary["users"],
-        "optimized_routes": summary["optimizedRoutes"],
-        "simulations": summary["simulations"],
-        "system_alerts": summary["systemAlerts"],
-        "demo_password": summary["demoPassword"],
-    }
+    return _seed_payload(summary)
+
+
+@router.post("/reset-database", response_model=SeedResult)
+def post_admin_reset_database(request: Request, actor: AdminOnly):
+    """Reinicia la base de datos: equivalente a `just db-reset` (parte de datos).
+
+    Borra los datos operativos y los repuebla desde `data/seeds`. No recrea el
+    esquema (las migraciones ya se aplican al arrancar el contenedor). Sirve para
+    dejar la base limpia sin escribir comandos.
+    """
+    actor_email = actor.email
+    ip_address = request.client.host if request.client else None
+    try:
+        summary = run_seed()
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al reiniciar la base de datos: {exc}",
+        ) from exc
+
+    with SessionLocal() as session:
+        log_audit(
+            session,
+            actor=None,
+            actor_email=actor_email,
+            action="reset",
+            resource="database",
+            details=summary,
+            ip_address=ip_address,
+        )
+        session.commit()
+
+    return _seed_payload(summary)

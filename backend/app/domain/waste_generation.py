@@ -23,6 +23,9 @@ from app.domain.criticality import CRITICAL_FILL_PCT
 # Horas por defecto que tarda un contenedor en llenarse por completo (fallback).
 DEFAULT_FILL_HOURS = 72.0
 
+# Horas de un día (conversión entre kg/día y kg/h).
+KG_PER_DAY = 24.0
+
 
 def _as_float(value: Any, default: float = 0.0) -> float:
     if value is None:
@@ -68,17 +71,47 @@ def effective_fill_rate_factor(point: Any) -> float:
 
 
 def effective_fill_hours(point: Any) -> float:
-    """Horas efectivas para llenarse: baseline ajustado por el factor de la zona/punto."""
+    """Horas hasta llenarse según la tasa efectiva.
+
+    Si el contenedor tiene una tasa absoluta (kg/día), se deriva de ella; en caso
+    contrario se mantiene el baseline ``estimated_fill_hours / factor``.
+    """
+    cap = capacity_kg(point)
+    rate = generation_rate_kg_per_hour(point)
+    if cap > 0 and rate > 0:
+        return cap / rate
+    return _derived_fill_hours(point)
+
+
+def _derived_fill_hours(point: Any) -> float:
+    """Horas de llenado derivadas del baseline y el factor de zona/punto."""
     return estimated_fill_hours(point) / effective_fill_rate_factor(point)
 
 
+def explicit_generation_rate_kg_per_day(point: Any) -> float:
+    """Tasa absoluta del contenedor (kg/día), 0.0 si no está configurada."""
+    return max(0.0, _as_float(getattr(point, "generation_rate_kg_per_day", None)))
+
+
 def generation_rate_kg_per_hour(point: Any) -> float:
-    """Tasa lineal: capacidad / horas efectivas para llenarse."""
+    """Tasa de generación efectiva (kg/h).
+
+    Prioridad: tasa absoluta del contenedor (``generation_rate_kg_per_day``) >
+    ``capacidad / horas derivadas`` (baseline ajustado por el factor de zona/punto).
+    """
+    day_rate = explicit_generation_rate_kg_per_day(point)
+    if day_rate > 0:
+        return day_rate / KG_PER_DAY
     cap = capacity_kg(point)
-    hours = effective_fill_hours(point)
+    hours = _derived_fill_hours(point)
     if cap <= 0 or hours <= 0:
         return 0.0
     return cap / hours
+
+
+def generation_rate_kg_per_day(point: Any) -> float:
+    """Tasa de generación efectiva (kg/día)."""
+    return generation_rate_kg_per_hour(point) * KG_PER_DAY
 
 
 def _clamp_kg(value: float, cap: float) -> Decimal:
@@ -115,6 +148,59 @@ def projected_fill_level_pct(point: Any, *, at: datetime | None = None) -> int:
         return 0
     fill = float(projected_fill_level_kg(point, at=at))
     return int(round(fill / cap * 100))
+
+
+def projected_fill_level_unclamped_kg(point: Any, *, at: datetime | None = None) -> float:
+    """Llenado proyectado **sin recortar a la capacidad** (para medir rebose).
+
+    Para contenedores nunca vaciados devuelve el llenado almacenado (no crece solo).
+    """
+    last_emptied = _as_utc(getattr(point, "last_emptied_at", None))
+    if last_emptied is None:
+        return float(stored_fill_level_kg(point))
+    at = _as_utc(at) or datetime.now(timezone.utc)
+    elapsed_hours = max(0.0, (at - last_emptied).total_seconds() / 3600.0)
+    return generation_rate_kg_per_hour(point) * elapsed_hours
+
+
+def overflow_kg(point: Any, *, at: datetime | None = None) -> Decimal:
+    """Kg que exceden la capacidad en el instante ``at`` (0 si no rebosa)."""
+    cap = capacity_kg(point)
+    if cap <= 0:
+        return Decimal("0")
+    over = projected_fill_level_unclamped_kg(point, at=at) - cap
+    if over <= 0:
+        return Decimal("0")
+    return Decimal(str(round(over, 2)))
+
+
+def overflow_ratio(point: Any, *, at: datetime | None = None) -> float:
+    """Rebose como fracción de la capacidad (>= 0)."""
+    cap = capacity_kg(point)
+    if cap <= 0:
+        return 0.0
+    return round(float(overflow_kg(point, at=at)) / cap, 4)
+
+
+def hours_until_overflow(point: Any, *, at: datetime | None = None) -> float | None:
+    """Horas desde ``at`` hasta superar la capacidad (None si no aplica).
+
+    Complementa ``hours_until_critical``: el rebose ocurre al 100 % de la capacidad.
+    """
+    cap = capacity_kg(point)
+    rate = generation_rate_kg_per_hour(point)
+    if cap <= 0 or rate <= 0:
+        return None
+    at = _as_utc(at) or datetime.now(timezone.utc)
+    last_emptied = _as_utc(getattr(point, "last_emptied_at", None))
+    if last_emptied is not None:
+        elapsed = max(0.0, (at - last_emptied).total_seconds() / 3600.0)
+        base_kg = rate * elapsed
+    else:
+        base_kg = float(stored_fill_level_kg(point))
+    if base_kg >= cap:
+        return 0.0
+    return (cap - base_kg) / rate
 
 
 def hours_until_critical(

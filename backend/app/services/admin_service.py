@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.security import hash_password
+from app.config import settings
 from app.db.models import AuditLog, SystemSettings, User, UserRole
 from app.domain.criticality import normalize_critical_threshold
 from app.schemas.admin import (
@@ -16,6 +17,8 @@ from app.schemas.admin import (
     AdminUser,
     AdminUserCreate,
     AdminUserUpdate,
+    AlgorithmSettings,
+    AlgorithmSettingsUpdate,
     AuditLogEntry,
     IntegrationSettings,
     IntegrationSettingsUpdate,
@@ -57,6 +60,27 @@ DEFAULT_INTEGRATIONS: dict[str, Any] = {
     "telemetry_enabled": True,
 }
 
+# Parámetros del motor; los valores por defecto provienen del entorno (config.py).
+DEFAULT_ALGORITHM: dict[str, Any] = {
+    "aco_alpha": 1.0,
+    "aco_beta": 3.0,
+    "aco_rho": 0.12,
+    "pheromone_q": 1.0,
+    "pheromone_elitist": False,
+    "aco_ants": settings.aco_ants,
+    "aco_iterations": settings.aco_iterations,
+    "aco_patience": settings.aco_patience,
+    "two_opt_passes": 10,
+    "heuristic_at_risk_multiplier": 1.50,
+    "heuristic_critical_multiplier": 1.35,
+    "heuristic_high_multiplier": 1.10,
+    "matrix_critical_factor": 0.70,
+    "matrix_high_factor": 0.90,
+    "overflow_penalty_weight": settings.overflow_penalty_weight,
+    "calibration_default_alpha": settings.calibration_default_alpha,
+    "calibration_window_days": settings.calibration_window_days,
+}
+
 # Cache de proceso del umbral de criticidad (se invalida al actualizar la config).
 _critical_threshold_cache: float | None = None
 
@@ -90,6 +114,7 @@ def _load_settings_blob(db: Session) -> dict[str, Any]:
         return {
             "operational": dict(DEFAULT_OPERATIONAL),
             "integrations": dict(DEFAULT_INTEGRATIONS),
+            "algorithm": dict(DEFAULT_ALGORITHM),
         }
     return json.loads(row.settings_json)
 
@@ -111,6 +136,7 @@ def ensure_default_settings(db: Session) -> None:
             {
                 "operational": dict(DEFAULT_OPERATIONAL),
                 "integrations": dict(DEFAULT_INTEGRATIONS),
+                "algorithm": dict(DEFAULT_ALGORITHM),
             },
         )
 
@@ -313,6 +339,38 @@ def get_integration_settings(db: Session) -> IntegrationSettings:
     ensure_default_settings(db)
     blob = _load_settings_blob(db)
     return IntegrationSettings(**blob.get("integrations", DEFAULT_INTEGRATIONS))
+
+
+def get_algorithm_settings(db: Session) -> AlgorithmSettings:
+    ensure_default_settings(db)
+    blob = _load_settings_blob(db)
+    merged = {**DEFAULT_ALGORITHM, **blob.get("algorithm", {})}
+    return AlgorithmSettings(**merged)
+
+
+def update_algorithm_settings(
+    db: Session,
+    payload: AlgorithmSettingsUpdate,
+    *,
+    actor: User,
+    ip_address: str | None = None,
+) -> AlgorithmSettings:
+    ensure_default_settings(db)
+    blob = _load_settings_blob(db)
+    algorithm = blob.setdefault("algorithm", dict(DEFAULT_ALGORITHM))
+    changes = payload.model_dump(exclude_unset=True)
+    algorithm.update(changes)
+    _save_settings_blob(db, blob)
+    log_audit(
+        db,
+        actor=actor,
+        action="update",
+        resource="settings",
+        resource_id="algorithm",
+        details=changes,
+        ip_address=ip_address,
+    )
+    return AlgorithmSettings(**algorithm)
 
 
 def update_integration_settings(

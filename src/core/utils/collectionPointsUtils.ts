@@ -79,6 +79,17 @@ export function computeCatalogKpis(
     },
   ];
 
+  const totalCapacityKg = points.reduce((sum, point) => sum + (point.capacityL ?? 0), 0);
+  if (totalCapacityKg > 0) {
+    kpis.push({
+      id: 'capacity',
+      title: 'Capacidad total',
+      value: Math.round(totalCapacityKg),
+      unit: 'kg',
+      iconTone: 'green',
+    });
+  }
+
   if (inactive > 0) {
     kpis.push({
       id: 'inactive',
@@ -178,6 +189,21 @@ export interface CollectionPointDetail {
   fillRateFactorOverride?: number | null;
   /** Factor efectivo (override del punto o del sector). */
   fillRateFactor?: number;
+  /** Horas base y efectivas de llenado del contenedor. */
+  estimatedFillHours?: number;
+  effectiveFillHours?: number;
+  /** Tasa de generación efectiva del contenedor (kg/día). */
+  generationRateKgPerDay?: number;
+  /** Tasa absoluta propia del contenedor (kg/día), null si es derivada. */
+  generationRateOverrideKgPerDay?: number | null;
+  /** Población servida por el contenedor (reparto por población de la zona). */
+  servedPopulation?: number | null;
+  /** Rebose actual: kg por encima de la capacidad y su % sobre la capacidad. */
+  overflowKg?: number;
+  overflowPct?: number;
+  /** Calibración con pesos reales recolectados. */
+  lastCalibratedAt?: string | null;
+  calibrationSamples?: number | null;
 }
 
 export interface CollectionPointFillHistory {

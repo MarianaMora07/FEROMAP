@@ -71,6 +71,28 @@ export interface OperationalSettings {
 
 export type OperationalSettingsUpdate = Partial<OperationalSettings>;
 
+export interface AlgorithmSettings {
+  acoAlpha: number;
+  acoBeta: number;
+  acoRho: number;
+  pheromoneQ: number;
+  pheromoneElitist: boolean;
+  acoAnts: number;
+  acoIterations: number;
+  acoPatience: number;
+  twoOptPasses: number;
+  heuristicAtRiskMultiplier: number;
+  heuristicCriticalMultiplier: number;
+  heuristicHighMultiplier: number;
+  matrixCriticalFactor: number;
+  matrixHighFactor: number;
+  overflowPenaltyWeight: number;
+  calibrationDefaultAlpha: number;
+  calibrationWindowDays: number;
+}
+
+export type AlgorithmSettingsUpdate = Partial<AlgorithmSettings>;
+
 export interface AuditLogEntry {
   id: number;
   actorEmail?: string | null;
@@ -106,6 +128,16 @@ export function updateAdminSettings(payload: OperationalSettingsUpdate): Promise
   return apiPatch<OperationalSettings>('/api/v1/admin/settings', payload);
 }
 
+export function fetchAlgorithmSettings(): Promise<AlgorithmSettings> {
+  return apiGet<AlgorithmSettings>('/api/v1/admin/algorithm-settings');
+}
+
+export function updateAlgorithmSettings(
+  payload: AlgorithmSettingsUpdate,
+): Promise<AlgorithmSettings> {
+  return apiPatch<AlgorithmSettings>('/api/v1/admin/algorithm-settings', payload);
+}
+
 export function fetchAdminAuditLog(limit = 50): Promise<AuditLogEntry[]> {
   return apiGet<AuditLogEntry[]>(`/api/v1/admin/audit-log?limit=${limit}`);
 }
@@ -125,4 +157,12 @@ export interface SeedResult {
 
 export function runAdminSeed(): Promise<SeedResult> {
   return apiPost<SeedResult>('/api/v1/admin/seed', {});
+}
+
+/**
+ * Reinicia la base de datos (equivalente a `just db-reset` en datos): borra los
+ * datos operativos y los repuebla desde `data/seeds`.
+ */
+export function resetDatabase(): Promise<SeedResult> {
+  return apiPost<SeedResult>('/api/v1/admin/reset-database', {});
 }

@@ -12,6 +12,9 @@ export interface CollectionPointFormValues {
   maxCapacityKg: number;
   status: 'active' | 'inactive';
   fillRateFactorOverride: number | null;
+  estimatedFillHours: number | null;
+  generationRateKgPerDay: number | null;
+  servedPopulation: number | null;
 }
 
 interface CollectionPointFormModalProps {
@@ -38,6 +41,9 @@ function defaultValues(
     maxCapacityKg: 1100,
     status: 'active',
     fillRateFactorOverride: null,
+    estimatedFillHours: null,
+    generationRateKgPerDay: null,
+    servedPopulation: null,
   };
 }
 
@@ -50,6 +56,9 @@ function valuesFromDetail(detail: CollectionPointDetail): CollectionPointFormVal
     maxCapacityKg: detail.capacityKg,
     status: detail.active ? 'active' : 'inactive',
     fillRateFactorOverride: detail.fillRateFactorOverride ?? null,
+    estimatedFillHours: detail.estimatedFillHours ?? null,
+    generationRateKgPerDay: detail.generationRateOverrideKgPerDay ?? null,
+    servedPopulation: detail.servedPopulation ?? null,
   };
 }
 
@@ -75,6 +84,12 @@ export function CollectionPointFormModal(props: CollectionPointFormModalProps) {
 
   const inheritedFactor = () =>
     props.sectorOptions.find((sector) => sector.id === form().sectorId)?.fillRateFactor ?? 1;
+
+  const selectedSector = () =>
+    props.sectorOptions.find((sector) => sector.id === form().sectorId);
+
+  /** La zona define una tasa: se reparte equitativamente y el campo por contenedor se bloquea. */
+  const zoneManaged = () => selectedSector()?.generationRateKgPerDay != null;
 
   const handleSubmit = async (event: Event) => {
     event.preventDefault();
@@ -188,6 +203,77 @@ export function CollectionPointFormModal(props: CollectionPointFormModalProps) {
           <p class="text-xs text-text-muted">
             &gt; 1 = se llena más rápido. Vacío hereda el factor de la zona (
             {inheritedFactor().toFixed(2)}×).
+          </p>
+        </div>
+
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div class="space-y-1">
+            <TextField
+              label="Tasa de generación (kg/día)"
+              name="generationRateKgPerDay"
+              type="number"
+              min="0"
+              step="1"
+              value={
+                form().generationRateKgPerDay == null
+                  ? ''
+                  : String(form().generationRateKgPerDay)
+              }
+              disabled={zoneManaged() || props.submitting}
+              placeholder={
+                zoneManaged()
+                  ? `Gestionada por zona (${selectedSector()?.generationRateKgPerDay} kg/día)`
+                  : 'Derivar de capacidad y horas'
+              }
+              onInput={(e) => {
+                const raw = e.currentTarget.value;
+                patch({ generationRateKgPerDay: raw === '' ? null : Number(raw) });
+              }}
+            />
+            <p class="text-xs text-text-muted">
+              {zoneManaged()
+                ? 'La zona reparte su tasa equitativamente; se bloquea este valor.'
+                : 'Vacío deriva la tasa de la capacidad y las horas de llenado.'}
+            </p>
+          </div>
+          <div class="space-y-1">
+            <TextField
+              label="Horas base de llenado"
+              name="estimatedFillHours"
+              type="number"
+              min="0.1"
+              step="0.1"
+              value={form().estimatedFillHours == null ? '' : String(form().estimatedFillHours)}
+              disabled={props.submitting}
+              placeholder="72"
+              onInput={(e) => {
+                const raw = e.currentTarget.value;
+                patch({ estimatedFillHours: raw === '' ? null : Number(raw) });
+              }}
+            />
+            <p class="text-xs text-text-muted">
+              Tiempo hasta llenarse sin factor. Vacío mantiene las 72 h por defecto.
+            </p>
+          </div>
+        </div>
+
+        <div class="space-y-1">
+          <TextField
+            label="Población servida (opcional)"
+            name="servedPopulation"
+            type="number"
+            min="0"
+            step="1"
+            value={form().servedPopulation == null ? '' : String(form().servedPopulation)}
+            disabled={props.submitting}
+            placeholder="Habitantes que sirve este contenedor"
+            onInput={(e) => {
+              const raw = e.currentTarget.value;
+              patch({ servedPopulation: raw === '' ? null : Number(raw) });
+            }}
+          />
+          <p class="text-xs text-text-muted">
+            Se usa cuando la zona reparte su tasa por población. Vacío cae a capacidad.
           </p>
         </div>
 

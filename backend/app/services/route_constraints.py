@@ -17,12 +17,17 @@ MORNING_WINDOW = (0, 6 * 3600)  # 06:00–12:00
 AFTERNOON_WINDOW = (6 * 3600, 12 * 3600)  # 12:00–18:00
 
 
-def fill_level_distance_factor(fill_pct: int) -> float:
+def fill_level_distance_factor(
+    fill_pct: int,
+    *,
+    critical_factor: float = 0.70,
+    high_factor: float = 0.90,
+) -> float:
     """Factor multiplicador en matriz heurística (<1 = más atractivo para el ACO)."""
     if fill_pct >= FILL_LEVEL_CRITICAL_PCT:
-        return 0.70
+        return critical_factor
     if fill_pct >= FILL_LEVEL_HIGH_PCT:
-        return 0.90
+        return high_factor
     return 1.0
 
 
@@ -57,6 +62,8 @@ def build_fill_level_heuristic_matrix(
     fill_pcts: list[int],
     *,
     enabled: bool,
+    critical_factor: float = 0.70,
+    high_factor: float = 0.90,
 ) -> list[list[float]]:
     """Reduce costos heurísticos hacia contenedores con llenado alto."""
     if not enabled or not fill_pcts:
@@ -64,7 +71,9 @@ def build_fill_level_heuristic_matrix(
     n = len(dist_matrix)
     heuristic = [row[:] for row in dist_matrix]
     for customer_idx, fill_pct in enumerate(fill_pcts, start=1):
-        factor = fill_level_distance_factor(fill_pct)
+        factor = fill_level_distance_factor(
+            fill_pct, critical_factor=critical_factor, high_factor=high_factor
+        )
         if factor >= 1.0:
             continue
         if customer_idx >= n:

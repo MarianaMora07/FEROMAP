@@ -282,7 +282,96 @@ Respuestas: `200` PNG, `404` tile inexistente, `503` MBTiles no generado.
 
 ### `PATCH /collection-points/{code}`
 
-Campos opcionales: `sectorId`, `latitude`, `longitude`, `maxCapacityKg`, `currentFillLevelKg`, `status`, `priorityBoost`.
+Campos opcionales: `sectorId`, `latitude`, `longitude`, `maxCapacityKg`, `currentFillLevelKg`, `status`, `priorityBoost`, `fillRateFactorOverride`, `estimatedFillHours`, `generationRateKgPerDay`, `servedPopulation`.
+
+### Tasa de generación (zonas y contenedores)
+
+| Método | Ruta | Auth | Descripción |
+|--------|------|------|-------------|
+| GET | `/sectors/fill-rate-factors` | Planificador/Admin | Factores de llenado y generación por zona |
+| GET | `/sectors/summary` | Planificador/Admin | Agregado por zona (contenedores, capacidad, generación y rebose) |
+| PATCH | `/sectors/{id}/fill-rate-factor` | Planificador/Admin | Factor de llenado de la zona |
+| PATCH | `/sectors/{id}/generation-rate` | Planificador/Admin | Tasa de la zona (manual/per cápita) y modo de reparto |
+| POST | `/collection-points/calibrate` | Planificador/Admin | Calibra las tasas con los pesos recolectados |
+
+`PATCH /sectors/{id}/generation-rate` — body parcial:
+
+```json
+{
+  "generationRateKgPerDay": 600,
+  "perCapitaKgPerDay": 0.75,
+  "distributionMode": "capacity"
+}
+```
+
+- **Tasa de la zona** (kg/día): `perCapitaKgPerDay × population` si hay per cápita y
+  población; si no, `generationRateKgPerDay` (manual). `null` limpia el valor.
+- **`distributionMode`**: `equal` (igual para todos), `capacity` (proporcional a la
+  capacidad) o `population` (proporcional a `servedPopulation`; cae a capacidad y luego
+  a iguales si faltan datos).
+- La zona se **redistribuye** al cambiar su config y al crear/eliminar/reasignar contenedores.
+
+`GET /sectors/summary`:
+
+```json
+[
+  {
+    "id": 1,
+    "name": "Unare I",
+    "fillRateFactor": 1.4,
+    "population": 4200,
+    "perCapitaKgPerDay": 0.75,
+    "distributionMode": "capacity",
+    "configuredGenerationRateKgPerDay": 600.0,
+    "generationRateKgPerDay": 3150.0,
+    "containerCount": 4,
+    "totalCapacityKg": 4400.0,
+    "effectiveGenerationRateKgPerDay": 3150.0,
+    "effectiveGenerationRateKgPerHour": 131.25,
+    "avgFillPct": 52,
+    "criticalCount": 1,
+    "overflowCount": 0
+  }
+]
+```
+
+`POST /collection-points/calibrate` — body opcional `{ "days": 30, "sectorId": 1, "alpha": 0.4 }`.
+Estima la tasa por contenedor con EWMA de las muestras `peso / horas` entre
+recolecciones consecutivas (pesos reales de `route_waypoints.collected_weight_kg`) y
+la escribe en `generationRateKgPerDay`. Omite contenedores cuya zona gestiona la tasa.
+
+```json
+{
+  "windowDays": 30,
+  "alpha": 0.4,
+  "calibratedCount": 12,
+  "skippedCount": 3,
+  "calibrated": [
+    { "code": "CNT-001", "samples": 4, "previousRateKgPerDay": null, "rateKgPerDay": 360.0 }
+  ],
+  "skipped": [{ "code": "CNT-002", "reason": "zone_managed" }]
+}
+```
+
+En el detalle de un contenedor (`GET /collection-points/{code}`) se exponen
+`estimatedFillHours`, `effectiveFillHours`, `generationRateKgPerDay` (efectiva),
+`generationRateOverrideKgPerDay` (tasa propia, `null` si es derivada), `servedPopulation`,
+`overflowKg`, `overflowPct`, `lastCalibratedAt` y `calibrationSamples`.
+
+Precedencia de la tasa efectiva: tasa del contenedor (`generationRateKgPerDay` en el
+contenedor) > capacidad ÷ horas base ajustadas por el factor. Una tasa por contenedor y
+una tasa gestionada por la zona no coexisten (409/422 si se intentan definir ambas).
+
+### Rebose y penalización en el objetivo
+
+El **rebose** (`overflowKg = llenado proyectado sin recortar − capacidad`) se expone por
+contenedor y se cuenta por zona (`overflowCount`). El motor ACO puede incluir una
+**penalización por rebose** en su función objetivo: cada contenedor servido después de
+su hora de desborde suma `kg rebosados × OVERFLOW_PENALTY_WEIGHT` al costo de la
+solución (los no atendidos rebosan hasta el fin de jornada). La distancia reportada sigue
+siendo pura (sin penalización). El peso se configura desde la pestaña *Parámetros del
+algoritmo* en `/optimization` (`PATCH /admin/algorithm-settings`); por defecto está
+desactivada (`overflowPenaltyWeight = 0`).
 
 ---
 
@@ -937,6 +1026,40 @@ Incluye `workStart` / `workEnd` (default `06:00` / `18:00`), coordenadas de dep�
 
 Actualiza parcialmente la configuración operativa (incl. coordenadas del vertedero y tiempo de descarga).
 
+### `GET /admin/algorithm-settings` · `PATCH /admin/algorithm-settings`
+
+Parámetros del motor de optimización, **editables por planificador/admin** (pestaña *Parámetros del algoritmo* en `/optimization`).
+
+```json
+{
+  "acoAlpha": 1.0,
+  "acoBeta": 3.0,
+  "acoRho": 0.12,
+  "pheromoneQ": 1.0,
+  "pheromoneElitist": false,
+  "acoAnts": 8,
+  "acoIterations": 20,
+  "acoPatience": 5,
+  "twoOptPasses": 10,
+  "heuristicAtRiskMultiplier": 1.5,
+  "heuristicCriticalMultiplier": 1.35,
+  "heuristicHighMultiplier": 1.1,
+  "matrixCriticalFactor": 0.7,
+  "matrixHighFactor": 0.9,
+  "overflowPenaltyWeight": 0.0,
+  "calibrationDefaultAlpha": 0.4,
+  "calibrationWindowDays": 30
+}
+```
+
+- **ACO core:** `acoAlpha` (peso feromona α), `acoBeta` (peso distancia β), `acoRho` (evaporación), `pheromoneQ` (escala de depósito Q), `pheromoneElitist` (refuerza además la mejor solución global), `acoAnts`, `acoIterations`, `acoPatience`, `twoOptPasses` (mejora local 2-opt).
+
+  Fórmulas: `P(c) = τ^α · (1/d)^β · b(c) / Σ_k τ^α · (1/d)^β · b(k)` y `τ ← (1−ρ)·τ + Q / C`.
+- **Heurístico de prioridad por llenado:** `heuristicAtRiskMultiplier` (riesgo de calendario), `heuristicCriticalMultiplier` (≥ 80 %), `heuristicHighMultiplier` (≥ 60 %) sesgan la elección de hormiga; `matrixCriticalFactor` / `matrixHighFactor` reducen el costo en la matriz heurística.
+- **Generación:** `overflowPenaltyWeight` (m/kg rebosado; 0 = desactivada), `calibrationDefaultAlpha` / `calibrationWindowDays` (defaults de la calibración).
+- Actúan como **valores por defecto** de la corrida: si la petición de optimización especifica `acoAnts`/`acoIterations`, esos mandan; el resto siempre se toma de aquí.
+- Persistidos en `system_settings` (sección `algorithm`) con auditoría; por defecto toman los valores del entorno / constantes del motor.
+
 ### `GET /admin/integrations`
 
 Configuración de integraciones (GIS, telemetría). Disponible en API; UI en próxima fase.
@@ -948,6 +1071,18 @@ Actualiza integraciones.
 ### `GET /admin/audit-log?limit=50`
 
 Registro de auditoría de acciones administrativas.
+
+### `POST /admin/seed`
+
+Pobla la base desde `data/seeds/*.json` (borra y repuebla los datos operativos).
+
+### `POST /admin/reset-database`
+
+**Reinicia la base de datos: equivalente a `just db-reset` (parte de datos).** Borra los
+datos operativos y los repuebla desde `data/seeds`. No recrea el esquema: las migraciones
+se aplican al arrancar el contenedor. Pensado para la UI (botón *Reiniciar base de datos*
+en Administración) sin escribir comandos. Tras reiniciar, las sesiones se invalidan y hay
+que volver a iniciar sesión. Auditado con `action="reset"`, `resource="database"`.
 
 ---
 

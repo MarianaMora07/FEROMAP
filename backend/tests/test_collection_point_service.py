@@ -396,6 +396,74 @@ def test_list_sector_options_includes_fill_rate_factor():
     options = list_sector_options(db)
 
     assert options == [
-        {"id": 1, "name": "Unare I", "fillRateFactor": 1.5},
-        {"id": 2, "name": "Unare II", "fillRateFactor": 1.0},
+        {
+            "id": 1,
+            "name": "Unare I",
+            "fillRateFactor": 1.5,
+            "generationRateKgPerDay": None,
+            "perCapitaKgPerDay": None,
+            "population": None,
+            "distributionMode": "equal",
+        },
+        {
+            "id": 2,
+            "name": "Unare II",
+            "fillRateFactor": 1.0,
+            "generationRateKgPerDay": None,
+            "perCapitaKgPerDay": None,
+            "population": None,
+            "distributionMode": "equal",
+        },
     ]
+
+
+def test_create_rejects_container_rate_when_zone_managed():
+    db = MagicMock()
+    db.scalar.return_value = None
+    db.get.return_value = SimpleNamespace(
+        id=1, deleted_at=None, generation_rate_kg_per_day=Decimal("600.00")
+    )
+
+    payload = CollectionPointCreate(
+        sector_id=1,
+        code="CNT-NEW",
+        latitude=8.298,
+        longitude=-62.724,
+        max_capacity_kg=1000,
+        generation_rate_kg_per_day=200,
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        create_collection_point(db, payload)
+
+    assert exc.value.status_code == 422
+
+
+@patch("app.services.collection_point_service._persist_point")
+def test_update_collection_point_sets_generation_rate(mock_persist):
+    db = MagicMock()
+    point = _point("CNT-001")
+    db.scalar.return_value = point
+    db.get.return_value = SimpleNamespace(id=1, deleted_at=None, generation_rate_kg_per_day=None)
+    mock_persist.return_value = {"code": "CNT-001"}
+
+    update_collection_point(db, "CNT-001", CollectionPointUpdate(generation_rate_kg_per_day=250))
+
+    assert float(point.generation_rate_kg_per_day) == pytest.approx(250.0)
+    mock_persist.assert_called_once()
+
+
+@patch("app.services.collection_point_service._persist_point")
+def test_update_collection_point_rejects_rate_when_zone_managed(mock_persist):
+    db = MagicMock()
+    point = _point("CNT-001")
+    db.scalar.return_value = point
+    db.get.return_value = SimpleNamespace(
+        id=1, deleted_at=None, generation_rate_kg_per_day=Decimal("600.00")
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        update_collection_point(db, "CNT-001", CollectionPointUpdate(generation_rate_kg_per_day=100))
+
+    assert exc.value.status_code == 422
+    mock_persist.assert_not_called()

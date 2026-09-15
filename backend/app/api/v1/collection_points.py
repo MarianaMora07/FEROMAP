@@ -1,8 +1,13 @@
 from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from app.api.deps import CurrentUser, DbSession, PlannerOrAdmin
-from app.schemas.collection_point import CollectionPointCreate, CollectionPointUpdate
+from app.schemas.collection_point import (
+    CollectionPointCalibrationRequest,
+    CollectionPointCreate,
+    CollectionPointUpdate,
+)
 from app.schemas.visit_schedule import VisitScheduleUpsert
+from app.services.calibration_service import calibrate_collection_points
 from app.services.collection_point_service import (
     collection_point_detail,
     collection_point_fill_history,
@@ -29,6 +34,19 @@ def get_collection_points_summary(db: DbSession, current_user: CurrentUser):
 @router.get("/collection-points/sector-options")
 def get_collection_point_sector_options(db: DbSession, _user: PlannerOrAdmin):
     return list_sector_options(db)
+
+
+@router.post("/collection-points/calibrate")
+def post_collection_points_calibrate(
+    db: DbSession,
+    _user: PlannerOrAdmin,
+    payload: CollectionPointCalibrationRequest | None = None,
+):
+    """Calibra la tasa de generación de cada contenedor con los pesos recolectados."""
+    body = payload or CollectionPointCalibrationRequest()
+    return calibrate_collection_points(
+        db, days=body.days, alpha=body.alpha, sector_id=body.sector_id
+    )
 
 
 @router.get("/collection-points/optimization-context")
