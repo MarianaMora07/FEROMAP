@@ -5,30 +5,33 @@ import { ApiError } from '../../core/api/client';
 import {
   cancelCalibrationJob,
   fetchAcoSensitivity,
+  fetchAcoValidation,
   fetchCalibrationHistory,
   fetchCalibrationJob,
   fetchCalibrationRun,
   fetchObjectiveSweep,
   startCalibrationJob,
   type AcoSensitivityPayload,
-  type CalibrationCacheState,
+  type AcoValidationPayload,
   type CalibrationHistoryPage,
   type CalibrationHistoryRun,
   type CalibrationJobSnapshot,
-  type CalibrationSweep,
   type ObjectiveSweepPayload,
 } from '../../core/api/benchmark';
 import { fetchScenarios } from '../../core/api/simulation';
+import { updateAlgorithmSettings } from '../../core/api/admin';
 import { useLocale } from '../../core/i18n/solid';
 import type { Scenario } from '../../data/types/simulation';
 import { SettingsShell } from './SettingsShell';
+import { AcoValidationPanel } from './AcoValidationPanel';
 import { CalibrationAdvicePanel } from './CalibrationAdvicePanel';
-import { CalibrationFreshnessBanner } from './CalibrationFreshnessBanner';
 import { CalibrationHistoryPanel } from './CalibrationHistoryPanel';
 import { CalibrationObjectiveResults } from './CalibrationObjectiveResults';
 import { CalibrationProgress } from './CalibrationProgress';
 import { CalibrationResults } from './CalibrationResults';
 import { CalibrationRunControls } from './CalibrationRunControls';
+import { advisorProfileParams, isStandardProfile } from './calibrationAdvisorUx';
+import { profileLabel } from './acoValidationUx';
 import {
   CALIBRATION_MAX_WAIT_MS,
   CALIBRATION_POLL_MS,
@@ -38,6 +41,7 @@ import {
   pendingSnapshot,
   viewStateFor,
   wasServedFromCache,
+  type CalibrationResultTab,
   type CalibrationRunConfig,
 } from './calibrationRunUx';
 
@@ -64,14 +68,21 @@ export default function CalibrationPage() {
   const [scenarios, setScenarios] = createSignal<Scenario[]>([]);
   const [sensitivity, setSensitivity] = createSignal<AcoSensitivityPayload | undefined>();
   const [objective, setObjective] = createSignal<ObjectiveSweepPayload | undefined>();
+  const [validation, setValidation] = createSignal<AcoValidationPayload | undefined>();
   const [loadingCache, setLoadingCache] = createSignal(true);
   const [job, setJob] = createSignal<CalibrationJobSnapshot | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   const [cancelled, setCancelled] = createSignal(false);
   const [reusedCache, setReusedCache] = createSignal(false);
-  const [tab, setTab] = createSignal<CalibrationSweep>('sensitivity');
+  const [validating, setValidating] = createSignal(false);
+  const [applying, setApplying] = createSignal(false);
+  const [applied, setApplied] = createSignal<string | null>(null);
+  const [applyError, setApplyError] = createSignal<string | null>(null);
+  const [tab, setTab] = createSignal<CalibrationResultTab>('sensitivity');
   const [history, setHistory] = createSignal<CalibrationHistoryPage | null>(null);
   const [historyRun, setHistoryRun] = createSignal<CalibrationHistoryRun | null>(null);
+  /** Corrida de validación abierta desde el historial (vive en su panel, no en las pestañas). */
+  const [validationRun, setValidationRun] = createSignal<CalibrationHistoryRun | null>(null);
 
   let pollTimer: number | undefined;
   let waitStartedAt = 0;
@@ -94,7 +105,7 @@ export default function CalibrationPage() {
 
   const loadCache = async () => {
     setLoadingCache(true);
-    const [sens, obj] = await Promise.all([
+    const [sens, obj, val] = await Promise.all([
       fetchAcoSensitivity().catch((cause: unknown) => {
         if (!isMissingCache(cause)) setError(errorMessage(cause, 'No se pudo leer la sensibilidad.'));
         return undefined;
@@ -104,9 +115,15 @@ export default function CalibrationPage() {
           setError(errorMessage(cause, 'No se pudo leer el barrido de pesos.'));
         return undefined;
       }),
+      fetchAcoValidation().catch((cause: unknown) => {
+        if (!isMissingCache(cause))
+          setError(errorMessage(cause, 'No se pudo leer la validación de la combinación.'));
+        return undefined;
+      }),
     ]);
     setSensitivity(sens);
     setObjective(obj);
+    setValidation(val);
     if (sens) setTab((current) => (obj ? current : 'sensitivity'));
     else if (obj) setTab('objective');
     setLoadingCache(false);
@@ -125,7 +142,11 @@ export default function CalibrationPage() {
     if (snapshot.status === 'completed') {
       setReusedCache(wasServedFromCache(snapshot, config()));
       setHistoryRun(null);
-      setTab((snapshot.sweep as CalibrationSweep | null) ?? config().mode);
+      setValidationRun(null);
+      // La validación no tiene pestaña de resultados: se muestra en su propio panel.
+      if (snapshot.sweep === 'sensitivity' || snapshot.sweep === 'objective') {
+        setTab(snapshot.sweep);
+      }
       await Promise.all([loadCache(), loadHistory()]);
       return;
     }
@@ -174,13 +195,6 @@ export default function CalibrationPage() {
     }
   };
 
-  /** Recalcula el barrido visible ignorando la caché (para sellarla de nuevo). */
-  const recompute = () => {
-    setConfig((current) => ({ ...current, mode: tab(), reuseCache: false }));
-    setHistoryRun(null);
-    void run();
-  };
-
   const cancel = async () => {
     const current = job();
     if (!current) return;
@@ -191,17 +205,52 @@ export default function CalibrationPage() {
     }
   };
 
+  /** Valida la combinación recomendada contra el perfil estándar (2 corridas). */
+  const validate = async () => {
+    const payload = sensitivity();
+    if (!payload) return;
+    setError(null);
+    setCancelled(false);
+    setReusedCache(false);
+    setValidationRun(null);
+    setValidating(true);
+    stopPolling();
+    try {
+      const { jobId } = await startCalibrationJob('validation', {
+        scenarioId: config().scenarioId,
+        seed: config().seed,
+        refresh: true,
+        profile: advisorProfileParams(payload),
+      });
+      waitStartedAt = Date.now();
+      setJob(pendingSnapshot(jobId, 'validation'));
+      pollTimer = window.setInterval(() => void poll(jobId), CALIBRATION_POLL_MS);
+      await poll(jobId);
+    } catch (cause) {
+      setError(errorMessage(cause, tr('calibration.failed')));
+    } finally {
+      setValidating(false);
+    }
+  };
+
   const viewHistoryRun = async (runId: string) => {
     try {
       const run = await fetchCalibrationRun(runId);
+      if (run.sweep === 'validation') {
+        // La validación no tiene pestaña de resultados propia.
+        setHistoryRun(null);
+        setValidationRun(run);
+        return;
+      }
+      setValidationRun(null);
       setHistoryRun(run);
-      setTab(run.sweep ?? 'sensitivity');
+      if (run.sweep === 'sensitivity' || run.sweep === 'objective') setTab(run.sweep);
     } catch (cause) {
       setError(errorMessage(cause, 'No se pudo abrir la corrida histórica.'));
     }
   };
 
-  const selectTab = (next: CalibrationSweep) => {
+  const selectTab = (next: CalibrationResultTab) => {
     setHistoryRun(null);
     setTab(next);
   };
@@ -214,12 +263,65 @@ export default function CalibrationPage() {
   const state = createMemo(() =>
     viewStateFor({ hasResults: hasResults(), job: job(), error: error() }),
   );
-  const freshness = createMemo<CalibrationCacheState | undefined>(() =>
-    historyRun()
-      ? historyRun()!.cacheState
-      : (currentPayload() as { cacheState?: CalibrationCacheState } | undefined)?.cacheState,
-  );
   const retry = () => void run();
+
+  /**
+   * Escribe la combinación recomendada en la configuración del motor
+   * (`Configuración → Algoritmo`), que es lo que aplica la siguiente optimización.
+   */
+  const applyRecommended = async () => {
+    const payload = sensitivity();
+    if (!payload) return;
+    setApplyError(null);
+    setApplied(null);
+    setApplying(true);
+    try {
+      const params = advisorProfileParams(payload);
+      const updated = await updateAlgorithmSettings({
+        acoAnts: params.acoAnts,
+        acoIterations: params.acoIterations,
+        acoAlpha: params.acoAlpha,
+        acoBeta: params.acoBeta,
+        acoRho: params.acoRho,
+        pheromoneQ: params.pheromoneQ,
+      });
+      // Se confirma con lo que el motor guardó, no con lo que se pidió.
+      setApplied(
+        `${tr('calibration.advice.applied')} ${profileLabel({
+          acoAnts: updated.acoAnts,
+          acoIterations: updated.acoIterations,
+          acoAlpha: updated.acoAlpha,
+          acoBeta: updated.acoBeta,
+          acoRho: updated.acoRho,
+          pheromoneQ: updated.pheromoneQ,
+        })}`,
+      );
+    } catch (cause) {
+      setApplyError(errorMessage(cause, tr('calibration.advice.applyError')));
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  /** Combinación que la vista recomienda; `null` si ya coincide con el perfil estándar. */
+  const recommendedProfile = createMemo(() => {
+    const payload = sensitivity();
+    if (!payload) return null;
+    const params = advisorProfileParams(payload);
+    return isStandardProfile(params) ? null : params;
+  });
+
+  /** Validación a mostrar: la abierta desde el historial o la vigente en caché. */
+  const shownValidation = createMemo<AcoValidationPayload | undefined>(() => {
+    const run = validationRun();
+    if (!run) return validation();
+    return {
+      ...(run.payload as AcoValidationPayload),
+      instanceFingerprint: run.instanceFingerprint,
+      cacheState: run.cacheState,
+      stale: run.stale,
+    };
+  });
 
   return (
     <SettingsShell active="calibration" testId="calibration-page">
@@ -286,17 +388,25 @@ export default function CalibrationPage() {
       </Show>
 
       <Show when={!loadingCache()}>
-        <Show when={!historyRun() && currentPayload()}>
-          <CalibrationFreshnessBanner
-            state={freshness()}
-            fingerprint={sensitivity()?.instanceFingerprint ?? objective()?.instanceFingerprint}
-            onRecompute={recompute}
-            disabled={state() === 'ejecutando'}
+        <Show when={sensitivity() || objective()}>
+          <CalibrationAdvicePanel
+            sensitivity={sensitivity()}
+            objective={objective()}
+            onApply={recommendedProfile() ? () => void applyRecommended() : undefined}
+            applying={applying()}
+            appliedMessage={applied()}
+            applyError={applyError()}
           />
         </Show>
 
-        <Show when={sensitivity() || objective()}>
-          <CalibrationAdvicePanel sensitivity={sensitivity()} objective={objective()} />
+        <Show when={sensitivity()}>
+          <AcoValidationPanel
+            validation={shownValidation()}
+            profile={recommendedProfile()}
+            running={validating()}
+            disabled={state() === 'ejecutando'}
+            onValidate={() => void validate()}
+          />
         </Show>
 
         <div class="flex flex-wrap gap-1 border-b border-border dark:border-dark-border">
@@ -345,9 +455,12 @@ export default function CalibrationPage() {
 
         <CalibrationHistoryPanel
           history={history()}
-          viewing={historyRun()}
+          viewing={historyRun() ?? validationRun()}
           onView={(runId) => void viewHistoryRun(runId)}
-          onBack={() => setHistoryRun(null)}
+          onBack={() => {
+            setHistoryRun(null);
+            setValidationRun(null);
+          }}
         />
       </Show>
     </SettingsShell>

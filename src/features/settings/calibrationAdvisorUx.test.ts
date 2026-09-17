@@ -5,7 +5,7 @@ import type {
   ObjectiveSweepPayload,
   ObjectiveSweepRun,
 } from '../../core/api/benchmark';
-import { advisorAlternatives, advisorOperatingPoint, advisorProfile, calibrationAdvice } from './calibrationAdvisorUx';
+import { advisorAlternatives, advisorOperatingPoint, advisorProfile, advisorProfileParams, calibrationAdvice, isStandardProfile, STANDARD_ACO_PARAMS } from './calibrationAdvisorUx';
 
 function sensRun(
   axis: AcoSensitivityRun['axis'],
@@ -156,6 +156,22 @@ describe('recomendación de calibración (derivada de la evidencia)', () => {
     ]);
   });
 
+  it('marca el eje más sensible y el nivel que logró la mejor distancia', () => {
+    const profile = advisorProfile(sensitivity)!;
+    const byAxis = Object.fromEntries(profile.picks.map((pick) => [pick.axis, pick]));
+
+    // β mueve la distancia (±52,9 km) y su nivel β 5 es el mejor medido (184,7 km).
+    expect(profile.picks.filter((pick) => pick.sensitive).map((pick) => pick.axis)).toEqual(['beta']);
+    expect(byAxis['beta']?.bestMeasured).toBe(true);
+    // Los demás ejes que sí se mueven no son ni lo uno ni lo otro.
+    expect(byAxis['alpha']?.sensitive).toBe(false);
+    expect(byAxis['alpha']?.bestMeasured).toBe(false);
+    expect(byAxis['rho']?.bestMeasured).toBe(false);
+    // Un eje insensible no propone nivel, así que nunca queda como «mejor medido».
+    expect(byAxis['iterations']?.bestMeasured).toBe(false);
+    expect(byAxis['q']?.bestMeasured).toBe(false);
+  });
+
   it('avisa del early-stop de la mejor corrida', () => {
     expect(advisorProfile(sensitivity)?.earlyStop).toBe(true);
     const withoutEarlyStop = { ...sensitivity, runs: sensitivity.runs.map((run) => ({ ...run, acoStoppedEarly: false })) };
@@ -222,5 +238,36 @@ describe('recomendación de calibración (derivada de la evidencia)', () => {
     expect(empty.profile).toBeNull();
     expect(empty.operating).toBeNull();
     expect(empty.acceptanceOk).toBe('—');
+  });
+
+  it('deriva la combinación a validar: mejor nivel de cada eje no estable', () => {
+    const params = advisorProfileParams(sensitivity);
+
+    // α, β, ρ, hormigas mueven la distancia → se propone su mejor nivel medido.
+    expect(params).toEqual({
+      acoAnts: 8,
+      acoIterations: 20,
+      acoAlpha: 2,
+      acoBeta: 5,
+      acoRho: 0.3,
+      pheromoneQ: 1,
+    });
+    // Los ejes planos (iteraciones, Q) se quedan en el valor estándar.
+    expect(params.acoIterations).toBe(STANDARD_ACO_PARAMS.acoIterations);
+    expect(params.pheromoneQ).toBe(STANDARD_ACO_PARAMS.pheromoneQ);
+    expect(isStandardProfile(params)).toBe(false);
+  });
+
+  it('reconoce cuando la combinación recomendada ya es el perfil estándar', () => {
+    // Todos los ejes planos: no hay nada que desviar ni que validar.
+    const flat: AcoSensitivityPayload = {
+      ...sensitivity,
+      runs: sensitivity.runs.map((run) => ({ ...run, distanceKmOptimized: 190.8 })),
+    };
+
+    const params = advisorProfileParams(flat);
+
+    expect(params).toEqual(STANDARD_ACO_PARAMS);
+    expect(isStandardProfile(params)).toBe(true);
   });
 });

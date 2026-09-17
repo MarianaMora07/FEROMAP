@@ -28,6 +28,14 @@ export interface CalibrationRunConfig {
 }
 
 /**
+ * Pestañas de resultados con payload propio (`sensitivity` y `objective`).
+ *
+ * La validación **no** es una pestaña: tiene su panel dentro de la recomendación, porque
+ * su pregunta («¿rinde la combinación?») solo tiene sentido junto al perfil sugerido.
+ */
+export type CalibrationResultTab = 'sensitivity' | 'objective';
+
+/**
  * Línea de la «lectura automática» de un barrido.
  *
  * `detail` solo lleva **datos ya formateados** (números, etiquetas del payload): nunca

@@ -1,14 +1,20 @@
 import { For, Show, createMemo } from 'solid-js';
 import { A } from '@solidjs/router';
-import { Card, CardHeader } from '../../design-system/components';
+import { Badge, Button, Card, CardHeader } from '../../design-system/components';
 import { Lightbulb } from 'lucide-solid';
 import { useLocale } from '../../core/i18n/solid';
 import type { AcoSensitivityPayload, ObjectiveSweepPayload } from '../../core/api/benchmark';
-import { calibrationAdvice } from './calibrationAdvisorUx';
+import { advisorProfileParams, calibrationAdvice } from './calibrationAdvisorUx';
+import { profileLabel } from './acoValidationUx';
 
 interface CalibrationAdvicePanelProps {
   sensitivity?: AcoSensitivityPayload;
   objective?: ObjectiveSweepPayload;
+  /** Aplica la combinación recomendada al motor; ausente = no hay nada que aplicar. */
+  onApply?: () => void;
+  applying?: boolean;
+  appliedMessage?: string | null;
+  applyError?: string | null;
 }
 
 /**
@@ -37,26 +43,76 @@ export function CalibrationAdvicePanel(props: CalibrationAdvicePanelProps) {
             {(profile) => (
               <div data-testid="calibration-advice-profile">
                 <h4 class="text-sm font-semibold text-text-primary">{tr('calibration.advice.profile')}</h4>
-                <ul class="mt-2 space-y-1 text-sm text-text-secondary">
+
+                <Show when={props.sensitivity}>
+                  {(payload) => (
+                    <div class="mt-2 flex flex-wrap items-center gap-2">
+                      <span class="text-xs text-text-muted">
+                        {tr('calibration.advice.profileParams')}
+                      </span>
+                      <span
+                        class="rounded-md border border-border bg-app px-2 py-1 font-mono text-sm text-text-primary dark:border-dark-border"
+                        data-testid="calibration-advice-combination"
+                      >
+                        {profileLabel(advisorProfileParams(payload()))}
+                      </span>
+                    </div>
+                  )}
+                </Show>
+
+                <div
+                  class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2"
+                  data-testid="calibration-advice-picks"
+                >
                   <For each={profile().picks}>
                     {(pick) => (
-                      <li>
-                        <span class="font-medium text-text-primary">{tr(pick.labelKey, pick.axis)}</span>
-                        {' → '}
+                      <div
+                        class={`rounded-lg border p-3 ${
+                          pick.sensitive
+                            ? 'border-amber-300 bg-amber-50/40 dark:border-amber-500/40 dark:bg-amber-500/5'
+                            : 'border-border bg-app dark:border-dark-border'
+                        }`}
+                        data-testid={`calibration-advice-pick-${pick.axis}`}
+                      >
+                        <p class="text-xs font-medium text-text-muted">
+                          {tr(pick.labelKey, pick.axis)}
+                        </p>
+
                         <Show
                           when={!pick.keep}
-                          fallback={<span class="text-text-muted">{tr('calibration.advice.keepLevel')}</span>}
+                          fallback={
+                            <p class="mt-1 text-sm text-text-muted">
+                              {tr('calibration.advice.keepLevel')}
+                            </p>
+                          }
                         >
-                          <span class="font-mono">{pick.level}</span>
-                          {` · ${pick.km?.toFixed(1)} km`}
+                          <p class="mt-1 font-mono text-xl font-semibold text-text-primary">
+                            {pick.level}
+                          </p>
+                          <p class="text-sm text-text-secondary">{`${pick.km?.toFixed(1)} km`}</p>
                           <Show when={pick.amplitudeKm !== null && pick.amplitudeKm > 0}>
-                            <span class="text-text-muted">{` (±${pick.amplitudeKm?.toFixed(1)} km · ${pick.amplitudePct})`}</span>
+                            <p class="text-xs text-text-muted">{`±${pick.amplitudeKm?.toFixed(
+                              1,
+                            )} km · ${pick.amplitudePct}`}</p>
                           </Show>
                         </Show>
-                      </li>
+
+                        <Show when={pick.bestMeasured || pick.sensitive}>
+                          <div class="mt-2 flex flex-wrap gap-1">
+                            <Show when={pick.bestMeasured}>
+                              <Badge variant="success">{tr('calibration.advice.badge.best')}</Badge>
+                            </Show>
+                            <Show when={pick.sensitive}>
+                              <Badge variant="warning">
+                                {tr('calibration.advice.badge.sensitive')}
+                              </Badge>
+                            </Show>
+                          </div>
+                        </Show>
+                      </div>
                     )}
                   </For>
-                </ul>
+                </div>
 
                 <Show when={profile().earlyStop}>
                   <p class="mt-2 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
@@ -130,15 +186,40 @@ export function CalibrationAdvicePanel(props: CalibrationAdvicePanelProps) {
         </div>
       </Show>
 
-      <div class="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 dark:border-dark-border">
-        <p class="text-xs text-text-muted">{tr('calibration.advice.scope')}</p>
-        <A
-          href="/settings"
-          class="text-xs font-medium text-fero-blue hover:underline"
-          data-testid="calibration-advice-settings-link"
-        >
-          {tr('calibration.advice.editInSettings')}
-        </A>
+      <div class="mt-4 border-t border-border pt-3 dark:border-dark-border">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <p class="text-xs text-text-muted">{tr('calibration.advice.scope')}</p>
+          <div class="flex flex-wrap items-center gap-3">
+            <Button
+              variant="primary"
+              size="sm"
+              data-testid="calibration-apply-recommended"
+              disabled={!props.onApply || props.applying}
+              loading={props.applying}
+              onClick={() => props.onApply?.()}
+            >
+              {tr('calibration.advice.apply')}
+            </Button>
+            <A
+              href="/settings"
+              class="text-xs font-medium text-fero-blue hover:underline"
+              data-testid="calibration-advice-settings-link"
+            >
+              {tr('calibration.advice.editInSettings')}
+            </A>
+          </div>
+        </div>
+
+        <Show when={props.appliedMessage || props.applyError}>
+          <p
+            class={`mt-2 text-xs ${
+              props.applyError ? 'text-red-600' : 'text-fero-green-dark'
+            }`}
+            data-testid="calibration-apply-feedback"
+          >
+            {props.applyError ?? props.appliedMessage}
+          </p>
+        </Show>
       </div>
     </Card>
   );

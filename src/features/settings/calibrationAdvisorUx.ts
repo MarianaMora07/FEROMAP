@@ -8,13 +8,16 @@
 
 import type {
   AcoSensitivityPayload,
+  AcoValidationParams,
   CalibrationAxis,
   ObjectiveSweepPayload,
   ObjectiveSweepRun,
 } from '../../core/api/benchmark';
 import {
   amplitudeLabel,
+  bestRun,
   levelLabel,
+  mostSensitiveAxis,
   summarizeAxes,
   type CalibrationAxisSummary,
 } from './calibrationSensitivityUx';
@@ -37,6 +40,10 @@ export interface AdvisorAxisPick {
   amplitudeKm: number | null;
   amplitudePct: string;
   cpuSeconds: number | null;
+  /** Eje con mayor amplitud de distancia: el que de verdad importa. */
+  sensitive: boolean;
+  /** El nivel propuesto es el que logró la mejor distancia medida de todo el barrido. */
+  bestMeasured: boolean;
 }
 
 export interface AdvisorProfile {
@@ -78,7 +85,10 @@ export interface CalibrationAdvice {
   acceptanceOk: string;
 }
 
-function axisPick(summary: CalibrationAxisSummary): AdvisorAxisPick | null {
+function axisPick(
+  summary: CalibrationAxisSummary,
+  flags: { sensitive: boolean; bestMeasured: boolean },
+): AdvisorAxisPick | null {
   const best = summary.ranked[0];
   if (!best) return null;
   const keep = summary.stable;
@@ -91,6 +101,8 @@ function axisPick(summary: CalibrationAxisSummary): AdvisorAxisPick | null {
     amplitudeKm: summary.amplitudeKm,
     amplitudePct: amplitudeLabel(summary),
     cpuSeconds: best.computationSeconds ?? null,
+    sensitive: flags.sensitive,
+    bestMeasured: flags.bestMeasured,
   };
 }
 
@@ -98,19 +110,29 @@ function axisPick(summary: CalibrationAxisSummary): AdvisorAxisPick | null {
 export function advisorProfile(payload: AcoSensitivityPayload): AdvisorProfile | null {
   if (!payload.runs?.length) return null;
   const summaries = summarizeAxes(payload.runs);
-  const picks = summaries.map(axisPick).filter((pick): pick is AdvisorAxisPick => pick !== null);
+  const sensitive = mostSensitiveAxis(summaries);
+  // Mismo número que la «lectura automática»: una sola noción de «mejor medido».
+  const bestKm = bestRun(payload.runs)?.distanceKmOptimized ?? null;
+
+  const picks = summaries
+    .map((summary) => {
+      const candidateKm = summary.stable
+        ? null
+        : ((summary.ranked[0]?.distanceKmOptimized as number | undefined) ?? null);
+      return axisPick(summary, {
+        sensitive: sensitive?.axis === summary.axis,
+        bestMeasured: candidateKm !== null && bestKm !== null && candidateKm === bestKm,
+      });
+    })
+    .filter((pick): pick is AdvisorAxisPick => pick !== null);
   if (!picks.length) return null;
 
-  const measured = picks.filter((pick) => pick.km !== null) as (AdvisorAxisPick & { km: number })[];
-  const best = measured.length
-    ? measured.reduce((min, pick) => (pick.km < min.km ? pick : min))
-    : null;
   const reference = payload.runs.find((run) => typeof run.distanceKmBaseline === 'number');
 
   return {
     picks,
     earlyStop: payload.runs.some((run) => run.acoStoppedEarly === true),
-    bestKm: best?.km ?? null,
+    bestKm,
     referenceKm: reference?.distanceKmBaseline ?? null,
   };
 }
@@ -230,4 +252,58 @@ export function calibrationAdvice(input: {
     avoid,
     acceptanceOk: summary ? `${summary.ok}/${summary.total}` : '—',
   };
+}
+
+/** Perfil estándar del motor (12×20 · α1 β3 ρ0.12 Q1); espejo de `STANDARD_PARAMS`. */
+export const STANDARD_ACO_PARAMS: AcoValidationParams = {
+  acoAnts: 12,
+  acoIterations: 20,
+  acoAlpha: 1,
+  acoBeta: 3,
+  acoRho: 0.12,
+  pheromoneQ: 1,
+};
+
+/**
+ * Combinación concreta que la vista recomienda, lista para validar contra el estándar.
+ *
+ * Repite la regla del panel: mejor nivel medido de cada eje **no estable**; los ejes
+ * estables (amplitud ≤ 0,5 %) se quedan en el valor estándar para no desviarse sin ganar
+ * nada. Así la validación prueba exactamente lo que la vista muestra.
+ */
+export function advisorProfileParams(payload: AcoSensitivityPayload): AcoValidationParams {
+  const params: AcoValidationParams = { ...STANDARD_ACO_PARAMS };
+  for (const summary of summarizeAxes(payload.runs)) {
+    if (summary.stable) continue;
+    const best = summary.ranked[0];
+    if (!best) continue;
+    switch (summary.axis) {
+      case 'ants':
+        params.acoAnts = best.acoAnts;
+        break;
+      case 'iterations':
+        params.acoIterations = best.acoIterations;
+        break;
+      case 'alpha':
+        if (best.acoAlpha != null) params.acoAlpha = best.acoAlpha;
+        break;
+      case 'beta':
+        if (best.acoBeta != null) params.acoBeta = best.acoBeta;
+        break;
+      case 'rho':
+        if (best.acoRho != null) params.acoRho = best.acoRho;
+        break;
+      case 'q':
+        if (best.pheromoneQ != null) params.pheromoneQ = best.pheromoneQ;
+        break;
+    }
+  }
+  return params;
+}
+
+/** True si la combinación recomendada no se desvía del perfil estándar. */
+export function isStandardProfile(params: AcoValidationParams): boolean {
+  return (Object.keys(STANDARD_ACO_PARAMS) as (keyof AcoValidationParams)[]).every(
+    (field) => params[field] === STANDARD_ACO_PARAMS[field],
+  );
 }

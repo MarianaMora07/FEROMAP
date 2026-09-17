@@ -130,7 +130,7 @@ export function runAcoSensitivity(): Promise<AcoSensitivityPayload> {
 
 // --- Calibración del motor: jobs asíncronos y barrido de pesos (Fase 13) -----
 
-export type CalibrationSweep = 'sensitivity' | 'objective';
+export type CalibrationSweep = 'sensitivity' | 'objective' | 'validation';
 export type CalibrationJobStatus =
   | 'pending'
   | 'running'
@@ -212,6 +212,69 @@ export interface ObjectiveSweepPayload {
   stale?: boolean;
 }
 
+export interface AcoValidationParams {
+  acoAnts: number;
+  acoIterations: number;
+  acoAlpha: number;
+  acoBeta: number;
+  acoRho: number;
+  pheromoneQ: number;
+}
+
+/** Una de las dos corridas de la validación: el control o la combinación propuesta. */
+export interface AcoValidationRun {
+  label: string;
+  role: 'standard' | 'recommended';
+  params: AcoValidationParams;
+  computationSeconds?: number;
+  acoSeconds?: number;
+  distanceKmOptimized?: number;
+  distanceKmBaseline?: number;
+  savingPct?: number;
+  acoIterationsRun?: number;
+  acoStoppedEarly?: boolean;
+  uncoveredPoints?: number;
+  error?: string;
+}
+
+export type AcoValidationOutcome = 'better' | 'equal' | 'worse' | 'not-comparable';
+
+export interface AcoValidationVerdict {
+  outcome: AcoValidationOutcome;
+  /** Motivo cuando el veredicto no es comparable (`error`, `uncovered`, `missing`). */
+  reason: string | null;
+  standardKm: number | null;
+  recommendedKm: number | null;
+  /** Combinación − estándar: negativo significa que la combinación mejora (D2). */
+  deltaKm: number | null;
+  deltaPct: number | null;
+}
+
+/**
+ * Validación de la combinación recomendada contra el perfil estándar (Fase 13).
+ *
+ * Es la pieza que cierra el hueco del barrido OFAT: dos corridas en la misma sesión
+ * responden si los mejores niveles medidos rinden juntos.
+ */
+export interface AcoValidationPayload {
+  generatedAt: string;
+  durationSeconds: number;
+  scenarioId: string;
+  seed: number | null;
+  standardParams: AcoValidationParams;
+  profile: AcoValidationParams;
+  /** La combinación coincide con el estándar: no hay nada que confirmar. */
+  sameParams: boolean;
+  verdict: AcoValidationVerdict;
+  runs: AcoValidationRun[];
+  /** Sello de instancia: lo escribe el backend al guardar (`null` si es antiguo). */
+  instanceFingerprint?: string | null;
+  /** Estado frente a la instancia actual: lo añade el `GET`. */
+  currentFingerprint?: string;
+  cacheState?: CalibrationCacheState;
+  stale?: boolean;
+}
+
 export interface CalibrationHistoryItem {
   runId: string;
   sweep: CalibrationSweep | null;
@@ -243,7 +306,10 @@ export interface CalibrationJobLogEntry {
   phaseId?: string;
 }
 
-export type CalibrationJobResult = AcoSensitivityPayload | ObjectiveSweepPayload;
+export type CalibrationJobResult =
+  | AcoSensitivityPayload
+  | ObjectiveSweepPayload
+  | AcoValidationPayload;
 
 export interface CalibrationJobSnapshot {
   jobId: string;
@@ -267,6 +333,18 @@ export interface CalibrationJobRequest {
   scenarioId?: string;
   seed?: number;
   refresh?: boolean;
+  /** Solo en la validación: la combinación que la vista muestra y quiere confirmar. */
+  profile?: AcoValidationParams;
+}
+
+/** Lectura de la validación de la combinación (404 si nunca se ha lanzado). */
+export function fetchAcoValidation(): Promise<AcoValidationPayload> {
+  if (useMocks) {
+    return Promise.reject(
+      new ApiError('No hay validación de la combinación (modo demo con VITE_USE_MOCKS=true).', 404),
+    );
+  }
+  return apiGet<AcoValidationPayload>('/api/v1/benchmarks/aco/validation');
 }
 
 /** Lectura del barrido de pesos ya calculado (404 si no hay caché). */
@@ -294,7 +372,9 @@ export function startCalibrationJob(
   const path =
     sweep === 'sensitivity'
       ? '/api/v1/benchmarks/aco/sensitivity/jobs'
-      : '/api/v1/benchmarks/objective/sweep/jobs';
+      : sweep === 'validation'
+        ? '/api/v1/benchmarks/aco/validation/jobs'
+        : '/api/v1/benchmarks/objective/sweep/jobs';
   return apiPost<{ jobId: string }>(path, request);
 }
 

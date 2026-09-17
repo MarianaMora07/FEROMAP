@@ -147,26 +147,21 @@ export const es = {
   'calibration.ac2': 'AC-2 · Flota ≥ 3 y jornada ≤ 8 h',
   'calibration.ac3': 'AC-3 · Rotación semanal',
   'settings.section.algorithm': 'Algoritmo',
-  // Sello de instancia
+  // Sello de instancia (informativo: dice si la evidencia describe la instancia vigente)
   'calibration.cacheState.fresh': 'de la instancia actual',
-  'calibration.cacheState.stale': 'de otra instancia',
+  'calibration.cacheState.stale': 'de una instancia anterior',
   'calibration.cacheState.unknown': 'sin sello',
-  'calibration.freshness.fresh': 'Estos resultados son de la instancia actual de la BD.',
-  'calibration.freshness.freshHint':
-    'Sello de instancia vigente: si cambias puntos, flota o depósito, dejarán de serlo.',
-  'calibration.freshness.stamp': 'Sello',
-  'calibration.freshness.stale': 'Estos resultados son de otra instancia de BD.',
-  'calibration.freshness.staleHint':
-    'Se generaron antes de un reset o un cambio de puntos/flota/depósito: recalcula para que correspondan a la BD actual.',
-  'calibration.freshness.unknown': 'Estos resultados no llevan sello de instancia.',
-  'calibration.freshness.unknownHint':
-    'Se guardaron antes de esta versión, así que no se puede saber contra qué BD se corrieron. Recalcula para sellarlos.',
-  'calibration.freshness.recompute': 'Recalcular',
   // Recomendación derivada de la evidencia
   'calibration.advice.title': 'Recomendación',
   'calibration.advice.subtitle': 'Derivada de la evidencia de esta pantalla (no la inventa).',
   'calibration.advice.noEvidence': 'Sin evidencia: ejecuta un barrido para obtener una recomendación.',
   'calibration.advice.profile': 'Perfil sugerido (mejor nivel medido por eje)',
+  'calibration.advice.profileParams': 'Configuración recomendada',
+  'calibration.advice.badge.best': 'mejor medido',
+  'calibration.advice.badge.sensitive': 'más sensible',
+  'calibration.advice.apply': 'Aplicar la combinación',
+  'calibration.advice.applied': 'Aplicado al motor ACO:',
+  'calibration.advice.applyError': 'No se pudo aplicar la combinación',
   'calibration.advice.keep': 'No vale la pena tocar:',
   'calibration.advice.keepLevel': 'sin cambio (insensible)',
   'calibration.advice.earlyStop':
@@ -187,6 +182,44 @@ export const es = {
   // Historial
   'calibration.sweep.sensitivity': 'Sensibilidad ACO',
   'calibration.sweep.objective': 'Pesos del objetivo',
+  'calibration.sweep.validation': 'Validación de la combinación',
+  // Validación de la combinación (cierra el hueco OFAT)
+  'calibration.validation.title': 'Validación de la combinación',
+  'calibration.validation.subtitle':
+    'Dos corridas en la misma instancia y semilla: el perfil estándar como control y la combinación que recomienda la evidencia.',
+  'calibration.validation.run': 'Validar la combinación',
+  'calibration.validation.running': 'Validando…',
+  'calibration.validation.willValidate': 'Se probará',
+  'calibration.validation.notNeeded':
+    'La recomendación ya es el perfil estándar: no hay nada que validar.',
+  'calibration.validation.noData':
+    'Sin validación todavía. Confirma aquí que la combinación rinde de verdad.',
+  'calibration.validation.control': 'Control',
+  'calibration.validation.col.run': 'Corrida',
+  'calibration.validation.col.profile': 'Perfil',
+  'calibration.validation.col.iterations': 'Iteraciones',
+  'calibration.validation.col.earlyStop': 'Early-stop',
+  'calibration.validation.earlyStopYes': 'sí',
+  'calibration.validation.earlyStopNo': 'no',
+  'calibration.validation.generatedAt': 'Generado',
+  'calibration.validation.run.standard': 'Perfil estándar (control)',
+  'calibration.validation.run.recommended': 'Combinación recomendada',
+  'calibration.validation.outcome.better': 'La combinación mejora',
+  'calibration.validation.outcome.equal': 'Empate con el estándar',
+  'calibration.validation.outcome.worse': 'La combinación empeora',
+  'calibration.validation.outcome.not-comparable': 'No comparable',
+  'calibration.validation.caveat.same':
+    'La combinación coincide con el perfil estándar: las dos corridas son la misma configuración.',
+  'calibration.validation.caveat.stale':
+    'Evidencia anterior a cambios en la instancia: recalcula antes de citarla.',
+  'calibration.validation.caveat.earlyStop':
+    'Alguna corrida paró antes de agotar iteraciones: la comparación está confundida.',
+  'calibration.validation.reason.error': 'Una corrida falló: no hay comparación posible.',
+  'calibration.validation.reason.uncovered':
+    'Una corrida dejó puntos sin cubrir: la distancia no es comparable.',
+  'calibration.validation.reason.missing': 'Faltan corridas en el payload de validación.',
+  'calibration.validation.scope':
+    '2 corridas · 1 instancia · 1 semilla · confirma o refuta el barrido OFAT; no es un estudio de interacción.',
   'calibration.history.title': 'Ejecuciones anteriores',
   'calibration.history.subtitle':
     'Corridas guardadas en la BD (información histórica); abrir una no modifica la caché vigente.',
@@ -336,23 +369,18 @@ export const en: Record<MessageKey, string> = {
   'calibration.ac3': 'AC-3 · Weekly rotation',
   'settings.section.algorithm': 'Algorithm',
   'calibration.cacheState.fresh': 'from the current instance',
-  'calibration.cacheState.stale': 'from another instance',
+  'calibration.cacheState.stale': 'from an earlier instance state',
   'calibration.cacheState.unknown': 'without a stamp',
-  'calibration.freshness.fresh': 'These results belong to the current database instance.',
-  'calibration.freshness.freshHint':
-    'Instance stamp is current: change points, fleet or depot and it will not be.',
-  'calibration.freshness.stamp': 'Stamp',
-  'calibration.freshness.stale': 'These results belong to another database instance.',
-  'calibration.freshness.staleHint':
-    'They were produced before a reset or a change of points, fleet or depot: recompute to match the current database.',
-  'calibration.freshness.unknown': 'These results carry no instance stamp.',
-  'calibration.freshness.unknownHint':
-    'They were stored before this version, so there is no way to know which database they came from. Recompute to stamp them.',
-  'calibration.freshness.recompute': 'Recompute',
   'calibration.advice.title': 'Recommendation',
   'calibration.advice.subtitle': 'Derived from the evidence on this screen, never invented.',
   'calibration.advice.noEvidence': 'No evidence yet: run a sweep to get a recommendation.',
   'calibration.advice.profile': 'Suggested profile (best measured level per axis)',
+  'calibration.advice.profileParams': 'Recommended configuration',
+  'calibration.advice.badge.best': 'best measured',
+  'calibration.advice.badge.sensitive': 'most sensitive',
+  'calibration.advice.apply': 'Apply the combination',
+  'calibration.advice.applied': 'Applied to the ACO engine:',
+  'calibration.advice.applyError': "Couldn't apply the combination",
   'calibration.advice.keep': 'Not worth touching:',
   'calibration.advice.keepLevel': 'no change (insensitive)',
   'calibration.advice.earlyStop':
@@ -372,6 +400,43 @@ export const en: Record<MessageKey, string> = {
   'calibration.advice.editInSettings': 'Apply these values in Settings → Algorithm',
   'calibration.sweep.sensitivity': 'ACO sensitivity',
   'calibration.sweep.objective': 'Objective weights',
+  'calibration.sweep.validation': 'Combination validation',
+  'calibration.validation.title': 'Combination validation',
+  'calibration.validation.subtitle':
+    'Two runs on the same instance and seed: the standard profile as control and the combination the evidence recommends.',
+  'calibration.validation.run': 'Validate the combination',
+  'calibration.validation.running': 'Validating…',
+  'calibration.validation.willValidate': 'Will test',
+  'calibration.validation.notNeeded':
+    'The recommendation is already the standard profile: nothing to validate.',
+  'calibration.validation.noData':
+    'No validation yet. Confirm here that the combination really pays off.',
+  'calibration.validation.control': 'Control',
+  'calibration.validation.col.run': 'Run',
+  'calibration.validation.col.profile': 'Profile',
+  'calibration.validation.col.iterations': 'Iterations',
+  'calibration.validation.col.earlyStop': 'Early stop',
+  'calibration.validation.earlyStopYes': 'yes',
+  'calibration.validation.earlyStopNo': 'no',
+  'calibration.validation.generatedAt': 'Generated',
+  'calibration.validation.run.standard': 'Standard profile (control)',
+  'calibration.validation.run.recommended': 'Recommended combination',
+  'calibration.validation.outcome.better': 'The combination improves',
+  'calibration.validation.outcome.equal': 'Ties with the standard',
+  'calibration.validation.outcome.worse': 'The combination is worse',
+  'calibration.validation.outcome.not-comparable': 'Not comparable',
+  'calibration.validation.caveat.same':
+    'The combination matches the standard profile: both runs use the same configuration.',
+  'calibration.validation.caveat.stale':
+    'Evidence older than the current instance state: recompute before citing it.',
+  'calibration.validation.caveat.earlyStop':
+    'A run stopped before exhausting iterations: the comparison is confounded.',
+  'calibration.validation.reason.error': 'A run failed: no comparison is possible.',
+  'calibration.validation.reason.uncovered':
+    'A run left points uncovered: the distance is not comparable.',
+  'calibration.validation.reason.missing': 'Validation runs are missing from the payload.',
+  'calibration.validation.scope':
+    '2 runs · 1 instance · 1 seed · confirms or refutes the OFAT sweep; it is not an interaction study.',
   'calibration.history.title': 'Previous runs',
   'calibration.history.subtitle':
     'Runs stored in the database (historical data); opening one does not change the live cache.',
