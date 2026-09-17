@@ -41,6 +41,10 @@ class ResolvedEngineParameters:
     estimated_duration_hours: int | None
     rain_intensity: str | None
     waste_level_pct: int | None
+    workload_balance_weight: float | None = None
+    makespan_weight: float | None = None
+    min_active_vehicles: int | None = None
+    max_route_hours_target: float | None = None
 
 
 _CASE_STUDY_DEFAULT_KEYS: tuple[tuple[str, str], ...] = (
@@ -52,6 +56,10 @@ _CASE_STUDY_DEFAULT_KEYS: tuple[tuple[str, str], ...] = (
     ("estimatedDurationHours", "estimated_duration_hours"),
     ("rainIntensity", "rain_intensity"),
     ("wasteLevelPct", "waste_level_pct"),
+    ("workloadBalanceWeight", "workload_balance_weight"),
+    ("makespanWeight", "makespan_weight"),
+    ("minActiveVehicles", "min_active_vehicles"),
+    ("maxRouteHoursTarget", "max_route_hours_target"),
 )
 
 
@@ -122,6 +130,10 @@ def resolve_engine_parameters(
     estimated_duration_hours: int | None = None,
     rain_intensity: str | None = None,
     waste_level_pct: int | None = None,
+    workload_balance_weight: float | None = None,
+    makespan_weight: float | None = None,
+    min_active_vehicles: int | None = None,
+    max_route_hours_target: float | None = None,
 ) -> ResolvedEngineParameters:
     defaults = _parse_default_parameters(study.default_parameters_json if study else None)
 
@@ -141,6 +153,10 @@ def resolve_engine_parameters(
         "estimated_duration_hours": estimated_duration_hours,
         "rain_intensity": rain_intensity,
         "waste_level_pct": waste_level_pct,
+        "workload_balance_weight": workload_balance_weight,
+        "makespan_weight": makespan_weight,
+        "min_active_vehicles": min_active_vehicles,
+        "max_route_hours_target": max_route_hours_target,
     }
     for json_key, param_name in _CASE_STUDY_DEFAULT_KEYS:
         if resolved[param_name] is None and json_key in defaults:

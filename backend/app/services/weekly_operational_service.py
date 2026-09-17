@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from datetime import datetime, timezone
 from typing import Any, Callable
 
@@ -21,6 +22,7 @@ from app.db.models import (
     DailyPlan,
     OptimizedRoute,
     RouteWaypoint,
+    Vehicle,
     WeeklyPlan,
 )
 
@@ -122,6 +124,103 @@ def _collect_engine_context(
     }
 
 
+def _assignable_vehicle_rows(db: Session) -> list[dict[str, Any]]:
+    """Flota asignable (con conductor) ordenada por id, con su tipo de vehículo."""
+    from app.services.vehicle_service import (
+        ASSIGNABLE_STATUSES,
+        get_active_routes_by_vehicle_id,
+        resolve_vehicle_driver_id,
+    )
+
+    vehicles = db.scalars(
+        select(Vehicle).options(joinedload(Vehicle.default_driver)).order_by(Vehicle.id)
+    ).all()
+    active_routes = get_active_routes_by_vehicle_id(db)
+    rows: list[dict[str, Any]] = []
+    for vehicle in vehicles:
+        if vehicle.status not in ASSIGNABLE_STATUSES:
+            continue
+        if resolve_vehicle_driver_id(vehicle, active_route=active_routes.get(vehicle.id)) is None:
+            continue
+        rows.append({"id": vehicle.id, "code": vehicle.code, "type": vehicle.vehicle_type})
+    return rows
+
+
+def _rotation_rest_ids(
+    fleet_rows: list[dict[str, Any]],
+    usage_days: dict[int, int],
+    previous_day_used: set[int],
+    *,
+    fleet_by_type: dict[str, int] | None = None,
+    keep_limit: int | None = None,
+) -> list[int]:
+    """Vehículos que descansan hoy para repartir el uso de la semana (RF-5).
+
+    Conserva el mismo tamaño de flota (cuotas por tipo si existen y, si no, el tope
+    del día) pero rota las identidades: deja activos los vehículos con menos días
+    acumulados y, a igualdad, los que no trabajaron el día anterior.
+    """
+    def _preference(row: dict[str, Any]) -> tuple[int, int, int]:
+        return (
+            usage_days.get(row["id"], 0),
+            0 if row["id"] not in previous_day_used else 1,
+            row["id"],
+        )
+
+    active: set[int] = set()
+    if fleet_by_type:
+        groups: dict[str, list[dict[str, Any]]] = {}
+        for row in fleet_rows:
+            groups.setdefault(row["type"], []).append(row)
+        for vehicle_type, group in groups.items():
+            quota = fleet_by_type.get(vehicle_type)
+            if quota is None:
+                continue
+            keep = max(0, min(quota, len(group)))
+            for row in sorted(group, key=_preference)[:keep]:
+                active.add(row["id"])
+    else:
+        keep = keep_limit if keep_limit and keep_limit > 0 else len(fleet_rows)
+        keep = max(0, min(keep, len(fleet_rows)))
+        for row in sorted(fleet_rows, key=_preference)[:keep]:
+            active.add(row["id"])
+
+    if not active:
+        return []
+    return [row["id"] for row in fleet_rows if row["id"] not in active]
+
+
+def compute_weekly_rotation_kpis(days: list[dict[str, Any]]) -> dict[str, Any]:
+    """KPIs de horizonte (Fase 13, §5.2) sobre el resumen camión × día."""
+    counts: dict[str, int] = {}
+    for day in days:
+        for vehicle in day.get("vehicles") or []:
+            code = vehicle.get("vehicleCode")
+            if not code or code == "—":
+                continue
+            if int(vehicle.get("stops") or 0) <= 0:
+                continue
+            counts[str(code)] = counts.get(str(code), 0) + 1
+
+    values = list(counts.values())
+    distinct = len(counts)
+    total_days = sum(values)
+    mean_days = total_days / distinct if distinct else 0.0
+    if distinct:
+        std_days = math.sqrt(sum((value - mean_days) ** 2 for value in values) / distinct)
+    else:
+        std_days = 0.0
+    rotation_index = (
+        max(0.0, min(1.0, 1.0 - std_days / mean_days)) if mean_days > 0 else 1.0
+    )
+    return {
+        "distinctVehiclesWeek": distinct,
+        "vehicleDaysUsed": total_days,
+        "usageStdDays": round(std_days, 2),
+        "rotationIndex": round(rotation_index, 2),
+    }
+
+
 def _prepare_draft_daily_plan(
     db: Session, plan: WeeklyPlan, day: Any
 ) -> tuple[int, list[int]]:
@@ -177,9 +276,11 @@ def generate_weekly_operational_plan(
     db: Session,
     plan_id: int,
     *,
+    weekly_fleet_rotation: bool | None = None,
     on_progress: ProgressCallback | None = None,
 ) -> dict[str, Any]:
     """Optimiza la semana día por día y persiste el resumen camión × día."""
+    from app.services.admin_service import get_algorithm_settings
     from app.services.optimization_service import run_optimization_engine
     from app.services.planning_service import open_daily_plan
 
@@ -227,6 +328,17 @@ def generate_weekly_operational_plan(
     total = len(days)
     result_rows: list[dict[str, Any]] = []
 
+    # Fase 13.4 — rotación de flota en el horizonte (uso acumulado de la semana).
+    rotation_enabled = (
+        weekly_fleet_rotation
+        if weekly_fleet_rotation is not None
+        else bool(get_algorithm_settings(db).weekly_fleet_rotation)
+    )
+    fleet_rows = _assignable_vehicle_rows(db) if rotation_enabled else []
+    code_to_vehicle_id = {row["code"]: int(row["id"]) for row in fleet_rows}
+    usage_days: dict[int, int] = {int(row["id"]): 0 for row in fleet_rows}
+    previous_day_used: set[int] = set()
+
     def report(day_index: int, message: str) -> None:
         if on_progress is not None:
             base = int((day_index - 1) * 100 / max(1, total))
@@ -259,6 +371,23 @@ def generate_weekly_operational_plan(
                 continue
 
             report(index, f"{label} {day.operation_date} · optimizando con ACO ({index}/{total})")
+            rotation_rest_ids: list[int] = []
+            if rotation_enabled and fleet_rows:
+                rotation_rest_ids = _rotation_rest_ids(
+                    fleet_rows,
+                    usage_days,
+                    previous_day_used,
+                    fleet_by_type=ctx["fleetByType"],
+                    keep_limit=ctx["fleetLimit"],
+                )
+                if rotation_rest_ids:
+                    rested_codes = [
+                        row["code"] for row in fleet_rows if int(row["id"]) in set(rotation_rest_ids)
+                    ]
+                    report(
+                        index,
+                        f"{label} {day.operation_date} · rotación de flota: descansan {'/'.join(rested_codes)} ({index}/{total})",
+                    )
             result = run_optimization_engine(
                 db,
                 ctx["scenarioId"],
@@ -266,6 +395,7 @@ def generate_weekly_operational_plan(
                 fleet_limit=ctx["fleetLimit"],
                 fleet_by_type=ctx["fleetByType"],
                 sector_partition=ctx["sectorPartition"],
+                exclude_vehicle_ids=rotation_rest_ids or None,
                 auto_commit=True,
                 auto_dispatch=False,
                 reporter=None,
@@ -291,6 +421,18 @@ def generate_weekly_operational_plan(
                     "vehicles": _route_vehicle_rows(db, daily_plan_id),
                 }
             )
+            if rotation_enabled and fleet_rows:
+                day_used_ids = {
+                    code_to_vehicle_id[str(row.get("vehicleCode"))]
+                    for row in day_summary.get("vehicles") or []
+                    if int(row.get("stops") or 0) > 0
+                    and str(row.get("vehicleCode")) in code_to_vehicle_id
+                }
+                for vehicle_id in day_used_ids:
+                    usage_days[vehicle_id] = usage_days.get(vehicle_id, 0) + 1
+                previous_day_used = day_used_ids
+                day_summary["restedVehicleIds"] = rotation_rest_ids
+                day_summary["activeVehicleIds"] = sorted(day_used_ids)
             if on_progress is not None:
                 on_progress(
                     f"{label} {day.operation_date} · listo ({index}/{total})",
@@ -306,8 +448,11 @@ def generate_weekly_operational_plan(
         "generatedAt": datetime.now(timezone.utc).isoformat(),
         "weekStartDate": plan.week_start_date.isoformat(),
         "fleetByType": _fleet_by_type(plan),
+        "fleetRotationEnabled": bool(rotation_enabled),
         "days": result_rows,
     }
+    # Fase 13.4 — KPIs de horizonte (distinctVehiclesWeek, vehicleDaysUsed, …).
+    summary["weekly"] = compute_weekly_rotation_kpis(result_rows)
     plan.operational_plan_json = json.dumps(summary, ensure_ascii=False)
     db.commit()
     return summary

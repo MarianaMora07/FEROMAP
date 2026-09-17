@@ -129,6 +129,14 @@ class AlgorithmSettings(CamelModel):
     # Calibración con pesos reales recolectados.
     calibration_default_alpha: float = 0.4
     calibration_window_days: int = 30
+    # Fase 13 — objetivo multiobjetivo (distancia · flota · tiempo de servicio).
+    workload_balance_weight: float = 0.0
+    makespan_weight: float = 0.0
+    min_active_vehicles: int | None = None
+    max_route_hours_target: float = 8.0
+    # Jornada de turno por defecto (h) cuando la corrida no la especifica.
+    default_shift_hours: int | None = None
+    weekly_fleet_rotation: bool = False
 
 
 class AlgorithmSettingsUpdate(CamelModel):
@@ -149,6 +157,13 @@ class AlgorithmSettingsUpdate(CamelModel):
     overflow_penalty_weight: float | None = Field(default=None, ge=0, le=1_000_000)
     calibration_default_alpha: float | None = Field(default=None, gt=0, le=1)
     calibration_window_days: int | None = Field(default=None, ge=1, le=365)
+    # Fase 13 — objetivo multiobjetivo.
+    workload_balance_weight: float | None = Field(default=None, ge=0, le=10)
+    makespan_weight: float | None = Field(default=None, ge=0, le=10)
+    min_active_vehicles: int | None = Field(default=None, ge=1, le=100)
+    max_route_hours_target: float | None = Field(default=None, ge=1, le=18)
+    default_shift_hours: int | None = Field(default=None, ge=1, le=12)
+    weekly_fleet_rotation: bool | None = None
 
 
 class IntegrationSettingsUpdate(CamelModel):

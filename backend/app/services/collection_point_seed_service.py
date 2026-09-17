@@ -17,7 +17,11 @@ from app.domain.visit_schedule_distribution import (
 
 logger = logging.getLogger(__name__)
 
-TARGET_COLLECTION_POINTS = 120
+# Total del catálogo demo: los puntos de data/seeds/collection_points.json + relleno
+# automático repartido por sector. A jornada de 12 h el motor reparte ~30 puntos por
+# camión, así que un catálogo mayor es lo que hace emerger más flota sin forzar la
+# restricción `min_active_vehicles` (180 puntos -> ~6 camiones en la instancia completa).
+TARGET_COLLECTION_POINTS = 180
 
 # Coordenadas aproximadas por sector (zona Ciudad Guayana)
 # Basadas en los puntos existentes y distribución geográfica conocida
@@ -146,7 +150,7 @@ def ensure_collection_points_coverage(
 
 
 def generate_missing_collection_points(db: Session) -> dict[str, int]:
-    """Compatibilidad con el endpoint demo: cubre sectores y llega a 120 puntos."""
+    """Compatibilidad con el endpoint demo: cubre sectores y llega al total del catálogo."""
     return ensure_collection_points_coverage(db)
 
 

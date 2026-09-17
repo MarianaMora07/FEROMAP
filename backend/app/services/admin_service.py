@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+import logging
+from datetime import datetime, timezone, tzinfo
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -12,6 +13,7 @@ from app.core.security import hash_password
 from app.config import settings
 from app.db.models import AuditLog, SystemSettings, User, UserRole
 from app.domain.criticality import normalize_critical_threshold
+from app.domain.operational_clock import resolve_operational_timezone as domain_timezone
 from app.schemas.admin import (
     AdminRole,
     AdminUser,
@@ -26,6 +28,8 @@ from app.schemas.admin import (
     OperationalSettingsUpdate,
 )
 from app.services.auth_service import get_user_by_email, get_user_by_id, role_label
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_OPERATIONAL: dict[str, Any] = {
     "system_name": "FEROMAP - Sistema Inteligente de Recolección de Residuos",
@@ -79,6 +83,12 @@ DEFAULT_ALGORITHM: dict[str, Any] = {
     "overflow_penalty_weight": settings.overflow_penalty_weight,
     "calibration_default_alpha": settings.calibration_default_alpha,
     "calibration_window_days": settings.calibration_window_days,
+    "workload_balance_weight": settings.workload_balance_weight,
+    "makespan_weight": settings.makespan_weight,
+    "min_active_vehicles": settings.min_active_vehicles,
+    "max_route_hours_target": settings.max_route_hours_target,
+    "default_shift_hours": settings.default_shift_hours,
+    "weekly_fleet_rotation": settings.weekly_fleet_rotation,
 }
 
 # Cache de proceso del umbral de criticidad (se invalida al actualizar la config).
@@ -333,6 +343,20 @@ def invalidate_critical_threshold_cache() -> None:
     """Invalida el cache del umbral (tras cambiar la config operativa)."""
     global _critical_threshold_cache
     _critical_threshold_cache = None
+
+
+def resolve_operational_timezone(db: Session) -> tzinfo:
+    """Zona horaria operativa configurada (con respaldo al valor por defecto).
+
+    Las horas de la jornada (ETA por parada, playback) son horas locales de esta zona,
+    no UTC. Una configuración ilegible o inválida no debe romper el motor.
+    """
+    name: str | None = None
+    try:
+        name = get_operational_settings(db).timezone
+    except Exception:  # noqa: BLE001 - fallback seguro ante configuración ilegible
+        logger.warning("No se pudo leer la zona horaria operativa; se usa el valor por defecto")
+    return domain_timezone(name)
 
 
 def get_integration_settings(db: Session) -> IntegrationSettings:

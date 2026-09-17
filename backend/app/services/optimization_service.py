@@ -7,7 +7,7 @@ import logging
 import math
 import time
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Callable, Protocol
 
@@ -31,6 +31,7 @@ from app.domain.landfill_service_time import (
     landfill_node_index,
     route_operational_elapsed_seconds,
 )
+from app.domain.operational_clock import operational_departure_at
 from app.domain.traffic_profile import (
     congestion_band_for_hour,
     is_traffic_weighted,
@@ -53,8 +54,18 @@ from app.services.scenario_parameters import (
     normalize_rain_intensity,
     normalize_waste_level_pct,
 )
-from app.services.aco_parallel import resolve_aco_parallel_workers, run_ant_solutions
-from app.services.admin_service import get_algorithm_settings
+from app.services.aco_parallel import (
+    _default_distance_reference_m,
+    _objective_cost,
+    _rebalance_pass,
+    resolve_aco_parallel_workers,
+    run_ant_solutions,
+    workload_statistics,
+)
+from app.services.admin_service import (
+    get_algorithm_settings,
+    resolve_operational_timezone,
+)
 from app.services.case_study_optimization import (
     case_study_simulation_payload,
     load_optimization_collection_points,
@@ -98,6 +109,27 @@ FUEL_L_PER_KM = 0.35
 CO2_KG_PER_LITER = 2.68
 
 
+def resolve_sector_partition(
+    requested: bool | None,
+    *,
+    auto_applies: bool,
+    objective_requested: bool,
+) -> tuple[bool, bool]:
+    """Decide si se usa la partición sector→conductor (RNF-6/R-4, Fase 13).
+
+    Devuelve ``(usar_partición, territorios_desactivados_por_multiobjetivo)``. La
+    equidad y el makespan son métricas de **flota**, así que con el objetivo activo se
+    prefiere el reparto global salvo que el llamador fuerce ``sector_partition=True``.
+    """
+    if requested is False:
+        return False, False
+    if requested is True:
+        return True, False
+    if objective_requested:
+        return False, auto_applies
+    return auto_applies, False
+
+
 def cap_shift_budget_seconds(budget_seconds: int, requested_hours: int | None) -> int:
     """Presupuesto de turno efectivo: la jornada solicitada recorta el de la instalación."""
     if not requested_hours or requested_hours <= 0:
@@ -106,6 +138,55 @@ def cap_shift_budget_seconds(budget_seconds: int, requested_hours: int | None) -
     if budget_seconds <= 0:
         return requested
     return min(budget_seconds, requested)
+
+
+# Rango de los pesos del objetivo multiobjetivo (Fase 13, §9).
+OBJECTIVE_WEIGHT_MAX = 10.0
+
+
+def _normalize_objective_weight(value: float | None) -> float:
+    """Acota un peso del objetivo a ``[0, 10]``; ``None`` → 0 (solo distancia)."""
+    if value is None:
+        return 0.0
+    return max(0.0, min(OBJECTIVE_WEIGHT_MAX, float(value)))
+
+
+def resolve_shift_hours(requested: int | None, algorithm_default: int | None) -> int | None:
+    """Jornada de turno efectiva (h): la petición manda; si no, el default del algoritmo.
+
+    Recortar el turno es lo que reparte la carga entre más vehículos: a igual demanda,
+    una jornada más corta necesita más camiones. ``None`` = jornada de la instalación.
+    """
+    return normalize_duration_hours(requested if requested is not None else algorithm_default)
+
+
+def resolve_min_active_vehicles(
+    requested: int | None,
+    *,
+    available_customers: int,
+    available_vehicles: int,
+) -> tuple[int | None, str | None]:
+    """Resuelve la restricción de flota mínima (RF-3) y su warning de degradación.
+
+    Es infactible pedir más vehículos activos que puntos programados (cada vehículo
+    activo necesita al menos una parada). En ese caso se degrada en vez de fallar.
+    """
+    if requested is None or requested <= 0:
+        return None, None
+    feasible = min(int(requested), max(0, available_customers), max(0, available_vehicles))
+    if feasible <= 0:
+        return None, (
+            f"min_active_vehicles={requested} infactible "
+            f"({available_customers} puntos, {available_vehicles} vehículos): "
+            "restricción desactivada"
+        )
+    if feasible < requested:
+        return feasible, (
+            f"min_active_vehicles={requested} infactible "
+            f"({available_customers} puntos, {available_vehicles} vehículos): "
+            f"se degrada a {feasible} vehículo(s) activo(s)"
+        )
+    return feasible, None
 
 
 class OptimizationCancelledError(Exception):
@@ -160,10 +241,32 @@ class RouteSolution:
     aco_parallel_workers: int = 1
     aco_convergence: list[dict[str, float | int]] = field(default_factory=list)
     uncovered_customer_indices: list[int] = field(default_factory=list)
+    # Vehículo real de cada ruta activa, en paralelo a ``vehicle_routes``. Es necesario
+    # porque ``vehicle_routes`` solo trae las rutas con paradas: su posición no es el
+    # índice de vehículo salvo que la solución venga paginada por vehículo.
+    # ``None`` = "mismo orden" (soluciones armadas a mano; ver ``_route_vehicle_index``).
+    vehicle_indices: list[int] | None = None
 
 
 def _landfill_idx(n_customers: int) -> int:
     return landfill_node_index(n_customers)
+
+
+def _active_vehicle_indices(routes: list[list[int]]) -> list[int]:
+    """Índices de vehículo de las rutas con paradas (una entrada por vehículo de entrada)."""
+    return [index for index, route in enumerate(routes) if len(route) > 2]
+
+
+def _route_vehicle_index(solution: RouteSolution, route_position: int, vehicle_count: int) -> int:
+    """Índice de vehículo dueño de la ruta activa que ocupa ``route_position``.
+
+    Usa ``vehicle_indices`` cuando la solución lo trae y cae a la posición solo para
+    soluciones armadas a mano (compatibilidad hacia atrás).
+    """
+    indices = solution.vehicle_indices
+    if indices is not None and route_position < len(indices):
+        return min(indices[route_position], vehicle_count - 1)
+    return min(route_position, vehicle_count - 1)
 
 
 def _is_collection_idx(idx: int, n_customers: int) -> bool:
@@ -194,9 +297,14 @@ def _ensure_demo_anchor_vehicle_route(
     if anchor_idx is None or n_customers < 1:
         return solution
 
-    routes = [route[:] for route in solution.vehicle_routes]
-    while len(routes) < len(vehicles):
-        routes.append([0, 0])
+    # Vista por vehículo (una entrada por vehículo) reconstruida desde las rutas activas y
+    # su vehículo real: la posición en ``vehicle_routes`` no es el índice de vehículo.
+    routes: list[list[int]] = [[0, 0] for _ in vehicles]
+    for position, route in enumerate(solution.vehicle_routes):
+        if len(route) <= 2:
+            continue
+        vehicle_idx = _route_vehicle_index(solution, position, len(vehicles))
+        routes[vehicle_idx] = route[:]
 
     if _route_collection_stop_count(routes[anchor_idx], n_customers) > 0:
         return solution
@@ -222,6 +330,7 @@ def _ensure_demo_anchor_vehicle_route(
     distance_m, duration_s = _evaluate_solution(routes, dist_matrix, time_matrix)
     return RouteSolution(
         vehicle_routes=routes,
+        vehicle_indices=_active_vehicle_indices(routes),
         distance_m=distance_m,
         duration_s=duration_s,
         aco_iterations_run=solution.aco_iterations_run,
@@ -303,6 +412,9 @@ def _coalesce_optimized_solution(optimized: RouteSolution, fallback: RouteSoluti
         return optimized
     return RouteSolution(
         vehicle_routes=[route[:] for route in fallback.vehicle_routes],
+        vehicle_indices=(
+            fallback.vehicle_indices[:] if fallback.vehicle_indices is not None else None
+        ),
         distance_m=fallback.distance_m,
         duration_s=fallback.duration_s,
         aco_iterations_run=optimized.aco_iterations_run,
@@ -430,7 +542,12 @@ def _baseline_routes_partitioned(
             continue
         routes.append([0] + customer_indices + [0])
     distance_m, duration_s = _evaluate_solution(routes, dist_matrix, time_matrix)
-    return RouteSolution(vehicle_routes=routes, distance_m=distance_m, duration_s=duration_s)
+    return RouteSolution(
+        vehicle_routes=routes,
+        distance_m=distance_m,
+        duration_s=duration_s,
+        vehicle_indices=_active_vehicle_indices(routes),
+    )
 
 
 def _remap_local_route_to_global(
@@ -666,6 +783,7 @@ def _optimize_by_sector_assignment(
         aco_parallel_workers=parallel_workers,
         aco_convergence=convergence,
         uncovered_customer_indices=sorted(set(uncovered)),
+        vehicle_indices=_active_vehicle_indices(vehicle_routes),
     )
 
 
@@ -946,11 +1064,16 @@ def _solution_operational_metrics(
     landfill_trips = 0
     stop_count = 0
     crew_assignments: list[tuple[int, int]] = []
+    # Fase 13.1 — métricas POR RUTA (horas de servicio por vehículo).
+    fleet_slots = max(1, len(vehicles))
+    vehicle_workload_hours = [0.0] * len(vehicles)
+    route_hours: list[float] = []
 
     for v_idx, route in enumerate(solution.vehicle_routes):
         if len(route) <= 2:
             continue
-        vehicle = vehicles[min(v_idx, len(vehicles) - 1)]
+        vehicle_idx = _route_vehicle_index(solution, v_idx, len(vehicles))
+        vehicle = vehicles[vehicle_idx]
         _, route_travel, route_total = _route_operational_duration(
             route,
             dist_matrix,
@@ -969,6 +1092,10 @@ def _solution_operational_metrics(
         unload_s += visits * unload_seconds
         landfill_trips += visits
         stop_count += stops
+        if stops > 0:
+            # Solo las rutas con recolección cuentan como vehículo activo.
+            route_hours.append(route_total / 3600)
+            vehicle_workload_hours[min(vehicle_idx, fleet_slots - 1)] = round(route_total / 3600, 2)
         assigned_effective = resolve_effective_assigned(
             vehicle.assigned_operators,
             ideal=vehicle.ideal_operators,
@@ -979,6 +1106,7 @@ def _solution_operational_metrics(
     crew_assignment, crew_label = _fleet_crew_summary(crew_assignments)
     total_s = int(round(travel_s)) + service_s + unload_s
     shift_utilization = min(100.0, total_s / shift_budget_seconds * 100.0) if shift_budget_seconds > 0 else 0.0
+    mean_hours, std_hours, fairness = workload_statistics(route_hours)
     return {
         "travel_s": travel_s,
         "service_s": service_s,
@@ -990,6 +1118,14 @@ def _solution_operational_metrics(
         "crew_label": crew_label,
         "shift_budget_seconds": shift_budget_seconds,
         "shift_utilization_pct": round(shift_utilization, 1),
+        # Aditivo (Fase 13.1): perfil por ruta para los KPIs de flota/servicio/equidad.
+        "active_vehicles": len(route_hours),
+        "route_hours": route_hours,
+        "vehicle_workload_hours": vehicle_workload_hours,
+        "max_route_hours": round(max(route_hours), 2) if route_hours else 0.0,
+        "workload_mean_hours": round(mean_hours, 2),
+        "workload_std_hours": round(std_hours, 2),
+        "fairness_index": round(fairness, 2),
     }
 
 
@@ -1038,7 +1174,7 @@ def _solution_fuel_liters(
         if len(route) <= 2:
             continue
         route_km = sum(dist_matrix[a][b] for a, b in zip(route, route[1:])) / 1000.0
-        vehicle = vehicles[min(v_idx, len(vehicles) - 1)]
+        vehicle = vehicles[_route_vehicle_index(solution, v_idx, len(vehicles))]
         rate = float(vehicle.fuel_rate or FUEL_L_PER_KM)
         total += route_km * rate
     return total
@@ -1079,6 +1215,10 @@ def _aco_cvrp(
     at_risk_multiplier: float = 1.50,
     critical_multiplier: float = 1.35,
     high_multiplier: float = 1.10,
+    workload_balance_weight: float = 0.0,
+    makespan_weight: float = 0.0,
+    distance_reference_m: float | None = None,
+    min_active_vehicles: int | None = None,
 ) -> RouteSolution:
     """Ant Colony Optimization para CVRP multi-viaje con vertedero y jornada."""
     parallel_workers = resolve_aco_parallel_workers(aco_ants)
@@ -1089,6 +1229,11 @@ def _aco_cvrp(
         process_pool = ProcessPoolExecutor(max_workers=parallel_workers)
 
     n_nodes = landfill_idx + 1
+    # Referencia única de la corrida: normaliza el fitness y escala el depósito de
+    # feromona, de modo que ρ y Q sigan siendo comparables entre modos.
+    distance_reference = distance_reference_m
+    if distance_reference is None or distance_reference <= 0:
+        distance_reference = _default_distance_reference_m(dist_matrix)
     pick_matrix = heuristic_matrix if heuristic_matrix is not None else dist_matrix
     pheromone = [[1.0 / max(pick_matrix[i][j], 1.0) for j in range(n_nodes)] for i in range(n_nodes)]
 
@@ -1145,6 +1290,10 @@ def _aco_cvrp(
                 two_opt_passes=two_opt_passes,
                 alpha=alpha,
                 beta=beta,
+                workload_balance_weight=workload_balance_weight,
+                makespan_weight=makespan_weight,
+                distance_reference_m=distance_reference,
+                min_active_vehicles=min_active_vehicles,
             )
             for routes, cost, _dur, uncovered in ant_results:
                 if cost < iteration_cost or (cost == iteration_cost and len(uncovered) < len(iteration_uncovered)):
@@ -1171,6 +1320,8 @@ def _aco_cvrp(
                     "iteration": iterations_run,
                     "bestDistanceKm": round(record_best / 1000, 3),
                     "iterationBestDistanceKm": round(record_iter / 1000, 3),
+                    # Costo combinado del objetivo (D6): distancia normalizada + equidad + makespan.
+                    "bestCost": round(best_cost, 4) if math.isfinite(best_cost) else 0.0,
                 }
             )
             if on_iteration:
@@ -1188,13 +1339,15 @@ def _aco_cvrp(
                 for j in range(n_nodes):
                     pheromone[i][j] *= 1 - rho
             if iteration_best:
-                deposit = pheromone_q / max(iteration_cost, 1.0)
+                # ``iteration_cost`` es adimensional; se reescala por la referencia para
+                # que Δτ viva en la escala de distancia previa y no explote.
+                deposit = pheromone_q / max(iteration_cost * distance_reference, 1.0)
                 for route in iteration_best:
                     for i, j in zip(route[:-1], route[1:]):
                         pheromone[i][j] += deposit
             # Variante elitista: refuerza además la mejor solución global.
             if pheromone_elitist and best_routes:
-                elite_deposit = pheromone_q / max(best_cost, 1.0)
+                elite_deposit = pheromone_q / max(best_cost * distance_reference, 1.0)
                 for route in best_routes:
                     for i, j in zip(route[:-1], route[1:]):
                         pheromone[i][j] += elite_deposit
@@ -1202,9 +1355,62 @@ def _aco_cvrp(
         if process_pool is not None:
             process_pool.shutdown(wait=True)
 
+    # Fase 13.2 — local search inter-ruta sobre la mejor solución (D3).
+    objective_active = (
+        workload_balance_weight > 0
+        or makespan_weight > 0
+        or (min_active_vehicles is not None and min_active_vehicles > 1)
+    )
+    if objective_active and best_routes:
+        rebalanced = _rebalance_pass(
+            best_routes,
+            dist_matrix,
+            time_matrix,
+            capacities=capacities,
+            demands=demands,
+            landfill_idx=landfill_idx,
+            service_secs=service_secs,
+            unload_sec=unload_sec,
+            shift_budget_sec=shift_budget_sec,
+            distance_reference_m=distance_reference,
+            workload_balance_weight=workload_balance_weight,
+            makespan_weight=makespan_weight,
+            min_active_vehicles=min_active_vehicles,
+            window_starts=window_starts,
+            window_ends=window_ends,
+            overflow_deadline_sec=overflow_deadline_sec,
+            overflow_rate_kg_per_hour=overflow_rate_kg_per_hour,
+            overflow_weight=overflow_weight,
+        )
+        rebalanced_cost = _objective_cost(
+            rebalanced,
+            dist_matrix,
+            time_matrix,
+            landfill_idx=landfill_idx,
+            service_secs=service_secs,
+            unload_sec=unload_sec,
+            shift_budget_sec=shift_budget_sec,
+            distance_reference_m=distance_reference,
+            workload_balance_weight=workload_balance_weight,
+            makespan_weight=makespan_weight,
+            min_active_vehicles=min_active_vehicles,
+            window_starts=window_starts,
+            overflow_deadline_sec=overflow_deadline_sec,
+            overflow_rate_kg_per_hour=overflow_rate_kg_per_hour,
+            overflow_weight=overflow_weight,
+        )
+        if rebalanced_cost < best_cost - 1e-9:
+            best_routes = rebalanced
+            best_cost = rebalanced_cost
+            best_distance, best_time = _evaluate_solution(best_routes, dist_matrix, time_matrix)
+
     return RouteSolution(
-        vehicle_routes=best_routes,
-        distance_m=best_distance if math.isfinite(best_distance) else best_cost,
+        # ``best_routes`` lleva una entrada por vehículo (alineada con ``service_secs``);
+        # hacia afuera solo se exponen las rutas con paradas, con su vehículo real.
+        vehicle_routes=[route for route in best_routes if len(route) > 2],
+        vehicle_indices=_active_vehicle_indices(best_routes),
+        # ``best_distance`` está en metros (a diferencia de ``best_cost``, ya adimensional).
+        distance_m=best_distance if math.isfinite(best_distance) else 0.0,
         duration_s=best_time,
         aco_iterations_run=iterations_run,
         aco_stopped_early=stopped_early,
@@ -1304,6 +1510,7 @@ def _baseline_factible_partitioned(
         distance_m=distance_m,
         duration_s=duration_s,
         uncovered_customer_indices=sorted(set(uncovered)),
+        vehicle_indices=_active_vehicle_indices(routes),
     )
 
 
@@ -1352,6 +1559,7 @@ def _baseline_factible_global(
         distance_m=distance_m,
         duration_s=duration_s,
         uncovered_customer_indices=uncovered,
+        vehicle_indices=_active_vehicle_indices(routes),
     )
 
 
@@ -1363,7 +1571,7 @@ def _baseline_route(
     """Ruta actual: visita fija por orden de código (ineficiente)."""
     route = [0] + list(range(1, n_customers + 1)) + [0]
     d, t = _route_cost(route, dist_matrix, time_matrix)
-    return RouteSolution(vehicle_routes=[route], distance_m=d, duration_s=t)
+    return RouteSolution(vehicle_routes=[route], distance_m=d, duration_s=t, vehicle_indices=[0])
 
 
 def _critical_coverage_pct(customers: list[CustomerNode], served_codes: set[str]) -> int:
@@ -1517,7 +1725,8 @@ def _routes_to_geojson(
             landfill_lon=landfill_lon,
             landfill_lat=landfill_lat,
         )
-        vehicle = vehicles[min(v_idx, len(vehicles) - 1)] if vehicles else None
+        vehicle_idx = _route_vehicle_index(solution, v_idx, len(vehicles)) if vehicles else v_idx
+        vehicle = vehicles[vehicle_idx] if vehicles else None
         if vehicle is not None:
             d, _, total_s = _route_operational_duration(
                 route_indices,
@@ -1540,9 +1749,11 @@ def _routes_to_geojson(
         )
         feature = _build_geojson_feature(
             coords,
-            route_id=f"route-{kind}" if v_idx == 0 else f"route-{kind}-v{v_idx + 1}",
+            route_id=(
+                f"route-{kind}" if vehicle_idx == 0 else f"route-{kind}-v{vehicle_idx + 1}"
+            ),
             kind=kind,
-            label=label if v_idx == 0 else f"{label} — vehículo {v_idx + 1}",
+            label=label if vehicle_idx == 0 else f"{label} — vehículo {vehicle_idx + 1}",
             distance_km=d / 1000,
             duration_min=int(total_s / 60),
             stops=stops,
@@ -1571,6 +1782,7 @@ def _compute_kpis(
     unload_seconds: int = 0,
     shift_budget_seconds: int = 0,
     uncovered_point_codes: list[str] | None = None,
+    max_route_hours_target: float = 8.0,
 ) -> dict[str, Any]:
     n_customers = len(customers)
     cur_km = _safe_distance_km(current.distance_m)
@@ -1623,6 +1835,21 @@ def _compute_kpis(
     active_routes = [route for route in optimized.vehicle_routes if len(route) > 2]
     vehicle_count = max(1, len(active_routes))
 
+    # Fase 13.1 — KPIs de flota, duración y equidad (aditivos).
+    active_vehicles = int(opt_metrics["active_vehicles"])
+    assignable_vehicles = max(1, len(vehicles))
+    fleet_utilization = round(active_vehicles / assignable_vehicles * 100, 1)
+    route_hours = list(opt_metrics["route_hours"])
+    target_hours = max_route_hours_target if max_route_hours_target and max_route_hours_target > 0 else workday_h
+    finish_under_target = (
+        round(sum(1 for value in route_hours if value <= target_hours) / len(route_hours) * 100, 1)
+        if route_hours
+        else 0.0
+    )
+    max_route_hours = float(opt_metrics["max_route_hours"])
+    shift_hours = shift_budget_seconds / 3600 if shift_budget_seconds > 0 else workday_h
+    shift_slack = round(shift_hours - max_route_hours, 2)
+
     saving_pct_val = round((1 - opt_km / cur_km) * 100, 1) if cur_km > 0 else 0.0
     critical_pct_opt = _critical_coverage_pct(customers, served_codes)
     iec = round((saving_pct_val * coverage_pct * critical_pct_opt) / 10000, 2)
@@ -1655,6 +1882,16 @@ def _compute_kpis(
         "uncoveredPoints": len(uncovered),
         "iec": iec,
         "savingPct": saving_pct_val,
+        # Fase 13.1 — uso de flota, tiempo de servicio y equidad (Fase 13, §5.1).
+        "activeVehicles": active_vehicles,
+        "fleetUtilizationPct": fleet_utilization,
+        "vehicleWorkloadHours": opt_metrics["vehicle_workload_hours"],
+        "maxRouteHours": max_route_hours,
+        "shiftSlackHours": shift_slack,
+        "finishUnderTargetPct": finish_under_target,
+        "maxRouteHoursTarget": round(target_hours, 2),
+        "workloadStdHours": opt_metrics["workload_std_hours"],
+        "fairnessIndex": opt_metrics["fairness_index"],
     }
 
 
@@ -1677,6 +1914,10 @@ def _build_engine_metrics(
     graph_load_source: str,
     aco_parallel_workers: int,
     aco_convergence: list[dict[str, float | int]],
+    workload_balance_weight: float = 0.0,
+    makespan_weight: float = 0.0,
+    min_active_vehicles: int | None = None,
+    max_route_hours_target: float = 8.0,
 ) -> dict[str, Any]:
     overhead = max(0.0, computation_seconds - aco_seconds - graph_seconds)
     return {
@@ -1698,6 +1939,11 @@ def _build_engine_metrics(
         "acoConvergence": aco_convergence,
         "customers": customer_count,
         "vehicles": vehicle_count,
+        # Fase 13 — parámetros del objetivo multiobjetivo (trazabilidad RNF-5).
+        "workloadBalanceWeight": workload_balance_weight,
+        "makespanWeight": makespan_weight,
+        "minActiveVehicles": min_active_vehicles,
+        "maxRouteHoursTarget": max_route_hours_target,
     }
 
 
@@ -1856,6 +2102,7 @@ def _persist_routes(
     daily_plan_id: int | None = None,
     planning_level: str | None = None,
     unload_seconds: int = 0,
+    departure_at: datetime | None = None,
 ) -> None:
     """Guarda rutas y waypoints en BD."""
     if daily_plan_id is not None:
@@ -1873,7 +2120,7 @@ def _persist_routes(
         for v_idx, route_indices in enumerate(solution.vehicle_routes):
             if len(route_indices) <= 2:
                 continue
-            vehicle = vehicles[min(v_idx, len(vehicles) - 1)]
+            vehicle = vehicles[_route_vehicle_index(solution, v_idx, len(vehicles))]
             d, _, total_s = _route_operational_duration(
                 route_indices,
                 dist_matrix,
@@ -1899,10 +2146,22 @@ def _persist_routes(
             db.flush()
 
             seq = 0
+            # Fase 13.5 — ETA por parada: viaje + servicio + descargas desde la salida.
+            elapsed_s = 0.0
+            previous = route_indices[0] if route_indices else 0
+            assigned_effective = resolve_effective_assigned(
+                vehicle.assigned_operators,
+                ideal=vehicle.ideal_operators,
+                operators_shortage=operators_shortage,
+            )
+            service_per_stop = service_time_seconds_per_stop(
+                assigned_effective, ideal=vehicle.ideal_operators
+            )
             for idx in route_indices:
                 if idx == 0:
                     continue
                 seq += 1
+                elapsed_s += time_matrix[previous][idx]
                 if idx == landfill_idx:
                     db.add(
                         RouteWaypoint(
@@ -1914,10 +2173,18 @@ def _persist_routes(
                             status="pending",
                         )
                     )
+                    elapsed_s += unload_seconds
+                    previous = idx
                     continue
                 if not _is_collection_idx(idx, n_customers):
+                    previous = idx
                     continue
                 customer = customers[idx - 1]
+                estimated_arrival = (
+                    departure_at + timedelta(seconds=elapsed_s)
+                    if departure_at is not None
+                    else None
+                )
                 db.add(
                     RouteWaypoint(
                         route_id=db_route.id,
@@ -1926,8 +2193,11 @@ def _persist_routes(
                         sequence_order=seq,
                         status="pending",
                         collected_weight_kg=Decimal(str(round(customer.demand_kg, 2))),
+                        estimated_arrival_at=estimated_arrival,
                     )
                 )
+                elapsed_s += service_per_stop
+                previous = idx
 
 
 def run_optimization_engine(
@@ -1960,6 +2230,10 @@ def run_optimization_engine(
     sector_partition: bool | None = None,
     include_per_vehicle_routes: bool = False,
     seed: int | None = None,
+    workload_balance_weight: float | None = None,
+    makespan_weight: float | None = None,
+    min_active_vehicles: int | None = None,
+    max_route_hours_target: float | None = None,
 ) -> dict[str, Any]:
     """Ejecuta el motor real de optimización y persiste resultados."""
     computation_started = time.perf_counter()
@@ -1998,6 +2272,10 @@ def run_optimization_engine(
         estimated_duration_hours=estimated_duration_hours,
         rain_intensity=rain_intensity,
         waste_level_pct=waste_level_pct,
+        workload_balance_weight=workload_balance_weight,
+        makespan_weight=makespan_weight,
+        min_active_vehicles=min_active_vehicles,
+        max_route_hours_target=max_route_hours_target,
     )
 
     normalized = normalize_scenario_id(resolved_params.scenario_id)
@@ -2018,11 +2296,15 @@ def run_optimization_engine(
 
     rain = normalize_rain_intensity(resolved_params.rain_intensity)
     waste = normalize_waste_level_pct(resolved_params.waste_level_pct)
-    duration_h = normalize_duration_hours(resolved_params.estimated_duration_hours)
     shortage = normalize_operators_shortage(resolved_params.operators_shortage)
     # Parámetros del algoritmo configurables por el planificador (BD) que actúan como
     # valores por defecto cuando la corrida no los especifica.
     algorithm_settings = get_algorithm_settings(db)
+    # Fase 13 — jornada de turno: la corrida manda; si no, el default del algoritmo.
+    duration_h = resolve_shift_hours(
+        resolved_params.estimated_duration_hours,
+        algorithm_settings.default_shift_hours,
+    )
     resolved_aco_ants = normalize_aco_ants(
         resolved_params.aco_ants
         if resolved_params.aco_ants is not None
@@ -2055,6 +2337,33 @@ def run_optimization_engine(
         bool(resolved_params.time_window_enabled)
         if resolved_params.time_window_enabled is not None
         else False
+    )
+    # Fase 13 — pesos del objetivo multiobjetivo (request > caso > admin).
+    resolved_workload_balance_weight = _normalize_objective_weight(
+        resolved_params.workload_balance_weight
+        if resolved_params.workload_balance_weight is not None
+        else algorithm_settings.workload_balance_weight
+    )
+    resolved_makespan_weight = _normalize_objective_weight(
+        resolved_params.makespan_weight
+        if resolved_params.makespan_weight is not None
+        else algorithm_settings.makespan_weight
+    )
+    resolved_max_route_hours_target = float(
+        resolved_params.max_route_hours_target
+        if resolved_params.max_route_hours_target is not None
+        else algorithm_settings.max_route_hours_target
+    )
+    requested_min_active_vehicles = (
+        resolved_params.min_active_vehicles
+        if resolved_params.min_active_vehicles is not None
+        else algorithm_settings.min_active_vehicles
+    )
+    # ¿La corrida pide el objetivo multiobjetivo? (afecta el reparto de territorios, R-4)
+    objective_requested = (
+        resolved_workload_balance_weight > 0
+        or resolved_makespan_weight > 0
+        or (requested_min_active_vehicles is not None and requested_min_active_vehicles > 0)
     )
     resolved_kpi_view = kpi_view if kpi_view in {"distance", "time", "co2"} else "distance"
     traffic_mult, fill_boost, applied_modifiers = apply_simulation_parameter_modifiers(
@@ -2234,6 +2543,47 @@ def run_optimization_engine(
         compute_service_time_sec(vehicle, shortage_for_engine) for vehicle in vehicles
     ]
 
+    # Fase 13.3 — restricción de flota mínima: degradar con warning si es infactible.
+    effective_min_active_vehicles, min_active_warning = resolve_min_active_vehicles(
+        requested_min_active_vehicles,
+        available_customers=n_customers,
+        available_vehicles=len(vehicles),
+    )
+    if min_active_warning:
+        report("instancia_vrp", min_active_warning, "warning")
+
+    if (
+        resolved_workload_balance_weight > 0
+        or resolved_makespan_weight > 0
+        or effective_min_active_vehicles is not None
+    ):
+        report(
+            "instancia_vrp",
+            (
+                "Objetivo multiobjetivo activo — "
+                f"equidad λ_b={resolved_workload_balance_weight:g}, "
+                f"makespan λ_t={resolved_makespan_weight:g}, "
+                f"mín. vehículos={effective_min_active_vehicles if effective_min_active_vehicles is not None else '—'}"
+            ),
+            "info",
+        )
+
+    # Fase 13.5 — salida de la flota en la zona horaria operativa (reloj local, no UTC).
+    departure_at = operational_departure_at(
+        operation_date,
+        facilities.work_start,
+        tz=resolve_operational_timezone(db),
+    )
+
+    simulation_parameters["multiObjective"] = {
+        "workloadBalanceWeight": resolved_workload_balance_weight,
+        "makespanWeight": resolved_makespan_weight,
+        "minActiveVehicles": effective_min_active_vehicles,
+        "minActiveVehiclesRequested": requested_min_active_vehicles,
+        "maxRouteHoursTarget": resolved_max_route_hours_target,
+        "departureAt": departure_at.isoformat(),
+    }
+
     report("matriz_costos", "Construyendo matriz de costos sobre red vial (NetworkX shortest path)")
     depot_node = nearest_node(graph, depot_lon, depot_lat)
 
@@ -2320,11 +2670,21 @@ def run_optimization_engine(
     # por zonas desde el Plan semanal o mezcla) se usa el ACO global multi-flota, que
     # reparte los contenedores libremente entre la flota.
     explicit_sector_driver_map = build_sector_driver_map(db)
-    use_sector_partition = (
-        sector_partition
-        if sector_partition is not None
-        else sector_territory_applies(customers, explicit_sector_driver_map)
+    auto_sector_partition = sector_territory_applies(customers, explicit_sector_driver_map)
+    use_sector_partition, partition_disabled_by_objective = resolve_sector_partition(
+        sector_partition,
+        auto_applies=auto_sector_partition,
+        objective_requested=objective_requested,
     )
+    if partition_disabled_by_objective:
+        report(
+            "instancia_vrp",
+            (
+                "Multiobjetivo activo: territorios sector→conductor desactivados para "
+                "reparto global de equidad/makespan (R-4)"
+            ),
+            "info",
+        )
     if use_sector_partition:
         resolved_sector_driver_map = resolve_sector_driver_map_for_optimization(
             customers,
@@ -2368,7 +2728,7 @@ def run_optimization_engine(
                 ),
                 "info",
             )
-        else:
+        elif not partition_disabled_by_objective:
             report(
                 "instancia_vrp",
                 (
@@ -2380,6 +2740,15 @@ def run_optimization_engine(
 
     baseline_demands = [customer.demand_kg for customer in customers]
     baseline_capacities = [vehicle.capacity_kg for vehicle in vehicles]
+    if use_sector_partition and objective_requested:
+        report(
+            "instancia_vrp",
+            (
+                "Territorios sector→conductor forzados: el objetivo multiobjetivo no aplica "
+                "(cada vehículo resuelve su zona de forma independiente; ver R-4)"
+            ),
+            "warning",
+        )
     if use_sector_partition:
         current_solution = _baseline_factible_partitioned(
             assigned_by_vehicle,
@@ -2504,6 +2873,10 @@ def run_optimization_engine(
             at_risk_multiplier=at_risk_multiplier,
             critical_multiplier=critical_multiplier,
             high_multiplier=high_multiplier,
+            workload_balance_weight=resolved_workload_balance_weight,
+            makespan_weight=resolved_makespan_weight,
+            distance_reference_m=current_solution.distance_m,
+            min_active_vehicles=effective_min_active_vehicles,
         )
     if not math.isfinite(optimized_solution.distance_m) or not optimized_solution.vehicle_routes:
         report(
@@ -2549,8 +2922,22 @@ def run_optimization_engine(
         unload_seconds=unload_seconds,
         shift_budget_seconds=facilities.shift_budget_seconds,
         uncovered_point_codes=uncovered_point_codes,
+        max_route_hours_target=resolved_max_route_hours_target,
     )
     kpis["kpiView"] = resolved_kpi_view
+    if (
+        effective_min_active_vehicles is not None
+        and int(kpis.get("activeVehicles") or 0) < effective_min_active_vehicles
+    ):
+        report(
+            "refinamiento_2opt",
+            (
+                f"No se alcanzó min_active_vehicles={effective_min_active_vehicles}: "
+                f"la solución usa {int(kpis.get('activeVehicles') or 0)} vehículo(s) activo(s) "
+                "(restricción degradada)"
+            ),
+            "warning",
+        )
 
     computation_seconds = time.perf_counter() - computation_started
     engine_metrics = _build_engine_metrics(
@@ -2571,6 +2958,10 @@ def run_optimization_engine(
         graph_load_source=graph_source,
         aco_parallel_workers=optimized_solution.aco_parallel_workers,
         aco_convergence=optimized_solution.aco_convergence,
+        workload_balance_weight=resolved_workload_balance_weight,
+        makespan_weight=resolved_makespan_weight,
+        min_active_vehicles=effective_min_active_vehicles,
+        max_route_hours_target=resolved_max_route_hours_target,
     )
     kpis["engineMetrics"] = engine_metrics
     simulation_parameters["engineMetrics"] = engine_metrics
@@ -2709,6 +3100,7 @@ def run_optimization_engine(
         daily_plan_id=daily_plan_id,
         planning_level=planning_context["level"],
         unload_seconds=unload_seconds,
+        departure_at=departure_at,
     )
     if daily_plan_id is not None:
         from app.services.planning_service import mark_daily_plan_optimized

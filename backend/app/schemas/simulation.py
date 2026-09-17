@@ -73,6 +73,39 @@ class OptimizeRequest(CamelModel):
         default=None,
         description="Métrica principal para narrativa de KPIs (no altera el fitness del solver).",
     )
+    workload_balance_weight: float | None = Field(
+        default=None,
+        ge=0,
+        le=10,
+        description=(
+            "Peso de equidad de carga (Fase 13): penaliza el desbalance de horas de servicio "
+            "entre camiones normalizado (σ/μ). 0 = solo distancia."
+        ),
+    )
+    makespan_weight: float | None = Field(
+        default=None,
+        ge=0,
+        le=10,
+        description=(
+            "Peso del makespan (Fase 13): penaliza la ruta más larga normalizada "
+            "(T_max / jornada). 0 = solo distancia."
+        ),
+    )
+    min_active_vehicles: int | None = Field(
+        default=None,
+        ge=1,
+        le=100,
+        description=(
+            "Mínimo de vehículos activos por día (Fase 13). Si es infactible respecto "
+            "a los puntos programados, se degrada con warning explícito."
+        ),
+    )
+    max_route_hours_target: float | None = Field(
+        default=None,
+        ge=1,
+        le=18,
+        description="Jornada objetivo (h) del KPI finishUnderTargetPct (Fase 13). Default 8 h.",
+    )
     planning_level: Literal["strategic", "administrative", "operational", "simulation"] | None = None
     operation_date: date | None = None
     collection_point_ids: list[int] | None = None

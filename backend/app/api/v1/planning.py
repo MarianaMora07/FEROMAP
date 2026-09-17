@@ -386,7 +386,12 @@ def optimize_daily(
         priority_fill_level=body.priority_fill_level,
         time_window_enabled=body.time_window_enabled,
         departure_hour=body.departure_hour,
+        estimated_duration_hours=body.estimated_duration_hours,
         kpi_view=body.kpi_view,
+        workload_balance_weight=body.workload_balance_weight,
+        makespan_weight=body.makespan_weight,
+        min_active_vehicles=body.min_active_vehicles,
+        max_route_hours_target=body.max_route_hours_target,
     )
     return {"jobId": job.id, "dailyPlanId": daily_plan_id, "pointCount": len(point_ids)}
 

@@ -49,6 +49,10 @@ class CaseStudyDefaultParameters:
     estimated_duration_hours: int | None = None
     rain_intensity: str | None = None
     waste_level_pct: int | None = None
+    workload_balance_weight: float | None = None
+    makespan_weight: float | None = None
+    min_active_vehicles: int | None = None
+    max_route_hours_target: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {}
@@ -68,6 +72,14 @@ class CaseStudyDefaultParameters:
             out["rainIntensity"] = self.rain_intensity
         if self.waste_level_pct is not None:
             out["wasteLevelPct"] = self.waste_level_pct
+        if self.workload_balance_weight is not None:
+            out["workloadBalanceWeight"] = self.workload_balance_weight
+        if self.makespan_weight is not None:
+            out["makespanWeight"] = self.makespan_weight
+        if self.min_active_vehicles is not None:
+            out["minActiveVehicles"] = self.min_active_vehicles
+        if self.max_route_hours_target is not None:
+            out["maxRouteHoursTarget"] = self.max_route_hours_target
         return out
 
 

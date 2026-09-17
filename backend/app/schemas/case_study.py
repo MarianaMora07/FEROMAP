@@ -12,6 +12,11 @@ class CaseStudyDefaultParameters(CamelModel):
     estimated_duration_hours: int | None = Field(default=None, ge=1, le=12)
     rain_intensity: str | None = None
     waste_level_pct: int | None = Field(default=None, ge=0, le=50)
+    # Fase 13 — objetivo multiobjetivo.
+    workload_balance_weight: float | None = Field(default=None, ge=0, le=10)
+    makespan_weight: float | None = Field(default=None, ge=0, le=10)
+    min_active_vehicles: int | None = Field(default=None, ge=1, le=100)
+    max_route_hours_target: float | None = Field(default=None, ge=1, le=18)
 
 
 class CaseStudyPointInput(CamelModel):

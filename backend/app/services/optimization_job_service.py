@@ -71,6 +71,10 @@ class OptimizationJob:
     fleet_limit: int | None = None
     fleet_by_type: dict[str, int] | None = None
     sector_partition: bool | None = None
+    workload_balance_weight: float | None = None
+    makespan_weight: float | None = None
+    min_active_vehicles: int | None = None
+    max_route_hours_target: float | None = None
     job_type: str = "simulation"
     extra_params: dict[str, Any] = field(default_factory=dict)
     created_at: datetime | None = None
@@ -110,6 +114,10 @@ _JOB_PARAM_FIELDS = (
     "fleet_limit",
     "fleet_by_type",
     "sector_partition",
+    "workload_balance_weight",
+    "makespan_weight",
+    "min_active_vehicles",
+    "max_route_hours_target",
 )
 
 
@@ -306,6 +314,10 @@ def create_optimization_job(
     fleet_limit: int | None = None,
     fleet_by_type: dict[str, int] | None = None,
     sector_partition: bool | None = None,
+    workload_balance_weight: float | None = None,
+    makespan_weight: float | None = None,
+    min_active_vehicles: int | None = None,
+    max_route_hours_target: float | None = None,
     job_type: str | None = None,
 ) -> OptimizationJob:
     resolved_auto_dispatch = auto_dispatch
@@ -338,6 +350,10 @@ def create_optimization_job(
         fleet_limit=fleet_limit,
         fleet_by_type=fleet_by_type,
         sector_partition=sector_partition,
+        workload_balance_weight=workload_balance_weight,
+        makespan_weight=makespan_weight,
+        min_active_vehicles=min_active_vehicles,
+        max_route_hours_target=max_route_hours_target,
         job_type=job_type,
         created_at=created_at,
     )
@@ -516,6 +532,10 @@ def _run_job_worker(job_id: str) -> None:
             fleet_limit=job.fleet_limit,
             fleet_by_type=job.fleet_by_type,
             sector_partition=job.sector_partition,
+            workload_balance_weight=job.workload_balance_weight,
+            makespan_weight=job.makespan_weight,
+            min_active_vehicles=job.min_active_vehicles,
+            max_route_hours_target=job.max_route_hours_target,
             reporter=reporter,
         )
         with job.lock:

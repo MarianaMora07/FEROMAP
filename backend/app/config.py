@@ -105,6 +105,23 @@ class Settings(BaseSettings):
     # rebosado". 0 desactiva la penalización (comportamiento solo-distancia).
     overflow_penalty_weight: float = 0.0
 
+    # Fase 13 — optimización multiobjetivo (distancia · uso de flota · tiempo de
+    # servicio). Pesos normalizados del objetivo combinado; 0 = solo distancia
+    # (comportamiento previo, ver RNF-2).
+    workload_balance_weight: float = 0.0
+    makespan_weight: float = 0.0
+    # Restricción opcional de flota activa por día (None = sin restricción).
+    min_active_vehicles: int | None = None
+    # Jornada objetivo (h) para el KPI finishUnderTargetPct.
+    max_route_hours_target: float = 8.0
+    # Jornada de turno por defecto (1–12 h). Recorta el presupuesto de jornada de
+    # todas las optimizaciones (día y semana) cuando la corrida no lo especifica;
+    # jornadas más cortas reparten la carga entre más vehículos. None = jornada de
+    # la instalación (06:00–18:00).
+    default_shift_hours: int | None = None
+    # Rotación de flota en el horizonte semanal (plan operativo Lun→Vie).
+    weekly_fleet_rotation: bool = False
+
     @property
     def is_production(self) -> bool:
         return (self.app_env or "").strip().lower() in PRODUCTION_ENVS
