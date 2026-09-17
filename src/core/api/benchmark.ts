@@ -71,6 +71,12 @@ export interface AcoSensitivityPayload {
   standardProfile: { acoAnts: number; acoIterations: number };
   standardHyperparameters?: Record<string, number>;
   runs: AcoSensitivityRun[];
+  /** Sello de instancia: lo escribe el backend al guardar (`null` si es antiguo). */
+  instanceFingerprint?: string | null;
+  /** Estado frente a la instancia actual: lo añade el `GET`. */
+  currentFingerprint?: string;
+  cacheState?: CalibrationCacheState;
+  stale?: boolean;
 }
 
 export function fetchAcoSensitivity(): Promise<AcoSensitivityPayload> {
@@ -132,6 +138,18 @@ export type CalibrationJobStatus =
   | 'cancelled'
   | 'failed';
 
+/** Estado de una caché histórica frente a la instancia de BD actual. */
+export type CalibrationCacheState = 'fresh' | 'stale' | 'unknown';
+
+export interface CalibrationFreshness {
+  /** Sello con el que se generó (lo escribe el backend al guardar). */
+  instanceFingerprint: string | null;
+  /** Sello de la instancia vigente (lo añade el GET). */
+  currentFingerprint: string;
+  cacheState: CalibrationCacheState;
+  stale: boolean;
+}
+
 /** Corrida del barrido de pesos del objetivo (`run_multiobjective_sweep`). */
 export interface ObjectiveSweepRun {
   label: string;
@@ -186,6 +204,35 @@ export interface ObjectiveSweepPayload {
   runs: ObjectiveSweepRun[];
   paretoFrontier: ObjectiveSweepRun[];
   acceptance: ObjectiveSweepAcceptance;
+  /** Sello de instancia: lo escribe el backend al guardar (`null` si es antiguo). */
+  instanceFingerprint?: string | null;
+  /** Estado frente a la instancia actual: lo añade el `GET`. */
+  currentFingerprint?: string;
+  cacheState?: CalibrationCacheState;
+  stale?: boolean;
+}
+
+export interface CalibrationHistoryItem {
+  runId: string;
+  sweep: CalibrationSweep | null;
+  scenarioId: string | null;
+  seed: number | null;
+  durationSeconds: number | null;
+  instanceFingerprint: string | null;
+  cacheState: CalibrationCacheState;
+  stale: boolean;
+  createdAt: string | null;
+}
+
+export interface CalibrationHistoryPage {
+  items: CalibrationHistoryItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface CalibrationHistoryRun extends CalibrationHistoryItem {
+  payload: CalibrationJobResult;
 }
 
 export interface CalibrationJobLogEntry {
@@ -260,6 +307,22 @@ export function cancelCalibrationJob(jobId: string): Promise<{ jobId: string; st
     `/api/v1/benchmarks/calibration/jobs/${jobId}/cancel`,
     {},
   );
+}
+
+/** Historial de corridas guardadas en la BD (información histórica). */
+export function fetchCalibrationHistory(limit = 20): Promise<CalibrationHistoryPage> {
+  if (useMocks) {
+    return Promise.resolve({ items: [], total: 0, limit, offset: 0 });
+  }
+  return apiGet<CalibrationHistoryPage>(`/api/v1/benchmarks/calibration/history?limit=${limit}`);
+}
+
+/** Payload completo de una corrida histórica (404 si no existe). */
+export function fetchCalibrationRun(runId: string): Promise<CalibrationHistoryRun> {
+  if (useMocks) {
+    return Promise.reject(new ApiError('Historial no disponible en modo demo.', 404));
+  }
+  return apiGet<CalibrationHistoryRun>(`/api/v1/benchmarks/calibration/history/${runId}`);
 }
 
 // --- Benchmark entre familias (ACO vs Clarke-Wright vs GA) — Tarea 6 --------

@@ -147,6 +147,55 @@ export const es = {
   'calibration.ac2': 'AC-2 · Flota ≥ 3 y jornada ≤ 8 h',
   'calibration.ac3': 'AC-3 · Rotación semanal',
   'settings.section.algorithm': 'Algoritmo',
+  // Sello de instancia
+  'calibration.cacheState.fresh': 'de la instancia actual',
+  'calibration.cacheState.stale': 'de otra instancia',
+  'calibration.cacheState.unknown': 'sin sello',
+  'calibration.freshness.fresh': 'Estos resultados son de la instancia actual de la BD.',
+  'calibration.freshness.freshHint':
+    'Sello de instancia vigente: si cambias puntos, flota o depósito, dejarán de serlo.',
+  'calibration.freshness.stamp': 'Sello',
+  'calibration.freshness.stale': 'Estos resultados son de otra instancia de BD.',
+  'calibration.freshness.staleHint':
+    'Se generaron antes de un reset o un cambio de puntos/flota/depósito: recalcula para que correspondan a la BD actual.',
+  'calibration.freshness.unknown': 'Estos resultados no llevan sello de instancia.',
+  'calibration.freshness.unknownHint':
+    'Se guardaron antes de esta versión, así que no se puede saber contra qué BD se corrieron. Recalcula para sellarlos.',
+  'calibration.freshness.recompute': 'Recalcular',
+  // Recomendación derivada de la evidencia
+  'calibration.advice.title': 'Recomendación',
+  'calibration.advice.subtitle': 'Derivada de la evidencia de esta pantalla (no la inventa).',
+  'calibration.advice.noEvidence': 'Sin evidencia: ejecuta un barrido para obtener una recomendación.',
+  'calibration.advice.profile': 'Perfil sugerido (mejor nivel medido por eje)',
+  'calibration.advice.keep': 'No vale la pena tocar:',
+  'calibration.advice.keepLevel': 'sin cambio (insensible)',
+  'calibration.advice.earlyStop':
+    'La mejor corrida se detuvo por early-stop: la comparación entre ejes está confundida. Sube la paciencia del ACO y repite.',
+  'calibration.advice.combination':
+    'La combinación de los mejores niveles no está medida (barrido OFAT): confírmala con una corrida de validación.',
+  'calibration.advice.operating': 'Punto de operación sugerido (jornada de 8 h)',
+  'calibration.advice.weights': 'Pesos',
+  'calibration.advice.acceptedBy': 'Respaldo:',
+  'calibration.advice.alternatives': 'Alternativas también válidas',
+  'calibration.advice.avoid': 'Configuraciones que empeoran la distancia',
+  'calibration.advice.noteFairness': 'mejor equidad del bloque',
+  'calibration.advice.noteHours': 'menos horas de ruta',
+  'calibration.advice.noteValid': 'dentro del 10 % del mejor',
+  'calibration.advice.scope':
+    '1 instancia · 1 semilla · OFAT: sugerencia situacional, no un óptimo global.',
+  'calibration.advice.editInSettings': 'Aplicar estos valores en Configuración → Algoritmo',
+  // Historial
+  'calibration.sweep.sensitivity': 'Sensibilidad ACO',
+  'calibration.sweep.objective': 'Pesos del objetivo',
+  'calibration.history.title': 'Ejecuciones anteriores',
+  'calibration.history.subtitle':
+    'Corridas guardadas en la BD (información histórica); abrir una no modifica la caché vigente.',
+  'calibration.history.empty': 'Todavía no hay corridas guardadas.',
+  'calibration.history.view': 'Ver',
+  'calibration.history.back': 'Volver a la corrida vigente',
+  'calibration.history.when': 'Cuándo',
+  'calibration.history.stamp': 'Instancia',
+  'calibration.history.viewing': 'Viendo una corrida histórica:',
 } as const;
 
 export type MessageKey = keyof typeof es;
@@ -286,6 +335,52 @@ export const en: Record<MessageKey, string> = {
   'calibration.ac2': 'AC-2 · Fleet ≥ 3 and shift ≤ 8 h',
   'calibration.ac3': 'AC-3 · Weekly rotation',
   'settings.section.algorithm': 'Algorithm',
+  'calibration.cacheState.fresh': 'from the current instance',
+  'calibration.cacheState.stale': 'from another instance',
+  'calibration.cacheState.unknown': 'without a stamp',
+  'calibration.freshness.fresh': 'These results belong to the current database instance.',
+  'calibration.freshness.freshHint':
+    'Instance stamp is current: change points, fleet or depot and it will not be.',
+  'calibration.freshness.stamp': 'Stamp',
+  'calibration.freshness.stale': 'These results belong to another database instance.',
+  'calibration.freshness.staleHint':
+    'They were produced before a reset or a change of points, fleet or depot: recompute to match the current database.',
+  'calibration.freshness.unknown': 'These results carry no instance stamp.',
+  'calibration.freshness.unknownHint':
+    'They were stored before this version, so there is no way to know which database they came from. Recompute to stamp them.',
+  'calibration.freshness.recompute': 'Recompute',
+  'calibration.advice.title': 'Recommendation',
+  'calibration.advice.subtitle': 'Derived from the evidence on this screen, never invented.',
+  'calibration.advice.noEvidence': 'No evidence yet: run a sweep to get a recommendation.',
+  'calibration.advice.profile': 'Suggested profile (best measured level per axis)',
+  'calibration.advice.keep': 'Not worth touching:',
+  'calibration.advice.keepLevel': 'no change (insensitive)',
+  'calibration.advice.earlyStop':
+    'The best run stopped early: the comparison across axes is confounded. Raise ACO patience and repeat.',
+  'calibration.advice.combination':
+    'The combination of the best levels is not measured (OFAT sweep): confirm it with a validation run.',
+  'calibration.advice.operating': 'Suggested operating point (8 h shift)',
+  'calibration.advice.weights': 'Weights',
+  'calibration.advice.acceptedBy': 'Backed by:',
+  'calibration.advice.alternatives': 'Alternatives that also hold',
+  'calibration.advice.avoid': 'Configurations that worsen distance',
+  'calibration.advice.noteFairness': 'best fairness of the block',
+  'calibration.advice.noteHours': 'fewest route hours',
+  'calibration.advice.noteValid': 'within 10 % of the best',
+  'calibration.advice.scope':
+    '1 instance · 1 seed · OFAT: a situational suggestion, not a global optimum.',
+  'calibration.advice.editInSettings': 'Apply these values in Settings → Algorithm',
+  'calibration.sweep.sensitivity': 'ACO sensitivity',
+  'calibration.sweep.objective': 'Objective weights',
+  'calibration.history.title': 'Previous runs',
+  'calibration.history.subtitle':
+    'Runs stored in the database (historical data); opening one does not change the live cache.',
+  'calibration.history.empty': 'No stored runs yet.',
+  'calibration.history.view': 'View',
+  'calibration.history.back': 'Back to the live run',
+  'calibration.history.when': 'When',
+  'calibration.history.stamp': 'Instance',
+  'calibration.history.viewing': 'Viewing a historical run:',
 };
 
 export const DICTIONARIES = { es, en } as const;

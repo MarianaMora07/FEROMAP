@@ -5,10 +5,15 @@ import { ApiError } from '../../core/api/client';
 import {
   cancelCalibrationJob,
   fetchAcoSensitivity,
+  fetchCalibrationHistory,
   fetchCalibrationJob,
+  fetchCalibrationRun,
   fetchObjectiveSweep,
   startCalibrationJob,
   type AcoSensitivityPayload,
+  type CalibrationCacheState,
+  type CalibrationHistoryPage,
+  type CalibrationHistoryRun,
   type CalibrationJobSnapshot,
   type CalibrationSweep,
   type ObjectiveSweepPayload,
@@ -17,6 +22,9 @@ import { fetchScenarios } from '../../core/api/simulation';
 import { useLocale } from '../../core/i18n/solid';
 import type { Scenario } from '../../data/types/simulation';
 import { SettingsShell } from './SettingsShell';
+import { CalibrationAdvicePanel } from './CalibrationAdvicePanel';
+import { CalibrationFreshnessBanner } from './CalibrationFreshnessBanner';
+import { CalibrationHistoryPanel } from './CalibrationHistoryPanel';
 import { CalibrationObjectiveResults } from './CalibrationObjectiveResults';
 import { CalibrationProgress } from './CalibrationProgress';
 import { CalibrationResults } from './CalibrationResults';
@@ -44,9 +52,10 @@ function isMissingCache(error: unknown): boolean {
 /**
  * Calibración del motor (`/settings/calibration`, Fase 13 · decisión D-C).
  *
- * Ejecuta los dos barridos del ACO (sensibilidad y pesos del objetivo) como job
- * asíncrono con progreso real y cancelación, y renderiza los resultados desde la
- * caché (fuente de verdad). Métrica primaria: **distancia optimizada**.
+ * Ejecuta los dos barridos del ACO como job asíncrono con progreso y cancelación, y
+ * renderiza la evidencia en caché. Avisa si esa evidencia es de **otra instancia** de BD
+ * (sello de instancia), recomienda un perfil a partir de lo medido y permite abrir
+ * corridas anteriores guardadas en la BD. Métrica primaria: **distancia optimizada**.
  */
 export default function CalibrationPage() {
   const tr = useLocale();
@@ -61,6 +70,8 @@ export default function CalibrationPage() {
   const [cancelled, setCancelled] = createSignal(false);
   const [reusedCache, setReusedCache] = createSignal(false);
   const [tab, setTab] = createSignal<CalibrationSweep>('sensitivity');
+  const [history, setHistory] = createSignal<CalibrationHistoryPage | null>(null);
+  const [historyRun, setHistoryRun] = createSignal<CalibrationHistoryRun | null>(null);
 
   let pollTimer: number | undefined;
   let waitStartedAt = 0;
@@ -73,6 +84,14 @@ export default function CalibrationPage() {
   };
   onCleanup(stopPolling);
 
+  const loadHistory = async () => {
+    try {
+      setHistory(await fetchCalibrationHistory());
+    } catch {
+      setHistory(null);
+    }
+  };
+
   const loadCache = async () => {
     setLoadingCache(true);
     const [sens, obj] = await Promise.all([
@@ -81,7 +100,8 @@ export default function CalibrationPage() {
         return undefined;
       }),
       fetchObjectiveSweep().catch((cause: unknown) => {
-        if (!isMissingCache(cause)) setError(errorMessage(cause, 'No se pudo leer el barrido de pesos.'));
+        if (!isMissingCache(cause))
+          setError(errorMessage(cause, 'No se pudo leer el barrido de pesos.'));
         return undefined;
       }),
     ]);
@@ -97,14 +117,16 @@ export default function CalibrationPage() {
       .then(setScenarios)
       .catch(() => setScenarios([]));
     void loadCache();
+    void loadHistory();
   });
 
   const handleFinished = async (snapshot: CalibrationJobSnapshot) => {
     stopPolling();
     if (snapshot.status === 'completed') {
       setReusedCache(wasServedFromCache(snapshot, config()));
+      setHistoryRun(null);
       setTab((snapshot.sweep as CalibrationSweep | null) ?? config().mode);
-      await loadCache();
+      await Promise.all([loadCache(), loadHistory()]);
       return;
     }
     if (snapshot.status === 'cancelled') {
@@ -152,6 +174,13 @@ export default function CalibrationPage() {
     }
   };
 
+  /** Recalcula el barrido visible ignorando la caché (para sellarla de nuevo). */
+  const recompute = () => {
+    setConfig((current) => ({ ...current, mode: tab(), reuseCache: false }));
+    setHistoryRun(null);
+    void run();
+  };
+
   const cancel = async () => {
     const current = job();
     if (!current) return;
@@ -162,11 +191,33 @@ export default function CalibrationPage() {
     }
   };
 
-  const hasResults = createMemo(() =>
-    tab() === 'sensitivity' ? Boolean(sensitivity()) : Boolean(objective()),
+  const viewHistoryRun = async (runId: string) => {
+    try {
+      const run = await fetchCalibrationRun(runId);
+      setHistoryRun(run);
+      setTab(run.sweep ?? 'sensitivity');
+    } catch (cause) {
+      setError(errorMessage(cause, 'No se pudo abrir la corrida histórica.'));
+    }
+  };
+
+  const selectTab = (next: CalibrationSweep) => {
+    setHistoryRun(null);
+    setTab(next);
+  };
+
+  const currentPayload = createMemo(() =>
+    tab() === 'sensitivity' ? sensitivity() : objective(),
   );
+  const shownPayload = createMemo(() => historyRun()?.payload ?? currentPayload());
+  const hasResults = createMemo(() => Boolean(shownPayload()));
   const state = createMemo(() =>
     viewStateFor({ hasResults: hasResults(), job: job(), error: error() }),
+  );
+  const freshness = createMemo<CalibrationCacheState | undefined>(() =>
+    historyRun()
+      ? historyRun()!.cacheState
+      : (currentPayload() as { cacheState?: CalibrationCacheState } | undefined)?.cacheState,
   );
   const retry = () => void run();
 
@@ -227,16 +278,33 @@ export default function CalibrationPage() {
       </Show>
 
       <Show when={loadingCache()}>
-        <LoadingPanel label={tr('calibration.loading')} indeterminate detail={tr('calibration.subtitle')} />
+        <LoadingPanel
+          label={tr('calibration.loading')}
+          indeterminate
+          detail={tr('calibration.subtitle')}
+        />
       </Show>
 
       <Show when={!loadingCache()}>
+        <Show when={!historyRun() && currentPayload()}>
+          <CalibrationFreshnessBanner
+            state={freshness()}
+            fingerprint={sensitivity()?.instanceFingerprint ?? objective()?.instanceFingerprint}
+            onRecompute={recompute}
+            disabled={state() === 'ejecutando'}
+          />
+        </Show>
+
+        <Show when={sensitivity() || objective()}>
+          <CalibrationAdvicePanel sensitivity={sensitivity()} objective={objective()} />
+        </Show>
+
         <div class="flex flex-wrap gap-1 border-b border-border dark:border-dark-border">
           <button
             type="button"
             data-testid="calibration-result-tab-sensitivity"
             aria-current={tab() === 'sensitivity' ? 'page' : undefined}
-            onClick={() => setTab('sensitivity')}
+            onClick={() => selectTab('sensitivity')}
             class={`px-3 py-2 text-sm font-medium transition-colors ${
               tab() === 'sensitivity' ? 'text-fero-blue' : 'text-text-muted hover:text-text-primary'
             }`}
@@ -247,7 +315,7 @@ export default function CalibrationPage() {
             type="button"
             data-testid="calibration-result-tab-objective"
             aria-current={tab() === 'objective' ? 'page' : undefined}
-            onClick={() => setTab('objective')}
+            onClick={() => selectTab('objective')}
             class={`px-3 py-2 text-sm font-medium transition-colors ${
               tab() === 'objective' ? 'text-fero-blue' : 'text-text-muted hover:text-text-primary'
             }`}
@@ -267,11 +335,20 @@ export default function CalibrationPage() {
         >
           <Show
             when={tab() === 'sensitivity'}
-            fallback={<CalibrationObjectiveResults payload={objective()!} />}
+            fallback={
+              <CalibrationObjectiveResults payload={shownPayload() as ObjectiveSweepPayload} />
+            }
           >
-            <CalibrationResults payload={sensitivity()!} />
+            <CalibrationResults payload={shownPayload() as AcoSensitivityPayload} />
           </Show>
         </Show>
+
+        <CalibrationHistoryPanel
+          history={history()}
+          viewing={historyRun()}
+          onView={(runId) => void viewHistoryRun(runId)}
+          onBack={() => setHistoryRun(null)}
+        />
       </Show>
     </SettingsShell>
   );
