@@ -51,6 +51,32 @@ SWEEP_CASES: list[dict[str, Any]] = [
     {"label": "12 h · mín. 4 vehículos", "durationHours": None, "wb": 0.0, "wt": 0.0, "minActive": 4},
 ]
 
+# Jornadas explícitas que cubre el barrido (el resto de casos usa la jornada por defecto
+# del motor). Fuente de verdad para validar `durationHours` en la API.
+SUPPORTED_SWEEP_SHIFTS: frozenset[int] = frozenset(
+    case["durationHours"] for case in SWEEP_CASES if case["durationHours"] is not None
+)
+
+
+def validate_sweep_duration(duration_hours: int | None) -> int | None:
+    """Valida la jornada pedida contra las que el barrido ya cubre.
+
+    La jornada del barrido **no es una perilla**: los casos fijan 8 h (serie de AC-2) o la
+    jornada por defecto del motor, y de ese valor dependen las líneas base de AC-1/AC-2
+    (`evaluate_acceptance_criteria`) y las etiquetas del payload. Aceptarla aquí convierte
+    un valor inconsistente en un error explícito en vez de ignorarlo en silencio.
+    """
+    if duration_hours is None:
+        return None
+    if duration_hours in SUPPORTED_SWEEP_SHIFTS:
+        return duration_hours
+    supported = ", ".join(str(value) for value in sorted(SUPPORTED_SWEEP_SHIFTS))
+    raise ValueError(
+        f"durationHours={duration_hours} no está soportado: el barrido de pesos cubre la "
+        f"jornada {supported} h (serie de aceptación AC-2) y la jornada por defecto del "
+        "motor (omitir el campo)"
+    )
+
 
 def _sweep_dir(*, ensure: bool = False) -> Path:
     path = Path(settings.data_dir) / "cache" / "phase13"
