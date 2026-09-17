@@ -133,8 +133,10 @@ describe('export de calibración (Fase 8)', () => {
     const lines = objectiveRunsCsv(objectivePayload).split('\n');
 
     expect(lines).toHaveLength(2);
-    expect(lines[0]).toContain('caso,jornada_h,pesos');
-    expect(lines[1]).toContain('base 8 h (w=0),8,λb 0 · λt 0');
+    expect(lines[0]).toBe(
+      'caso,jornada_h,pesos,distancia_km_optimizada,ahorro_pct,vehiculos_activos,max_horas_ruta,holgura_h,termina_bajo_objetivo_pct,sigma_horas,equidad,puntos_no_cubiertos,cpu_s',
+    );
+    expect(lines[1]).toContain('base 8 h (w=0),8,λb 0 · λt 0,140.6,,6');
     expect(lines.join('\n')).not.toContain('barrido roto');
   });
 

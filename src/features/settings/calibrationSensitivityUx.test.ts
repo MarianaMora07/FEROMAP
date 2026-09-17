@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AcoSensitivityPayload, AcoSensitivityRun } from '../../core/api/benchmark';
 import {
   AXIS_ORDER,
+  amplitudeLabel,
   bestRun,
   bestRunWithoutEarlyStop,
   excludedRuns,
@@ -120,6 +121,17 @@ describe('sensibilidad ACO — derivaciones por eje (Fase 6)', () => {
 
     expect(bestRunWithoutEarlyStop(withEarlyStop)).toBeNull();
     expect(bestRunWithoutEarlyStop(payload().runs)?.label).toBe('β 5');
+  });
+
+  it('publica la amplitud de cada eje para las pestañas del ranking', () => {
+    const summaries = summarizeAxes(payload().runs);
+
+    expect(amplitudeLabel(summaries.find((item) => item.axis === 'beta')!)).toBe('28.6 %');
+    expect(amplitudeLabel(summaries.find((item) => item.axis === 'iterations')!)).toBe('0.1 %');
+
+    // Un eje sin corridas válidas no inventa una amplitud.
+    const empty = summarizeAxes([run('rho', 'ρ 0.30', undefined, { error: 'rota' })]);
+    expect(amplitudeLabel(empty.find((item) => item.axis === 'rho')!)).toBe('—');
   });
 
   it('etiqueta el nivel de cada eje', () => {

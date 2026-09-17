@@ -9,7 +9,9 @@ import { CalibrationAxisChart } from './CalibrationAxisChart';
 import { CalibrationReadingList } from './CalibrationReadingList';
 import {
   AXIS_ORDER,
+  amplitudeLabel,
   baselineKm,
+  isValidRun,
   levelLabel,
   readingFindings,
   summarizeAxes,
@@ -51,6 +53,10 @@ export function CalibrationResults(props: CalibrationResultsProps) {
 
   return (
     <div class="space-y-4" data-testid="calibration-sensitivity-results">
+      <p class="text-xs text-text-muted" data-testid="calibration-help">
+        {tr('calibration.help.sensitivity')}
+      </p>
+
       <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           title={tr('calibration.kpi.best')}
@@ -63,6 +69,7 @@ export function CalibrationResults(props: CalibrationResultsProps) {
           value={baselineKm(props.payload.runs)?.toFixed(1) ?? '—'}
           unit="km"
           iconTone="slate"
+          footer={<span class="text-xs text-text-muted">{tr('calibration.kpi.baselineHint')}</span>}
         />
         <KpiCard
           title={tr('calibration.kpi.axis')}
@@ -100,22 +107,35 @@ export function CalibrationResults(props: CalibrationResultsProps) {
         <div class="overflow-x-auto border-b border-border dark:border-dark-border">
           <nav class="flex min-w-max gap-1" aria-label={tr('calibration.axisRanking')}>
             <For each={AXIS_ORDER}>
-              {(item) => (
-                <button
-                  type="button"
-                  data-testid={`calibration-axis-${item}`}
-                  aria-current={axis() === item ? 'page' : undefined}
-                  onClick={() => setAxis(item)}
-                  class={`relative px-3 py-2 text-sm font-medium transition-colors ${
-                    axis() === item ? 'text-fero-blue' : 'text-text-muted hover:text-text-primary'
-                  }`}
-                >
-                  {tr(`calibration.axis.${item}`, item)}
-                  {axis() === item && (
-                    <span class="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-fero-blue" />
-                  )}
-                </button>
-              )}
+              {(item) => {
+                const itemSummary = () => summaries().find((summary) => summary.axis === item);
+                const isSensitive = () => sensitive()?.axis === item;
+                return (
+                  <button
+                    type="button"
+                    data-testid={`calibration-axis-${item}`}
+                    aria-current={axis() === item ? 'page' : undefined}
+                    onClick={() => setAxis(item)}
+                    class={`relative px-3 py-2 text-sm font-medium transition-colors ${
+                      axis() === item ? 'text-fero-blue' : 'text-text-muted hover:text-text-primary'
+                    }`}
+                  >
+                    {tr(`calibration.axis.${item}`, item)}
+                    <span
+                      class={`ml-1.5 font-mono text-[10px] ${
+                        isSensitive() ? 'text-amber-600 dark:text-amber-400' : 'text-text-muted'
+                      }`}
+                      data-testid={`calibration-axis-amplitude-${item}`}
+                    >
+                      {isSensitive() ? '▲ ' : ''}
+                      {itemSummary() ? amplitudeLabel(itemSummary()!) : '—'}
+                    </span>
+                    {axis() === item && (
+                      <span class="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-fero-blue" />
+                    )}
+                  </button>
+                );
+              }}
             </For>
           </nav>
         </div>
@@ -149,8 +169,19 @@ export function CalibrationResults(props: CalibrationResultsProps) {
                   <tbody>
                     <For each={[...current().ranked, ...current().excluded]}>
                       {(run) => (
-                        <tr class="border-b border-border/60 dark:border-dark-border/60">
-                          <td class="px-2 py-2">{levelLabel(run)}</td>
+                        <tr
+                          class={`border-b border-border/60 dark:border-dark-border/60 ${
+                            run === current().best ? 'bg-fero-green/5' : ''
+                          }`}
+                        >
+                          <td class="px-2 py-2">
+                            {levelLabel(run)}
+                            <Show when={run === current().best}>
+                              <span class="ml-2 rounded bg-fero-green/15 px-1 text-[10px] font-semibold text-fero-green-dark">
+                                {tr('calibration.bestLevel')}
+                              </span>
+                            </Show>
+                          </td>
                           <td class="px-2 py-2 font-mono">
                             {formatComputationSeconds(run.computationSeconds ?? 0)}
                           </td>
@@ -161,8 +192,8 @@ export function CalibrationResults(props: CalibrationResultsProps) {
                           <td class="px-2 py-2 font-mono">{run.acoIterationsRun ?? '—'}</td>
                           <td class="px-2 py-2">
                             <Show
-                              when={!run.error && (run.uncoveredPoints ?? 0) === 0}
-                              fallback={<span class="text-amber-600">excluida</span>}
+                              when={isValidRun(run)}
+                              fallback={<span class="text-amber-600">{tr('calibration.excluded')}</span>}
                             >
                               {run.acoStoppedEarly ? 'sí' : 'no'}
                             </Show>
@@ -172,6 +203,7 @@ export function CalibrationResults(props: CalibrationResultsProps) {
                     </For>
                   </tbody>
                 </table>
+                <p class="mt-2 text-[11px] text-text-muted">{tr('calibration.legend.sensitivity')}</p>
               </div>
             </>
           )}

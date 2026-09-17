@@ -2,12 +2,16 @@ import { describe, expect, it } from 'vitest';
 import type { ObjectiveSweepPayload, ObjectiveSweepRun } from '../../core/api/benchmark';
 import {
   acceptanceCards,
+  acceptanceLabel,
+  acceptanceSummary,
   bestObjectiveRun,
   frontierLabels,
   frontierRows,
+  isBaselineRun,
   isInFrontier,
   isValidObjectiveRun,
   objectiveFindings,
+  savingLabel,
   shiftLabel,
   tableRows,
   weightsLabel,
@@ -92,7 +96,30 @@ function payload(): ObjectiveSweepPayload {
 }
 
 describe('barrido de pesos — frontera y criterios de aceptación (Fase 7)', () => {
-  it('muestra la frontera del payload sin recalcular dominancia', () => {
+  it('marca la corrida de referencia y el ahorro declarado', () => {
+    expect(isBaselineRun(run('base 8 h (w=0)'))).toBe(true);
+    expect(isBaselineRun(run('base 12 h (w=0)', { durationHours: null }))).toBe(true);
+    expect(isBaselineRun(run('equidad 5', { workloadBalanceWeight: 5 }))).toBe(false);
+    expect(isBaselineRun(run('makespan 2', { makespanWeight: 2 }))).toBe(false);
+    // Pedir un mínimo de flota ya no es una corrida de referencia.
+    expect(isBaselineRun(run('mín. 6 vehículos', { minActiveVehiclesRequested: 6 }))).toBe(false);
+
+    expect(savingLabel(run('x', { savingPct: 11.24 }))).toBe('11.2 %');
+    expect(savingLabel(run('x'))).toBe('—');
+  });
+
+  it('cuenta los criterios por veredicto para el KPI', () => {
+    expect(acceptanceSummary(payload())).toEqual({
+      ok: 2,
+      total: 3,
+      withoutVerdict: ['ac3'],
+    });
+    expect(acceptanceSummary(payload()).withoutVerdict.map((id) => acceptanceLabel(id))).toEqual([
+      'AC-3',
+    ]);
+  });
+
+  it('expone la frontera del payload sin recalcular dominancia', () => {
     const data = payload();
 
     expect(frontierLabels(data)).toEqual(['makespan 5', 'base 8 h (w=0)']);

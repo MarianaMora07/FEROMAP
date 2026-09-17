@@ -97,7 +97,21 @@ export const es = {
   'calibration.kpi.best': 'Mejor distancia',
   'calibration.kpi.axis': 'Eje más sensible',
   'calibration.kpi.stable': 'Eje estable',
-  'calibration.kpi.baseline': 'Distancia de referencia',
+  'calibration.kpi.baseline': 'Referencia',
+  'calibration.kpi.baselineHint': 'ruta voraz del motor, no histórica',
+  'calibration.help.sensitivity':
+    'Ahorro relativo a la referencia de esta corrida (ruta voraz del motor) · 1 instancia · 1 semilla · OFAT',
+  'calibration.help.objective':
+    '«≤ obj. %» se mide contra el objetivo de 8 h · 1 instancia · 1 semilla · OFAT',
+  'calibration.bestLevel': 'mejor',
+  'calibration.baselineRow': 'base',
+  'calibration.excluded': 'excluida',
+  'calibration.acNoVerdict': 'sin veredicto',
+  'calibration.pareto.footer': 'soluciones no dominadas',
+  'calibration.legend.sensitivity':
+    '«mejor» = menor distancia del eje · «excluida» = con error o puntos sin cubrir',
+  'calibration.legend.objective':
+    '«base» = sin pesos · «Pareto» = no dominada · el ahorro es relativo a la referencia del bloque',
   'calibration.axis.ants': 'Hormigas',
   'calibration.axis.iterations': 'Iteraciones',
   'calibration.axis.alpha': 'α (feromona)',
@@ -223,7 +237,21 @@ export const en: Record<MessageKey, string> = {
   'calibration.kpi.best': 'Best distance',
   'calibration.kpi.axis': 'Most sensitive axis',
   'calibration.kpi.stable': 'Stable axis',
-  'calibration.kpi.baseline': 'Reference distance',
+  'calibration.kpi.baseline': 'Reference',
+  'calibration.kpi.baselineHint': 'engine greedy route, not historical',
+  'calibration.help.sensitivity':
+    'Saving relative to the reference of each run (engine greedy route) · 1 instance · 1 seed · OFAT',
+  'calibration.help.objective':
+    '“≤ target %” is measured against the 8 h target · 1 instance · 1 seed · OFAT',
+  'calibration.bestLevel': 'best',
+  'calibration.baselineRow': 'baseline',
+  'calibration.excluded': 'excluded',
+  'calibration.acNoVerdict': 'no verdict',
+  'calibration.pareto.footer': 'non-dominated solutions',
+  'calibration.legend.sensitivity':
+    '“best” = shortest distance of the axis · “excluded” = with errors or uncovered points',
+  'calibration.legend.objective':
+    '“baseline” = no weights · “Pareto” = non-dominated · savings are relative to the block reference',
   'calibration.axis.ants': 'Ants',
   'calibration.axis.iterations': 'Iterations',
   'calibration.axis.alpha': 'α (pheromone)',

@@ -36,6 +36,12 @@ export function axisLabelKey(axis: CalibrationAxis): string {
   return `calibration.axis.${axis}`;
 }
 
+/** Amplitud del eje como texto corto (`28.6 %`) para las pestañas del ranking. */
+export function amplitudeLabel(summary: CalibrationAxisSummary): string {
+  if (summary.amplitudePct === null) return '—';
+  return `${summary.amplitudePct.toFixed(1)} %`;
+}
+
 /** Nivel del eje en esa corrida (hormigas, iteraciones o valor del hiperparámetro). */
 export function levelValue(run: AcoSensitivityRun): number | null {
   switch (run.axis) {

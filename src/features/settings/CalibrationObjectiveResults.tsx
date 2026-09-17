@@ -14,10 +14,14 @@ import { ParetoFrontierChart } from './ParetoFrontierChart';
 import { CalibrationReadingList } from './CalibrationReadingList';
 import {
   acceptanceCards,
+  acceptanceLabel,
+  acceptanceSummary,
   bestObjectiveRun,
   frontierRows,
+  isBaselineRun,
   isInFrontier,
   objectiveFindings,
+  savingLabel,
   shiftLabel,
   tableRows,
   weightsLabel,
@@ -46,6 +50,7 @@ export function CalibrationObjectiveResults(props: CalibrationObjectiveResultsPr
   const tr = useLocale();
 
   const cards = createMemo(() => acceptanceCards(props.payload));
+  const summary = createMemo(() => acceptanceSummary(props.payload));
   const rows = createMemo(() => tableRows(props.payload));
   const findings = createMemo(() => objectiveFindings(props.payload));
   const best = createMemo(() => bestObjectiveRun(props.payload));
@@ -66,6 +71,10 @@ export function CalibrationObjectiveResults(props: CalibrationObjectiveResultsPr
 
   return (
     <div class="space-y-4" data-testid="calibration-objective-results">
+      <p class="text-xs text-text-muted" data-testid="calibration-help">
+        {tr('calibration.help.objective')}
+      </p>
+
       <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           title={tr('calibration.kpi.best')}
@@ -77,18 +86,26 @@ export function CalibrationObjectiveResults(props: CalibrationObjectiveResultsPr
           value={props.payload.runs[0]?.distanceKmBaseline?.toFixed(1) ?? '—'}
           unit="km"
           iconTone="slate"
+          footer={<span class="text-xs text-text-muted">{tr('calibration.kpi.baselineHint')}</span>}
         />
         <KpiCard
           title={tr('calibration.pareto')}
-          value={String(frontierRows(props.payload).length)}
-          unit={`/ ${props.payload.runs.length}`}
+          value={`${frontierRows(props.payload).length}/${props.payload.runs.length}`}
           iconTone="blue"
+          footer={<span class="text-xs text-text-muted">{tr('calibration.pareto.footer')}</span>}
         />
         <KpiCard
           title={tr('calibration.acceptance')}
-          value={`${cards().filter((card) => card.ok === true).length}/${cards().length}`}
-          unit="ok"
+          value={`${summary().ok}/${summary().total}`}
           iconTone="amber"
+          footer={
+            <Show when={summary().withoutVerdict.length}>
+              <span class="text-xs text-text-muted">
+                {summary().withoutVerdict.length} {tr('calibration.acNoVerdict')} ·{' '}
+                {summary().withoutVerdict.map((id) => acceptanceLabel(id)).join(', ')}
+              </span>
+            </Show>
+          }
         />
       </div>
 
@@ -152,6 +169,7 @@ export function CalibrationObjectiveResults(props: CalibrationObjectiveResultsPr
                 <th class="px-2 py-2 font-semibold">Jornada</th>
                 <th class="px-2 py-2 font-semibold">Pesos</th>
                 <th class="px-2 py-2 font-semibold">Distancia</th>
+                <th class="px-2 py-2 font-semibold">Ahorro</th>
                 <th class="px-2 py-2 font-semibold">Vehículos</th>
                 <th class="px-2 py-2 font-semibold">máx. h</th>
                 <th class="px-2 py-2 font-semibold">Holgura h</th>
@@ -176,12 +194,18 @@ export function CalibrationObjectiveResults(props: CalibrationObjectiveResultsPr
                           Pareto
                         </span>
                       </Show>
+                      <Show when={isBaselineRun(run)}>
+                        <span class="ml-2 rounded bg-app px-1 text-[10px] font-semibold text-text-muted">
+                          {tr('calibration.baselineRow')}
+                        </span>
+                      </Show>
                     </td>
                     <td class="px-2 py-2">{shiftLabel(run)}</td>
                     <td class="px-2 py-2 font-mono">{weightsLabel(run)}</td>
                     <td class="px-2 py-2 font-semibold">
                       {run.distanceKmOptimized?.toFixed(1) ?? '—'} km
                     </td>
+                    <td class="px-2 py-2 font-mono">{savingLabel(run)}</td>
                     <td class="px-2 py-2">{run.activeVehicles ?? '—'}</td>
                     <td class="px-2 py-2 font-mono">{run.maxRouteHours?.toFixed(2) ?? '—'}</td>
                     <td class="px-2 py-2 font-mono">{run.shiftSlackHours?.toFixed(2) ?? '—'}</td>
@@ -196,6 +220,7 @@ export function CalibrationObjectiveResults(props: CalibrationObjectiveResultsPr
               </For>
             </tbody>
           </table>
+          <p class="mt-2 text-[11px] text-text-muted">{tr('calibration.legend.objective')}</p>
         </div>
       </Card>
 

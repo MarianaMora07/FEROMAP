@@ -46,6 +46,23 @@ export function shiftLabel(run: ObjectiveSweepRun): string {
   return run.durationHours ? `${run.durationHours} h` : '12 h (defecto)';
 }
 
+/**
+ * Corrida de referencia: sin pesos y sin mínimo de flota (la línea base del barrido).
+ * Sirve para distinguirla en la tabla de las corridas ya optimizadas.
+ */
+export function isBaselineRun(run: ObjectiveSweepRun): boolean {
+  return (
+    run.workloadBalanceWeight === 0 &&
+    run.makespanWeight === 0 &&
+    !run.minActiveVehiclesRequested
+  );
+}
+
+/** Ahorro declarado por la corrida respecto a **su** referencia, ya formateado. */
+export function savingLabel(run: ObjectiveSweepRun): string {
+  return typeof run.savingPct === 'number' ? `${run.savingPct.toFixed(1)} %` : '—';
+}
+
 /** La frontera se toma tal cual del payload (no se recalcula dominancia en la UI). */
 export function frontierRows(payload: ObjectiveSweepPayload): ObjectiveSweepRun[] {
   return payload.paretoFrontier ?? [];
@@ -101,6 +118,28 @@ export function acceptanceCards(payload: ObjectiveSweepPayload): AcceptanceCard[
       detail: acceptance.ac3.evidence,
     },
   ];
+}
+
+export interface AcceptanceSummary {
+  ok: number;
+  total: number;
+  /** Criterios sin veredicto automático (hoy AC-3, evidenciado por un test). */
+  withoutVerdict: AcceptanceCard['id'][];
+}
+
+/** Etiqueta corta del criterio: `ac1` → `AC-1`. */
+export function acceptanceLabel(id: AcceptanceCard['id']): string {
+  return `AC-${id.slice(2)}`;
+}
+
+/** Conteo de criterios por veredicto, para el KPI y su leyenda. */
+export function acceptanceSummary(payload: ObjectiveSweepPayload): AcceptanceSummary {
+  const cards = acceptanceCards(payload);
+  return {
+    ok: cards.filter((card) => card.ok === true).length,
+    total: cards.length,
+    withoutVerdict: cards.filter((card) => card.ok === null).map((card) => card.id),
+  };
 }
 
 /** Mejor corrida válida del barrido (menor distancia optimizada). */
