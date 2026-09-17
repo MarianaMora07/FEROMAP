@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.services.optimization_service import run_optimization_engine
+from app.services.sweep_progress import CancelCheck, OnRun, SweepCancelled
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +169,8 @@ def run_aco_sensitivity(
     *,
     scenario_id: str = DEFAULT_SCENARIO_ID,
     seed: int = DEFAULT_SEED,
+    on_run: OnRun | None = None,
+    cancel_check: CancelCheck | None = None,
 ) -> dict[str, Any]:
     """18 corridas (escenario normal, semilla fija):
 
@@ -177,6 +180,10 @@ def run_aco_sensitivity(
 
     El KPI de referencia es la **distancia optimizada** (decisión D2); el resto de
     columnas son guardarraíles.
+
+    ``on_run``/``cancel_check`` conectan el barrido con el job asíncrono: ``on_run``
+    reporta el progreso antes de cada corrida y ``cancel_check`` corta entre corridas.
+    Si se cancela, lanza :class:`SweepCancelled` y **no** escribe la caché.
     """
     started = datetime.now(timezone.utc)
     runs: list[dict[str, Any]] = []
@@ -186,7 +193,12 @@ def run_aco_sensitivity(
         *ITERATION_SENSITIVITY_SERIES,
         *HYPERPARAMETER_SENSITIVITY_SERIES,
     ]
-    for case in series:
+    total = len(series)
+    for index, case in enumerate(series):
+        if cancel_check is not None and cancel_check():
+            raise SweepCancelled(f"Sensibilidad ACO cancelada tras {len(runs)}/{total} corridas")
+        if on_run is not None:
+            on_run(index, total, case["label"])
         logger.info(
             "Sensibilidad ACO %s (%s×%s)", case["label"], case["acoAnts"], case["acoIterations"]
         )

@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.services.optimization_service import run_optimization_engine
+from app.services.sweep_progress import CancelCheck, OnRun, SweepCancelled
 
 logger = logging.getLogger(__name__)
 
@@ -266,11 +267,23 @@ def run_multiobjective_sweep(
     *,
     scenario_id: str = DEFAULT_SCENARIO_ID,
     seed: int = DEFAULT_SEED,
+    on_run: OnRun | None = None,
+    cancel_check: CancelCheck | None = None,
 ) -> dict[str, Any]:
-    """Corre el barrido completo (instancia demo, seed fijo) y persiste la evidencia."""
+    """Corre el barrido completo (instancia demo, seed fijo) y persiste la evidencia.
+
+    ``on_run``/``cancel_check`` conectan el barrido con el job asíncrono: ``on_run``
+    reporta el progreso antes de cada corrida y ``cancel_check`` corta entre corridas.
+    Si se cancela, lanza :class:`SweepCancelled` y **no** escribe la caché.
+    """
     started = datetime.now(timezone.utc)
     runs: list[dict[str, Any]] = []
-    for case in SWEEP_CASES:
+    total = len(SWEEP_CASES)
+    for index, case in enumerate(SWEEP_CASES):
+        if cancel_check is not None and cancel_check():
+            raise SweepCancelled(f"Barrido de pesos cancelado tras {len(runs)}/{total} corridas")
+        if on_run is not None:
+            on_run(index, total, str(case["label"]))
         logger.info("Barrido multiobjetivo · %s", case["label"])
         runs.append(_run_sweep_case(db, scenario_id=scenario_id, case=case, seed=seed))
 
