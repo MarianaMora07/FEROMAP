@@ -1,5 +1,5 @@
 import type { AcoConvergencePoint } from '../../data/types/simulation';
-import { apiGet, apiPost, useMocks } from './client';
+import { ApiError, apiGet, apiPost, useMocks } from './client';
 import { mockAcoBenchmark } from '../../data/mock/benchmark';
 
 export interface AcoBenchmarkRun {
@@ -40,15 +40,25 @@ export function runAcoBenchmark(): Promise<AcoBenchmarkPayload> {
   return apiPost<AcoBenchmarkPayload>('/api/v1/benchmarks/aco', {});
 }
 
+export type CalibrationAxis = 'ants' | 'iterations' | 'alpha' | 'beta' | 'rho' | 'q';
+
 export interface AcoSensitivityRun {
   label: string;
   scenarioId: string;
   acoAnts: number;
   acoIterations: number;
-  axis: 'ants' | 'iterations';
+  axis: CalibrationAxis;
+  acoAlpha?: number | null;
+  acoBeta?: number | null;
+  acoRho?: number | null;
+  pheromoneQ?: number | null;
   computationSeconds?: number;
+  acoSeconds?: number;
   distanceKmOptimized?: number;
+  distanceKmBaseline?: number;
   acoIterationsRun?: number;
+  acoStoppedEarly?: boolean;
+  uncoveredPoints?: number;
   savingPct?: number;
   error?: string;
 }
@@ -57,7 +67,9 @@ export interface AcoSensitivityPayload {
   generatedAt: string;
   durationSeconds: number;
   scenarioId: string;
+  seed?: number;
   standardProfile: { acoAnts: number; acoIterations: number };
+  standardHyperparameters?: Record<string, number>;
   runs: AcoSensitivityRun[];
 }
 
@@ -108,6 +120,146 @@ export function fetchAcoSensitivity(): Promise<AcoSensitivityPayload> {
 export function runAcoSensitivity(): Promise<AcoSensitivityPayload> {
   if (useMocks) return fetchAcoSensitivity();
   return apiPost<AcoSensitivityPayload>('/api/v1/benchmarks/aco/sensitivity', {});
+}
+
+// --- Calibración del motor: jobs asíncronos y barrido de pesos (Fase 13) -----
+
+export type CalibrationSweep = 'sensitivity' | 'objective';
+export type CalibrationJobStatus =
+  | 'pending'
+  | 'running'
+  | 'completed'
+  | 'cancelled'
+  | 'failed';
+
+/** Corrida del barrido de pesos del objetivo (`run_multiobjective_sweep`). */
+export interface ObjectiveSweepRun {
+  label: string;
+  durationHours: number | null;
+  workloadBalanceWeight: number;
+  makespanWeight: number;
+  minActiveVehiclesRequested: number | null;
+  minActiveVehicles?: number | null;
+  distanceKmOptimized?: number;
+  distanceKmBaseline?: number;
+  savingPct?: number;
+  activeVehicles?: number;
+  fleetUtilizationPct?: number | null;
+  maxRouteHours?: number;
+  shiftSlackHours?: number | null;
+  finishUnderTargetPct?: number | null;
+  workloadStdHours?: number | null;
+  fairnessIndex?: number | null;
+  vehicleWorkloadHours?: number[] | null;
+  uncoveredPoints?: number;
+  computationSeconds?: number;
+  error?: string;
+}
+
+export interface ObjectiveSweepCheck {
+  label: string;
+  distanceKmOptimized: number;
+  baselineKm: number;
+  limitKm: number;
+  ratio: number;
+  ok: boolean;
+}
+
+export interface ObjectiveSweepAcceptance {
+  ac1: {
+    criterion: string;
+    acceptedPoint: ObjectiveSweepCheck | null;
+    checks: ObjectiveSweepCheck[];
+    exceptions: ObjectiveSweepCheck[];
+    ok: boolean;
+  };
+  ac2: { criterion: string; candidates: string[]; ok: boolean };
+  ac3: { criterion: string; evidence: string; ok: boolean | null };
+}
+
+export interface ObjectiveSweepPayload {
+  generatedAt: string;
+  durationSeconds: number;
+  scenarioId: string;
+  seed: number;
+  maxRouteHoursTarget: number;
+  runs: ObjectiveSweepRun[];
+  paretoFrontier: ObjectiveSweepRun[];
+  acceptance: ObjectiveSweepAcceptance;
+}
+
+export interface CalibrationJobLogEntry {
+  id: string;
+  timestamp: string;
+  message: string;
+  type: string;
+  phaseId?: string;
+}
+
+export type CalibrationJobResult = AcoSensitivityPayload | ObjectiveSweepPayload;
+
+export interface CalibrationJobSnapshot {
+  jobId: string;
+  jobType: string;
+  sweep: CalibrationSweep | null;
+  status: CalibrationJobStatus;
+  phase: string | null;
+  progress: number;
+  /** Corrida en curso (1-based). */
+  current: number | null;
+  total: number | null;
+  currentLabel: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  result: CalibrationJobResult | null;
+  error: string | null;
+  logs: CalibrationJobLogEntry[];
+}
+
+export interface CalibrationJobRequest {
+  scenarioId?: string;
+  seed?: number;
+  refresh?: boolean;
+}
+
+/** Lectura del barrido de pesos ya calculado (404 si no hay caché). */
+export function fetchObjectiveSweep(): Promise<ObjectiveSweepPayload> {
+  if (useMocks) {
+    // Sin caché real en modo demo: se propaga el 404 para que la vista muestre
+    // el estado «sin datos» en vez de inventar evidencia de calibración.
+    return Promise.reject(
+      new ApiError('No hay barrido de pesos en caché (modo demo con VITE_USE_MOCKS=true).', 404),
+    );
+  }
+  return apiGet<ObjectiveSweepPayload>('/api/v1/benchmarks/objective/sweep');
+}
+
+/** Lanza un barrido como job asíncrono (202 `{jobId}` en el servidor). */
+export function startCalibrationJob(
+  sweep: CalibrationSweep,
+  request: CalibrationJobRequest,
+): Promise<{ jobId: string }> {
+  if (useMocks) {
+    return Promise.reject(
+      new ApiError('Ejecución deshabilitada en modo demo; usa just phase3-sensitivity / phase13-sweep.', 400),
+    );
+  }
+  const path =
+    sweep === 'sensitivity'
+      ? '/api/v1/benchmarks/aco/sensitivity/jobs'
+      : '/api/v1/benchmarks/objective/sweep/jobs';
+  return apiPost<{ jobId: string }>(path, request);
+}
+
+export function fetchCalibrationJob(jobId: string): Promise<CalibrationJobSnapshot> {
+  return apiGet<CalibrationJobSnapshot>(`/api/v1/benchmarks/calibration/jobs/${jobId}`);
+}
+
+export function cancelCalibrationJob(jobId: string): Promise<{ jobId: string; status: string }> {
+  return apiPost<{ jobId: string; status: string }>(
+    `/api/v1/benchmarks/calibration/jobs/${jobId}/cancel`,
+    {},
+  );
 }
 
 // --- Benchmark entre familias (ACO vs Clarke-Wright vs GA) — Tarea 6 --------
