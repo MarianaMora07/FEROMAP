@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -26,6 +26,7 @@ from app.db.models import (
     WeeklyPlanDay,
 )
 from app.domain.criticality import HIGH_FILL_PCT, is_critical_now, is_overloaded, required_visits_per_week
+from app.domain.operational_clock import operational_departure_at
 from app.domain.visit_schedule_distribution import planned_visits_and_weekdays
 from app.services.case_study_planning import (
     effective_case_study_id,
@@ -1520,7 +1521,8 @@ def seed_optimized_daily_playback_demo(
         db.add(route)
         db.flush()
 
-        base_time = datetime.combine(operation_date, time(6, 15), tzinfo=timezone.utc)
+        # Reloj operativo (Fase 13.5): 06:15 en la zona horaria configurada, no UTC.
+        base_time = operational_departure_at(operation_date, extra_minutes=15)
         for sequence, point in enumerate(route_points, start=1):
             arrival = base_time + timedelta(minutes=18 * sequence)
             db.add(

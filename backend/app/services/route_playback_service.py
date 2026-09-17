@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -17,6 +17,7 @@ from app.domain.crew_service_time import (
     service_time_seconds_per_stop,
 )
 from app.domain.landfill_service_time import DEFAULT_LANDFILL_LAT, DEFAULT_LANDFILL_LON
+from app.domain.operational_clock import operational_departure_at
 from app.services.operational_facilities_service import resolve_operational_facilities
 from app.services.route_geometry_service import build_route_linestring_cached
 
@@ -97,7 +98,8 @@ def _resolve_start_time(
             return estimated
     if plan.operation_date is None:
         return None
-    return datetime.combine(plan.operation_date, time(6, 0), tzinfo=timezone.utc)
+    # Reloj operativo (Fase 13.5): inicio de jornada en la zona configurada, no UTC.
+    return operational_departure_at(plan.operation_date)
 
 
 def _serialize_route(

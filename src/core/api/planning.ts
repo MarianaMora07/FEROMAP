@@ -660,6 +660,16 @@ export interface DailyOptimizeOptions {
   timeWindowEnabled?: boolean;
   kpiView?: 'distance' | 'time' | 'co2';
   departureHour?: number;
+  /** Jornada de turno (h, 1–12). Recorta el presupuesto del motor y reparte la carga. */
+  estimatedDurationHours?: number;
+  /** Fase 13 — peso de equidad de carga (0 = solo distancia). */
+  workloadBalanceWeight?: number;
+  /** Fase 13 — peso del makespan (0 = solo distancia). */
+  makespanWeight?: number;
+  /** Fase 13 — mínimo de vehículos activos del día. */
+  minActiveVehicles?: number;
+  /** Fase 13 — jornada objetivo (h) del KPI de cumplimiento. */
+  maxRouteHoursTarget?: number;
 }
 
 export function optimizeDailyPlan(
