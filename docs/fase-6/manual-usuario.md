@@ -133,11 +133,11 @@ FEROMAP trata la criticidad como un **estado temporal**, no como un atributo fij
 
 **Rebose**
 
-- Además de la criticidad (80 %), FEROMAP mide el **rebose** (llenado por encima de la capacidad). Se muestra por contenedor (`overflowKg`, `overflowPct`) y se cuenta por zona. El motor puede **penalizar el rebose** en su función objetivo, configurable desde la pestaña *Parámetros del algoritmo* (por defecto desactivado, `0`).
+- Además de la criticidad (80 %), FEROMAP mide el **rebose** (llenado por encima de la capacidad). Se muestra por contenedor (`overflowKg`, `overflowPct`) y se cuenta por zona. El motor puede **penalizar el rebose** en su función objetivo, configurable desde **Configuración → Algoritmo** (por defecto desactivado, `0`).
 
 **Parámetros del algoritmo (planificador)**
 
-- En **Plan del día → Parámetros del algoritmo** (`/optimization`) el planificador ajusta **todos** los parámetros del motor: **alpha** (feromona), **beta** (distancia), **rho** (evaporación), **Q** (depósito de feromona) y **refuerzo elitista**, **hormigas**, **iteraciones**, **paciencia**, **pasadas de 2-opt**, los **pesos heurísticos** (riesgo, crítico, lleno) y los **factores de matriz** por llenado, más la **penalización por rebose** (m/kg) y los parámetros de **calibración** (alpha y ventana). La misma pantalla muestra la **ecuación del ACO** en la parte superior y los **valores actuales** debajo, para ver de un vistazo qué combinación se está aplicando. Se guardan con auditoría y actúan como valores por defecto de la corrida (la corrida puede sobreescribir hormigas/iteraciones).
+- En **Configuración → Algoritmo** (`/settings`) el planificador ajusta **todos** los parámetros del motor: **alpha** (feromona), **beta** (distancia), **rho** (evaporación), **Q** (depósito de feromona) y **refuerzo elitista**, **hormigas**, **iteraciones**, **paciencia**, **pasadas de 2-opt**, los **pesos heurísticos** (riesgo, crítico, lleno) y los **factores de matriz** por llenado, más la **penalización por rebose** (m/kg), los parámetros de **calibración** (alpha y ventana) y el bloque **Uso de flota**: **equidad de carga** (λ_b), **makespan** (λ_t), **mínimo de camiones activos por día**, **jornada de turno por defecto** (recorta el turno de todas las optimizaciones, incluido el plan semanal) y **rotación de flota semanal**. La misma pantalla muestra la **ecuación del ACO** en la parte superior y los **valores actuales** debajo, para ver de un vistazo qué combinación se está aplicando. Se guardan con auditoría y actúan como valores por defecto de la corrida (la corrida puede sobreescribir hormigas/iteraciones).
 
 **Frecuencia híbrida**
 

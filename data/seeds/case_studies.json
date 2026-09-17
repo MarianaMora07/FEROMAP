@@ -148,7 +148,7 @@
   {
     "code": "CE-COMBINATORIO",
     "name": "Infierno combinatorio — catálogo completo Unare",
-    "description": "Catálogo demo (~120 contenedores activos): escenario saturado, ventanas horarias, ausentismo y parámetros ACO al máximo. Stress test VRP multi-vehículo — solo anexo (D8).",
+    "description": "Catálogo demo (~180 contenedores activos): escenario saturado, ventanas horarias, ausentismo y parámetros ACO al máximo. Stress test VRP multi-vehículo — solo anexo (D8).",
     "defaultScenarioId": "saturated",
     "defaultParameters": {
       "operatorsShortage": 1,

@@ -16,7 +16,7 @@ FEROMAP implementa un **CVRP** (Capacitated Vehicle Routing Problem) sobre la re
 | **Jornada laboral** | Ventana operativa 06:00–18:00 (12 h) |
 | **Escenarios** | Normal, tráfico pico, lluvia, saturación, avería (multiplicadores) |
 | **Metaheurística** | ACO + refinamiento 2-opt por ruta |
-| **Objetivo del solver** | Minimizar **distancia total** recorrida |
+| **Objetivo del solver** | Objetivo combinado configurable: **distancia** por defecto; Fase 13 añade pesos normalizados de equidad de carga y makespan (0 = solo distancia) |
 | **Comparación** | Baseline operativo (orden fijo por código de contenedor) |
 
 ## Qué NO resuelve (alcance explícito)
@@ -25,7 +25,7 @@ FEROMAP implementa un **CVRP** (Capacitated Vehicle Routing Problem) sobre la re
 |------------|-------------------------|
 | **Optimalidad global** | ACO es heurístico; entrega soluciones de alta calidad, no garantía óptima |
 | **VRPTW completo** | Sin ventanas operativas por contenedor. Soporte opt-in **VRPTW light** con **ventana por zona** (parroquia), default off → [ADR-006](./adr-006-ventanas-horarias.md) · [ADR-008](./adr-008-ventanas-por-zona.md) |
-| **Multi-objetivo** | No optimiza simultáneamente CO₂, tiempo y distancia en el fitness |
+| **Multiobjetivo** | **Soportado (Fase 13)**: objetivo combinado `w_d·D/D_ref + w_b·(σ_horas/μ_horas) + w_t·(T_max/H_jornada)`, con pesos configurables (`workloadBalanceWeight`, `makespanWeight`), restricción opcional `minActiveVehicles` y rotación de flota semanal. Por defecto los pesos son 0 → comportamiento solo-distancia idéntico al previo (RNF-2). El CO₂ sigue siendo narrativa de KPIs, no término del fitness → [especificación](../fase-13/especificacion-motor-multiobjetivo.md) |
 | **OR-Tools / solver exacto** | No en el camino de producción; baseline CP-SAT **opcional** disponible para el benchmark comparativo post-defensa → [ADR-009](./adr-009-baseline-ortools-y-recuperacion.md) |
 | **Tráfico en vivo** | Solo multiplicadores estáticos por escenario |
 | **Cobertura forzada** | Puede dejar puntos no cubiertos si flota o jornada no alcanzan |
@@ -38,6 +38,9 @@ FEROMAP implementa un **CVRP** (Capacitated Vehicle Routing Problem) sobre la re
 ## Referencias técnicas
 
 - Motor: `backend/app/services/optimization_service.py`
+- Objetivo multiobjetivo: `backend/app/services/aco_parallel.py` (`_objective_cost`, `_build_balanced_ant_solution`, `_rebalance_pass`)
+- Horquilla de pesos y frontera de Pareto: `just phase13-sweep` → `data/cache/phase13/multiobjective_sweep.json`
+- Evidencia Fase 13: [evidencia-multiobjetivo.md](../fase-13/evidencia-multiobjetivo.md)
 - ACO paralelo: `backend/app/services/aco_parallel.py`
 - Benchmark: `just benchmark-aco` → `data/cache/benchmarks/aco_latest.json`
 - Sensibilidad: `just phase3-sensitivity` → `data/cache/phase3/aco_sensitivity.json`

@@ -104,6 +104,14 @@ phase3-sensitivity: _check
 phase3-report: _check
     {{compose}} exec api python -m scripts.generate_phase3_report
 
+# Barrido de pesos multiobjetivo (Fase 13) → data/cache/phase13/multiobjective_sweep.json
+phase13-sweep: _check
+    {{compose}} exec api python -m scripts.phase13_sweep
+
+# Evidencia AC-3: rotación de flota en una semana demo real (Fase 13.4)
+phase13-weekly: _check
+    {{compose}} exec api python -m scripts.phase13_weekly_evidence
+
 # Backlog post-grado (OR-Tools, SSE, tráfico live…) — solo documentación, no implementar pre-defensa
 roadmap:
     @echo "═══ FEROMAP — backlog post-grado ═══"

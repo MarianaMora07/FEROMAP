@@ -13,7 +13,8 @@
 |---|---|---|---|
 | `/` Dashboard (hub integrado) | 0–2 | ✅ | e2e `planner-dashboard` + `daily-planning` (hub). KPIs agregados por rol pendientes. |
 | `/planning/weekly` Plan semanal (config base) | 1–3 | ✅ | **Config base**: zonas por día + flota por tipo. Validar → Aprobar → **Generar plan operativo** (tabla Camión × Día) → notificar por día/todo. e2e `daily-planning` + `weekly-operational` (motor real, lento). |
-| `/optimization` Plan del día (tabs Optimizar/Pendientes) | 1–4 | ✅ | Toolbar: Generar/Regenerar Plan Operativo + **Notificar a conductores** (aparece tras generar). Pendientes: cancelar antiguos / marcar ya visitado. e2e `daily-planning` (#pendientes) + `route-playback`. |
+| `/optimization` Plan del día (tabs Optimizar/Resultados/Pendientes) | 1–4 | ✅ | Toolbar: Generar/Regenerar Plan Operativo + **Notificar a conductores** (aparece tras generar). Pendientes: cancelar antiguos / marcar ya visitado. e2e `daily-planning` (#pendientes) + `route-playback`. Los **parámetros del algoritmo** viven en `/settings`. |
+| `/settings` Configuración (sección *Algoritmo*) | 13 | ✅ | Parámetros del motor (ACO, heurísticos, calibración) + **objetivo multiobjetivo** (equidad, makespan, mín. vehículos, jornada objetivo, rotación semanal). Vitest `optimizationObjectiveUx`. Antes era una pestaña de `/optimization`. |
 | `/planning/history` Historial unificado | 0–2 | ✅ | e2e `daily-planning`. |
 | `/monitoring` Monitoreo (tabs Mapa en vivo / Incidencias) | 2–4 | 🟡 | e2e básico de tabs OK; avance de flota usa "demo" que muta BD; e2e profundo pendiente. |
 | `/map` Mapa GIS | — | ✅ | e2e `operational-map` + residente. |
