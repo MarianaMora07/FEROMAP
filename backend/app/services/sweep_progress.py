@@ -26,7 +26,10 @@ CancelCheck = Callable[[], bool]
 # Identificadores de los barridos (viajan en `params_json` del job y en la API).
 SWEEP_SENSITIVITY = "sensitivity"
 SWEEP_OBJECTIVE = "objective"
-CALIBRATION_SWEEPS: tuple[str, ...] = (SWEEP_SENSITIVITY, SWEEP_OBJECTIVE)
+# Validación de la combinación recomendada (2 corridas): no es un barrido OFAT más, sino
+# la comprobación de que los mejores niveles medidos rinden juntos.
+SWEEP_VALIDATION = "validation"
+CALIBRATION_SWEEPS: tuple[str, ...] = (SWEEP_SENSITIVITY, SWEEP_OBJECTIVE, SWEEP_VALIDATION)
 
 # Valores por defecto reproducibles de los barridos (se muestran en la UI).
 DEFAULT_SWEEP_SCENARIO = "normal"
@@ -36,6 +39,7 @@ DEFAULT_SWEEP_SEED = 42
 SWEEP_PHASE_LABELS: dict[str, str] = {
     SWEEP_SENSITIVITY: "Sensibilidad ACO",
     SWEEP_OBJECTIVE: "Barrido de pesos",
+    SWEEP_VALIDATION: "Validación de la combinación",
 }
 
 

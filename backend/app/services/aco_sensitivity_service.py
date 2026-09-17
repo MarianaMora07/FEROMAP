@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.config import settings
+from app.services.calibration_sweep_store import latest_payload, record_sweep
 from app.services.optimization_service import run_optimization_engine
-from app.services.sweep_progress import CancelCheck, OnRun, SweepCancelled
+from app.services.sweep_progress import (
+    SWEEP_SENSITIVITY,
+    CancelCheck,
+    OnRun,
+    SweepCancelled,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,33 +66,9 @@ HYPERPARAMETER_SENSITIVITY_SERIES: list[dict[str, Any]] = [
 ]
 
 
-def _sensitivity_dir(*, ensure: bool = False) -> Path:
-    path = Path(settings.data_dir) / "cache" / "phase3"
-    if ensure:
-        path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
-def sensitivity_cache_path() -> Path:
-    return _sensitivity_dir() / "aco_sensitivity.json"
-
-
-def load_aco_sensitivity() -> dict[str, Any] | None:
-    path = sensitivity_cache_path()
-    if not path.exists():
-        return None
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        logger.warning("Sensibilidad ACO corrupta (%s): %s", path, exc)
-        return None
-
-
-def save_aco_sensitivity(payload: dict[str, Any]) -> Path:
-    path = sensitivity_cache_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    return path
+def load_aco_sensitivity(db: Session) -> dict[str, Any] | None:
+    """Payload vigente de la sensibilidad (la corrida más reciente en la BD)."""
+    return latest_payload(db, sweep=SWEEP_SENSITIVITY)
 
 
 def _run_sensitivity_case(
@@ -184,7 +163,7 @@ def run_aco_sensitivity(
 
     ``on_run``/``cancel_check`` conectan el barrido con el job asíncrono: ``on_run``
     reporta el progreso antes de cada corrida y ``cancel_check`` corta entre corridas.
-    Si se cancela, lanza :class:`SweepCancelled` y **no** escribe la caché.
+    Si se cancela, lanza :class:`SweepCancelled` y **no** guarda la corrida.
     """
     started = datetime.now(timezone.utc)
     runs: list[dict[str, Any]] = []
@@ -230,5 +209,10 @@ def run_aco_sensitivity(
         "instanceFingerprint": instance_fingerprint,
         "runs": runs,
     }
-    save_aco_sensitivity(payload)
+    record_sweep(
+        db,
+        sweep=SWEEP_SENSITIVITY,
+        payload=payload,
+        instance_fingerprint=instance_fingerprint,
+    )
     return payload

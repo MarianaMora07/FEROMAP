@@ -185,7 +185,7 @@ def test_sensitivity_get_reports_the_cache_state(monkeypatch):
         captured["scenario"] = scenario_id
         return {**payload_, "cacheState": "stale", "stale": True}
 
-    monkeypatch.setattr(benchmarks, "load_aco_sensitivity", lambda: payload)
+    monkeypatch.setattr(benchmarks, "load_aco_sensitivity", lambda db: payload)
     monkeypatch.setattr(benchmarks, "with_freshness", fake_freshness)
 
     result = benchmarks.get_aco_sensitivity(MagicMock(), MagicMock())
@@ -202,7 +202,7 @@ def test_sensitivity_get_uses_the_default_scenario_without_payload_field(monkeyp
         captured["scenario"] = scenario_id
         return payload_
 
-    monkeypatch.setattr(benchmarks, "load_aco_sensitivity", lambda: {"runs": []})
+    monkeypatch.setattr(benchmarks, "load_aco_sensitivity", lambda db: {"runs": []})
     monkeypatch.setattr(benchmarks, "with_freshness", fake_freshness)
 
     benchmarks.get_aco_sensitivity(MagicMock(), MagicMock())
@@ -210,7 +210,7 @@ def test_sensitivity_get_uses_the_default_scenario_without_payload_field(monkeyp
     assert captured["scenario"] == "normal"
 
 
-def test_calibration_payloads_are_stamped_on_save(monkeypatch):
+def test_calibration_payloads_are_stamped_when_recorded(monkeypatch):
     from app.services import aco_sensitivity_service as aco
     from app.services import multiobjective_sweep_service as sweep
 
@@ -226,9 +226,15 @@ def test_calibration_payloads_are_stamped_on_save(monkeypatch):
     saved: dict = {}
     monkeypatch.setattr(aco, "run_optimization_engine", fake_engine)
     monkeypatch.setattr(sweep, "run_optimization_engine", fake_engine)
-    monkeypatch.setattr(aco, "save_aco_sensitivity", lambda payload: saved.update({"aco": payload}))
     monkeypatch.setattr(
-        sweep, "save_multiobjective_sweep", lambda payload: saved.update({"sweep": payload})
+        aco,
+        "record_sweep",
+        lambda db, *, sweep, payload, instance_fingerprint=None: saved.update({"aco": payload}),
+    )
+    monkeypatch.setattr(
+        sweep,
+        "record_sweep",
+        lambda db, *, sweep, payload, instance_fingerprint=None: saved.update({"sweep": payload}),
     )
 
     aco_payload = aco.run_aco_sensitivity(MagicMock(), seed=7, instance_fingerprint="sello-aco")
@@ -256,7 +262,11 @@ def test_calibration_payloads_without_stamp_stay_unknown(monkeypatch):
             }
         },
     )
-    monkeypatch.setattr(aco, "save_aco_sensitivity", lambda payload: None)
+    monkeypatch.setattr(
+        aco,
+        "record_sweep",
+        lambda db, *, sweep, payload, instance_fingerprint=None: None,
+    )
 
     payload = aco.run_aco_sensitivity(MagicMock())
 

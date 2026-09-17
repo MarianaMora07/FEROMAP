@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from unittest.mock import MagicMock
 
 import pytest
 
 from app.services import aco_sensitivity_service
+from app.services.sweep_progress import SWEEP_SENSITIVITY
 
 
 def test_sensitivity_series_count():
@@ -16,24 +16,18 @@ def test_sensitivity_series_count():
     assert len(aco_sensitivity_service.HYPERPARAMETER_SENSITIVITY_SERIES) == 12
 
 
-def test_save_and_load_aco_sensitivity(tmp_path, monkeypatch):
-    cache_dir = tmp_path / "phase3"
-    cache_dir.mkdir()
-    path = cache_dir / "aco_sensitivity.json"
-    monkeypatch.setattr(aco_sensitivity_service, "sensitivity_cache_path", lambda: path)
+def test_load_aco_sensitivity_reads_the_latest_run(monkeypatch):
+    payload = {"generatedAt": "2026-08-27T12:00:00+00:00", "scenarioId": "normal", "runs": []}
+    captured: dict = {}
 
-    payload = {
-        "generatedAt": "2026-08-27T12:00:00+00:00",
-        "durationSeconds": 42.0,
-        "scenarioId": "normal",
-        "runs": [],
-    }
-    aco_sensitivity_service.save_aco_sensitivity(payload)
-    loaded = aco_sensitivity_service.load_aco_sensitivity()
+    def fake_latest(db, *, sweep):
+        captured["sweep"] = sweep
+        return payload
 
-    assert loaded is not None
-    assert loaded["scenarioId"] == "normal"
-    assert json.loads(path.read_text(encoding="utf-8"))["durationSeconds"] == 42.0
+    monkeypatch.setattr(aco_sensitivity_service, "latest_payload", fake_latest)
+
+    assert aco_sensitivity_service.load_aco_sensitivity(MagicMock()) is payload
+    assert captured["sweep"] == SWEEP_SENSITIVITY
 
 
 def test_run_aco_sensitivity_aggregates_runs(monkeypatch, tmp_path):
@@ -62,8 +56,8 @@ def test_run_aco_sensitivity_aggregates_runs(monkeypatch, tmp_path):
     monkeypatch.setattr(aco_sensitivity_service, "run_optimization_engine", fake_run)
     monkeypatch.setattr(
         aco_sensitivity_service,
-        "save_aco_sensitivity",
-        lambda payload: saved.update(payload) or tmp_path / "aco_sensitivity.json",
+        "record_sweep",
+        lambda db, *, sweep, payload, instance_fingerprint=None: saved.update(payload),
     )
 
     result = aco_sensitivity_service.run_aco_sensitivity(db)

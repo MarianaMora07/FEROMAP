@@ -39,11 +39,11 @@ FEROMAP implementa un **CVRP** (Capacitated Vehicle Routing Problem) sobre la re
 
 - Motor: `backend/app/services/optimization_service.py`
 - Objetivo multiobjetivo: `backend/app/services/aco_parallel.py` (`_objective_cost`, `_build_balanced_ant_solution`, `_rebalance_pass`)
-- Horquilla de pesos y frontera de Pareto: `just phase13-sweep` → `data/cache/phase13/multiobjective_sweep.json`
+- Horquilla de pesos y frontera de Pareto: `just phase13-sweep` → fila del barrido `objective` en la tabla `calibration_sweeps`
 - Evidencia Fase 13: [evidencia-multiobjetivo.md](../fase-13/evidencia-multiobjetivo.md)
 - ACO paralelo: `backend/app/services/aco_parallel.py`
 - Benchmark: `just benchmark-aco` → `data/cache/benchmarks/aco_latest.json`
-- Sensibilidad: `just phase3-sensitivity` → `data/cache/phase3/aco_sensitivity.json`
+- Sensibilidad: `just phase3-sensitivity` → fila del barrido `sensitivity` en la tabla `calibration_sweeps` (la BD es la única fuente: [ADR-011](../fase-13/adr-011-calibracion-en-bd.md))
 - Evidencia consolidada: [evidencia-aco.md](./evidencia-aco.md)
 - Alcance congelado: [alineacion-defensa.md](../fase-0/alineacion-defensa.md)
 - Backlog post-grado: [post-grado/README.md](../post-grado/README.md)

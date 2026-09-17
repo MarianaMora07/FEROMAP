@@ -86,9 +86,12 @@ sequenceDiagram
 **Principios**
 
 - El barrido **no se recalcula** en el frontend: se dispara y se renderiza.
-- La caché (JSON en `data/cache/`) es la fuente de verdad de los resultados mostrados.
-- Los jobs reutilizan la infraestructura existente (`OptimizationJob`, persistencia, historial).
-- Un job de calibración **no escribe** la caché si se cancela o falla.
+- **La BD es la fuente de verdad** de los resultados y del historial (tabla `calibration_sweeps`,
+  [ADR-011](./adr-011-calibracion-en-bd.md)). Este plan nació leyendo una caché JSON en
+  `data/cache/`, que se retiró: mantener dos fuentes hacía que los números sobrevivieran a un reset
+  de BD sin saberse de qué instancia eran.
+- Los jobs reutilizan la infraestructura existente (`OptimizationJob`, persistencia, journal).
+- Un job de calibración **no guarda** la corrida si se cancela o falla.
 
 ## 5. Contrato de API
 
@@ -101,7 +104,7 @@ Prefijo real: `/api/v1`. Todos los endpoints requieren rol `administrador` o `pl
 | `GET` | `/benchmarks/aco/sensitivity` | Payload en caché; `404` si no existe |
 | `POST` | `/benchmarks/aco/sensitivity` | Síncrono (~315 s). **Se conserva**; la UI usará la variante async |
 | `GET/POST` | `/benchmarks/aco` | Benchmark 5×3 escenarios |
-| `GET` | `/simulations/jobs?jobType=calibration` | Historial (reuso del store de jobs) |
+| `GET` | `/simulations/jobs?jobType=calibration` | Journal de los jobs de calibración (progreso y logs). El historial de corridas vive en `calibration_sweeps` (ADR-011) |
 
 ### 5.2 Nuevo — creación de jobs
 
@@ -119,7 +122,7 @@ Prefijo real: `/api/v1`. Todos los endpoints requieren rol `administrador` o `pl
 
 Estados: `pending` · `running` · `completed` · `cancelled` · `failed`.
 
-### 5.4 Nuevo — resultados en caché
+### 5.4 Nuevo — resultados vigentes (BD)
 
 | Método | Ruta | Respuesta |
 |---|---|---|
@@ -350,7 +353,7 @@ stateDiagram-v2
 |---|---|
 | Barridos largos (sensibilidad ~315 s; pesos ~15 corridas) | Job async, ETA, cancelación, límite de 1 job concurrente |
 | Cancelación a mitad de corrida no interrumpe el ACO en curso (solo entre corridas) | Declararlo en UI (“se cancelará tras la corrida actual”) |
-| Escritura de caché parcial/corrupta | Escribir solo al completar con éxito; `load_*` ya tolera JSON corrupto |
+| Escritura parcial/corrupta del artefacto | La corrida se guarda con `commit` solo al completar con éxito; el `GET` tolera un `payload_json` corrupto y responde 404 (ADR-011) |
 | Conflicto con `src/**` en WIP | Implementar por fases y en archivos nuevos; no tocar paneles existentes sin coordinar |
 | Endpoints síncronos antiguos usados por scripts | No eliminarlos; añadir la variante async en paralelo |
 | Semilla/escenario no reproducibles si se omiten | Defaults explícitos (`seed=42`, `scenarioId="normal"`) visibles en la UI |

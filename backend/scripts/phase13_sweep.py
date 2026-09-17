@@ -1,7 +1,7 @@
 """Barrido de pesos del motor multiobjetivo (Fase 13).
 
 Uso: ``podman exec feromap-api python -m scripts.phase13_sweep``
-Salida: tabla markdown + ``data/cache/phase13/multiobjective_sweep.json``.
+Salida: tabla markdown + fila en la tabla ``calibration_sweeps``.
 """
 
 from __future__ import annotations
@@ -9,7 +9,6 @@ from __future__ import annotations
 import sys
 
 from app.db.session import SessionLocal
-from app.services.calibration_history_service import record_calibration_run
 from app.services.instance_fingerprint import current_fingerprint
 from app.services.multiobjective_sweep_service import (
     evaluate_acceptance_criteria,
@@ -26,24 +25,21 @@ def _fmt(value: object) -> str:
     return str(value)
 
 
-def _load_payload() -> dict:
+def _load_payload(db) -> dict:
     if "--recompute" in sys.argv[1:]:
-        cached = load_multiobjective_sweep()
+        cached = load_multiobjective_sweep(db)
         if cached is None:
-            raise SystemExit("No hay barrido en caché; ejecuta el barrido completo primero.")
+            raise SystemExit("No hay barrido guardado; ejecuta el barrido completo primero.")
         cached["acceptance"] = evaluate_acceptance_criteria(cached["runs"])
         return cached
-    with SessionLocal() as db:
-        payload = run_multiobjective_sweep(
-            db, instance_fingerprint=current_fingerprint(db, scenario_id="normal")
-        )
-        # Historial en BD (información histórica, no toca la caché).
-        record_calibration_run(db, sweep="objective", payload=payload)
-        return payload
+    return run_multiobjective_sweep(
+        db, instance_fingerprint=current_fingerprint(db, scenario_id="normal")
+    )
 
 
 def main() -> None:
-    payload = _load_payload()
+    with SessionLocal() as db:
+        payload = _load_payload(db)
 
     runs = payload["runs"]
     print(f"Fase 13 — barrido multiobjetivo ({payload['durationSeconds']} s, seed={payload['seed']})")
@@ -109,7 +105,7 @@ def main() -> None:
     print(f"   candidatos: {', '.join(acceptance['ac2']['candidates']) or '—'}")
     print(f"AC-3 (≥6 vehículos distintos/semana): {acceptance['ac3']['evidence']}")
     print()
-    print("Guardado en data/cache/phase13/multiobjective_sweep.json")
+    print("Guardado en la tabla calibration_sweeps (barrido 'objective')")
 
 
 if __name__ == "__main__":

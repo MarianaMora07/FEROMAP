@@ -716,20 +716,24 @@ Interpretación para la defensa: más hormigas/iteraciones no siempre son propor
 
 ### Calibración del motor — `/api/v1/benchmarks/*`
 
-Consola de calibración (Fase 13 · [plan](../../docs/fase-13/plan-vista-calibracion.md)): ejecuta los dos barridos del motor como **job asíncrono** con progreso real y cancelación, y lee los resultados en caché. La métrica primaria es la **distancia optimizada**; el makespan y el rebose actúan como guardarraíles.
+Consola de calibración (Fase 13 · [plan](../../docs/fase-13/plan-vista-calibracion.md)): ejecuta los barridos del motor como **job asíncrono** con progreso real y cancelación, y lee la evidencia **de la base de datos** ([ADR-011](../../docs/fase-13/adr-011-calibracion-en-bd.md)). La métrica primaria es la **distancia optimizada**; el makespan y el rebose actúan como guardarraíles.
+
+**Almacenamiento.** Cada corrida completada deja una fila en la tabla `calibration_sweeps`: barrido, escenario, semilla, resumen tipado (`duration_seconds`, `runs_total`, `runs_failed`, `best_distance_km`) y el payload íntegro en `payload_json`. La corrida **vigente** de un barrido es su fila más reciente; no hay caché en fichero (`data/cache/phase3|phase13` se retiró en la migración `035_calibration_sweeps`).
 
 | Método | Ruta | Rol | Descripción |
 |--------|------|-----|-------------|
-| GET | `/benchmarks/aco/sensitivity` | Planificador/Admin | Sensibilidad ACO en caché (404 si no existe) |
+| GET | `/benchmarks/aco/sensitivity` | Planificador/Admin | Sensibilidad ACO vigente (404 si nunca corrió) |
 | POST | `/benchmarks/aco/sensitivity` | Planificador/Admin | Barrido **síncrono** (~315 s). Acepta `scenarioId` y `seed` por query |
 | POST | `/benchmarks/aco/sensitivity/jobs` | Planificador/Admin | Lanza el barrido como job → **202** `{jobId}` |
-| GET | `/benchmarks/objective/sweep` | Planificador/Admin | Barrido de pesos + frontera de Pareto + AC-1/AC-2/AC-3 en caché (404 si no existe) |
+| GET | `/benchmarks/objective/sweep` | Planificador/Admin | Barrido de pesos vigente + frontera de Pareto + AC-1/AC-2/AC-3 (404 si nunca corrió) |
 | POST | `/benchmarks/objective/sweep/jobs` | Planificador/Admin | Lanza el barrido de pesos como job → **202** `{jobId}` |
+| GET | `/benchmarks/aco/validation` | Planificador/Admin | Validación vigente de la combinación (404 si no se ha lanzado) |
+| POST | `/benchmarks/aco/validation/jobs` | Planificador/Admin | Valida la combinación contra el perfil estándar → **202** `{jobId}` |
 | GET | `/benchmarks/calibration/jobs/{jobId}` | Planificador/Admin | Estado, progreso y resultado del job |
 | POST | `/benchmarks/calibration/jobs/{jobId}/cancel` | Planificador/Admin | Solicita la cancelación |
-| GET | `/benchmarks/calibration/history?limit=&offset=` | Planificador/Admin | Corridas guardadas en la BD (histórico) |
+| GET | `/benchmarks/calibration/history?limit=&offset=` | Planificador/Admin | Corridas guardadas (historial de `calibration_sweeps`) |
 | GET | `/benchmarks/calibration/history/{runId}` | Planificador/Admin | Payload completo de una corrida histórica |
-| GET | `/simulations/jobs?jobType=calibration` | Planificador/Admin | Historial de jobs de calibración |
+| GET | `/simulations/jobs?jobType=calibration` | Planificador/Admin | Journal de los jobs de calibración (progreso y logs) |
 
 **Cuerpo de los `POST .../jobs`**
 
@@ -737,11 +741,24 @@ Consola de calibración (Fase 13 · [plan](../../docs/fase-13/plan-vista-calibra
 |---|---|
 | `/benchmarks/aco/sensitivity/jobs` | `{ scenarioId?, seed?, refresh? }` |
 | `/benchmarks/objective/sweep/jobs` | `{ scenarioId?, seed?, refresh?, durationHours? }` |
+| `/benchmarks/aco/validation/jobs` | `{ scenarioId?, seed?, refresh?, profile? }` |
 
 - `scenarioId` (default `normal`) y `seed` (default `42`) viajan explícitos para que la evidencia sea reproducible.
-- `refresh` (default `true`) fuerza el recálculo. Con `refresh=false`, si hay caché del mismo escenario/semilla el job nace `completed` con ese payload y no recalcula.
+- `refresh` (default `true`) fuerza el recálculo. Con `refresh=false`, si la BD ya tiene una corrida vigente del mismo escenario/semilla, el job nace `completed` con ese payload y no recalcula.
 - `durationHours` es una **declaración**, no una perilla: los casos del barrido fijan las jornadas (`8 h` para la serie de aceptación AC-2 y la jornada por defecto del motor para el resto) y de ese valor dependen las líneas base de AC-1/AC-2. Se acepta `8` o el campo omitido; cualquier otro valor devuelve **400** explicando por qué, en vez de ignorarse en silencio.
 - Los campos extra que no pertenezcan al contrato se ignoran, como en el resto de la API.
+- `profile` (solo validación) es la combinación ACO a probar: `{ acoAnts, acoIterations, acoAlpha, acoBeta, acoRho, pheromoneQ }`. La deriva la vista desde el barrido de sensibilidad (mejor nivel medido de cada eje no estable) y el backend solo valida rangos; omitirla equivale al perfil estándar (`12×20 · α1 β3 ρ0.12 Q1`) y el payload lo marca con `sameParams`.
+
+**Validación de la combinación (cierra el hueco OFAT).** El barrido de sensibilidad mide un eje a la vez, así que la recomendación «mejor nivel por eje» es una extrapolación. `POST /benchmarks/aco/validation/jobs` corre **dos optimizaciones en la misma sesión** (misma instancia y semilla): el perfil estándar como control y la combinación propuesta. El payload guarda `standardParams`, `profile`, los dos `runs` y un `verdict`:
+
+| Campo del `verdict` | Significado |
+|---|---|
+| `outcome` | `better` · `equal` · `worse` · `not-comparable` |
+| `reason` | Motivo cuando no es comparable: `error`, `uncovered`, `missing` |
+| `standardKm`, `recommendedKm` | Distancia optimizada de cada corrida |
+| `deltaKm`, `deltaPct` | Combinación − estándar (negativo = mejora) |
+
+El umbral de empate es el mismo 0,5 % que marca un eje como estable en la vista. La validación **no** tiene pestaña de resultados: vive en el panel de recomendación. A diferencia de los barridos, `refresh=false` no reutiliza la corrida vigente (son 2 corridas y la guardada sería de otra combinación). No es un estudio de interacción ni una búsqueda multi-semilla: confirma o refuta la recomendación OFAT.
 
 **Estados:** `pending` · `running` · `completed` · `cancelled` · `failed`.
 
@@ -774,22 +791,22 @@ Consola de calibración (Fase 13 · [plan](../../docs/fase-13/plan-vista-calibra
 }
 ```
 
-`current` es la corrida **en curso** (1-based) y `progress` el porcentaje de corridas **terminadas**: el progreso nunca retrocede. Al completar, `result` trae el payload del barrido y la caché queda reescrita.
+`current` es la corrida **en curso** (1-based) y `progress` el porcentaje de corridas **terminadas**: el progreso nunca retrocede. Al completar, `result` trae el payload del barrido y la corrida queda guardada en `calibration_sweeps`. Ese journal de job es lo único que sigue viviendo en `optimization_jobs`.
 
-**Sello de instancia (evita enseñar números de otra BD).** Cada payload guarda `instanceFingerprint` al generarse y los `GET` de resultados añaden:
+**Sello de instancia (informativo).** Cada payload guarda `instanceFingerprint` al generarse y los `GET` de resultados añaden:
 
 | Campo | Significado |
 |---|---|
-| `instanceFingerprint` | Sello con el que se generó (`null` en cachés anteriores a esta versión) |
+| `instanceFingerprint` | Sello con el que se generó (`null` si no se declaró) |
 | `currentFingerprint` | Sello de la instancia vigente |
-| `cacheState` | `fresh` (coincide) · `stale` (es de otra instancia) · `unknown` (sin sello) |
+| `cacheState` | `fresh` (coincide) · `stale` (la instancia cambió desde entonces) · `unknown` (sin sello) |
 | `stale` | Atajo booleano de `cacheState == "stale"` |
 
-El sello combina el **epoch de seed** (`data/cache/seed_epoch.json`, lo escribe `just seed`), el escenario, número y última edición de puntos, vehículos y zonas, y depósito, vertedero y jornada por defecto. `just db-reset` cambia el epoch sin borrar nada: la evidencia anterior queda marcada como `stale` y la vista ofrece recalcular.
+El sello combina el **epoch de seed** (`data/cache/seed_epoch.json`, lo escribe `just seed`), el escenario, número y última edición de puntos, vehículos y zonas, y depósito, vertedero y jornada por defecto. Con la evidencia en la BD ya no hay dos fuentes que conciliar: el sello solo dice si la corrida describe la instancia **actual** (por ejemplo, si cambiaste puntos o flota después de calcularla). La vista ya no muestra un banner por esto; el estado aparece como columna del historial y como aviso en el panel de validación.
 
-**Historial.** Cada corrida completada deja una fila (`jobType=calibration`) con su payload: las lanzadas por API/UI ya la escriben como job y las de CLI la escriben al terminar. `GET /benchmarks/calibration/history` las lista con su `cacheState` y `GET .../history/{runId}` devuelve el payload completo; abrir una corrida histórica no modifica la caché vigente.
+**Historial.** Cada corrida completada deja una fila en `calibration_sweeps` (la escriben los propios servicios del barrido, tanto por API/UI como por CLI). `GET /benchmarks/calibration/history` las lista con su `cacheState` y `GET .../history/{runId}` devuelve el payload completo; abrir una corrida histórica no cambia la vigente.
 
-**Cancelación:** se aplica **entre corridas** (no interrumpe el ACO en curso) y **no** escribe la caché: el job queda en `cancelled` con `result = null`. Corre **un barrido a la vez** (semáforo de calibración); el siguiente espera su turno.
+**Cancelación:** se aplica **entre corridas** (no interrumpe el ACO en curso) y **no** guarda la corrida: el job queda en `cancelled` con `result = null` y la tabla no crece. Corre **un barrido a la vez** (semáforo de calibración); el siguiente espera su turno.
 
 CLI equivalente: `just phase3-sensitivity` (sensibilidad) y `just phase13-sweep` (pesos).
 

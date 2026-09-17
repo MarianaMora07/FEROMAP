@@ -22,6 +22,7 @@ from app.services.sweep_progress import (
     DEFAULT_SWEEP_SEED,
     SWEEP_PHASE_LABELS,
     SWEEP_SENSITIVITY,
+    SWEEP_VALIDATION,
     SweepCancelled,
 )
 
@@ -523,15 +524,11 @@ def _run_background_worker(job_id: str, runner: Callable[[Any], dict[str, Any]])
         db.close()
 
 
-def _sweep_cache_loader(sweep: str) -> dict[str, Any] | None:
-    """Payload en caché del barrido pedido (o ``None`` si no existe o está corrupto)."""
-    if sweep == SWEEP_SENSITIVITY:
-        from app.services.aco_sensitivity_service import load_aco_sensitivity
+def _sweep_latest_payload(db: Session, sweep: str) -> dict[str, Any] | None:
+    """Payload vigente del barrido (la corrida más reciente guardada en la BD)."""
+    from app.services.calibration_sweep_store import latest_payload
 
-        return load_aco_sensitivity()
-    from app.services.multiobjective_sweep_service import load_multiobjective_sweep
-
-    return load_multiobjective_sweep()
+    return latest_payload(db, sweep=sweep)
 
 
 def _sweep_runner(sweep: str) -> Callable[..., dict[str, Any]]:
@@ -539,6 +536,10 @@ def _sweep_runner(sweep: str) -> Callable[..., dict[str, Any]]:
         from app.services.aco_sensitivity_service import run_aco_sensitivity
 
         return run_aco_sensitivity
+    if sweep == SWEEP_VALIDATION:
+        from app.services.aco_validation_service import run_aco_validation
+
+        return run_aco_validation
     from app.services.multiobjective_sweep_service import run_multiobjective_sweep
 
     return run_multiobjective_sweep
@@ -551,8 +552,13 @@ def _execute_calibration_sweep(
     *,
     scenario_id: str,
     seed: int,
+    extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Corre el barrido conectando ``on_run``/``cancel_check`` con el estado del job."""
+    """Corre el barrido conectando ``on_run``/``cancel_check`` con el estado del job.
+
+    ``extra`` son los argumentos propios de cada barrido (p. ej. el perfil de la
+    validación); los comunes van explícitos.
+    """
     sweep_label = SWEEP_PHASE_LABELS.get(sweep, sweep)
 
     def on_run(index: int, total: int, label: str) -> None:
@@ -591,6 +597,7 @@ def _execute_calibration_sweep(
         on_run=on_run,
         cancel_check=cancel_check,
         instance_fingerprint=fingerprint,
+        **(extra or {}),
     )
 
 
@@ -609,18 +616,24 @@ def _cache_matches(
 def create_calibration_job(
     sweep: str,
     *,
+    db: Session,
     scenario_id: str | None = None,
     seed: int | None = None,
     refresh: bool = True,
+    profile: dict[str, Any] | None = None,
 ) -> OptimizationJob:
-    """Crea y arranca un job de calibración (sensibilidad ACO o pesos del objetivo).
+    """Crea y arranca un job de calibración (sensibilidad, pesos o validación).
 
-    - ``refresh=True`` (default): corre el barrido y reescribe la caché al terminar.
-    - ``refresh=False``: si hay caché del mismo escenario/semilla, el job nace
-      ``completed`` con ese payload y **no** recalcula.
+    - ``refresh=True`` (default): corre el barrido y guarda la corrida al terminar.
+    - ``refresh=False``: si la BD ya tiene una corrida vigente del mismo escenario/semilla,
+      el job nace ``completed`` con ese payload y **no** recalcula.
+    - ``profile``: combinación a probar en el barrido de validación (queda en el job y,
+      por tanto, en su journal).
 
-    El barrido se serializa con el semáforo de calibración (máximo 1 en paralelo); el
-    payload solo se persiste en la caché si el job termina sin cancelarse.
+    El barrido se serializa con el semáforo de calibración (máximo 1 en paralelo); la
+    corrida solo se guarda si el job termina sin cancelarse. La validación **siempre
+    corre** aunque ``refresh=False``: son 2 corridas y reutilizar la corrida de otra
+    combinación no respondería la pregunta.
     """
     if sweep not in CALIBRATION_SWEEPS:
         raise ValueError(f"Barrido de calibración desconocido: {sweep}")
@@ -636,11 +649,15 @@ def create_calibration_job(
         estimated_duration_hours=None,
         seed=resolved_seed,
         job_type="calibration",
-        extra_params={"sweep": sweep, "refresh": refresh},
+        extra_params={
+            "sweep": sweep,
+            "refresh": refresh,
+            **({"profile": profile} if profile else {}),
+        },
         created_at=now,
     )
-    if not refresh:
-        cached = _sweep_cache_loader(sweep)
+    if not refresh and sweep != SWEEP_VALIDATION:
+        cached = _sweep_latest_payload(db, sweep)
         if _cache_matches(cached, scenario_id=resolved_scenario, seed=resolved_seed):
             with job.lock:
                 job.status = "completed"
@@ -669,7 +686,12 @@ def create_calibration_job(
                 job.phase = SWEEP_PHASE_LABELS.get(sweep, sweep)
             _persist_job_snapshot(job, force=True)
             return _execute_calibration_sweep(
-                job, sweep, db, scenario_id=resolved_scenario, seed=resolved_seed
+                job,
+                sweep,
+                db,
+                scenario_id=resolved_scenario,
+                seed=resolved_seed,
+                extra={"profile": profile} if profile else None,
             )
         finally:
             if acquired:

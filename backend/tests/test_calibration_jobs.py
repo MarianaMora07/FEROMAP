@@ -67,7 +67,7 @@ def test_calibration_job_reports_monotonic_progress(monkeypatch):
 
     monkeypatch.setattr(svc, "_sweep_runner", lambda sweep: fake_sweep)
 
-    job = svc.create_calibration_job(SWEEP_SENSITIVITY)
+    job = svc.create_calibration_job(SWEEP_SENSITIVITY, db=MagicMock())
     view = svc.get_calibration_job_view(job.id)
     deadline = time.time() + 5
     while view["status"] in {"pending", "running"} and time.time() < deadline:
@@ -112,7 +112,7 @@ def test_calibration_job_cancel_marks_cancelled_without_result(monkeypatch):
 
     monkeypatch.setattr(svc, "_sweep_runner", lambda sweep: fake_sweep)
 
-    job = svc.create_calibration_job(SWEEP_OBJECTIVE)
+    job = svc.create_calibration_job(SWEEP_OBJECTIVE, db=MagicMock())
     assert started.wait(timeout=5)
 
     assert svc.cancel_optimization_job(job.id)["status"] == "cancelled"
@@ -136,10 +136,10 @@ def test_calibration_job_cancelled_while_waiting_for_slot(monkeypatch):
 
     monkeypatch.setattr(svc, "_sweep_runner", lambda sweep: fake_sweep)
 
-    first = svc.create_calibration_job(SWEEP_SENSITIVITY)
+    first = svc.create_calibration_job(SWEEP_SENSITIVITY, db=MagicMock())
     assert running.wait(timeout=5)
 
-    waiting = svc.create_calibration_job(SWEEP_SENSITIVITY)
+    waiting = svc.create_calibration_job(SWEEP_SENSITIVITY, db=MagicMock())
     svc.cancel_optimization_job(waiting.id)
 
     view = _wait_for_status(waiting.id, {"cancelled", "completed", "failed"})
@@ -169,9 +169,9 @@ def test_calibration_jobs_run_one_at_a_time(monkeypatch):
 
     monkeypatch.setattr(svc, "_sweep_runner", lambda sweep: fake_sweep)
 
-    first = svc.create_calibration_job(SWEEP_SENSITIVITY)
+    first = svc.create_calibration_job(SWEEP_SENSITIVITY, db=MagicMock())
     assert running.wait(timeout=5)
-    second = svc.create_calibration_job(SWEEP_OBJECTIVE)
+    second = svc.create_calibration_job(SWEEP_OBJECTIVE, db=MagicMock())
 
     time.sleep(0.2)
     assert len(started) == 1
@@ -192,12 +192,12 @@ def test_calibration_jobs_run_one_at_a_time(monkeypatch):
 def test_calibration_job_refresh_false_reuses_matching_cache(monkeypatch):
     monkeypatch.setattr(svc, "SessionLocal", lambda: MagicMock())
     cached = {"generatedAt": "2026-09-17T00:00:00+00:00", "scenarioId": "normal", "seed": 42}
-    monkeypatch.setattr(svc, "_sweep_cache_loader", lambda sweep: cached)
+    monkeypatch.setattr(svc, "_sweep_latest_payload", lambda db, sweep: cached)
     monkeypatch.setattr(
         svc, "_sweep_runner", lambda sweep: pytest.fail("no debe recalcular con refresh=False")
     )
 
-    job = svc.create_calibration_job(SWEEP_SENSITIVITY, refresh=False)
+    job = svc.create_calibration_job(SWEEP_SENSITIVITY, db=MagicMock(), refresh=False)
 
     view = svc.get_calibration_job_view(job.id)
     assert view["status"] == "completed"
@@ -214,10 +214,10 @@ def test_calibration_job_refresh_false_with_other_seed_runs(monkeypatch):
         ran.append(seed)
         return {"runs": [], "scenarioId": scenario_id, "seed": seed}
 
-    monkeypatch.setattr(svc, "_sweep_cache_loader", lambda sweep: cached)
+    monkeypatch.setattr(svc, "_sweep_latest_payload", lambda db, sweep: cached)
     monkeypatch.setattr(svc, "_sweep_runner", lambda sweep: fake_sweep)
 
-    job = svc.create_calibration_job(SWEEP_SENSITIVITY, seed=99, refresh=False)
+    job = svc.create_calibration_job(SWEEP_SENSITIVITY, db=MagicMock(), seed=99, refresh=False)
 
     view = _wait_for_status(job.id, {"completed", "failed", "cancelled"})
     assert view["status"] == "completed"
@@ -226,7 +226,7 @@ def test_calibration_job_refresh_false_with_other_seed_runs(monkeypatch):
 
 def test_create_calibration_job_rejects_unknown_sweep():
     with pytest.raises(ValueError):
-        svc.create_calibration_job("no-existe")
+        svc.create_calibration_job("no-existe", db=MagicMock())
 
 
 # --------------------------------------------------------------------------- #
@@ -264,7 +264,9 @@ def test_validate_sweep_duration_rejects_shift_outside_the_sweep():
 
 def test_objective_sweep_endpoint_rejects_unsupported_duration():
     with pytest.raises(HTTPException) as excinfo:
-        benchmarks.start_objective_sweep_job(_objective_request(durationHours=12), MagicMock())
+        benchmarks.start_objective_sweep_job(
+            _objective_request(durationHours=12), MagicMock(), MagicMock()
+        )
 
     assert excinfo.value.status_code == 400
     assert "durationHours=12" in str(excinfo.value.detail)
@@ -273,15 +275,15 @@ def test_objective_sweep_endpoint_rejects_unsupported_duration():
 def test_objective_sweep_endpoint_accepts_declared_shift(monkeypatch):
     created: list[str] = []
 
-    def fake_create(sweep, *, scenario_id=None, seed=None, refresh=True):
+    def fake_create(sweep, **kwargs):
         created.append(sweep)
         return SimpleNamespace(id="job-declarado")
 
     monkeypatch.setattr(benchmarks, "create_calibration_job", fake_create)
 
-    assert benchmarks.start_objective_sweep_job(_objective_request(durationHours=8), MagicMock()) == {
-        "jobId": "job-declarado"
-    }
+    assert benchmarks.start_objective_sweep_job(
+        _objective_request(durationHours=8), MagicMock(), MagicMock()
+    ) == {"jobId": "job-declarado"}
     assert created == [SWEEP_OBJECTIVE]
 
 
@@ -292,7 +294,9 @@ def test_objective_sweep_endpoint_accepts_omitted_shift(monkeypatch):
         lambda sweep, **kwargs: SimpleNamespace(id="job-omitido"),
     )
 
-    assert benchmarks.start_objective_sweep_job(_objective_request(), MagicMock()) == {"jobId": "job-omitido"}
+    assert benchmarks.start_objective_sweep_job(
+        _objective_request(), MagicMock(), MagicMock()
+    ) == {"jobId": "job-omitido"}
 
 
 # --------------------------------------------------------------------------- #
@@ -331,7 +335,7 @@ def test_calibration_job_persists_calibration_type_and_params(monkeypatch):
 
     monkeypatch.setattr(svc, "_sweep_runner", lambda sweep: fake_sweep)
 
-    job = svc.create_calibration_job(SWEEP_OBJECTIVE)
+    job = svc.create_calibration_job(SWEEP_OBJECTIVE, db=MagicMock())
     assert _wait_for_status(job.id, {"completed", "failed", "cancelled"})["status"] == "completed"
 
     assert record.job_type == "calibration"
@@ -394,9 +398,7 @@ def test_calibration_job_view_rejects_unknown_job():
 # --------------------------------------------------------------------------- #
 
 
-def test_objective_sweep_cache_read_exposes_frontier_and_acceptance(monkeypatch, tmp_path):
-    from app.services import multiobjective_sweep_service as sweep
-
+def test_objective_sweep_read_exposes_frontier_and_acceptance(monkeypatch, tmp_path):
     payload = {
         "generatedAt": "2026-09-17T00:00:00+00:00",
         "durationSeconds": 10.0,
@@ -411,9 +413,7 @@ def test_objective_sweep_cache_read_exposes_frontier_and_acceptance(monkeypatch,
             "ac3": {"ok": None},
         },
     }
-    path = tmp_path / "multiobjective_sweep.json"
-    path.write_text(json.dumps(payload), encoding="utf-8")
-    monkeypatch.setattr(sweep, "sweep_cache_path", lambda: path)
+    monkeypatch.setattr(benchmarks, "load_multiobjective_sweep", lambda db: payload)
     # El sello de instancia lo cubre test_calibration_fingerprint.
     monkeypatch.setattr(benchmarks, "with_freshness", lambda payload_, db, *, scenario_id: payload_)
 
@@ -423,10 +423,8 @@ def test_objective_sweep_cache_read_exposes_frontier_and_acceptance(monkeypatch,
     assert set(result["acceptance"]) == {"ac1", "ac2", "ac3"}
 
 
-def test_objective_sweep_cache_read_404_without_cache(monkeypatch, tmp_path):
-    from app.services import multiobjective_sweep_service as sweep
-
-    monkeypatch.setattr(sweep, "sweep_cache_path", lambda: tmp_path / "missing.json")
+def test_objective_sweep_read_404_without_evidence(monkeypatch, tmp_path):
+    monkeypatch.setattr(benchmarks, "load_multiobjective_sweep", lambda db: None)
 
     with pytest.raises(HTTPException) as excinfo:
         benchmarks.get_objective_sweep(MagicMock(), MagicMock())

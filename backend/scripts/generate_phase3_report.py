@@ -1,9 +1,10 @@
-"""Genera reporte markdown Fase 3 desde benchmarks en caché."""
+"""Genera reporte markdown Fase 3 desde la evidencia guardada en la BD."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
+from app.db.session import SessionLocal
 from app.services.aco_sensitivity_service import load_aco_sensitivity
 from app.services.benchmark_service import ACO_BENCHMARK_PROFILES, load_aco_benchmark
 
@@ -122,9 +123,9 @@ def _sensitivity_tables(sensitivity: dict) -> list[str]:
     return lines
 
 
-def build_report() -> str:
+def build_report(db) -> str:
     benchmark = load_aco_benchmark()
-    sensitivity = load_aco_sensitivity()
+    sensitivity = load_aco_sensitivity(db)
     lines = [
         "# Evidencia ACO — Fase 3 (rigor algorítmico)",
         "",
@@ -201,7 +202,8 @@ def build_report() -> str:
 
 
 def main() -> None:
-    report = build_report()
+    with SessionLocal() as db:
+        report = build_report(db)
     path = _report_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(report, encoding="utf-8")

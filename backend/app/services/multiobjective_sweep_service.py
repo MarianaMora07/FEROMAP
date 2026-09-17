@@ -7,17 +7,20 @@ de Pareto y la evaluación de los criterios de aceptación AC-1/AC-2 (Fase 13, �
 
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.config import settings
+from app.services.calibration_sweep_store import latest_payload, record_sweep
 from app.services.optimization_service import run_optimization_engine
-from app.services.sweep_progress import CancelCheck, OnRun, SweepCancelled
+from app.services.sweep_progress import (
+    SWEEP_OBJECTIVE,
+    CancelCheck,
+    OnRun,
+    SweepCancelled,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -78,33 +81,9 @@ def validate_sweep_duration(duration_hours: int | None) -> int | None:
     )
 
 
-def _sweep_dir(*, ensure: bool = False) -> Path:
-    path = Path(settings.data_dir) / "cache" / "phase13"
-    if ensure:
-        path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
-def sweep_cache_path() -> Path:
-    return _sweep_dir() / "multiobjective_sweep.json"
-
-
-def save_multiobjective_sweep(payload: dict[str, Any]) -> Path:
-    path = sweep_cache_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    return path
-
-
-def load_multiobjective_sweep() -> dict[str, Any] | None:
-    path = sweep_cache_path()
-    if not path.exists():
-        return None
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Barrido multiobjetivo corrupto (%s): %s", path, exc)
-        return None
+def load_multiobjective_sweep(db: Session) -> dict[str, Any] | None:
+    """Payload vigente del barrido de pesos (la corrida más reciente en la BD)."""
+    return latest_payload(db, sweep=SWEEP_OBJECTIVE)
 
 
 def _run_sweep_case(
@@ -301,7 +280,7 @@ def run_multiobjective_sweep(
 
     ``on_run``/``cancel_check`` conectan el barrido con el job asíncrono: ``on_run``
     reporta el progreso antes de cada corrida y ``cancel_check`` corta entre corridas.
-    Si se cancela, lanza :class:`SweepCancelled` y **no** escribe la caché.
+    Si se cancela, lanza :class:`SweepCancelled` y **no** guarda la corrida.
     """
     started = datetime.now(timezone.utc)
     runs: list[dict[str, Any]] = []
@@ -326,5 +305,10 @@ def run_multiobjective_sweep(
         "paretoFrontier": build_pareto_frontier(runs),
         "acceptance": evaluate_acceptance_criteria(runs),
     }
-    save_multiobjective_sweep(payload)
+    record_sweep(
+        db,
+        sweep=SWEEP_OBJECTIVE,
+        payload=payload,
+        instance_fingerprint=instance_fingerprint,
+    )
     return payload

@@ -1,3 +1,4 @@
+from app.db.models.calibration_sweep import CalibrationSweep
 from app.db.models.case_study import CaseStudy, CaseStudyPoint
 from app.db.models.collection_point import CollectionPoint
 from app.db.models.driver_notification import DriverNotification
@@ -38,6 +39,7 @@ __all__ = [
     "OptimizedRoute",
     "RouteWaypoint",
     "OptimizationJobRecord",
+    "CalibrationSweep",
     "Simulation",
     "SystemAlert",
     "AlertActivity",

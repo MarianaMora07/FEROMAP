@@ -47,8 +47,8 @@ def _patch_aco(monkeypatch, tmp_path, executed: list[str]):
     monkeypatch.setattr(aco_sensitivity_service, "run_optimization_engine", fake_run)
     monkeypatch.setattr(
         aco_sensitivity_service,
-        "save_aco_sensitivity",
-        lambda payload: saved.append(payload) or tmp_path / "aco_sensitivity.json",
+        "record_sweep",
+        lambda db, *, sweep, payload, instance_fingerprint=None: saved.append(payload),
     )
     return saved
 
@@ -71,7 +71,7 @@ def test_aco_sensitivity_on_run_reports_every_case(monkeypatch, tmp_path):
     assert len(saved) == 1
 
 
-def test_aco_sensitivity_cancel_between_runs_skips_cache(monkeypatch, tmp_path):
+def test_aco_sensitivity_cancel_between_runs_skips_the_record(monkeypatch, tmp_path):
     calls: list[tuple[int, int, str]] = []
     executed: list = []
     saved = _patch_aco(monkeypatch, tmp_path, executed)
@@ -84,7 +84,7 @@ def test_aco_sensitivity_cancel_between_runs_skips_cache(monkeypatch, tmp_path):
         )
 
     assert len(executed) == 3
-    # No se reporta la corrida cancelada ni se escribe la caché.
+    # No se reporta la corrida cancelada ni se guarda la corrida.
     assert [call[0] for call in calls] == [0, 1, 2]
     assert saved == []
 
@@ -129,8 +129,8 @@ def _patch_sweep(monkeypatch, tmp_path, executed: list[str]):
     monkeypatch.setattr(multiobjective_sweep_service, "run_optimization_engine", fake_run)
     monkeypatch.setattr(
         multiobjective_sweep_service,
-        "save_multiobjective_sweep",
-        lambda payload: saved.append(payload) or tmp_path / "sweep.json",
+        "record_sweep",
+        lambda db, *, sweep, payload, instance_fingerprint=None: saved.append(payload),
     )
     return saved
 
@@ -153,7 +153,7 @@ def test_multiobjective_sweep_on_run_reports_every_case(monkeypatch, tmp_path):
     assert len(saved) == 1
 
 
-def test_multiobjective_sweep_cancel_between_runs_skips_cache(monkeypatch, tmp_path):
+def test_multiobjective_sweep_cancel_between_runs_skips_the_record(monkeypatch, tmp_path):
     calls: list[tuple[int, int, str]] = []
     executed: list = []
     saved = _patch_sweep(monkeypatch, tmp_path, executed)
