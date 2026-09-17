@@ -125,6 +125,8 @@ class AlgorithmSettings(CamelModel):
     matrix_critical_factor: float = 0.70
     matrix_high_factor: float = 0.90
     # Penalización por rebose en la función objetivo (metros por kg rebosado).
+    # 0 = rebose como KPI (``kpis["overflowKg"]``), no como objetivo — decisión D1 de
+    # Fase 13; ver docs/fase-3/README-rigor.md.
     overflow_penalty_weight: float = 0.0
     # Calibración con pesos reales recolectados.
     calibration_default_alpha: float = 0.4

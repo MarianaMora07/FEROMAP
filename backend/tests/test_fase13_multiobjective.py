@@ -6,6 +6,7 @@ nivel 3 (regresión RNF-2 con línea base caracterizada).
 
 from __future__ import annotations
 
+import json
 from datetime import date, datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
@@ -16,6 +17,7 @@ from app.services.aco_parallel import (
     _default_distance_reference_m,
     _objective_cost,
     build_ant_solution,
+    solution_overflow_kg,
     workload_statistics,
 )
 from app.services.admin_service import resolve_operational_timezone
@@ -807,3 +809,161 @@ def test_daily_optimize_request_accepts_objective_parameters():
         DailyOptimizeRequest(minActiveVehicles=0)
     with pytest.raises(ValidationError):
         DailyOptimizeRequest(estimatedDurationHours=13)
+
+
+# --------------------------------------------------------------------------- #
+# 13.8 — decisiones de alcance: rebose como KPI y semilla reproducible
+# --------------------------------------------------------------------------- #
+
+
+def test_solution_overflow_kg_counts_unserved_and_is_unweighted():
+    """D1: el KPI de rebose reusa la fórmula del objetivo, pero sin peso (kg crudos)."""
+    n_customers = 3
+    _dist, time = vrp_matrix(n_customers, base=1000.0)
+    landfill_idx = n_customers + 1
+    deadline = [0.0] * n_customers
+    rate = [10.0] * n_customers
+
+    base_kwargs = {
+        "landfill_idx": landfill_idx,
+        "unload_sec": 0.0,
+        "shift_budget_sec": 3600.0,
+        "deadline_sec": deadline,
+        "rate_kg_per_hour": rate,
+    }
+
+    # Sin rutas activas todos quedan sin atender y rebosan hasta el fin de jornada:
+    # 10 kg/h × 1 h × 3 contenedores.
+    unserved_kg = solution_overflow_kg([], time, services=[], **base_kwargs)
+    assert unserved_kg == pytest.approx(30.0)
+
+    route = [0, 1, 2, 3, landfill_idx, 0]
+    served_kg = solution_overflow_kg([route], time, services=[0.0], **base_kwargs)
+    assert served_kg > 0.0
+
+    # El KPI no lleva peso: al duplicar la tasa, el rebose se duplica.
+    doubled = solution_overflow_kg(
+        [route], time, services=[0.0], **{**base_kwargs, "rate_kg_per_hour": [20.0] * n_customers}
+    )
+    assert doubled == pytest.approx(2 * served_kg)
+
+    # Deadline lejano ⇒ nadie rebosa dentro de la jornada.
+    far = solution_overflow_kg(
+        [route],
+        time,
+        services=[0.0],
+        **{**base_kwargs, "deadline_sec": [10**9] * n_customers},
+    )
+    assert far == 0.0
+
+
+def test_optimization_job_serializes_seed_for_reproducible_sweeps():
+    """Pendiente 6: la semilla viaja job → params del motor."""
+    from app.services.optimization_job_service import OptimizationJob, _serialize_params
+
+    job = OptimizationJob(
+        id="job-seed",
+        status="pending",
+        scenario_id="normal",
+        rain_intensity=None,
+        waste_level_pct=None,
+        estimated_duration_hours=None,
+        seed=1234,
+    )
+    payload = json.loads(_serialize_params(job))
+    assert payload["seed"] == 1234
+
+    # Sin semilla no se contamina el payload (se conserva el default 42 del motor).
+    no_seed = json.loads(
+        _serialize_params(
+            OptimizationJob(
+                id="job-no-seed",
+                status="pending",
+                scenario_id="normal",
+                rain_intensity=None,
+                waste_level_pct=None,
+                estimated_duration_hours=None,
+            )
+        )
+    )
+    assert "seed" not in no_seed
+
+
+def test_optimize_request_accepts_seed():
+    """Pendiente 6: el endpoint admite la semilla como parámetro opcional del motor."""
+    from app.schemas.simulation import OptimizeRequest
+
+    assert OptimizeRequest(seed=7).seed == 7
+    assert OptimizeRequest().seed is None
+
+
+def test_optimize_request_accepts_aco_hyperparameters():
+    """Opción (a): α/β/ρ/Q viajan por corrida y validan su rango en el esquema."""
+    from pydantic import ValidationError
+
+    from app.schemas.simulation import OptimizeRequest
+
+    body = OptimizeRequest(acoAlpha=2, acoBeta=5, acoRho=0.3, pheromoneQ=0.5)
+    assert body.aco_alpha == 2.0
+    assert body.aco_beta == 5.0
+    assert body.aco_rho == 0.3
+    assert body.pheromone_q == 0.5
+
+    # Sin valor, el motor cae al default de Administración.
+    assert OptimizeRequest().aco_alpha is None
+    assert OptimizeRequest().pheromone_q is None
+
+    # Fuera de rango: ρ ∈ (0, 1], α > 0, β ≥ 0, Q > 0.
+    with pytest.raises(ValidationError):
+        OptimizeRequest(acoRho=1.5)
+    with pytest.raises(ValidationError):
+        OptimizeRequest(acoRho=0)
+    with pytest.raises(ValidationError):
+        OptimizeRequest(acoAlpha=0)
+    with pytest.raises(ValidationError):
+        OptimizeRequest(acoBeta=-1)
+
+
+def test_optimization_job_serializes_aco_hyperparameters():
+    """Opción (a): los hiperparámetros del barrido se persisten con el job."""
+    from app.services.optimization_job_service import OptimizationJob, _serialize_params
+
+    job = OptimizationJob(
+        id="job-hyper",
+        status="pending",
+        scenario_id="normal",
+        rain_intensity=None,
+        waste_level_pct=None,
+        estimated_duration_hours=None,
+        aco_alpha=1.5,
+        aco_beta=4.0,
+        aco_rho=0.2,
+        pheromone_q=2.0,
+    )
+    payload = json.loads(_serialize_params(job))
+    assert payload["aco_alpha"] == 1.5
+    assert payload["aco_beta"] == 4.0
+    assert payload["aco_rho"] == 0.2
+    assert payload["pheromone_q"] == 2.0
+
+
+def test_sensitivity_sweep_covers_hyperparameters_in_three_levels():
+    """Opción (a): el barrido cubre los 4 ejes α/β/ρ/Q con 3 niveles cada uno."""
+    from app.services.aco_sensitivity_service import (
+        ANT_SENSITIVITY_SERIES,
+        HYPERPARAMETER_SENSITIVITY_SERIES,
+        ITERATION_SENSITIVITY_SERIES,
+        STANDARD_HYPERPARAMETERS,
+    )
+
+    keys = ("acoAlpha", "acoBeta", "acoRho", "pheromoneQ")
+    axes = {case["axis"] for case in HYPERPARAMETER_SENSITIVITY_SERIES}
+    assert axes == {"alpha", "beta", "rho", "q"}
+    for axis in axes:
+        levels = [case for case in HYPERPARAMETER_SENSITIVITY_SERIES if case["axis"] == axis]
+        assert len(levels) == 3
+    assert all(key in STANDARD_HYPERPARAMETERS for key in keys)
+
+    # Las series de hormigas/iteraciones no fijan hiperparámetros: usan el default.
+    for case in [*ANT_SENSITIVITY_SERIES, *ITERATION_SENSITIVITY_SERIES]:
+        assert not any(key in case for key in keys)

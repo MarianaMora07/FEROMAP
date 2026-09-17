@@ -57,6 +57,10 @@ class OptimizationJob:
     operators_shortage: int | None = None
     aco_ants: int | None = None
     aco_iterations: int | None = None
+    aco_alpha: float | None = None
+    aco_beta: float | None = None
+    aco_rho: float | None = None
+    pheromone_q: float | None = None
     priority_fill_level: bool | None = None
     time_window_enabled: bool | None = None
     departure_hour: int | None = None
@@ -75,6 +79,7 @@ class OptimizationJob:
     makespan_weight: float | None = None
     min_active_vehicles: int | None = None
     max_route_hours_target: float | None = None
+    seed: int | None = None
     job_type: str = "simulation"
     extra_params: dict[str, Any] = field(default_factory=dict)
     created_at: datetime | None = None
@@ -100,6 +105,10 @@ _JOB_PARAM_FIELDS = (
     "operators_shortage",
     "aco_ants",
     "aco_iterations",
+    "aco_alpha",
+    "aco_beta",
+    "aco_rho",
+    "pheromone_q",
     "priority_fill_level",
     "time_window_enabled",
     "departure_hour",
@@ -118,6 +127,7 @@ _JOB_PARAM_FIELDS = (
     "makespan_weight",
     "min_active_vehicles",
     "max_route_hours_target",
+    "seed",
 )
 
 
@@ -300,6 +310,10 @@ def create_optimization_job(
     operators_shortage: int | None = None,
     aco_ants: int | None = None,
     aco_iterations: int | None = None,
+    aco_alpha: float | None = None,
+    aco_beta: float | None = None,
+    aco_rho: float | None = None,
+    pheromone_q: float | None = None,
     priority_fill_level: bool | None = None,
     time_window_enabled: bool | None = None,
     departure_hour: int | None = None,
@@ -318,6 +332,7 @@ def create_optimization_job(
     makespan_weight: float | None = None,
     min_active_vehicles: int | None = None,
     max_route_hours_target: float | None = None,
+    seed: int | None = None,
     job_type: str | None = None,
 ) -> OptimizationJob:
     resolved_auto_dispatch = auto_dispatch
@@ -336,6 +351,10 @@ def create_optimization_job(
         operators_shortage=operators_shortage,
         aco_ants=aco_ants,
         aco_iterations=aco_iterations,
+        aco_alpha=aco_alpha,
+        aco_beta=aco_beta,
+        aco_rho=aco_rho,
+        pheromone_q=pheromone_q,
         priority_fill_level=priority_fill_level,
         time_window_enabled=time_window_enabled,
         departure_hour=departure_hour,
@@ -354,6 +373,7 @@ def create_optimization_job(
         makespan_weight=makespan_weight,
         min_active_vehicles=min_active_vehicles,
         max_route_hours_target=max_route_hours_target,
+        seed=seed,
         job_type=job_type,
         created_at=created_at,
     )
@@ -518,6 +538,10 @@ def _run_job_worker(job_id: str) -> None:
             operators_shortage=job.operators_shortage,
             aco_ants=job.aco_ants,
             aco_iterations=job.aco_iterations,
+            aco_alpha=job.aco_alpha,
+            aco_beta=job.aco_beta,
+            aco_rho=job.aco_rho,
+            pheromone_q=job.pheromone_q,
             priority_fill_level=job.priority_fill_level,
             time_window_enabled=job.time_window_enabled,
             departure_hour=job.departure_hour,
@@ -536,6 +560,7 @@ def _run_job_worker(job_id: str) -> None:
             makespan_weight=job.makespan_weight,
             min_active_vehicles=job.min_active_vehicles,
             max_route_hours_target=job.max_route_hours_target,
+            seed=job.seed,
             reporter=reporter,
         )
         with job.lock:

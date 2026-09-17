@@ -27,6 +27,12 @@ DEFAULT_TWO_OPT_PASSES = 10
 # Fase 13 — objetivo multiobjetivo (distancia · equidad · makespan).
 # Penalización por vehículo activo faltante cuando se exige ``min_active_vehicles``.
 # Es una barrera grande comparada con los tres términos normalizados (O(1)).
+#
+# Decisión de alcance (Fase 13): se mantiene como *cota inferior* (barrera), no como
+# perilla de Pareto. El solver hace lo necesario por alcanzar ``min_active_vehicles`` y
+# no premia usar menos camiones. Si se quisiera un compromiso distancia↔flota habría que
+# normalizarlo como ``(N_min − activos)/N_min`` y tratarlo como peso; ese eje, de
+# existir, debe ser un término aparte para no romper la garantía de flota mínima.
 MIN_ACTIVE_VEHICLES_PENALTY = 10.0
 
 # Barrera por cerrar una ruta fuera de la jornada. El vehículo debe regresar a base
@@ -491,6 +497,51 @@ def _solution_overflow_cost(
                 weight,
             )
     return total
+
+
+def solution_overflow_kg(
+    routes: list[list[int]],
+    time_matrix: list[list[float]],
+    *,
+    landfill_idx: int,
+    services: list[float],
+    unload_sec: float,
+    shift_budget_sec: float | None,
+    deadline_sec: list[float | None] | None,
+    rate_kg_per_hour: list[float] | None,
+    window_starts: list[float] | None = None,
+) -> float:
+    """Rebose proyectado de una solución, en kg (KPI, no objetivo).
+
+    Reutiliza el reloj único y la misma fórmula del término de costo (``weight=1.0``),
+    así que el KPI y el objetivo nunca divergen. ``services`` va alineado con ``routes``
+    (una entrada por ruta): aquí las rutas ya vienen filtradas por vehículo activo y no
+    comparten el índice de ``service_secs``.
+
+    Se reporta como KPI porque el reloj del rebose arranca en "ahora", mientras que las
+    llegadas de ``_route_timeline`` arrancan en la salida de la flota (ver decisión D1).
+    """
+    if deadline_sec is None or rate_kg_per_hour is None:
+        return 0.0
+    timelines = [
+        _route_timeline(
+            route,
+            time_matrix,
+            landfill_idx=landfill_idx,
+            service_sec=service,
+            unload_sec=unload_sec,
+            window_starts=window_starts,
+        )
+        for route, service in zip(routes, services)
+    ]
+    return _solution_overflow_cost(
+        timelines,
+        landfill_idx=landfill_idx,
+        shift_budget_sec=shift_budget_sec,
+        deadline_sec=deadline_sec,
+        rate_kg_per_hour=rate_kg_per_hour,
+        weight=1.0,
+    )
 
 
 def workload_statistics(hours: list[float]) -> tuple[float, float, float]:

@@ -106,6 +106,51 @@ class OptimizeRequest(CamelModel):
         le=18,
         description="Jornada objetivo (h) del KPI finishUnderTargetPct (Fase 13). Default 8 h.",
     )
+    aco_alpha: float | None = Field(
+        default=None,
+        gt=0,
+        le=20,
+        description=(
+            "Hiperparámetro ACO α (importancia de la feromona). Si se omite, usa el "
+            "valor de Administración (1.0)."
+        ),
+    )
+    aco_beta: float | None = Field(
+        default=None,
+        ge=0,
+        le=20,
+        description=(
+            "Hiperparámetro ACO β (importancia del heurístico de cercanía). Si se omite, "
+            "usa el valor de Administración (3.0)."
+        ),
+    )
+    aco_rho: float | None = Field(
+        default=None,
+        gt=0,
+        le=1,
+        description=(
+            "Hiperparámetro ACO ρ (evaporación de feromona, 0–1). Si se omite, usa el "
+            "valor de Administración (0.12)."
+        ),
+    )
+    pheromone_q: float | None = Field(
+        default=None,
+        gt=0,
+        le=1_000_000,
+        description=(
+            "Hiperparámetro ACO Q (feromona depositada por la mejor hormiga). Si se omite, "
+            "usa el valor de Administración (1.0)."
+        ),
+    )
+    seed: int | None = Field(
+        default=None,
+        ge=0,
+        le=2_147_483_647,
+        description=(
+            "Semilla del ACO (Fase 13). Fija la corrida para reproducibilidad y barridos de "
+            "robustez. Si se omite, usa 42."
+        ),
+    )
     planning_level: Literal["strategic", "administrative", "operational", "simulation"] | None = None
     operation_date: date | None = None
     collection_point_ids: list[int] | None = None

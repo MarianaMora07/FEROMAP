@@ -60,6 +60,7 @@ from app.services.aco_parallel import (
     _rebalance_pass,
     resolve_aco_parallel_workers,
     run_ant_solutions,
+    solution_overflow_kg,
     workload_statistics,
 )
 from app.services.admin_service import (
@@ -616,6 +617,7 @@ def _optimize_by_sector_assignment(
     aco_ants: int,
     aco_iterations: int,
     aco_patience: int = ACO_PATIENCE,
+    seed: int | None = None,
     cancel_check: Callable[[], bool] | None = None,
     on_iteration: Callable[[int, int, float, float], None] | None = None,
     priority_fill_level: bool = False,
@@ -638,6 +640,9 @@ def _optimize_by_sector_assignment(
 ) -> RouteSolution:
     """Optimiza una ruta por vehículo solo con puntos de los sectores de su conductor."""
     n_customers = len(customers)
+    # Semilla base del barrido; cada vehículo recibe una derivada para que su ACO local
+    # sea reproducible sin compartir secuencia con los demás.
+    base_seed = seed if seed is not None else 42
     landfill_global = _landfill_idx(n_customers)
     vehicle_routes: list[list[int]] = []
     uncovered: list[int] = list(unassigned_indices)
@@ -720,7 +725,7 @@ def _optimize_by_sector_assignment(
             aco_ants=aco_ants,
             aco_iterations=aco_iterations,
             aco_patience=aco_patience,
-            seed=42 + v_idx * 17,
+            seed=base_seed + v_idx * 17,
             cancel_check=cancel_check,
             on_iteration=vehicle_progress if on_iteration else None,
             heuristic_matrix=local_heuristic,
@@ -1127,6 +1132,50 @@ def _solution_operational_metrics(
         "workload_std_hours": round(std_hours, 2),
         "fairness_index": round(fairness, 2),
     }
+
+
+def _solution_overflow_kg(
+    solution: RouteSolution,
+    *,
+    time_matrix: list[list[float]],
+    landfill_idx: int,
+    service_secs: list[float] | list[int],
+    unload_sec: float,
+    shift_budget_sec: float | None,
+    window_starts: list[float] | None,
+    deadline_sec: list[float | None] | None,
+    rate_kg_per_hour: list[float] | None,
+    vehicle_count: int,
+) -> float:
+    """Rebose proyectado de una ``RouteSolution``, en kg (KPI, no objetivo).
+
+    ``RouteSolution`` solo expone las rutas activas; su vehículo real está en
+    ``vehicle_indices``. Por eso se reconstruye la lista de tiempos de servicio con
+    ``_route_vehicle_index`` antes de delegar en ``solution_overflow_kg``.
+    """
+    if deadline_sec is None or rate_kg_per_hour is None:
+        return 0.0
+    routes: list[list[int]] = []
+    services: list[float] = []
+    for position, route in enumerate(solution.vehicle_routes):
+        if len(route) <= 2:
+            continue
+        vehicle_idx = _route_vehicle_index(solution, position, vehicle_count)
+        routes.append(route)
+        services.append(
+            float(service_secs[min(vehicle_idx, len(service_secs) - 1)]) if service_secs else 0.0
+        )
+    return solution_overflow_kg(
+        routes,
+        time_matrix,
+        landfill_idx=landfill_idx,
+        services=services,
+        unload_sec=unload_sec,
+        shift_budget_sec=shift_budget_sec,
+        deadline_sec=deadline_sec,
+        rate_kg_per_hour=rate_kg_per_hour,
+        window_starts=window_starts,
+    )
 
 
 def _evaluate_solution(
@@ -2210,6 +2259,10 @@ def run_optimization_engine(
     operators_shortage: int | None = None,
     aco_ants: int | None = None,
     aco_iterations: int | None = None,
+    aco_alpha: float | None = None,
+    aco_beta: float | None = None,
+    aco_rho: float | None = None,
+    pheromone_q: float | None = None,
     priority_fill_level: bool | None = None,
     time_window_enabled: bool | None = None,
     kpi_view: str | None = None,
@@ -2317,10 +2370,14 @@ def run_optimization_engine(
     )
     aco_patience = max(0, int(algorithm_settings.aco_patience))
     overflow_weight = float(algorithm_settings.overflow_penalty_weight)
-    aco_alpha = float(algorithm_settings.aco_alpha)
-    aco_beta = float(algorithm_settings.aco_beta)
-    aco_rho = float(algorithm_settings.aco_rho)
-    pheromone_q = float(algorithm_settings.pheromone_q)
+    # Fase 13 — hiperparámetros del ACO (request > admin). Expuestos por corrida para que
+    # el barrido de sensibilidad pueda variar α/β/ρ/Q y quede registrado en la evidencia.
+    resolved_aco_alpha = float(aco_alpha if aco_alpha is not None else algorithm_settings.aco_alpha)
+    resolved_aco_beta = float(aco_beta if aco_beta is not None else algorithm_settings.aco_beta)
+    resolved_aco_rho = float(aco_rho if aco_rho is not None else algorithm_settings.aco_rho)
+    resolved_pheromone_q = float(
+        pheromone_q if pheromone_q is not None else algorithm_settings.pheromone_q
+    )
     pheromone_elitist = bool(algorithm_settings.pheromone_elitist)
     two_opt_passes = max(1, int(algorithm_settings.two_opt_passes))
     at_risk_multiplier = float(algorithm_settings.heuristic_at_risk_multiplier)
@@ -2359,6 +2416,9 @@ def run_optimization_engine(
         if resolved_params.min_active_vehicles is not None
         else algorithm_settings.min_active_vehicles
     )
+    # Semilla del ACO expuesta desde el request/job (Fase 13) para que los barridos de
+    # robustez sean reproducibles. Sin semilla se conserva el valor histórico (42).
+    resolved_seed = seed if seed is not None else 42
     # ¿La corrida pide el objetivo multiobjetivo? (afecta el reparto de territorios, R-4)
     objective_requested = (
         resolved_workload_balance_weight > 0
@@ -2581,7 +2641,15 @@ def run_optimization_engine(
         "minActiveVehicles": effective_min_active_vehicles,
         "minActiveVehiclesRequested": requested_min_active_vehicles,
         "maxRouteHoursTarget": resolved_max_route_hours_target,
+        "overflowWeight": overflow_weight,
         "departureAt": departure_at.isoformat(),
+    }
+    # Trazabilidad del barrido de sensibilidad: hiperparámetros efectivos de la corrida.
+    simulation_parameters["acoHyperparameters"] = {
+        "alpha": resolved_aco_alpha,
+        "beta": resolved_aco_beta,
+        "rho": resolved_aco_rho,
+        "pheromoneQ": resolved_pheromone_q,
     }
 
     report("matriz_costos", "Construyendo matriz de costos sobre red vial (NetworkX shortest path)")
@@ -2676,6 +2744,10 @@ def run_optimization_engine(
         auto_applies=auto_sector_partition,
         objective_requested=objective_requested,
     )
+    # Ventanas por cliente: solo el reparto global las construye; el KPI de rebose las usa
+    # si existen (el camino sectorial queda sin esperas por ventana, aproximación declarada).
+    window_starts: list[float] | None = None
+    window_ends: list[float] | None = None
     if partition_disabled_by_objective:
         report(
             "instancia_vrp",
@@ -2685,6 +2757,21 @@ def run_optimization_engine(
             ),
             "info",
         )
+    if use_sector_partition and objective_requested:
+        # Guard de calibración (Fase 13): el camino sectorial no reenvía λ_b/λ_t/min
+        # vehículos ni corre el local search inter-ruta, así que su objetivo NO es el
+        # mismo que el global. Se avisa y se marca la corrida para no comparar cruzando
+        # esta frontera. Ver docs/fase-3/README-rigor.md.
+        report(
+            "instancia_vrp",
+            (
+                "Partición sectorial forzada con objetivo multiobjetivo activo: el camino "
+                "sectorial degrada el objetivo (sin equidad/makespan/mín. vehículos ni "
+                "local search). No calibrar cruzando esta frontera (R-4)."
+            ),
+            "warning",
+        )
+        simulation_parameters["multiObjective"]["objectiveDegradedBySectorPartition"] = True
     if use_sector_partition:
         resolved_sector_driver_map = resolve_sector_driver_map_for_optimization(
             customers,
@@ -2804,6 +2891,7 @@ def run_optimization_engine(
             aco_ants=resolved_aco_ants,
             aco_iterations=resolved_aco_iterations,
             aco_patience=aco_patience,
+            seed=resolved_seed,
             cancel_check=cancelled,
             on_iteration=aco_progress,
             priority_fill_level=resolved_priority_fill_level,
@@ -2812,10 +2900,10 @@ def run_optimization_engine(
             overflow_deadline_sec=overflow_deadlines,
             overflow_rate_kg_per_hour=overflow_rates,
             overflow_weight=overflow_weight,
-            alpha=aco_alpha,
-            beta=aco_beta,
-            rho=aco_rho,
-            pheromone_q=pheromone_q,
+            alpha=resolved_aco_alpha,
+            beta=resolved_aco_beta,
+            rho=resolved_aco_rho,
+            pheromone_q=resolved_pheromone_q,
             pheromone_elitist=pheromone_elitist,
             two_opt_passes=two_opt_passes,
             at_risk_multiplier=at_risk_multiplier,
@@ -2852,7 +2940,7 @@ def run_optimization_engine(
             aco_ants=resolved_aco_ants,
             aco_iterations=resolved_aco_iterations,
             aco_patience=aco_patience,
-            seed=seed if seed is not None else 42,
+            seed=resolved_seed,
             cancel_check=cancelled,
             on_iteration=aco_progress,
             heuristic_matrix=heuristic_matrix,
@@ -2864,10 +2952,10 @@ def run_optimization_engine(
             overflow_deadline_sec=overflow_deadlines,
             overflow_rate_kg_per_hour=overflow_rates,
             overflow_weight=overflow_weight,
-            alpha=aco_alpha,
-            beta=aco_beta,
-            rho=aco_rho,
-            pheromone_q=pheromone_q,
+            alpha=resolved_aco_alpha,
+            beta=resolved_aco_beta,
+            rho=resolved_aco_rho,
+            pheromone_q=resolved_pheromone_q,
             pheromone_elitist=pheromone_elitist,
             two_opt_passes=two_opt_passes,
             at_risk_multiplier=at_risk_multiplier,
@@ -2924,6 +3012,37 @@ def run_optimization_engine(
         uncovered_point_codes=uncovered_point_codes,
         max_route_hours_target=resolved_max_route_hours_target,
     )
+    # D1 (Fase 13) — rebose como KPI, no como objetivo: se reporta el rebose proyectado de
+    # la solución con el mismo reloj/fórmula del término de costo, pero ``w_ov`` sigue en 0.
+    cur_overflow_kg = _solution_overflow_kg(
+        current_solution,
+        time_matrix=time_matrix,
+        landfill_idx=landfill_idx,
+        service_secs=service_secs,
+        unload_sec=float(unload_seconds),
+        shift_budget_sec=shift_budget_sec,
+        window_starts=window_starts,
+        deadline_sec=overflow_deadlines,
+        rate_kg_per_hour=overflow_rates,
+        vehicle_count=len(vehicles),
+    )
+    opt_overflow_kg = _solution_overflow_kg(
+        optimized_solution,
+        time_matrix=time_matrix,
+        landfill_idx=landfill_idx,
+        service_secs=service_secs,
+        unload_sec=float(unload_seconds),
+        shift_budget_sec=shift_budget_sec,
+        window_starts=window_starts,
+        deadline_sec=overflow_deadlines,
+        rate_kg_per_hour=overflow_rates,
+        vehicle_count=len(vehicles),
+    )
+    kpis["overflowKg"] = {
+        "current": round(cur_overflow_kg, 1),
+        "optimized": round(opt_overflow_kg, 1),
+    }
+    kpis["overflowKgAvoided"] = round(max(0.0, cur_overflow_kg - opt_overflow_kg), 1)
     kpis["kpiView"] = resolved_kpi_view
     if (
         effective_min_active_vehicles is not None

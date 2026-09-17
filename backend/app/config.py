@@ -103,6 +103,10 @@ class Settings(BaseSettings):
     calibration_window_days: int = 30
     # Penalización por rebose en la función objetivo del ACO, en "metros por kg
     # rebosado". 0 desactiva la penalización (comportamiento solo-distancia).
+    # Decisión de alcance (Fase 13, D1): el rebose se reporta como KPI
+    # (``kpis["overflowKg"]``), no como objetivo, porque su reloj arranca en "ahora" y
+    # no en la salida de la flota. Activar este peso requiere antes alinear ese reloj y
+    # sumar el rebose a ``objective_active`` (ver docs/fase-3/README-rigor.md).
     overflow_penalty_weight: float = 0.0
 
     # Fase 13 — optimización multiobjetivo (distancia · uso de flota · tiempo de
