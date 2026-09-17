@@ -142,7 +142,7 @@ Modelo único de criticidad documentado en [adr-criticidad.md](./adr-criticidad.
 | Frecuencia requerida vs declarada | **Conectada** | `requiredVisitsPerWeek` (física) vs `visitsPerWeek`; `overloaded` |
 | `at_risk_before_next_visit` | **Conectada** | KPI "Se llenarán antes de la próxima visita"; prioriza ACO y genera alertas |
 | Fuente de "próxima visita" (`next_visit_service`) | **Conectada** | Plan semanal aprobado > agenda declarada; misma fuente para KPI, alertas `agenda` y sesgo ACO |
-| `operational_timezone` (config) | **Conectada** | Hora (07:00) y días de recolección en calendario **local** (por defecto `America/Caracas`) |
+| `operational.timezone` (Administración) | **Conectada** | Fuente única de la zona horaria: hora (07:00) y días de recolección en calendario **local** (por defecto `America/Caracas`) |
 | `priorityFillLevel` (toggle) | **Conectada** | Activa el sesgo ACO (riesgo `eta×1.5`, llenado `×1.35/1.10`) |
 | `criticalCoveragePct` (KPI) | **Conectada** | % contenedores ≥80 % atendidos (sin cambio de semántica) |
 | `atRiskContainers` / `mapMetrics["at_risk"]` | **Conectada** | KPI complementario: excluye los ya críticos, no altera "Contenedores críticos" y reporta cobertura no evaluable |

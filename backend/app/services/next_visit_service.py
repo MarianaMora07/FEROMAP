@@ -18,6 +18,7 @@ como si fueran lo mismo.
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -25,13 +26,15 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.db.models import CollectionPoint, VisitSchedule, WeeklyPlan, WeeklyPlanDay
 from app.domain.criticality import (
     hours_until_local_date,
     next_visit_local_date,
     operational_today,
 )
+from app.services.admin_service import get_operational_settings
+
+logger = logging.getLogger(__name__)
 
 # Horizonte de búsqueda del plan: más que las ~3 semanas que abarcan los planes.
 DEFAULT_HORIZON_DAYS = 28
@@ -134,6 +137,21 @@ def planned_dates_by_point(
     return planned
 
 
+def _operational_timezone_name(db: Session, override: str | None = None) -> str | None:
+    """Nombre de la zona operativa: override explícito > Administración → General.
+
+    Una configuración ilegible no debe romper la proyección: se devuelve ``None``
+    y el resolver del dominio cae a su zona por defecto.
+    """
+    if override:
+        return override
+    try:
+        return get_operational_settings(db).timezone
+    except Exception:  # noqa: BLE001 - configuración ilegible: se usa la por defecto
+        logger.warning("No se pudo leer la zona horaria operativa; se usa la de por defecto")
+        return None
+
+
 def next_visits_by_point(
     db: Session,
     *,
@@ -143,10 +161,12 @@ def next_visits_by_point(
 ) -> dict[int, NextVisit]:
     """Próxima recolección por punto con su origen (plan aprobado > agenda).
 
-    Los puntos sin fecha planificada ni agenda declarada quedan fuera del mapa:
-    son los no evaluables que el dashboard reporta como cobertura.
+    La zona operativa sale de la configuración de Administración (``system_settings``),
+    que es la única fuente de la zona horaria; ``tz_name`` solo la sobreescribe en
+    pruebas. Los puntos sin fecha planificada ni agenda declarada quedan fuera del
+    mapa: son los no evaluables que el dashboard reporta como cobertura.
     """
-    zone_name = tz_name or settings.operational_timezone
+    zone_name = _operational_timezone_name(db, tz_name)
     today = operational_today(at=at, tz_name=zone_name)
 
     visits: dict[int, NextVisit] = {}

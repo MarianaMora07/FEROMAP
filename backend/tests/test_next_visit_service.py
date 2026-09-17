@@ -7,6 +7,7 @@ from datetime import date, datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+from app.services import next_visit_service
 from app.services.next_visit_service import (
     SOURCE_AGENDA,
     SOURCE_PLAN,
@@ -135,3 +136,33 @@ def test_past_planned_visit_falls_back_to_agenda():
     assert visits[1].hours == 23.0
     assert visits[1].source == SOURCE_AGENDA
     assert visits[1].local_date == date(2026, 9, 18)
+
+
+def test_timezone_comes_from_the_admin_operational_settings(monkeypatch):
+    """La zona operativa es la configurada en Administración, no una constante."""
+    monkeypatch.setattr(
+        next_visit_service,
+        "get_operational_settings",
+        lambda db: SimpleNamespace(timezone="UTC"),
+    )
+    db = _db([], [_schedule(1, [4])])  # viernes
+
+    visits = next_visits_by_point(db, at=AT)
+
+    # En UTC la visita del viernes es a las 07:00 UTC (31 h), no a las 07:00
+    # de Caracas (35 h).
+    assert visits[1].hours == 31.0
+    assert visits[1].local_date == date(2026, 9, 18)
+
+
+def test_unreadable_timezone_config_falls_back_to_the_default(monkeypatch):
+    def _boom(db):
+        raise RuntimeError("configuración ilegible")
+
+    monkeypatch.setattr(next_visit_service, "get_operational_settings", _boom)
+    db = _db([], [_schedule(1, [4])])
+
+    visits = next_visits_by_point(db, at=AT)
+
+    # Respaldo: la zona por defecto del resolver (America/Caracas).
+    assert visits[1].hours == 35.0

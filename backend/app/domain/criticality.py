@@ -15,7 +15,8 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
 from typing import Any
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from app.domain.operational_clock import resolve_operational_timezone
 
 # Umbrales de llenado (%).
 CRITICAL_FILL_PCT = 80.0
@@ -27,23 +28,14 @@ WEEK_HOURS = 168.0
 MAX_VISITS_PER_WEEK = 7
 
 # Hora de inicio de recolección **local** (espeja DEFAULT_COLLECTION_START del
-# residente) y zona operativa en la que se interpreta. Sin esto, el 07:00 se
+# residente), interpretada en la zona operativa configurada. Sin esto, el 07:00 se
 # aplicaba en UTC (= 03:00 en Venezuela) y el día operativo cambiaba a las 20:00
 # locales, desplazando ~4 h el "faltan X horas para la visita".
 DEFAULT_VISIT_HOUR = 7
-DEFAULT_OPERATIONAL_TZ = "America/Caracas"
-
-
-def _operational_zone(tz_name: str | None = None) -> ZoneInfo:
-    """Zona operativa; cae a la de por defecto si el nombre no es válido."""
-    try:
-        return ZoneInfo(tz_name or DEFAULT_OPERATIONAL_TZ)
-    except (ZoneInfoNotFoundError, ValueError, TypeError):
-        return ZoneInfo(DEFAULT_OPERATIONAL_TZ)
 
 
 def operational_today(at: datetime | None = None, tz_name: str | None = None) -> date:
-    """Fecha del día operativo (calendario local de ``tz_name``)."""
+    """Fecha del día operativo (calendario local de la zona operativa)."""
     _, local = _local_now(at, tz_name)
     return local.date()
 
@@ -55,13 +47,13 @@ def visit_datetime_utc(
     tz_name: str | None = None,
 ) -> datetime:
     """Instante UTC de la recolección de ``local_date`` a la hora operativa local."""
-    zone = _operational_zone(tz_name)
+    zone = resolve_operational_timezone(tz_name)
     return datetime.combine(local_date, time(hour=visit_hour), tzinfo=zone).astimezone(timezone.utc)
 
 
 def _local_now(at: datetime | None, tz_name: str | None = None) -> tuple[datetime, datetime]:
     """Par ``(ahora_utc, ahora_local)`` para el instante de referencia."""
-    zone = _operational_zone(tz_name)
+    zone = resolve_operational_timezone(tz_name)
     now_utc = at or datetime.now(timezone.utc)
     if now_utc.tzinfo is None:
         now_utc = now_utc.replace(tzinfo=timezone.utc)
