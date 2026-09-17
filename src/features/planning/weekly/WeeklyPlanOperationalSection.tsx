@@ -1,7 +1,8 @@
-import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onMount } from 'solid-js';
 import { A, useNavigate } from '@solidjs/router';
 import { CalendarRange, ExternalLink, Radio, RefreshCw, Send, Truck, Zap } from 'lucide-solid';
 import { Button } from '../../../design-system/components';
+import { fetchAlgorithmSettings, updateAlgorithmSettings } from '../../../core/api/admin';
 import {
   dispatchDailyPlan,
   notifyWeeklyOperationalDays,
@@ -49,6 +50,39 @@ export function WeeklyPlanOperationalSection(props: WeeklyPlanOperationalSection
   const [notifiedDays, setNotifiedDays] = createSignal<Set<string>>(new Set());
   const [notifyingDay, setNotifyingDay] = createSignal<string | null>(null);
   const [localPlan, setLocalPlan] = createSignal<WeeklyOperationalPlan | null>(null);
+  /** Rotación de flota: ajuste global del motor (`algorithm_settings`), no de la corrida. */
+  const [rotation, setRotation] = createSignal<boolean | null>(null);
+  const [savingRotation, setSavingRotation] = createSignal(false);
+
+  onMount(() => {
+    void fetchAlgorithmSettings()
+      .then((settings) => setRotation(settings.weeklyFleetRotation))
+      .catch(() => setRotation(null));
+  });
+
+  const toggleRotation = async (next: boolean) => {
+    const previous = rotation();
+    setRotation(next);
+    setSavingRotation(true);
+    setError(null);
+    setNotice('');
+    try {
+      const updated = await updateAlgorithmSettings({ weeklyFleetRotation: next });
+      setRotation(updated.weeklyFleetRotation);
+      setNotice(
+        updated.weeklyFleetRotation
+          ? 'Rotación de flota semanal activada: el plan repartirá los días entre los camiones.'
+          : 'Rotación de flota semanal desactivada.',
+      );
+    } catch (err) {
+      setRotation(previous);
+      setError(
+        err instanceof Error ? err.message : 'No se pudo guardar la rotación de flota semanal',
+      );
+    } finally {
+      setSavingRotation(false);
+    }
+  };
 
   createEffect(() => {
     if (props.operationalPlan) {
@@ -202,6 +236,28 @@ export function WeeklyPlanOperationalSection(props: WeeklyPlanOperationalSection
           </Show>
         </div>
       </div>
+
+      <label
+        class="flex items-start gap-2 rounded-lg border border-border bg-app/60 px-3 py-2 text-sm text-text-secondary dark:border-dark-border"
+        data-testid="weekly-fleet-rotation"
+      >
+        <input
+          type="checkbox"
+          class="mt-0.5"
+          checked={rotation() ?? false}
+          disabled={rotation() === null || savingRotation() || running()}
+          onChange={(event) => void toggleRotation(event.currentTarget.checked)}
+        />
+        <span>
+          <span class="font-medium text-text-primary">Rotación de flota semanal</span>
+          <span class="text-text-muted">
+            {' '}
+            — reparte los días de trabajo entre los camiones al generar el plan (Lun→Vie): quedan
+            activos los que acumulan menos días y, a igualdad, los que no trabajaron el día anterior.
+            Es lo que produce la evidencia de rotación del criterio AC-3 (≥ 6 vehículos distintos).
+          </span>
+        </span>
+      </label>
 
       <Show when={confirmAll()}>
         <div
