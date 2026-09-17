@@ -8,7 +8,7 @@ import { fitMapToOperationalData } from '../../core/map/operationalMapConfig';
 import { fetchDaySimulation } from '../../core/api/daySimulation';
 import { optimizationHref } from '../../core/planning/operationalLinks';
 import { useDaySimulation } from '../route-playback/useDaySimulation';
-import { filterPlaybackRoutesByLabels } from '../route-playback/daySimulationUx';
+import { buildDayVehicleOptions, filterPlaybackRoutesByLabels, inPlayVehicleLabels } from '../route-playback/daySimulationUx';
 import { RoutePlaybackLayer } from '../route-playback/RoutePlaybackLayer';
 import { RoutePlaybackLegend } from '../route-playback/RoutePlaybackLegend';
 import { DaySimulationPanel } from './DaySimulationPanel';
@@ -51,17 +51,12 @@ export default function DaySimulationPage() {
   const fleet = createMemo(() => {
     const sim = simulation();
     if (!sim) return [];
-    // Unión de todo el día (base + todos los alternativos): el selector mantiene una
-    // lista estable aunque el tramo actual fusione/quíte rutas entre pasos.
-    const byLabel = new Map<string, string>();
-    const add = (label: string, color: string) => {
-      if (label && !byLabel.has(label)) byLabel.set(label, color);
-    };
-    sim.baseRoutes.forEach((route) => add(route.vehicleLabel, route.color));
-    sim.steps.forEach((step) =>
-      step.alternativeRoutes.forEach((route) => add(route.vehicleLabel, route.color)),
+    // Unión de todo el día (base + alternativos), marcando el origen: la lista sigue
+    // siendo estable aunque el tramo actual fusione o quite rutas entre pasos.
+    return buildDayVehicleOptions(
+      sim,
+      new Set(controller.routes().map((route) => route.vehicleLabel)),
     );
-    return [...byLabel.entries()].map(([label, color]) => ({ label, color }));
   });
   const toggleVehicle = (label: string) =>
     setHiddenLabels((prev) => {
@@ -71,7 +66,7 @@ export default function DaySimulationPage() {
       return next;
     });
   const showAllVehicles = () => setHiddenLabels(new Set<string>());
-  const hideAllVehicles = () => setHiddenLabels(new Set(fleet().map((vehicle) => vehicle.label)));
+  const hideAllVehicles = () => setHiddenLabels(new Set(inPlayVehicleLabels(fleet())));
 
   // Al cambiar de día, reinicia la selección (todos visibles).
   createEffect(() => {

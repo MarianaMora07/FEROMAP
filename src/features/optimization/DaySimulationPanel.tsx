@@ -10,6 +10,7 @@ import {
   simulatedDayClockLabel,
   stepImpactLabel,
   stepStabilityPct,
+  type DayVehicleOption,
 } from '../route-playback/daySimulationUx';
 
 interface DaySimulationPanelProps {
@@ -18,8 +19,8 @@ interface DaySimulationPanelProps {
   operationDate: string;
   loading?: boolean;
   error?: string | null;
-  /** Camiones disponibles para representar (por etiqueta). */
-  vehicles?: Array<{ label: string; color: string }>;
+  /** Camiones del selector (día + contingencias), con su origen. */
+  vehicles?: DayVehicleOption[];
   isVehicleHidden?: (label: string) => boolean;
   onToggleVehicle?: (label: string) => void;
   onShowAllVehicles?: () => void;
@@ -55,6 +56,29 @@ export function DaySimulationPanel(props: DaySimulationPanelProps) {
   };
   const step = () => props.controller.activeStep();
   const progressPercent = () => Math.round(props.controller.progress() * 100);
+
+  // Dos bloques cuando hay camiones de contingencia: los del día y los que entran con
+  // un paso guionado (atenuados hasta que su tramo los active). El índice del
+  // `data-testid` se conserva global para no cambiar los localizadores existentes.
+  const vehicleGroups = () => {
+    const indexed = (props.vehicles ?? []).map((option, index) => ({ option, index }));
+    const day = indexed.filter((item) => item.option.source === 'day');
+    const contingency = indexed.filter((item) => item.option.source === 'contingency');
+    return [
+      {
+        key: 'day',
+        title: `Del día (${day.length})`,
+        showTitle: contingency.length > 0,
+        items: day,
+      },
+      {
+        key: 'contingency',
+        title: `Contingencia (${contingency.length})`,
+        showTitle: true,
+        items: contingency,
+      },
+    ].filter((group) => group.items.length > 0);
+  };
   const clockLabel = () =>
     simulatedDayClockLabel(routes(), props.controller.progress(), props.controller.operationMinutes());
   const elapsed = () =>
@@ -260,42 +284,65 @@ export function DaySimulationPanel(props: DaySimulationPanelProps) {
                     Ninguno
                   </button>
                 </div>
-                <ul class="space-y-1.5">
-                  <For each={props.vehicles ?? []}>
-                    {(vehicle, index) => {
-                      const hidden = () => props.isVehicleHidden?.(vehicle.label) ?? false;
-                      return (
-                        <li>
-                          <button
-                            type="button"
-                            class={`flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left text-sm transition-colors ${
-                              hidden()
-                                ? 'border-default bg-app/40 text-text-muted'
-                                : 'border-default bg-elevated text-text-primary hover:bg-app'
-                            }`}
-                            data-testid={`day-simulation-vehicle-${index()}`}
-                            aria-pressed={!hidden()}
-                            onClick={() => props.onToggleVehicle?.(vehicle.label)}
-                          >
-                            <span
-                              class="h-2.5 w-2.5 shrink-0 rounded-full"
-                              style={{ 'background-color': vehicle.color }}
-                              aria-hidden="true"
-                            />
-                            <span class="flex-1 truncate">{vehicle.label}</span>
-                            <span
-                              class={`text-[10px] font-semibold uppercase ${
-                                hidden() ? 'text-text-muted' : 'text-fero-green-dark'
-                              }`}
-                            >
-                              {hidden() ? 'Oculto' : 'Visible'}
-                            </span>
-                          </button>
-                        </li>
-                      );
-                    }}
-                  </For>
-                </ul>
+                <For each={vehicleGroups()}>
+                  {(group) => (
+                    <div class="space-y-1.5">
+                      <Show when={group.showTitle}>
+                        <p class="text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+                          {group.title}
+                        </p>
+                      </Show>
+                      <ul class="space-y-1.5">
+                        <For each={group.items}>
+                          {(item) => {
+                            const hidden = () => props.isVehicleHidden?.(item.option.label) ?? false;
+                            const pending = () => item.option.pending;
+                            return (
+                              <li
+                                title={
+                                  pending()
+                                    ? 'Entra con la contingencia guionada del día'
+                                    : undefined
+                                }
+                              >
+                                <button
+                                  type="button"
+                                  class={`flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left text-sm transition-colors ${
+                                    pending()
+                                      ? 'cursor-default border-dashed border-default bg-app/30 text-text-muted'
+                                      : hidden()
+                                        ? 'border-default bg-app/40 text-text-muted'
+                                        : 'border-default bg-elevated text-text-primary hover:bg-app'
+                                  }`}
+                                  data-testid={`day-simulation-vehicle-${item.index}`}
+                                  aria-pressed={!hidden()}
+                                  disabled={pending()}
+                                  onClick={() => props.onToggleVehicle?.(item.option.label)}
+                                >
+                                  <span
+                                    class="h-2.5 w-2.5 shrink-0 rounded-full"
+                                    style={{ 'background-color': item.option.color }}
+                                    aria-hidden="true"
+                                  />
+                                  <span class="flex-1 truncate">{item.option.label}</span>
+                                  <span
+                                    class={`text-[10px] font-semibold uppercase ${
+                                      pending() || hidden()
+                                        ? 'text-text-muted'
+                                        : 'text-fero-green-dark'
+                                    }`}
+                                  >
+                                    {pending() ? 'En espera' : hidden() ? 'Oculto' : 'Visible'}
+                                  </span>
+                                </button>
+                              </li>
+                            );
+                          }}
+                        </For>
+                      </ul>
+                    </div>
+                  )}
+                </For>
               </div>
             </Card>
           </Show>

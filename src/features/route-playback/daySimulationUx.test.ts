@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { mockDaySimulation } from '../../data/mock/daySimulation';
 import {
+  buildDayVehicleOptions,
   buildPausePoints,
   droppedSummary,
   elapsedOperationMinutes,
   filterPlaybackRoutesByLabels,
+  inPlayVehicleLabels,
   mergeStepRoutes,
   nextPausePoint,
   planStabilityPct,
@@ -165,5 +167,50 @@ describe('daySimulationUx', () => {
       count: 2,
     });
     expect(summary.byCriticality[1]).toEqual({ criticality: 'lleno', label: 'Lleno', count: 1 });
+  });
+
+  it('agrupa los camiones por origen y deja en espera la contingencia', () => {
+    const simulation = mockDaySimulation(2);
+    const baseLabels = simulation.baseRoutes.map((route) => route.vehicleLabel);
+
+    const options = buildDayVehicleOptions(simulation, new Set(baseLabels));
+    const day = options.filter((option) => option.source === 'day').map((option) => option.label);
+    const contingency = options.filter((option) => option.source === 'contingency');
+
+    // Los del día conservan el orden del plan base.
+    expect(day).toEqual(baseLabels);
+    // TR-11 solo vive en los planes alternativos (el TR-04 alternativo ya está en el día).
+    expect(contingency.map((option) => option.label)).toEqual(['TR-11']);
+    expect(contingency[0]!.pending).toBe(true);
+  });
+
+  it('activa la contingencia cuando el tramo actual ya la incluye', () => {
+    const simulation = mockDaySimulation(2);
+    const active = new Set([
+      ...simulation.baseRoutes.map((route) => route.vehicleLabel),
+      'TR-11',
+    ]);
+
+    const options = buildDayVehicleOptions(simulation, active);
+
+    expect(options.find((option) => option.label === 'TR-11')?.pending).toBe(false);
+  });
+
+  it('no duplica como contingencia un camión que ya está en el día', () => {
+    const simulation = mockDaySimulation(2);
+
+    const labels = buildDayVehicleOptions(simulation, new Set()).map((option) => option.label);
+
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it('deja fuera del "Ninguno" las contingencias en espera', () => {
+    const simulation = mockDaySimulation(2);
+    const active = new Set(simulation.baseRoutes.map((route) => route.vehicleLabel));
+
+    const labels = inPlayVehicleLabels(buildDayVehicleOptions(simulation, active));
+
+    expect(labels).not.toContain('TR-11');
+    expect(labels).toHaveLength(simulation.baseRoutes.length);
   });
 });

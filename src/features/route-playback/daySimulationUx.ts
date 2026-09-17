@@ -216,3 +216,69 @@ export function filterPlaybackRoutesByLabels(
   if (hiddenLabels.size === 0) return [...routes];
   return routes.filter((route) => !hiddenLabels.has(route.vehicleLabel));
 }
+
+/** Origen de un camión en el selector de la simulación del día. */
+export type DayVehicleSource = 'day' | 'contingency';
+
+export interface DayVehicleOption {
+  label: string;
+  color: string;
+  /** `day` = ruta despachada del día; `contingency` = plan alternativo de un paso. */
+  source: DayVehicleSource;
+  /** Contingencia que aún no ha entrado: no tiene ruta en el tramo actual. */
+  pending: boolean;
+}
+
+/**
+ * Camiones del selector: unión de **todo el día** (rutas base + alternativos de las
+ * contingencias), para que la lista no cambie entre tramos, diciendo de dónde sale
+ * cada uno y cuáles todavía no han entrado en escena.
+ *
+ * `activeLabels` son las etiquetas con ruta en el tramo actual: una contingencia
+ * fuera de ese conjunto queda `pending` y el panel la atenúa hasta que entre. Un
+ * camión que ya está en el plan base no se duplica como contingencia.
+ */
+export function buildDayVehicleOptions(
+  simulation: DaySimulation,
+  activeLabels: ReadonlySet<string>,
+): DayVehicleOption[] {
+  const day = new Map<string, string>();
+  for (const route of simulation.baseRoutes) {
+    if (route.vehicleLabel && !day.has(route.vehicleLabel)) {
+      day.set(route.vehicleLabel, route.color);
+    }
+  }
+
+  const contingency = new Map<string, string>();
+  for (const step of simulation.steps) {
+    for (const route of step.alternativeRoutes) {
+      const label = route.vehicleLabel;
+      if (!label || day.has(label) || contingency.has(label)) continue;
+      contingency.set(label, route.color);
+    }
+  }
+
+  return [
+    ...[...day].map(([label, color]) => ({
+      label,
+      color,
+      source: 'day' as const,
+      pending: false,
+    })),
+    ...[...contingency].map(([label, color]) => ({
+      label,
+      color,
+      source: 'contingency' as const,
+      pending: !activeLabels.has(label),
+    })),
+  ];
+}
+
+/**
+ * Etiquetas que ya participan (día + contingencias activas): las que oculta
+ * "Ninguno". Las contingencias en espera se quedan fuera para que aparezcan
+ * visibles cuando entre su tramo.
+ */
+export function inPlayVehicleLabels(options: readonly DayVehicleOption[]): string[] {
+  return options.filter((option) => !option.pending).map((option) => option.label);
+}

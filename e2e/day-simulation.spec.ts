@@ -51,6 +51,14 @@ test.describe('Simulación guionada del día — optimización', () => {
     await page.getByTestId('day-simulation-vehicles-all').click();
     await expect(routeRows).toHaveCount(3);
 
+    // El selector separa lo despachado del día de lo que entra por contingencia, y
+    // deja esta última en espera (no interactuable) hasta que su tramo la active.
+    await expect(page.getByTestId('day-simulation-vehicles')).toContainText('Del día (3)');
+    await expect(page.getByTestId('day-simulation-vehicles')).toContainText('Contingencia (1)');
+    const pendingVehicle = page.getByTestId('day-simulation-vehicle-3');
+    await expect(pendingVehicle).toContainText('En espera');
+    await expect(pendingVehicle).toBeDisabled();
+
     // Estabilidad e impacto del plan visibles en el panel.
     await expect(page.getByTestId('day-simulation-stability')).toBeVisible();
     await expect(page.getByTestId('day-simulation-stability')).toContainText('Estabilidad media');
