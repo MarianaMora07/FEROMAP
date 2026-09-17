@@ -18,6 +18,30 @@ export interface DashboardMapMetric {
   icon: string;
 }
 
+/** Contenedor que se llenará antes de su próxima recolección (aún no crítico). */
+export interface DashboardAtRiskContainer {
+  id: string;
+  sector: string;
+  fillLevel: number;
+  hoursUntilCritical: number | null;
+  hoursUntilNextVisit: number | null;
+  /** De dónde sale la fecha de recolección: plan semanal aprobado o agenda declarada. */
+  visitSource?: 'plan' | 'agenda';
+  /** Fecha local (YYYY-MM-DD) de esa recolección. */
+  visitDate?: string | null;
+}
+
+/** Agregado por zona para el panel de atención del dashboard. */
+export interface DashboardSectorFill {
+  name: string;
+  /** Llenado medio (%) de los contenedores activos de la zona. */
+  pct: number;
+  /** Contenedores activos de la zona que ya alcanzan el umbral crítico. */
+  criticalCount: number;
+  /** Contenedores activos de la zona que ya rebosan (llenado > capacidad). */
+  overflowCount: number;
+}
+
 export interface DashboardFleetStatus {
   total: number;
   items: Array<{ label: string; count: number; pct: number; color: string }>;
@@ -57,6 +81,14 @@ export interface DashboardSummary {
     totalContainers: number;
     criticalContainers: number;
     atRiskContainers?: number;
+    /** Contenedores no críticos con próxima recolección conocida (evaluables). */
+    atRiskEvaluable?: number;
+    /** De los evaluables, cuántos toman la fecha del plan semanal aprobado. */
+    atRiskEvaluableFromPlan?: number;
+    /** De los evaluables, cuántos toman la fecha de la agenda declarada. */
+    atRiskEvaluableFromAgenda?: number;
+    /** Contenedores no críticos sin plan ni agenda: no se pueden proyectar. */
+    atRiskUnevaluated?: number;
     fullContainers: number;
     activeVehicles: number;
     routesInProgress: number;
@@ -74,14 +106,8 @@ export interface DashboardSummary {
     fillLevel: number;
     priority: string;
   }>;
-  atRiskContainers?: Array<{
-    id: string;
-    sector: string;
-    fillLevel: number;
-    hoursUntilCritical: number | null;
-    hoursUntilNextVisit: number | null;
-  }>;
-  sectorFillLevels: Array<{ name: string; pct: number }>;
+  atRiskContainers?: DashboardAtRiskContainer[];
+  sectorFillLevels: DashboardSectorFill[];
   mapMetrics: DashboardMapMetric[];
   lastOptimization?: {
     simulationId: number;
@@ -110,7 +136,7 @@ export interface DashboardViewModel {
   summary: DashboardSummary;
   kpis: typeof dashboardKpis;
   fleetStatus: typeof fleetStatus;
-  sectorFillLevels: typeof sectorFillLevels;
+  sectorFillLevels: DashboardSectorFill[];
   recentAlerts: typeof recentAlerts;
   activeRoutes: DashboardActiveRoute[];
   weeklyTons: typeof weeklyTons;

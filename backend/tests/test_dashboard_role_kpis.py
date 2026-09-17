@@ -15,11 +15,19 @@ _KW = dict(
 )
 
 
-def test_planner_kpis_highlight_critical_and_completion():
+def test_planner_kpis_do_not_duplicate_dashboard_cards():
+    """La fila del planificador no repite lo que ya muestran sus tarjetas."""
     items = role_kpis("planificador", **_KW)
 
-    assert [item["id"] for item in items] == ["critical", "at_risk", "completed"]
-    assert next(item for item in items if item["id"] == "critical")["value"] == 3
+    ids = [item["id"] for item in items]
+    assert ids == ["containers", "vehicles", "routes"]
+    # Críticos y riesgo viven en las tarjetas de PlannerOverviewSection.
+    assert "critical" not in ids
+    assert "at_risk" not in ids
+
+
+def test_admin_and_planner_share_the_context_row():
+    assert role_kpis("planificador", **_KW) == role_kpis("administrador", **_KW)
 
 
 def test_admin_kpis_highlight_fleet_and_planning():

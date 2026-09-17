@@ -24,10 +24,10 @@ export const fleetStatus = {
 };
 
 export const sectorFillLevels = [
-  { name: 'Unare I', pct: 72 },
-  { name: 'Unare II', pct: 58 },
-  { name: 'Villa Brasil', pct: 85 },
-  { name: 'Andrés Eloy', pct: 46 },
+  { name: 'Unare I', pct: 72, criticalCount: 5, overflowCount: 1 },
+  { name: 'Unare II', pct: 58, criticalCount: 2, overflowCount: 0 },
+  { name: 'Villa Brasil', pct: 85, criticalCount: 7, overflowCount: 3 },
+  { name: 'Andrés Eloy', pct: 46, criticalCount: 0, overflowCount: 0 },
 ];
 
 export const weeklyTons = {

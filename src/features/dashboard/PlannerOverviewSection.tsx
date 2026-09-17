@@ -6,6 +6,8 @@ import { dashboardView } from '../../core/stores/dashboardStore';
 import { emptyDashboardKpis, type DashboardActiveRoute } from '../../core/api/dashboard';
 import { driverDisplayName, fetchDrivers } from '../../core/api/drivers';
 import { DashboardPlanVsRealKpi } from './DashboardPlanVsRealKpi';
+import { ZoneAttentionPanel } from './ZoneAttentionPanel';
+import { riskCoverageText, riskFooterText } from './riskSummaryUx';
 
 function initials(firstName: string, lastName: string): string {
   return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
@@ -22,11 +24,19 @@ export function PlannerOverviewSection() {
   const activeRoutes = (): DashboardActiveRoute[] => view()?.activeRoutes ?? [];
   const criticalContainers = () => view()?.summary?.metrics?.criticalContainers ?? 0;
   const atRiskContainers = () => view()?.summary?.metrics?.atRiskContainers ?? 0;
-  const soonestRiskHours = () => {
-    const values = (view()?.summary?.atRiskContainers ?? [])
-      .map((item) => item.hoursUntilCritical)
-      .filter((value): value is number => value != null);
-    return values.length > 0 ? Math.min(...values) : null;
+  const riskItems = () => view()?.summary?.atRiskContainers ?? [];
+  const riskFooter = () => riskFooterText(riskItems());
+  const riskCoverage = () => {
+    const metrics = view()?.summary?.metrics;
+    const evaluable = metrics?.atRiskEvaluable ?? 0;
+    const unevaluated = metrics?.atRiskUnevaluated ?? 0;
+    if (evaluable + unevaluated === 0) return null;
+    return riskCoverageText({
+      evaluable,
+      unevaluated,
+      fromPlan: metrics?.atRiskEvaluableFromPlan ?? 0,
+      fromAgenda: metrics?.atRiskEvaluableFromAgenda ?? 0,
+    });
   };
   const lastOptimization = () => view()?.lastOptimization ?? null;
   const driversOnShift = () => view()?.summary?.fleet?.driversOnShift ?? 0;
@@ -107,7 +117,7 @@ export function PlannerOverviewSection() {
                 Crítico ahora
               </span>
               <A
-                href="/collection-points"
+                href="/collection-points?status=critico"
                 class="text-sm font-medium text-fero-blue underline-offset-2 hover:underline"
               >
                 Revisar
@@ -116,21 +126,26 @@ export function PlannerOverviewSection() {
           }
         />
         <KpiCard
-          title="En riesgo de rebose"
+          title="Se llenarán antes de la próxima visita"
           value={atRiskContainers()}
           unit="contenedores"
           icon={<AlertTriangle size={28} />}
           iconTone="amber"
           footer={
-            <span class="text-sm text-text-muted">
-              {soonestRiskHours() != null
-                ? `Se llena en ~${Math.max(0, Math.round(soonestRiskHours()!))} h`
-                : 'Se llenarán antes de la próxima visita'}
-            </span>
+            <div class="space-y-1">
+              <span class="text-sm text-text-muted">{riskFooter()}</span>
+              <Show when={riskCoverage()}>
+                {(coverage) => (
+                  <span class="block text-xs text-text-muted">{coverage()}</span>
+                )}
+              </Show>
+            </div>
           }
         />
         <DashboardPlanVsRealKpi />
       </div>
+
+      <ZoneAttentionPanel />
 
       <div class="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
         <Card class="w-full">

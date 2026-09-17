@@ -9,14 +9,13 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import CollectionPoint, DailyPlan, Driver, OptimizedRoute, RouteWaypoint, Simulation, User, UserRole, Vehicle, Vehicle, VisitSchedule
+from app.db.models import CollectionPoint, DailyPlan, Driver, OptimizedRoute, RouteWaypoint, Simulation, User, UserRole, Vehicle, Vehicle
 from app.domain.criticality import (
     HIGH_FILL_PCT,
-    hours_until_next_visit,
     is_at_risk_before_next_visit,
     is_critical_now,
 )
-from app.domain.waste_generation import hours_until_critical
+from app.domain.waste_generation import hours_until_critical, overflow_kg
 from app.services.auth_service import role_label
 from app.services.geo_service import fill_level_pct, fleet_summary, route_geojson, seed_meta_by_code
 from app.services.resident_schedule_service import build_resident_schedule
@@ -24,6 +23,7 @@ from app.services.alert_service import list_alerts as list_persisted_alerts
 from app.services.operations_service import active_routes_view
 from app.services.planning_analytics_service import planning_dashboard_snapshot
 from app.services.optimization_service import run_optimization_engine
+from app.services.next_visit_service import SOURCE_PLAN, next_visits_by_point
 from app.services.scenario_utils import normalize_scenario_id
 from app.services.seed_loader import load_seed
 from app.services.simulation_parsing import _case_study_fields, parse_simulation
@@ -42,17 +42,14 @@ def role_kpis(
 ) -> list[dict[str, Any]]:
     """KPIs agregados por rol para el dashboard (F6)."""
     value = role.value if isinstance(role, UserRole) else role
-    if value == "administrador":
+    # Administrador y planificador comparten fila: el dashboard del planificador ya
+    # muestra críticos, riesgo y rutas en sus tarjetas, así que repetirlos aquí
+    # duplicaba la misma cifra dos veces en la misma página.
+    if value in ("administrador", "planificador"):
         return [
             {"id": "containers", "label": "Contenedores", "value": total_containers, "tone": "green", "icon": "trash"},
             {"id": "vehicles", "label": "Vehículos activos", "value": active_vehicles, "tone": "blue", "icon": "truck"},
             {"id": "routes", "label": "Rutas planificadas", "value": routes_planned, "tone": "amber", "icon": "route"},
-        ]
-    if value == "planificador":
-        return [
-            {"id": "critical", "label": "Contenedores críticos", "value": critical, "tone": "red", "icon": "trash"},
-            {"id": "at_risk", "label": "En riesgo de rebose", "value": at_risk, "tone": "amber", "icon": "trash"},
-            {"id": "completed", "label": "Rutas completadas", "value": routes_completed, "tone": "green", "icon": "route"},
         ]
     if value == "conductor":
         return [
@@ -338,10 +335,12 @@ def dashboard_summary(db: Session, *, current_user: User | None = None) -> dict[
     ).all()
     meta_by_code = seed_meta_by_code()
     critical = []
+    critical_point_ids: set[Any] = set()
     full_count = 0
     for point in points:
         pct = fill_level_pct(point)
         if is_critical_now(pct):
+            critical_point_ids.add(point.id)
             meta = meta_by_code.get(point.code, {})
             critical.append(
                 {
@@ -354,24 +353,29 @@ def dashboard_summary(db: Session, *, current_user: User | None = None) -> dict[
         if pct >= HIGH_FILL_PCT:
             full_count += 1
 
-    weekdays_by_point: dict[int, list[int]] = {}
-    for schedule in db.scalars(select(VisitSchedule)).all():
-        raw = getattr(schedule, "weekdays_json", None)
-        point_id = getattr(schedule, "collection_point_id", None)
-        if raw is None or point_id is None:
-            continue
-        try:
-            weekdays_by_point[point_id] = [int(value) for value in json.loads(raw)]
-        except (TypeError, ValueError, json.JSONDecodeError):
-            continue
+    visits = next_visits_by_point(db)
 
+    # Cubos complementarios: "riesgo" es lo que AÚN NO está crítico pero cruzará el
+    # umbral antes de su próxima recolección real (plan aprobado > agenda declarada).
     at_risk: list[dict[str, Any]] = []
+    evaluable = 0
+    unevaluated = 0
+    evaluable_from_plan = 0
+    evaluable_from_agenda = 0
     for point in points:
-        weekdays = weekdays_by_point.get(point.id)
-        if not weekdays or point.status != "active":
+        if point.id in critical_point_ids or point.status != "active":
             continue
-        if is_at_risk_before_next_visit(point, weekdays=weekdays):
-            hours_next = hours_until_next_visit(weekdays=weekdays)
+        visit = visits.get(point.id)
+        if visit is None:
+            # Sin plan ni agenda: no se inventa la visita, se reporta como cobertura.
+            unevaluated += 1
+            continue
+        evaluable += 1
+        if visit.source == SOURCE_PLAN:
+            evaluable_from_plan += 1
+        else:
+            evaluable_from_agenda += 1
+        if is_at_risk_before_next_visit(point, next_visit_hours=visit.hours):
             hours_critical = hours_until_critical(point)
             at_risk.append(
                 {
@@ -379,17 +383,35 @@ def dashboard_summary(db: Session, *, current_user: User | None = None) -> dict[
                     "sector": point.sector.name if point.sector else "",
                     "fillLevel": fill_level_pct(point),
                     "hoursUntilCritical": round(hours_critical, 1) if hours_critical is not None else None,
-                    "hoursUntilNextVisit": round(hours_next, 1) if hours_next is not None else None,
+                    "hoursUntilNextVisit": round(visit.hours, 1),
+                    "visitSource": visit.source,
+                    "visitDate": visit.local_date.isoformat(),
                 }
             )
 
-    sector_fill: dict[str, list[int]] = {}
+    # Agregado por zona para el panel "Zonas que requieren más atención": solo
+    # contenedores en servicio (mismo criterio que ``sector_service.sectors_summary``).
+    zone_stats: dict[str, dict[str, int]] = {}
     for point in points:
+        if point.status != "active":
+            continue
         name = point.sector.name if point.sector else "Desconocido"
-        sector_fill.setdefault(name, []).append(fill_level_pct(point))
+        stats = zone_stats.setdefault(name, {"count": 0, "fill_sum": 0, "critical": 0, "overflow": 0})
+        pct = fill_level_pct(point)
+        stats["count"] += 1
+        stats["fill_sum"] += pct
+        if is_critical_now(pct):
+            stats["critical"] += 1
+        if overflow_kg(point) > 0:
+            stats["overflow"] += 1
     sector_fill_levels = [
-        {"name": name, "pct": round(sum(values) / len(values))}
-        for name, values in sorted(sector_fill.items())
+        {
+            "name": name,
+            "pct": round(stats["fill_sum"] / stats["count"]) if stats["count"] else 0,
+            "criticalCount": stats["critical"],
+            "overflowCount": stats["overflow"],
+        }
+        for name, stats in sorted(zone_stats.items())
     ]
 
     fleet = fleet_summary(db)
@@ -450,6 +472,10 @@ def dashboard_summary(db: Session, *, current_user: User | None = None) -> dict[
             "totalContainers": len(points),
             "criticalContainers": len(critical),
             "atRiskContainers": len(at_risk),
+            "atRiskEvaluable": evaluable,
+            "atRiskEvaluableFromPlan": evaluable_from_plan,
+            "atRiskEvaluableFromAgenda": evaluable_from_agenda,
+            "atRiskUnevaluated": unevaluated,
             "fullContainers": full_count,
             "activeVehicles": fleet["activeVehicles"],
             "routesInProgress": routes_in_progress,
