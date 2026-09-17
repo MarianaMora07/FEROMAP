@@ -1,5 +1,12 @@
 import type { UserRole } from '../types/auth';
 
+/**
+ * Ruta de la consola de calibración del motor (Fase 13 · decisión D-C).
+ * Se centraliza aquí para poder moverla sin tocar componentes; hereda los
+ * permisos de `/settings` por la regla de prefijo de `canAccessRoute`.
+ */
+export const CALIBRATION_ROUTE = '/settings/calibration';
+
 export const ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
   '/': ['administrador', 'planificador', 'conductor', 'residente'],
   '/operator': ['administrador', 'planificador', 'conductor'],
@@ -22,6 +29,7 @@ export const ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
   '/alerts': ['administrador', 'planificador', 'conductor', 'residente'],
   '/admin': ['administrador'],
   '/settings': ['administrador', 'planificador'],
+  [CALIBRATION_ROUTE]: ['administrador', 'planificador'],
   '/profile': ['administrador', 'planificador', 'conductor', 'residente'],
 };
 
@@ -63,6 +71,8 @@ export interface NavItemDef {
   sidebarPrimary?: boolean;
   /** Clasificación demo/producto mostrada como badge solo para admin (docs/ux §3) */
   kind?: 'demo' | 'producto';
+  /** No queda activo en subrutas (evita duplicar el resaltado padre/hijo). */
+  exact?: boolean;
 }
 
 export const DEMO_NAV_HIDDEN_HREFS = new Set<string>();
@@ -208,6 +218,17 @@ export const MAIN_NAV_ITEMS: NavItemDef[] = [
     description: 'Parámetros del motor y preferencias',
     descriptionKey: 'nav.settings.description',
     sidebarPrimary: true,
+    exact: true,
+    roles: ['administrador', 'planificador'],
+  },
+  {
+    href: CALIBRATION_ROUTE,
+    label: 'Calibración',
+    labelKey: 'nav.calibration',
+    description: 'Barridos del motor: sensibilidad y pesos',
+    descriptionKey: 'nav.calibration.description',
+    sidebarPrimary: true,
+    exact: true,
     roles: ['administrador', 'planificador'],
   },
 ];

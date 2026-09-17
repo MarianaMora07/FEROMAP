@@ -3,6 +3,7 @@ import { Suspense, lazy, type Component, type JSX } from 'solid-js';
 import { LoadingPanel } from '../design-system/components';
 import { AppShell } from '../design-system/layout/AppShell';
 import { AuthGate, GuestGate, RoleGate } from '../core/auth/AuthGate';
+import { CALIBRATION_ROUTE } from '../core/auth/permissions';
 
 function PageFallback() {
   return (
@@ -43,6 +44,7 @@ const ReportsPage = lazyPage(() => import('../features/reports'));
 const AlertsPage = lazyPage(() => import('../features/alerts'));
 const AdminPage = lazyPage(() => import('../features/admin'));
 const SettingsPage = lazyPage(() => import('../features/settings'));
+const CalibrationPage = lazyPage(() => import('../features/settings/CalibrationPage'));
 const ResidentPage = lazyPage(() => import('../features/resident'));
 const ProfilePage = lazyPage(() => import('../features/profile'));
 const OperatorPage = lazyPage(() => import('../features/operator'));
@@ -97,6 +99,7 @@ export default function App() {
         <Route path="/alerts" component={AlertsPage} />
         <Route path="/admin" component={AdminPage} />
         <Route path="/settings" component={SettingsPage} />
+        <Route path={CALIBRATION_ROUTE} component={CalibrationPage} />
         <Route path="/profile" component={ProfilePage} />
       </Route>
     </Router>

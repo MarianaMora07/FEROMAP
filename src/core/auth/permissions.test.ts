@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEMO_NAV_HIDDEN_HREFS, sidebarNavLayout } from './permissions';
+import { CALIBRATION_ROUTE, DEMO_NAV_HIDDEN_HREFS, sidebarNavLayout } from './permissions';
 
 describe('permissions — arquitectura de navegación (IA)', () => {
   it('exposes analytics in the planner sidebar (F6)', () => {
@@ -12,7 +12,7 @@ describe('permissions — arquitectura de navegación (IA)', () => {
   it('orders planner primaries as planificar → operar → supervisar', () => {
     const layout = sidebarNavLayout('planificador');
     // El ciclo operativo (planificar → operar → supervisar) se mantiene como prefijo;
-    // «Configuración» es un destino de sistema y se añade al final.
+    // «Configuración» y su consola de «Calibración» (Fase 13) cierran la lista.
     expect(layout.primary.map((item) => item.href)).toEqual([
       '/',
       '/planning/weekly',
@@ -20,6 +20,7 @@ describe('permissions — arquitectura de navegación (IA)', () => {
       '/monitoring',
       '/map',
       '/settings',
+      CALIBRATION_ROUTE,
     ]);
   });
 
@@ -33,6 +34,21 @@ describe('permissions — arquitectura de navegación (IA)', () => {
 
     const driver = sidebarNavLayout('conductor').primary.map((item) => item.href);
     expect(driver).not.toContain('/settings');
+  });
+
+  it('expone la calibración del motor junto a Configuración (Fase 13)', () => {
+    const planner = sidebarNavLayout('planificador').primary.find(
+      (item) => item.href === CALIBRATION_ROUTE,
+    );
+    expect(planner?.labelKey).toBe('nav.calibration');
+    expect(planner?.kind).toBeUndefined();
+
+    const admin = sidebarNavLayout('administrador').primary.map((item) => item.href);
+    expect(admin).toContain(CALIBRATION_ROUTE);
+
+    // El conductor no gestiona parámetros del motor.
+    const driver = sidebarNavLayout('conductor').primary.map((item) => item.href);
+    expect(driver).not.toContain(CALIBRATION_ROUTE);
   });
 
   it('groups sections as Consulta y reportes, Catálogos, Tesis y demostración', () => {

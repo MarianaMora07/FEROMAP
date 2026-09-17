@@ -18,9 +18,10 @@ import {
   ClipboardList,
   CalendarDays,
   Settings,
+  Gauge,
 } from 'lucide-solid';
 import { authUser } from '../../core/stores/authStore';
-import { sidebarNavLayout, SIDEBAR_SECTION_LABEL_KEYS } from '../../core/auth/permissions';
+import { sidebarNavLayout, SIDEBAR_SECTION_LABEL_KEYS, CALIBRATION_ROUTE } from '../../core/auth/permissions';
 import { useLocale } from '../../core/i18n/solid';
 import { SidebarHeader } from './sidebar/SidebarHeader';
 import { SidebarNavLink } from './sidebar/SidebarNavLink';
@@ -46,6 +47,7 @@ const NAV_ICONS: Record<string, typeof LayoutDashboard> = {
   '/resident': Trash2,
   '/alerts': AlertTriangle,
   '/settings': Settings,
+  [CALIBRATION_ROUTE]: Gauge,
 };
 
 interface SidebarProps {
@@ -80,7 +82,7 @@ export function Sidebar(props: SidebarProps) {
         <For each={layout().primary}>
           {(item) => {
             const Icon = NAV_ICONS[navHrefPath(item.href)] ?? LayoutDashboard;
-            const active = () => isNavItemActive(item.href, location.pathname);
+            const active = () => isNavItemActive(item.href, location.pathname, item.exact ?? false);
             return (
               <SidebarNavLink
                 href={item.href}
