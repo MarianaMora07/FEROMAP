@@ -13,6 +13,7 @@ from app.services import aco_sensitivity_service
 def test_sensitivity_series_count():
     assert len(aco_sensitivity_service.ANT_SENSITIVITY_SERIES) == 3
     assert len(aco_sensitivity_service.ITERATION_SENSITIVITY_SERIES) == 3
+    assert len(aco_sensitivity_service.HYPERPARAMETER_SENSITIVITY_SERIES) == 12
 
 
 def test_save_and_load_aco_sensitivity(tmp_path, monkeypatch):
@@ -67,9 +68,19 @@ def test_run_aco_sensitivity_aggregates_runs(monkeypatch, tmp_path):
 
     result = aco_sensitivity_service.run_aco_sensitivity(db)
 
+    num_series = len(
+        [
+            *aco_sensitivity_service.ANT_SENSITIVITY_SERIES,
+            *aco_sensitivity_service.ITERATION_SENSITIVITY_SERIES,
+            *aco_sensitivity_service.HYPERPARAMETER_SENSITIVITY_SERIES,
+        ]
+    )
     assert result["scenarioId"] == "normal"
-    assert len(result["runs"]) == 6
+    assert len(result["runs"]) == num_series
     assert result["standardProfile"] == {"acoAnts": 12, "acoIterations": 20}
+    assert result["standardHyperparameters"]["acoAlpha"] == 1.0
     assert all(run.get("distanceKmOptimized") is not None for run in result["runs"] if "error" not in run)
-    assert db.rollback.call_count == 6
+    assert db.rollback.call_count == num_series
     assert saved["runs"][0]["axis"] == "ants"
+    hyper_runs = [run for run in result["runs"] if run["axis"] in {"alpha", "beta", "rho", "q"}]
+    assert len(hyper_runs) == len(aco_sensitivity_service.HYPERPARAMETER_SENSITIVITY_SERIES)

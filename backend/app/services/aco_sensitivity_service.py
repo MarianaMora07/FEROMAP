@@ -16,6 +16,7 @@ from app.services.optimization_service import run_optimization_engine
 logger = logging.getLogger(__name__)
 
 DEFAULT_SCENARIO_ID = "normal"
+DEFAULT_SEED = 42
 
 # Variación de hormigas (iteraciones fijas en 20)
 ANT_SENSITIVITY_SERIES: list[dict[str, Any]] = [
@@ -29,6 +30,35 @@ ITERATION_SENSITIVITY_SERIES: list[dict[str, Any]] = [
     {"label": "10 iteraciones", "acoAnts": 12, "acoIterations": 10, "axis": "iterations"},
     {"label": "20 iteraciones (estándar)", "acoAnts": 12, "acoIterations": 20, "axis": "iterations"},
     {"label": "40 iteraciones", "acoAnts": 12, "acoIterations": 40, "axis": "iterations"},
+]
+
+# Fase 13 — sensibilidad de los hiperparámetros clásicos del ACO (α/β/ρ/Q). Cada serie
+# varía un parámetro, mantiene el perfil estándar (12×20) y deja el resto en su valor por
+# defecto (α=1, β=3, ρ=0.12, Q=1). El valor viaja **por corrida** (no se toca la
+# configuración global de Administración), que es lo que hace reproducible la evidencia.
+STANDARD_HYPERPARAMETERS: dict[str, float] = {
+    "acoAlpha": 1.0,
+    "acoBeta": 3.0,
+    "acoRho": 0.12,
+    "pheromoneQ": 1.0,
+}
+
+# Perfil fijo (hormigas × iteraciones) de las series de hiperparámetros.
+_STANDARD_PROFILE: dict[str, Any] = {"acoAnts": 12, "acoIterations": 20}
+
+HYPERPARAMETER_SENSITIVITY_SERIES: list[dict[str, Any]] = [
+    {**_STANDARD_PROFILE, "label": "α 0.5", "axis": "alpha", "acoAlpha": 0.5},
+    {**_STANDARD_PROFILE, "label": "α 1 (estándar)", "axis": "alpha", "acoAlpha": 1.0},
+    {**_STANDARD_PROFILE, "label": "α 2", "axis": "alpha", "acoAlpha": 2.0},
+    {**_STANDARD_PROFILE, "label": "β 1", "axis": "beta", "acoBeta": 1.0},
+    {**_STANDARD_PROFILE, "label": "β 3 (estándar)", "axis": "beta", "acoBeta": 3.0},
+    {**_STANDARD_PROFILE, "label": "β 5", "axis": "beta", "acoBeta": 5.0},
+    {**_STANDARD_PROFILE, "label": "ρ 0.05", "axis": "rho", "acoRho": 0.05},
+    {**_STANDARD_PROFILE, "label": "ρ 0.12 (estándar)", "axis": "rho", "acoRho": 0.12},
+    {**_STANDARD_PROFILE, "label": "ρ 0.30", "axis": "rho", "acoRho": 0.30},
+    {**_STANDARD_PROFILE, "label": "Q 0.5", "axis": "q", "pheromoneQ": 0.5},
+    {**_STANDARD_PROFILE, "label": "Q 1 (estándar)", "axis": "q", "pheromoneQ": 1.0},
+    {**_STANDARD_PROFILE, "label": "Q 2", "axis": "q", "pheromoneQ": 2.0},
 ]
 
 
@@ -69,13 +99,29 @@ def _run_sensitivity_case(
     aco_ants: int,
     aco_iterations: int,
     axis: str,
+    seed: int,
+    aco_alpha: float | None = None,
+    aco_beta: float | None = None,
+    aco_rho: float | None = None,
+    pheromone_q: float | None = None,
 ) -> dict[str, Any]:
+    hyperparameters = {
+        "acoAlpha": aco_alpha,
+        "acoBeta": aco_beta,
+        "acoRho": aco_rho,
+        "pheromoneQ": pheromone_q,
+    }
     try:
         result = run_optimization_engine(
             db,
             scenario_id,
             aco_ants=aco_ants,
             aco_iterations=aco_iterations,
+            aco_alpha=aco_alpha,
+            aco_beta=aco_beta,
+            aco_rho=aco_rho,
+            pheromone_q=pheromone_q,
+            seed=seed,
             auto_commit=False,
             auto_dispatch=False,
             reporter=None,
@@ -89,6 +135,7 @@ def _run_sensitivity_case(
             "acoAnts": aco_ants,
             "acoIterations": aco_iterations,
             "axis": axis,
+            **hyperparameters,
             "error": str(exc),
         }
 
@@ -104,6 +151,7 @@ def _run_sensitivity_case(
         "acoAnts": aco_ants,
         "acoIterations": aco_iterations,
         "axis": axis,
+        **hyperparameters,
         "computationSeconds": round(float(metrics.get("computationSeconds", 0)), 2),
         "acoSeconds": round(float(metrics.get("acoSeconds", 0)), 2),
         "distanceKmOptimized": round(float(optimized_km), 2),
@@ -115,13 +163,33 @@ def _run_sensitivity_case(
     }
 
 
-def run_aco_sensitivity(db: Session, *, scenario_id: str = DEFAULT_SCENARIO_ID) -> dict[str, Any]:
-    """6 corridas: 3 perfiles de hormigas + 3 perfiles de iteraciones (escenario normal)."""
+def run_aco_sensitivity(
+    db: Session,
+    *,
+    scenario_id: str = DEFAULT_SCENARIO_ID,
+    seed: int = DEFAULT_SEED,
+) -> dict[str, Any]:
+    """18 corridas (escenario normal, semilla fija):
+
+    - hormigas 8/12/20 (iteraciones en 20),
+    - iteraciones 10/20/40 (hormigas en 12),
+    - hiperparámetros α/β/ρ/Q en 3 niveles cada uno.
+
+    El KPI de referencia es la **distancia optimizada** (decisión D2); el resto de
+    columnas son guardarraíles.
+    """
     started = datetime.now(timezone.utc)
     runs: list[dict[str, Any]] = []
 
-    for case in [*ANT_SENSITIVITY_SERIES, *ITERATION_SENSITIVITY_SERIES]:
-        logger.info("Sensibilidad ACO %s (%s×%s)", case["label"], case["acoAnts"], case["acoIterations"])
+    series = [
+        *ANT_SENSITIVITY_SERIES,
+        *ITERATION_SENSITIVITY_SERIES,
+        *HYPERPARAMETER_SENSITIVITY_SERIES,
+    ]
+    for case in series:
+        logger.info(
+            "Sensibilidad ACO %s (%s×%s)", case["label"], case["acoAnts"], case["acoIterations"]
+        )
         runs.append(
             _run_sensitivity_case(
                 db,
@@ -130,6 +198,11 @@ def run_aco_sensitivity(db: Session, *, scenario_id: str = DEFAULT_SCENARIO_ID) 
                 aco_ants=case["acoAnts"],
                 aco_iterations=case["acoIterations"],
                 axis=case["axis"],
+                seed=seed,
+                aco_alpha=case.get("acoAlpha"),
+                aco_beta=case.get("acoBeta"),
+                aco_rho=case.get("acoRho"),
+                pheromone_q=case.get("pheromoneQ"),
             )
         )
 
@@ -138,7 +211,9 @@ def run_aco_sensitivity(db: Session, *, scenario_id: str = DEFAULT_SCENARIO_ID) 
         "generatedAt": finished.isoformat(),
         "durationSeconds": round((finished - started).total_seconds(), 1),
         "scenarioId": scenario_id,
+        "seed": seed,
         "standardProfile": {"acoAnts": 12, "acoIterations": 20},
+        "standardHyperparameters": STANDARD_HYPERPARAMETERS,
         "runs": runs,
     }
     save_aco_sensitivity(payload)
