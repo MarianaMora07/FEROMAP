@@ -37,7 +37,7 @@ def db():
 
 
 def _db_has_seed_demo(db: Session) -> bool:
-    """True si la BD global ya trae el seed demo (≈120 collection points)."""
+    """True si la BD global ya trae el catálogo demo (≈180 collection points)."""
     total = db.scalar(
         select(func.count()).select_from(CollectionPoint).where(CollectionPoint.deleted_at.is_(None))
     )
@@ -45,8 +45,9 @@ def _db_has_seed_demo(db: Session) -> bool:
 
 
 # Estos tests asumen BD sin seed: crean códigos CNT-0xx y cuentan puntos globales.
-# En la BD sembrada (120 pts) chocan por UniqueViolation / totales 125, así que solo
-# corren en el paso unit de CI/BD limpia; si la BD ya está sembrada se saltan.
+# En la BD sembrada (catálogo demo completo) chocan por UniqueViolation / totales
+# desplazados, así que solo corren en el paso unit de CI/BD limpia; si la BD ya está
+# sembrada se saltan.
 def _skip_if_seeded(db: Session) -> None:
     if _db_has_seed_demo(db):
         pytest.skip("Requiere BD sin seed: corre en el paso unit de CI/BD limpia")
@@ -125,7 +126,7 @@ def test_generate_missing_collection_points_is_idempotent_after_seed(db: Session
 
 
 @pytest.mark.integration
-def test_seeded_database_has_120_points_across_all_sectors(db: Session):
+def test_seeded_database_reaches_catalog_target_across_all_sectors(db: Session):
     total = db.scalar(
         select(func.count()).select_from(CollectionPoint).where(CollectionPoint.deleted_at.is_(None))
     )

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import CaseStudy, CaseStudyPoint, CollectionPoint, Sector, Simulation
 from app.db.session import SessionLocal
+from app.services.collection_point_seed_service import TARGET_COLLECTION_POINTS
 
 
 def _database_available() -> bool:
@@ -76,7 +77,8 @@ def test_case_study_point_counts(db: Session):
     assert norte_count == 15
     assert sur_count == 15
     assert multi_count == 12
-    assert combinatorio_count == 120
+    # CE-COMBINATORIO incluye todo el catálogo activo.
+    assert combinatorio_count == TARGET_COLLECTION_POINTS
 
 
 def test_collection_points_seed_covers_all_sectors(db: Session):
@@ -91,7 +93,7 @@ def test_collection_points_seed_covers_all_sectors(db: Session):
             CollectionPoint.deleted_at.is_(None)
         )
     )
-    assert total == 120
+    assert total == TARGET_COLLECTION_POINTS
     assert sectors_with_points == sectors_total
 
 
