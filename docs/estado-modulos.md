@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |-------|-------|
-| **Actualizado** | 2026-09-11 |
+| **Actualizado** | 2026-09-17 |
 | **Alcance** | Módulos del frontend vs. fase de implementación y estado |
 | **Relación** | [ux/arquitectura-navegacion.md](./ux/arquitectura-navegacion.md) define la IA destino; esta matriz indica qué está listo y qué falta |
 | **Leyenda** | ✅ sólido · 🟡 parcial (funciona; sin e2e o backend incompleto) · 🧪 demo/mocks · ⚠️ duplicado/andamiaje |
@@ -15,6 +15,7 @@
 | `/planning/weekly` Plan semanal (config base) | 1–3 | ✅ | **Config base**: zonas por día + flota por tipo. Validar → Aprobar → **Generar plan operativo** (tabla Camión × Día) → notificar por día/todo. e2e `daily-planning` + `weekly-operational` (motor real, lento). |
 | `/optimization` Plan del día (tabs Optimizar/Resultados/Pendientes) | 1–4 | ✅ | Toolbar: Generar/Regenerar Plan Operativo + **Notificar a conductores** (aparece tras generar). Pendientes: cancelar antiguos / marcar ya visitado. e2e `daily-planning` (#pendientes) + `route-playback`. Los **parámetros del algoritmo** viven en `/settings`. |
 | `/settings` Configuración (sección *Algoritmo*) | 13 | ✅ | Parámetros del motor (ACO, heurísticos, calibración) + **objetivo multiobjetivo** (equidad, makespan, mín. vehículos, jornada objetivo, rotación semanal). Vitest `optimizationObjectiveUx`. Antes era una pestaña de `/optimization`. |
+| `/settings/calibration` Calibración del motor | 13 | ✅ | Consola de ambos barridos (sensibilidad ACO 18 corridas y pesos del objetivo) como **job asíncrono** con progreso `k/total`, ETA y cancelación; resultados desde caché con frontera de Pareto, AC-1/AC-2/AC-3 y export JSON/CSV. API `POST /benchmarks/*/jobs` + `GET /benchmarks/calibration/jobs/{id}` (`backend/docs/API.md`). Vitest `calibrationRunUx`, `calibrationSensitivityUx`, `calibrationObjectiveUx`, `calibrationExport`. |
 | `/planning/history` Historial unificado | 0–2 | ✅ | e2e `daily-planning`. |
 | `/monitoring` Monitoreo (tabs Mapa en vivo / Incidencias) | 2–4 | 🟡 | e2e básico de tabs OK; avance de flota usa "demo" que muta BD; e2e profundo pendiente. |
 | `/map` Mapa GIS | — | ✅ | e2e `operational-map` + residente. |

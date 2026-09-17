@@ -714,6 +714,70 @@ Interpretación para la defensa: más hormigas/iteraciones no siempre son propor
 
 `estimatedDurationHours` en el request define `workdayHours` para la bandera `exceedsWorkday` (default 8 h si se omite).
 
+### Calibración del motor — `/api/v1/benchmarks/*`
+
+Consola de calibración (Fase 13 · [plan](../../docs/fase-13/plan-vista-calibracion.md)): ejecuta los dos barridos del motor como **job asíncrono** con progreso real y cancelación, y lee los resultados en caché. La métrica primaria es la **distancia optimizada**; el makespan y el rebose actúan como guardarraíles.
+
+| Método | Ruta | Rol | Descripción |
+|--------|------|-----|-------------|
+| GET | `/benchmarks/aco/sensitivity` | Planificador/Admin | Sensibilidad ACO en caché (404 si no existe) |
+| POST | `/benchmarks/aco/sensitivity` | Planificador/Admin | Barrido **síncrono** (~315 s). Acepta `scenarioId` y `seed` por query |
+| POST | `/benchmarks/aco/sensitivity/jobs` | Planificador/Admin | Lanza el barrido como job → **202** `{jobId}` |
+| GET | `/benchmarks/objective/sweep` | Planificador/Admin | Barrido de pesos + frontera de Pareto + AC-1/AC-2/AC-3 en caché (404 si no existe) |
+| POST | `/benchmarks/objective/sweep/jobs` | Planificador/Admin | Lanza el barrido de pesos como job → **202** `{jobId}` |
+| GET | `/benchmarks/calibration/jobs/{jobId}` | Planificador/Admin | Estado, progreso y resultado del job |
+| POST | `/benchmarks/calibration/jobs/{jobId}/cancel` | Planificador/Admin | Solicita la cancelación |
+| GET | `/simulations/jobs?jobType=calibration` | Planificador/Admin | Historial de jobs de calibración |
+
+**Cuerpo de los `POST .../jobs`**
+
+| Endpoint | Cuerpo |
+|---|---|
+| `/benchmarks/aco/sensitivity/jobs` | `{ scenarioId?, seed?, refresh? }` |
+| `/benchmarks/objective/sweep/jobs` | `{ scenarioId?, seed?, refresh?, durationHours? }` |
+
+- `scenarioId` (default `normal`) y `seed` (default `42`) viajan explícitos para que la evidencia sea reproducible.
+- `refresh` (default `true`) fuerza el recálculo. Con `refresh=false`, si hay caché del mismo escenario/semilla el job nace `completed` con ese payload y no recalcula.
+- `durationHours` es una **declaración**, no una perilla: los casos del barrido fijan las jornadas (`8 h` para la serie de aceptación AC-2 y la jornada por defecto del motor para el resto) y de ese valor dependen las líneas base de AC-1/AC-2. Se acepta `8` o el campo omitido; cualquier otro valor devuelve **400** explicando por qué, en vez de ignorarse en silencio.
+- Los campos extra que no pertenezcan al contrato se ignoran, como en el resto de la API.
+
+**Estados:** `pending` · `running` · `completed` · `cancelled` · `failed`.
+
+**Response de `GET /benchmarks/calibration/jobs/{jobId}`**
+
+```json
+{
+  "jobId": "…",
+  "jobType": "calibration",
+  "sweep": "sensitivity",
+  "status": "running",
+  "phase": "Sensibilidad ACO",
+  "progress": 23,
+  "current": 5,
+  "total": 18,
+  "currentLabel": "20 hormigas",
+  "startedAt": "2026-09-17T15:01:00+00:00",
+  "finishedAt": null,
+  "result": null,
+  "error": null,
+  "logs": [
+    {
+      "id": "log-…-4",
+      "timestamp": "15:03:12",
+      "message": "[5/18] 20 hormigas",
+      "type": "progress",
+      "phaseId": "sensitivity"
+    }
+  ]
+}
+```
+
+`current` es la corrida **en curso** (1-based) y `progress` el porcentaje de corridas **terminadas**: el progreso nunca retrocede. Al completar, `result` trae el payload del barrido y la caché queda reescrita.
+
+**Cancelación:** se aplica **entre corridas** (no interrumpe el ACO en curso) y **no** escribe la caché: el job queda en `cancelled` con `result = null`. Corre **un barrido a la vez** (semáforo de calibración); el siguiente espera su turno.
+
+CLI equivalente: `just phase3-sensitivity` (sensibilidad) y `just phase13-sweep` (pesos).
+
 ### Decisión de diseño: ACO en distancia, KPIs en tiempo operativo
 
 | Pregunta | Respuesta |

@@ -12,7 +12,7 @@ Documentación y evidencia experimental para fortalecer el capítulo de implemen
 | 3.1 | Límites del solver | [limites-solver.md](./limites-solver.md) |
 | 3.1 | Matriz UI ↔ motor (actualizada) | [matriz-variables-motor.md](../fase-0/matriz-variables-motor.md) |
 | 3.2 | Benchmark 5×3 perfiles | [evidencia-aco.md](./evidencia-aco.md) |
-| 3.3 | Sensibilidad ACO (hormigas, iteraciones y α/β/ρ/Q) | [evidencia-aco.md](./evidencia-aco.md) + UI en `/optimization` |
+| 3.3 | Sensibilidad ACO (hormigas, iteraciones y α/β/ρ/Q) | [evidencia-aco.md](./evidencia-aco.md) + cliente `src/core/api/benchmark.ts` (consola `/settings/calibration`, [Fase 13](../fase-13/plan-vista-calibracion.md)) |
 | 3.4 | Acciones sobre puntos no cubiertos | `UncoveredPointsActionsPanel` + API `defer-uncovered` |
 | 3.5 | Regresión pre-defensa | `just defense-verify` ampliado |
 
@@ -80,6 +80,6 @@ por vehículo (`base + v_idx * 17`).
 - `backend/app/services/benchmark_service.py`
 - `backend/app/services/aco_sensitivity_service.py`
 - `backend/scripts/generate_phase3_report.py`
-- `src/features/optimization/OptimizationAcoSensitivityPanel.tsx`
+- `src/core/api/benchmark.ts` (lectura/ejecución del payload de sensibilidad)
 - `src/features/landfill/UncoveredPointsActionsPanel.tsx`
 - `scripts/defense-verify.sh`
