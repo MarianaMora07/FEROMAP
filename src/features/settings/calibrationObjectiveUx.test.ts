@@ -146,6 +146,13 @@ describe('barrido de pesos — frontera y criterios de aceptación (Fase 7)', ()
     expect(keys).toContain('calibration.reading.excluded');
     expect(
       findings.find((finding) => finding.labelKey === 'calibration.reading.pareto')?.detail,
-    ).toContain('2 soluciones');
+    ).toBe('2 · makespan 5, base 8 h (w=0)');
+  });
+
+  it('el detalle de la frontera no lleva texto traducible', () => {
+    for (const finding of objectiveFindings(payload())) {
+      expect(finding.detail).not.toMatch(/calibration\./);
+      expect(finding.detail).not.toMatch(/soluciones/);
+    }
   });
 });

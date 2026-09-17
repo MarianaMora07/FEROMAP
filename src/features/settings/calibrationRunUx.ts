@@ -27,6 +27,19 @@ export interface CalibrationRunConfig {
   reuseCache: boolean;
 }
 
+/**
+ * Línea de la «lectura automática» de un barrido.
+ *
+ * `detail` solo lleva **datos ya formateados** (números, etiquetas del payload): nunca
+ * texto traducible ni claves i18n. Los ejes implicados viajan en `axisKeys` para que el
+ * componente los traduzca.
+ */
+export interface CalibrationReading {
+  labelKey: string;
+  detail: string;
+  axisKeys?: string[];
+}
+
 /** Defaults reproducibles acordados con el backend (`DEFAULT_SWEEP_SEED`). */
 export const CALIBRATION_DEFAULT_SCENARIO = 'normal';
 export const CALIBRATION_DEFAULT_SEED = 42;

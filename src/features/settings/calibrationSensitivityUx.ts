@@ -6,6 +6,7 @@
  */
 
 import type { AcoSensitivityPayload, AcoSensitivityRun, CalibrationAxis } from '../../core/api/benchmark';
+import type { CalibrationReading } from './calibrationRunUx';
 
 /** Orden de presentación de los ejes (series de `aco_sensitivity_service`). */
 export const AXIS_ORDER: CalibrationAxis[] = ['ants', 'iterations', 'alpha', 'beta', 'rho', 'q'];
@@ -166,12 +167,10 @@ export interface CalibrationFinding {
 
 /**
  * Lectura automática (§7 de la vista): mejor resultado, eje más sensible y avisos de
- * calidad. Las claves i18n se traducen en el componente.
+ * calidad. `detail` nunca lleva texto traducible; los ejes van en `axisKeys`.
  */
-export function readingFindings(
-  payload: AcoSensitivityPayload,
-): { labelKey: string; detail: string }[] {
-  const findings: { labelKey: string; detail: string }[] = [];
+export function readingFindings(payload: AcoSensitivityPayload): CalibrationReading[] {
+  const findings: CalibrationReading[] = [];
   const summaries = summarizeAxes(payload.runs);
   const best = bestRun(payload.runs);
   if (best) {
@@ -185,7 +184,8 @@ export function readingFindings(
   if (sensitive) {
     findings.push({
       labelKey: 'calibration.reading.sensitive',
-      detail: `${sensitive.labelKey} · ${sensitive.amplitudePct?.toFixed(1) ?? '—'} % (${
+      axisKeys: [sensitive.labelKey],
+      detail: `${sensitive.amplitudePct?.toFixed(1) ?? '—'} % (${
         sensitive.amplitudeKm?.toFixed(1) ?? '—'
       } km)`,
     });
@@ -194,18 +194,23 @@ export function readingFindings(
   const stable = stableAxes(summaries);
   findings.push({
     labelKey: 'calibration.reading.stable',
-    detail: stable.length
-      ? `${stable.length}/${summaries.length} · ${stable.map((s) => s.axis).join(', ')}`
-      : '—',
+    axisKeys: stable.map((summary) => summary.labelKey),
+    detail: `${stable.length}/${summaries.length}`,
   });
 
+  // Calidad: ¿la mejor corrida agotó las iteraciones configuradas o se detuvo antes?
   const withoutEarlyStop = bestRunWithoutEarlyStop(payload.runs);
-  findings.push({
-    labelKey: 'calibration.reading.quality',
-    detail: withoutEarlyStop
-      ? `${withoutEarlyStop.label} · ${withoutEarlyStop.acoIterationsRun ?? '—'} iteraciones`
-      : 'sin corrida sin early-stop',
-  });
+  if (withoutEarlyStop) {
+    findings.push({
+      labelKey: 'calibration.reading.quality',
+      detail: `${withoutEarlyStop.label} · ${withoutEarlyStop.acoIterationsRun ?? '—'}`,
+    });
+  } else if (best) {
+    findings.push({
+      labelKey: 'calibration.reading.qualityEarlyStop',
+      detail: `${best.label} · ${best.acoIterationsRun ?? '—'}`,
+    });
+  }
 
   const excluded = excludedRuns(payload.runs);
   if (excluded.length) {

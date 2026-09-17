@@ -11,6 +11,7 @@ import {
 import { formatComputationSeconds } from '../../core/utils/optimizationResults';
 import type { ObjectiveSweepPayload } from '../../core/api/benchmark';
 import { ParetoFrontierChart } from './ParetoFrontierChart';
+import { CalibrationReadingList } from './CalibrationReadingList';
 import {
   acceptanceCards,
   bestObjectiveRun,
@@ -198,19 +199,7 @@ export function CalibrationObjectiveResults(props: CalibrationObjectiveResultsPr
         </div>
       </Card>
 
-      <Card data-testid="calibration-reading">
-        <CardHeader title={tr('calibration.reading')} />
-        <ul class="list-disc space-y-1 pl-5 text-sm text-text-secondary">
-          <For each={findings()}>
-            {(finding) => (
-              <li>
-                <span class="font-medium text-text-primary">{tr(finding.labelKey)}: </span>
-                {finding.detail}
-              </li>
-            )}
-          </For>
-        </ul>
-      </Card>
+      <CalibrationReadingList title={tr('calibration.reading')} findings={findings()} />
     </div>
   );
 }

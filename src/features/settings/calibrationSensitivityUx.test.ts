@@ -137,8 +137,44 @@ describe('sensibilidad ACO — derivaciones por eje (Fase 6)', () => {
     expect(keys).toContain('calibration.reading.stable');
     expect(keys).toContain('calibration.reading.excluded');
     expect(findings[0]?.detail).toContain('184.7 km');
-    expect(findings.find((finding) => finding.labelKey === 'calibration.reading.sensitive')?.detail).toContain(
-      'beta',
+
+    const sensitive = findings.find(
+      (finding) => finding.labelKey === 'calibration.reading.sensitive',
     );
+    expect(sensitive?.axisKeys).toEqual(['calibration.axis.beta']);
+    expect(sensitive?.detail).toBe('28.6 % (52.9 km)');
+
+    const stable = findings.find((finding) => finding.labelKey === 'calibration.reading.stable');
+    expect(stable?.axisKeys).toEqual([
+      'calibration.axis.iterations',
+      'calibration.axis.rho',
+      'calibration.axis.q',
+    ]);
+    expect(stable?.detail).toBe('3/6');
+  });
+
+  it('el detalle nunca filtra claves i18n ni texto traducible', () => {
+    for (const finding of readingFindings(payload())) {
+      // Las claves i18n viajan en labelKey/axisKeys, no en el detalle.
+      expect(finding.detail).not.toMatch(/calibration\./);
+      expect(finding.labelKey).toMatch(/^calibration\.reading\./);
+    }
+  });
+
+  it('avisa cuando la mejor corrida se detuvo antes de agotar iteraciones', () => {
+    const withEarlyStop: AcoSensitivityPayload = {
+      ...payload(),
+      runs: [run('ants', '8 hormigas', 190.8, { acoStoppedEarly: true, acoIterationsRun: 10 })],
+    };
+
+    const findings = readingFindings(withEarlyStop);
+    const quality = findings.find(
+      (finding) =>
+        finding.labelKey === 'calibration.reading.quality' ||
+        finding.labelKey === 'calibration.reading.qualityEarlyStop',
+    );
+
+    expect(quality?.labelKey).toBe('calibration.reading.qualityEarlyStop');
+    expect(quality?.detail).toBe('8 hormigas · 10');
   });
 });

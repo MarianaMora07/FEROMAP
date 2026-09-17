@@ -6,6 +6,7 @@ import { formatComputationSeconds } from '../../core/utils/optimizationResults';
 import { calibrationFilename, downloadText, jsonText, sensitivityAxisCsv } from './calibrationExport';
 import type { AcoSensitivityPayload, CalibrationAxis } from '../../core/api/benchmark';
 import { CalibrationAxisChart } from './CalibrationAxisChart';
+import { CalibrationReadingList } from './CalibrationReadingList';
 import {
   AXIS_ORDER,
   baselineKm,
@@ -71,8 +72,7 @@ export function CalibrationResults(props: CalibrationResultsProps) {
         />
         <KpiCard
           title={tr('calibration.kpi.stable')}
-          value={stable().length ? String(stable().length) : '0'}
-          unit={`/ ${summaries().length}`}
+          value={`${stable().length}/${summaries().length}`}
           iconTone="blue"
         />
       </div>
@@ -178,19 +178,7 @@ export function CalibrationResults(props: CalibrationResultsProps) {
         </Show>
       </Card>
 
-      <Card data-testid="calibration-reading">
-        <CardHeader title={tr('calibration.reading')} />
-        <ul class="list-disc space-y-1 pl-5 text-sm text-text-secondary">
-          <For each={findings()}>
-            {(finding) => (
-              <li>
-                <span class="font-medium text-text-primary">{tr(finding.labelKey)}: </span>
-                {finding.detail}
-              </li>
-            )}
-          </For>
-        </ul>
-      </Card>
+      <CalibrationReadingList title={tr('calibration.reading')} findings={findings()} />
     </div>
   );
 }

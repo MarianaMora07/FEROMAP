@@ -10,6 +10,7 @@ import type {
   ObjectiveSweepPayload,
   ObjectiveSweepRun,
 } from '../../core/api/benchmark';
+import type { CalibrationReading } from './calibrationRunUx';
 
 export type AcceptanceScore = boolean | null;
 
@@ -111,8 +112,8 @@ export function bestObjectiveRun(payload: ObjectiveSweepPayload): ObjectiveSweep
   );
 }
 
-export function objectiveFindings(payload: ObjectiveSweepPayload): { labelKey: string; detail: string }[] {
-  const findings: { labelKey: string; detail: string }[] = [];
+export function objectiveFindings(payload: ObjectiveSweepPayload): CalibrationReading[] {
+  const findings: CalibrationReading[] = [];
   const best = bestObjectiveRun(payload);
   if (best) {
     findings.push({
@@ -122,7 +123,7 @@ export function objectiveFindings(payload: ObjectiveSweepPayload): { labelKey: s
   }
   findings.push({
     labelKey: 'calibration.reading.pareto',
-    detail: `${frontierRows(payload).length} soluciones · ${frontierLabels(payload).join(', ') || '—'}`,
+    detail: `${frontierRows(payload).length} · ${frontierLabels(payload).join(', ') || '—'}`,
   });
   const failed = payload.runs.length - payload.runs.filter(isValidObjectiveRun).length;
   if (failed > 0) {
