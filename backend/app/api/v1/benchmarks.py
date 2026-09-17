@@ -17,6 +17,7 @@ from app.services.algorithm_benchmark_service import (
     run_algorithms_benchmark,
 )
 from app.services.benchmark_service import load_aco_benchmark, run_aco_benchmark
+from app.services.calibration_history_service import get_calibration_run, list_calibration_runs
 from app.services.instance_fingerprint import with_freshness
 from app.services.multiobjective_sweep_service import (
     load_multiobjective_sweep,
@@ -156,6 +157,26 @@ def get_objective_sweep(db: DbSession, _: PlannerOrAdmin):
     return with_freshness(
         payload, db, scenario_id=payload.get("scenarioId") or DEFAULT_SWEEP_SCENARIO
     )
+
+
+@router.get("/benchmarks/calibration/history")
+def get_calibration_history(
+    db: DbSession,
+    _: PlannerOrAdmin,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
+    """Corridas de calibración guardadas (histórico; no toca la caché vigente)."""
+    return list_calibration_runs(db, limit=limit, offset=offset)
+
+
+@router.get("/benchmarks/calibration/history/{run_id}")
+def get_calibration_history_run(run_id: str, db: DbSession, _: PlannerOrAdmin):
+    """Payload completo de una corrida histórica, con su sello de instancia."""
+    run = get_calibration_run(db, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Corrida de calibración no encontrada")
+    return run
 
 
 @router.get("/benchmarks/calibration/jobs/{job_id}")

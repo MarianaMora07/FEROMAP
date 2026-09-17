@@ -580,6 +580,10 @@ def _execute_calibration_sweep(
 
     # El sello lo calcula quien invoca el barrido (el servicio se mantiene sin BD propia).
     fingerprint = current_fingerprint(db, scenario_id=scenario_id)
+    with job.lock:
+        # Queda en params_json: el historial puede decir si la corrida sigue vigente.
+        job.extra_params = {**(job.extra_params or {}), "instanceFingerprint": fingerprint}
+    _persist_job_snapshot(job, force=True)
     return _sweep_runner(sweep)(
         db,
         scenario_id=scenario_id,

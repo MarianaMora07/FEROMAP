@@ -9,6 +9,7 @@ from __future__ import annotations
 import sys
 
 from app.db.session import SessionLocal
+from app.services.calibration_history_service import record_calibration_run
 from app.services.instance_fingerprint import current_fingerprint
 from app.services.multiobjective_sweep_service import (
     evaluate_acceptance_criteria,
@@ -33,9 +34,12 @@ def _load_payload() -> dict:
         cached["acceptance"] = evaluate_acceptance_criteria(cached["runs"])
         return cached
     with SessionLocal() as db:
-        return run_multiobjective_sweep(
+        payload = run_multiobjective_sweep(
             db, instance_fingerprint=current_fingerprint(db, scenario_id="normal")
         )
+        # Historial en BD (información histórica, no toca la caché).
+        record_calibration_run(db, sweep="objective", payload=payload)
+        return payload
 
 
 def main() -> None:
