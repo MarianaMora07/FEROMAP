@@ -295,6 +295,7 @@ def run_multiobjective_sweep(
     seed: int = DEFAULT_SEED,
     on_run: OnRun | None = None,
     cancel_check: CancelCheck | None = None,
+    instance_fingerprint: str | None = None,
 ) -> dict[str, Any]:
     """Corre el barrido completo (instancia demo, seed fijo) y persiste la evidencia.
 
@@ -320,6 +321,7 @@ def run_multiobjective_sweep(
         "scenarioId": scenario_id,
         "seed": seed,
         "maxRouteHoursTarget": DEFAULT_MAX_ROUTE_HOURS_TARGET,
+        "instanceFingerprint": instance_fingerprint,
         "runs": runs,
         "paretoFrontier": build_pareto_frontier(runs),
         "acceptance": evaluate_acceptance_criteria(runs),

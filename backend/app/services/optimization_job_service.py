@@ -15,6 +15,7 @@ from app.db.models import OptimizationJobRecord
 from app.db.session import SessionLocal
 from sqlalchemy import func, select
 from app.services.optimization_service import OptimizationCancelledError, run_optimization_engine
+from app.services.instance_fingerprint import current_fingerprint
 from app.services.sweep_progress import (
     CALIBRATION_SWEEPS,
     DEFAULT_SWEEP_SCENARIO,
@@ -577,12 +578,15 @@ def _execute_calibration_sweep(
     def cancel_check() -> bool:
         return job.cancel_requested
 
+    # El sello lo calcula quien invoca el barrido (el servicio se mantiene sin BD propia).
+    fingerprint = current_fingerprint(db, scenario_id=scenario_id)
     return _sweep_runner(sweep)(
         db,
         scenario_id=scenario_id,
         seed=seed,
         on_run=on_run,
         cancel_check=cancel_check,
+        instance_fingerprint=fingerprint,
     )
 
 

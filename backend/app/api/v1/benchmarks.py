@@ -17,6 +17,7 @@ from app.services.algorithm_benchmark_service import (
     run_algorithms_benchmark,
 )
 from app.services.benchmark_service import load_aco_benchmark, run_aco_benchmark
+from app.services.instance_fingerprint import with_freshness
 from app.services.multiobjective_sweep_service import (
     load_multiobjective_sweep,
     validate_sweep_duration,
@@ -26,7 +27,11 @@ from app.services.optimization_job_service import (
     create_calibration_job,
     get_calibration_job_view,
 )
-from app.services.sweep_progress import SWEEP_OBJECTIVE, SWEEP_SENSITIVITY
+from app.services.sweep_progress import (
+    DEFAULT_SWEEP_SCENARIO,
+    SWEEP_OBJECTIVE,
+    SWEEP_SENSITIVITY,
+)
 
 router = APIRouter(tags=["benchmarks"])
 
@@ -64,14 +69,17 @@ def generate_algorithms_benchmark(_: PlannerOrAdmin):
 
 
 @router.get("/benchmarks/aco/sensitivity")
-def get_aco_sensitivity(_: PlannerOrAdmin):
+def get_aco_sensitivity(db: DbSession, _: PlannerOrAdmin):
+    """Payload en caché + estado del sello de instancia (`cacheState`, `stale`)."""
     payload = load_aco_sensitivity()
     if payload is None:
         raise HTTPException(
             status_code=404,
             detail="No hay estudio de sensibilidad ACO. Ejecuta: just phase3-sensitivity",
         )
-    return payload
+    return with_freshness(
+        payload, db, scenario_id=payload.get("scenarioId") or DEFAULT_SWEEP_SCENARIO
+    )
 
 
 @router.post("/benchmarks/aco/sensitivity")
@@ -137,15 +145,17 @@ def start_objective_sweep_job(body: ObjectiveSweepJobRequest, _: PlannerOrAdmin)
 
 
 @router.get("/benchmarks/objective/sweep")
-def get_objective_sweep(_: PlannerOrAdmin):
-    """Payload en caché del barrido de pesos (runs, frontera de Pareto y AC-1/AC-2/AC-3)."""
+def get_objective_sweep(db: DbSession, _: PlannerOrAdmin):
+    """Caché del barrido de pesos + estado del sello de instancia."""
     payload = load_multiobjective_sweep()
     if payload is None:
         raise HTTPException(
             status_code=404,
             detail="No hay barrido de pesos del objetivo. Ejecuta: just phase13-sweep",
         )
-    return payload
+    return with_freshness(
+        payload, db, scenario_id=payload.get("scenarioId") or DEFAULT_SWEEP_SCENARIO
+    )
 
 
 @router.get("/benchmarks/calibration/jobs/{job_id}")

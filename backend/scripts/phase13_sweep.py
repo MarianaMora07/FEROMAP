@@ -9,6 +9,7 @@ from __future__ import annotations
 import sys
 
 from app.db.session import SessionLocal
+from app.services.instance_fingerprint import current_fingerprint
 from app.services.multiobjective_sweep_service import (
     evaluate_acceptance_criteria,
     load_multiobjective_sweep,
@@ -32,7 +33,9 @@ def _load_payload() -> dict:
         cached["acceptance"] = evaluate_acceptance_criteria(cached["runs"])
         return cached
     with SessionLocal() as db:
-        return run_multiobjective_sweep(db)
+        return run_multiobjective_sweep(
+            db, instance_fingerprint=current_fingerprint(db, scenario_id="normal")
+        )
 
 
 def main() -> None:

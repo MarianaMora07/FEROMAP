@@ -32,6 +32,12 @@ def reset_calibration_slot():
     svc.reset_calibration_slot_for_tests()
 
 
+@pytest.fixture(autouse=True)
+def stub_instance_fingerprint(monkeypatch):
+    """El sello de instancia consulta la BD real; en estos tests se sustituye."""
+    monkeypatch.setattr(svc, "current_fingerprint", lambda db, *, scenario_id: "sello-test")
+
+
 def _wait_for_status(job_id: str, expected: set[str], timeout: float = 5.0) -> dict:
     deadline = time.time() + timeout
     view = svc.get_calibration_job_view(job_id)
@@ -51,7 +57,7 @@ def test_calibration_job_reports_monotonic_progress(monkeypatch):
     total = 4
     seen: list[dict] = []
 
-    def fake_sweep(db, *, scenario_id, seed, on_run, cancel_check):
+    def fake_sweep(db, *, scenario_id, seed, on_run, cancel_check, instance_fingerprint=None):
         for index in range(total):
             if cancel_check():
                 raise SweepCancelled("cancelado")
@@ -96,7 +102,7 @@ def test_calibration_job_cancel_marks_cancelled_without_result(monkeypatch):
     started = threading.Event()
     release = threading.Event()
 
-    def fake_sweep(db, *, scenario_id, seed, on_run, cancel_check):
+    def fake_sweep(db, *, scenario_id, seed, on_run, cancel_check, instance_fingerprint=None):
         on_run(0, 3, "caso 1")
         started.set()
         release.wait(timeout=5)
@@ -123,7 +129,7 @@ def test_calibration_job_cancelled_while_waiting_for_slot(monkeypatch):
     running = threading.Event()
     release = threading.Event()
 
-    def fake_sweep(db, *, scenario_id, seed, on_run, cancel_check):
+    def fake_sweep(db, *, scenario_id, seed, on_run, cancel_check, instance_fingerprint=None):
         running.set()
         release.wait(timeout=5)
         return {"runs": []}
@@ -155,7 +161,7 @@ def test_calibration_jobs_run_one_at_a_time(monkeypatch):
     release = threading.Event()
     started: list[str] = []
 
-    def fake_sweep(db, *, scenario_id, seed, on_run, cancel_check):
+    def fake_sweep(db, *, scenario_id, seed, on_run, cancel_check, instance_fingerprint=None):
         started.append(scenario_id)
         running.set()
         release.wait(timeout=5)
@@ -204,7 +210,7 @@ def test_calibration_job_refresh_false_with_other_seed_runs(monkeypatch):
     cached = {"scenarioId": "normal", "seed": 7, "runs": []}
     ran: list[int] = []
 
-    def fake_sweep(db, *, scenario_id, seed, on_run, cancel_check):
+    def fake_sweep(db, *, scenario_id, seed, on_run, cancel_check, instance_fingerprint=None):
         ran.append(seed)
         return {"runs": [], "scenarioId": scenario_id, "seed": seed}
 
@@ -320,7 +326,7 @@ def test_calibration_job_persists_calibration_type_and_params(monkeypatch):
     fake = _FakeDb(record)
     monkeypatch.setattr(svc, "SessionLocal", lambda: fake)
 
-    def fake_sweep(db, *, scenario_id, seed, on_run, cancel_check):
+    def fake_sweep(db, *, scenario_id, seed, on_run, cancel_check, instance_fingerprint=None):
         return {"runs": []}
 
     monkeypatch.setattr(svc, "_sweep_runner", lambda sweep: fake_sweep)
@@ -408,8 +414,10 @@ def test_objective_sweep_cache_read_exposes_frontier_and_acceptance(monkeypatch,
     path = tmp_path / "multiobjective_sweep.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
     monkeypatch.setattr(sweep, "sweep_cache_path", lambda: path)
+    # El sello de instancia lo cubre test_calibration_fingerprint.
+    monkeypatch.setattr(benchmarks, "with_freshness", lambda payload_, db, *, scenario_id: payload_)
 
-    result = benchmarks.get_objective_sweep(MagicMock())
+    result = benchmarks.get_objective_sweep(MagicMock(), MagicMock())
 
     assert result["paretoFrontier"] == payload["paretoFrontier"]
     assert set(result["acceptance"]) == {"ac1", "ac2", "ac3"}
@@ -421,6 +429,6 @@ def test_objective_sweep_cache_read_404_without_cache(monkeypatch, tmp_path):
     monkeypatch.setattr(sweep, "sweep_cache_path", lambda: tmp_path / "missing.json")
 
     with pytest.raises(HTTPException) as excinfo:
-        benchmarks.get_objective_sweep(MagicMock())
+        benchmarks.get_objective_sweep(MagicMock(), MagicMock())
 
     assert excinfo.value.status_code == 404

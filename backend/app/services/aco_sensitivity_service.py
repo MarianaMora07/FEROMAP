@@ -171,6 +171,7 @@ def run_aco_sensitivity(
     seed: int = DEFAULT_SEED,
     on_run: OnRun | None = None,
     cancel_check: CancelCheck | None = None,
+    instance_fingerprint: str | None = None,
 ) -> dict[str, Any]:
     """18 corridas (escenario normal, semilla fija):
 
@@ -226,6 +227,7 @@ def run_aco_sensitivity(
         "seed": seed,
         "standardProfile": {"acoAnts": 12, "acoIterations": 20},
         "standardHyperparameters": STANDARD_HYPERPARAMETERS,
+        "instanceFingerprint": instance_fingerprint,
         "runs": runs,
     }
     save_aco_sensitivity(payload)
