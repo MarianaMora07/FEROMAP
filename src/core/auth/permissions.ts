@@ -71,8 +71,6 @@ export interface NavItemDef {
   sidebarPrimary?: boolean;
   /** Clasificación demo/producto mostrada como badge solo para admin (docs/ux §3) */
   kind?: 'demo' | 'producto';
-  /** No queda activo en subrutas (evita duplicar el resaltado padre/hijo). */
-  exact?: boolean;
 }
 
 export const DEMO_NAV_HIDDEN_HREFS = new Set<string>();
@@ -215,20 +213,11 @@ export const MAIN_NAV_ITEMS: NavItemDef[] = [
     href: '/settings',
     label: 'Configuración',
     labelKey: 'nav.settings',
-    description: 'Parámetros del motor y preferencias',
+    // La consola de calibración es una sección de Configuración (D-C), no un
+    // destino propio: el ítem queda activo en todo `/settings/*`.
+    description: 'Parámetros del motor, calibración y preferencias',
     descriptionKey: 'nav.settings.description',
     sidebarPrimary: true,
-    exact: true,
-    roles: ['administrador', 'planificador'],
-  },
-  {
-    href: CALIBRATION_ROUTE,
-    label: 'Calibración',
-    labelKey: 'nav.calibration',
-    description: 'Barridos del motor: sensibilidad y pesos',
-    descriptionKey: 'nav.calibration.description',
-    sidebarPrimary: true,
-    exact: true,
     roles: ['administrador', 'planificador'],
   },
 ];

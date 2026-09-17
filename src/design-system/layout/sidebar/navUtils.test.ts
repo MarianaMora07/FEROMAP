@@ -13,12 +13,9 @@ describe('navUtils — ítem activo del sidebar', () => {
     expect(isNavItemActive('/map?scope=sector', '/map')).toBe(true);
   });
 
-  it('con `exact` no se activa en subrutas propias del menú', () => {
-    // El padre (/settings) no debe resaltarse en la subruta hermana.
-    expect(isNavItemActive('/settings', '/settings/calibration', true)).toBe(false);
-    expect(isNavItemActive('/settings', '/settings', true)).toBe(true);
-    // La subruta sí queda activa en su propia ruta.
-    expect(isNavItemActive('/settings/calibration', '/settings/calibration', true)).toBe(true);
-    expect(isNavItemActive('/settings/calibration', '/settings')).toBe(false);
+  it('mantiene activo el ítem padre en subrutas propias de su página', () => {
+    // «Configuración» sigue resaltada en su sección de calibración.
+    expect(isNavItemActive('/settings', '/settings/calibration')).toBe(true);
+    expect(isNavItemActive('/settings', '/settings')).toBe(true);
   });
 });

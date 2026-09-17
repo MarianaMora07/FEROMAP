@@ -11,8 +11,8 @@ describe('permissions — arquitectura de navegación (IA)', () => {
 
   it('orders planner primaries as planificar → operar → supervisar', () => {
     const layout = sidebarNavLayout('planificador');
-    // El ciclo operativo (planificar → operar → supervisar) se mantiene como prefijo;
-    // «Configuración» y su consola de «Calibración» (Fase 13) cierran la lista.
+    // El ciclo operativo (planificar → operar → supervisar) y «Configuración»
+    // (que agrupa Algoritmo y Calibración) cierran la lista.
     expect(layout.primary.map((item) => item.href)).toEqual([
       '/',
       '/planning/weekly',
@@ -20,7 +20,6 @@ describe('permissions — arquitectura de navegación (IA)', () => {
       '/monitoring',
       '/map',
       '/settings',
-      CALIBRATION_ROUTE,
     ]);
   });
 
@@ -36,19 +35,12 @@ describe('permissions — arquitectura de navegación (IA)', () => {
     expect(driver).not.toContain('/settings');
   });
 
-  it('expone la calibración del motor junto a Configuración (Fase 13)', () => {
-    const planner = sidebarNavLayout('planificador').primary.find(
-      (item) => item.href === CALIBRATION_ROUTE,
-    );
-    expect(planner?.labelKey).toBe('nav.calibration');
-    expect(planner?.kind).toBeUndefined();
-
-    const admin = sidebarNavLayout('administrador').primary.map((item) => item.href);
-    expect(admin).toContain(CALIBRATION_ROUTE);
-
-    // El conductor no gestiona parámetros del motor.
-    const driver = sidebarNavLayout('conductor').primary.map((item) => item.href);
-    expect(driver).not.toContain(CALIBRATION_ROUTE);
+  it('no expone la calibración del motor como destino del sidebar (Fase 13)', () => {
+    // La consola vive como sección de Configuración (decisión D-C), así que el
+    // destino del sidebar es `/settings`, que permanece activo en la subruta.
+    const primary = sidebarNavLayout('administrador').primary.map((item) => item.href);
+    expect(primary).toContain('/settings');
+    expect(primary).not.toContain(CALIBRATION_ROUTE);
   });
 
   it('groups sections as Consulta y reportes, Catálogos, Tesis y demostración', () => {

@@ -7,12 +7,9 @@ export function navHrefPath(href: string) {
   return href.split('?')[0] ?? href;
 }
 
-export function isNavItemActive(href: string, pathname: string, exact = false) {
+export function isNavItemActive(href: string, pathname: string) {
   const base = navHrefPath(href);
   if (pathname === base) return true;
-  // `exact` evita que un padre quede activo en una subruta propia del menú
-  // (p. ej. «Configuración» en `/settings/calibration`).
-  if (exact) return false;
   if (base !== '/' && pathname.startsWith(`${base}/`)) return true;
   return false;
 }

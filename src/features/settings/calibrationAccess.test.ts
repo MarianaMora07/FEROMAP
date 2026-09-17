@@ -21,18 +21,15 @@ describe('calibración del motor — ruta, permisos e i18n (Fase 4)', () => {
     expect(ROUTE_PERMISSIONS[CALIBRATION_ROUTE]).toEqual(ROUTE_PERMISSIONS['/settings']);
   });
 
-  it('la entrada del sidebar usa claves i18n presentes en ES y EN', () => {
-    const item = sidebarNavLayout('planificador').primary.find(
-      (entry) => entry.href === CALIBRATION_ROUTE,
-    );
+  it('la sección de Configuración usa claves i18n presentes en ES y EN', () => {
+    // La consola es una sección de Configuración (D-C), no un destino del sidebar.
+    const primary = sidebarNavLayout('planificador').primary.map((entry) => entry.href);
+    expect(primary).not.toContain(CALIBRATION_ROUTE);
 
-    expect(item).toBeDefined();
-    expect(item?.labelKey).toBe('nav.calibration');
+    const section = settingsSections.find((entry) => entry.href === CALIBRATION_ROUTE);
+    expect(section?.labelKey).toBe('nav.calibration');
     expect(es['nav.calibration']).toBeTruthy();
     expect(en['nav.calibration']).toBeTruthy();
-    expect(item?.descriptionKey).toBe('nav.calibration.description');
-    expect(es['nav.calibration.description']).toBeTruthy();
-    expect(en['nav.calibration.description']).toBeTruthy();
   });
 
   it('publica el bloque completo de copy de calibración en ambos diccionarios', () => {

@@ -48,7 +48,7 @@ El orden de los primarios sigue el ciclo **planificar → operar → supervisar*
 
 | Nivel | Ítems (etiqueta · ruta) |
 |-------|-------------------------|
-| **Primarios** | Dashboard `/` · Plan semanal `/planning/weekly` · Plan del día `/optimization` · Monitoreo en vivo `/monitoring` · Mapa GIS `/map` |
+| **Primarios** | Dashboard `/` · Plan semanal `/planning/weekly` · Plan del día `/optimization` · Monitoreo en vivo `/monitoring` · Mapa GIS `/map` · Configuración `/settings` |
 | ▸ **Consulta y reportes** | Historial unificado `/planning/history` · Reportes `/reports` |
 | ▸ **Catálogos** | Vehículos `/vehicles` · Conductores `/drivers` · Puntos de Recolección `/collection-points` |
 | ▸ **Tesis y demostración** | Simulación ACO `/simulation` · Casos de estudio `/case-studies` · Demostración ACO `/demostracion` |
@@ -75,6 +75,7 @@ Mi Recolección `/resident` · Mapa mi sector `/map?scope=sector` · Puntos de r
 | **Plan del día** `/optimization` | 1) Optimizar (Generar/Regenerar Plan Operativo) → **Notificar a conductores** → Monitoreo · 2) Pendientes (carry-over: cancelar antiguos / marcar ya visitado). El historial vive en Historial unificado. |
 | **Monitoreo en vivo** `/monitoring` | 1) Mapa en vivo · 2) Incidencias y alertas. Sin "modo campo" (eso es `/operator`). |
 | **Mapa GIS** `/map` | Capas + leyenda + playback de recorrido (solo lectura). |
+| **Configuración** `/settings` | 1) Algoritmo (motor ACO y objetivo) · 2) Calibración `/settings/calibration`: barridos de sensibilidad y pesos con job asíncrono. La consola es una **sección** de Configuración, no un destino propio del sidebar. |
 | **Historial unificado** `/planning/history` | Buscador único: Semana / Día / Incidencia. Único destino de historial. |
 | **Reportes** `/reports` | Resumen → Generar / descargar → Guardados. |
 | **Simulación ACO** `/simulation` | 1) Baseline vs ACO · 2) Historial de simulaciones. Benchmarks y sensibilidad como subvistas de resultados. Sin contenido de Plan semanal. |
