@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
@@ -16,12 +15,12 @@ from app.db.models import (
     RouteWaypoint,
     Vehicle,
     VehicleIncident,
-    VisitSchedule,
 )
 from app.domain.criticality import is_at_risk_before_next_visit
 from app.config import settings
 from app.core.idempotency import run_idempotent
 from app.services.geo_service import fill_level_pct
+from app.services.next_visit_service import next_visits_by_point
 from app.services.seed_loader import load_seed
 
 VEHICLE_IMAGES = [
@@ -399,26 +398,16 @@ def alerts_from_db(db: Session) -> list[dict[str, Any]]:
             }
         )
 
-    schedules = db.scalars(select(VisitSchedule)).all()
-    weekdays_by_point: dict[int, list[int]] = {}
-    for schedule in schedules:
-        raw = getattr(schedule, "weekdays_json", None)
-        point_id = getattr(schedule, "collection_point_id", None)
-        if raw is None or point_id is None:
-            continue
-        try:
-            weekdays_by_point[point_id] = [int(value) for value in json.loads(raw)]
-        except (TypeError, ValueError, json.JSONDecodeError):
-            continue
+    visits = next_visits_by_point(db)
 
     for point in points:
         pct = fill_level_pct(point)
-        weekdays = weekdays_by_point.get(point.id)
+        visit = visits.get(point.id)
         # La alerta de agenda es para lo que rebosará antes de la próxima visita
         # sin estar crítico aún (lo crítico ya tiene su alerta de contenedor).
-        if not weekdays or pct >= 80:
+        if visit is None or pct >= 80:
             continue
-        if is_at_risk_before_next_visit(point, weekdays=weekdays):
+        if is_at_risk_before_next_visit(point, next_visit_hours=visit.hours):
             alerts.append(
                 {
                     "id": f"al-agenda-{point.code}",

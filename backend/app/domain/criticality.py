@@ -12,9 +12,10 @@ from __future__ import annotations
 import math
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 # Umbrales de llenado (%).
 CRITICAL_FILL_PCT = 80.0
@@ -25,8 +26,48 @@ NORMAL_FILL_PCT = 30.0
 WEEK_HOURS = 168.0
 MAX_VISITS_PER_WEEK = 7
 
-# Hora de inicio de recolección (espeja DEFAULT_COLLECTION_START del residente).
+# Hora de inicio de recolección **local** (espeja DEFAULT_COLLECTION_START del
+# residente) y zona operativa en la que se interpreta. Sin esto, el 07:00 se
+# aplicaba en UTC (= 03:00 en Venezuela) y el día operativo cambiaba a las 20:00
+# locales, desplazando ~4 h el "faltan X horas para la visita".
 DEFAULT_VISIT_HOUR = 7
+DEFAULT_OPERATIONAL_TZ = "America/Caracas"
+
+
+def _operational_zone(tz_name: str | None = None) -> ZoneInfo:
+    """Zona operativa; cae a la de por defecto si el nombre no es válido."""
+    try:
+        return ZoneInfo(tz_name or DEFAULT_OPERATIONAL_TZ)
+    except (ZoneInfoNotFoundError, ValueError, TypeError):
+        return ZoneInfo(DEFAULT_OPERATIONAL_TZ)
+
+
+def operational_today(at: datetime | None = None, tz_name: str | None = None) -> date:
+    """Fecha del día operativo (calendario local de ``tz_name``)."""
+    _, local = _local_now(at, tz_name)
+    return local.date()
+
+
+def visit_datetime_utc(
+    local_date: date,
+    *,
+    visit_hour: int = DEFAULT_VISIT_HOUR,
+    tz_name: str | None = None,
+) -> datetime:
+    """Instante UTC de la recolección de ``local_date`` a la hora operativa local."""
+    zone = _operational_zone(tz_name)
+    return datetime.combine(local_date, time(hour=visit_hour), tzinfo=zone).astimezone(timezone.utc)
+
+
+def _local_now(at: datetime | None, tz_name: str | None = None) -> tuple[datetime, datetime]:
+    """Par ``(ahora_utc, ahora_local)`` para el instante de referencia."""
+    zone = _operational_zone(tz_name)
+    now_utc = at or datetime.now(timezone.utc)
+    if now_utc.tzinfo is None:
+        now_utc = now_utc.replace(tzinfo=timezone.utc)
+    else:
+        now_utc = now_utc.astimezone(timezone.utc)
+    return now_utc, now_utc.astimezone(zone)
 
 
 class CriticalityLevel(str, Enum):
@@ -120,12 +161,29 @@ def is_overloaded(required_visits: int, declared_visits: int | None) -> bool:
     return required_visits > declared_visits
 
 
-def _ensure_utc(moment: datetime | None) -> datetime:
-    if moment is None:
-        return datetime.now(timezone.utc)
-    if moment.tzinfo is None:
-        return moment.replace(tzinfo=timezone.utc)
-    return moment.astimezone(timezone.utc)
+def next_visit_local_date(
+    *,
+    weekdays: Iterable[int],
+    at: datetime | None = None,
+    visit_hour: int = DEFAULT_VISIT_HOUR,
+    tz_name: str | None = None,
+) -> date | None:
+    """Fecha local de la próxima recolección programada (None si no hay).
+
+    ``weekdays`` usa 0=lunes..6=domingo sobre el **calendario local** de la zona
+    operativa (``tz_name``) y la visita ocurre a ``visit_hour`` hora local.
+    """
+    days = {int(day) for day in weekdays if 0 <= int(day) <= 6}
+    if not days:
+        return None
+    now_utc, now_local = _local_now(at, tz_name)
+    for offset in range(8):
+        candidate = now_local.date() + timedelta(days=offset)
+        if candidate.weekday() not in days:
+            continue
+        if visit_datetime_utc(candidate, visit_hour=visit_hour, tz_name=tz_name) > now_utc:
+            return candidate
+    return None
 
 
 def hours_until_next_visit(
@@ -133,25 +191,28 @@ def hours_until_next_visit(
     weekdays: Iterable[int],
     at: datetime | None = None,
     visit_hour: int = DEFAULT_VISIT_HOUR,
+    tz_name: str | None = None,
 ) -> float | None:
-    """Horas desde ``at`` hasta la próxima recolección programada (None si no hay).
-
-    ``weekdays`` usa 0=lunes..6=domingo (``datetime.weekday()``). Espeja la
-    semántica de ``resident_schedule_service`` (ventana desde ``visit_hour``).
-    """
-    days = {int(day) for day in weekdays if 0 <= int(day) <= 6}
-    if not days:
+    """Horas desde ``at`` hasta la próxima recolección programada (None si no hay)."""
+    local_date = next_visit_local_date(
+        weekdays=weekdays, at=at, visit_hour=visit_hour, tz_name=tz_name
+    )
+    if local_date is None:
         return None
-    now = _ensure_utc(at)
-    today = now.date()
-    for offset in range(8):
-        candidate = today + timedelta(days=offset)
-        if candidate.weekday() not in days:
-            continue
-        visit_moment = datetime.combine(candidate, time(hour=visit_hour), tzinfo=timezone.utc)
-        if visit_moment > now:
-            return (visit_moment - now).total_seconds() / 3600.0
-    return None
+    return hours_until_local_date(local_date, at=at, visit_hour=visit_hour, tz_name=tz_name)
+
+
+def hours_until_local_date(
+    local_date: date,
+    *,
+    at: datetime | None = None,
+    visit_hour: int = DEFAULT_VISIT_HOUR,
+    tz_name: str | None = None,
+) -> float:
+    """Horas desde ``at`` hasta la recolección de ``local_date`` (negativo si ya pasó)."""
+    now_utc, _ = _local_now(at, tz_name)
+    visit_moment = visit_datetime_utc(local_date, visit_hour=visit_hour, tz_name=tz_name)
+    return (visit_moment - now_utc).total_seconds() / 3600.0
 
 
 def is_at_risk_before_next_visit(
@@ -162,17 +223,21 @@ def is_at_risk_before_next_visit(
     at: datetime | None = None,
     threshold: float | None = None,
     visit_hour: int = DEFAULT_VISIT_HOUR,
+    tz_name: str | None = None,
 ) -> bool:
     """¿Se llenará hasta el umbral antes de la próxima recolección programada?
 
     Combina urgencia (``hours_until_critical``) con la agenda. Sin agenda
     (``weekdays`` vacío / ``None``) devuelve ``False``.
+
+    Prefiere ``next_visit_hours`` cuando el llamador ya resolvió la visita real
+    (plan semanal aprobado > agenda declarada), ver ``next_visit_service``.
     """
     from app.domain.waste_generation import hours_until_critical
 
     if next_visit_hours is None:
         next_visit_hours = hours_until_next_visit(
-            weekdays=weekdays or (), at=at, visit_hour=visit_hour
+            weekdays=weekdays or (), at=at, visit_hour=visit_hour, tz_name=tz_name
         )
     if next_visit_hours is None:
         return False

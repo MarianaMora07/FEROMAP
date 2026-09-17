@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
-from app.db.models import CollectionPoint, OptimizedRoute, RouteWaypoint, Sector, Simulation, Vehicle, VisitSchedule
+from app.db.models import CollectionPoint, OptimizedRoute, RouteWaypoint, Sector, Simulation, Vehicle
 from app.domain.criticality import is_at_risk_before_next_visit, is_critical_now
 from app.domain.waste_generation import generation_rate_kg_per_hour, hours_until_overflow
 from app.domain.crew_service_time import (
@@ -36,6 +36,7 @@ from app.domain.traffic_profile import (
     is_traffic_weighted,
     normalize_departure_hour,
 )
+from app.services.next_visit_service import next_visits_by_point
 from app.services.operational_facilities_service import resolve_operational_facilities
 from app.services.zone_config_service import parish_for_sectors, sector_windows
 from app.services.route_constraints import (
@@ -2159,16 +2160,8 @@ def run_optimization_engine(
     )
 
     customers: list[CustomerNode] = []
-    weekdays_by_point: dict[int, list[int]] = {}
-    for schedule in db.scalars(select(VisitSchedule)).all():
-        raw = getattr(schedule, "weekdays_json", None)
-        point_id = getattr(schedule, "collection_point_id", None)
-        if raw is None or point_id is None:
-            continue
-        try:
-            weekdays_by_point[point_id] = [int(value) for value in json.loads(raw)]
-        except (TypeError, ValueError, json.JSONDecodeError):
-            continue
+    # Misma "próxima visita" que el KPI y las alertas (plan aprobado > agenda).
+    visits = next_visits_by_point(db)
 
     overflow_deadlines: list[float | None] = []
     overflow_rates: list[float] = []
@@ -2179,8 +2172,10 @@ def run_optimization_engine(
             membership,
             fill_boost=fill_boost,
         )
-        weekdays = weekdays_by_point.get(point.id)
-        at_risk = bool(weekdays) and is_at_risk_before_next_visit(point, weekdays=weekdays)
+        visit = visits.get(point.id)
+        at_risk = visit is not None and is_at_risk_before_next_visit(
+            point, next_visit_hours=visit.hours
+        )
         hours_to_overflow = hours_until_overflow(point)
         overflow_deadlines.append(
             None if hours_to_overflow is None else hours_to_overflow * 3600.0

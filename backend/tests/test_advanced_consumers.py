@@ -103,6 +103,7 @@ def test_alerts_include_agenda_category(monkeypatch):
     db = MagicMock()
     db.scalars.side_effect = [
         MagicMock(all=MagicMock(return_value=points)),
+        MagicMock(all=MagicMock(return_value=[])),  # días de plan semanal
         MagicMock(all=MagicMock(return_value=schedules)),
         MagicMock(all=MagicMock(return_value=[])),  # vehicles
         MagicMock(all=MagicMock(return_value=[])),  # incidents
@@ -110,7 +111,7 @@ def test_alerts_include_agenda_category(monkeypatch):
     monkeypatch.setattr(
         operations_service,
         "is_at_risk_before_next_visit",
-        lambda point, *, weekdays: True,
+        lambda point, *, next_visit_hours: True,
     )
 
     alerts = operations_service.alerts_from_db(db)

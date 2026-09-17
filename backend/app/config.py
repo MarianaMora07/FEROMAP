@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     data_dir: str = "/app/data"
     app_env: str = "local"
     criticality_model: str = DEFAULT_CRITICALITY_MODEL
+    # Zona horaria de la operación: interpreta la hora de recolección (07:00) y los
+    # días de agenda del calendario local, no de UTC.
+    operational_timezone: str = "America/Caracas"
 
     # Seguridad y sesiones (Fase 2).
     # `jwt_secret` no tiene default: en producción el arranque falla si falta.
