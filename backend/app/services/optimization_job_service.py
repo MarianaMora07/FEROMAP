@@ -15,6 +15,14 @@ from app.db.models import OptimizationJobRecord
 from app.db.session import SessionLocal
 from sqlalchemy import func, select
 from app.services.optimization_service import OptimizationCancelledError, run_optimization_engine
+from app.services.sweep_progress import (
+    CALIBRATION_SWEEPS,
+    DEFAULT_SWEEP_SCENARIO,
+    DEFAULT_SWEEP_SEED,
+    SWEEP_PHASE_LABELS,
+    SWEEP_SENSITIVITY,
+    SweepCancelled,
+)
 
 PHASE_END_PROGRESS: dict[str, int] = {
     "preparando": 5,
@@ -28,6 +36,11 @@ PHASE_END_PROGRESS: dict[str, int] = {
 
 _optimization_slot: threading.Semaphore | None = None
 _slot_init_lock = threading.Lock()
+
+# Semáforo propio de la calibración: los barridos son intensivos (~315 s el de
+# sensibilidad) y consumen CPU de forma sostenida, así que solo corre uno a la vez.
+_calibration_slot: threading.Semaphore | None = None
+_calibration_slot_lock = threading.Lock()
 
 
 def _get_optimization_slot() -> threading.Semaphore:
@@ -44,6 +57,21 @@ def reset_optimization_slot_for_tests(max_workers: int | None = None) -> None:
     with _slot_init_lock:
         workers = max_workers if max_workers is not None else settings.optimization_max_workers
         _optimization_slot = threading.Semaphore(max(1, workers))
+
+
+def _get_calibration_slot() -> threading.Semaphore:
+    global _calibration_slot
+    with _calibration_slot_lock:
+        if _calibration_slot is None:
+            _calibration_slot = threading.Semaphore(1)
+        return _calibration_slot
+
+
+def reset_calibration_slot_for_tests() -> None:
+    """Reinicia el semáforo de calibración (solo tests)."""
+    global _calibration_slot
+    with _calibration_slot_lock:
+        _calibration_slot = threading.Semaphore(1)
 
 
 @dataclass
@@ -87,6 +115,11 @@ class OptimizationJob:
     finished_at: datetime | None = None
     phase: str | None = None
     progress: int = 0
+    # Progreso granular de los barridos de calibración: corrida en curso (1-based),
+    # total de corridas y etiqueta de la corrida en curso.
+    current: int | None = None
+    total: int | None = None
+    current_label: str | None = None
     logs: list[dict[str, Any]] = field(default_factory=list)
     result: dict[str, Any] | None = None
     error: str | None = None
@@ -301,6 +334,34 @@ def _serialize_job(job: OptimizationJob) -> dict[str, Any]:
         }
 
 
+def _serialize_calibration_job(job: OptimizationJob) -> dict[str, Any]:
+    """Vista del job de calibración (contrato §5.3 del plan de la vista)."""
+    with job.lock:
+        return {
+            "jobId": job.id,
+            "jobType": job.job_type,
+            "sweep": (job.extra_params or {}).get("sweep"),
+            "status": job.status,
+            "phase": job.phase,
+            "progress": job.progress,
+            "current": job.current,
+            "total": job.total,
+            "currentLabel": job.current_label,
+            "startedAt": job.started_at.isoformat() if job.started_at else None,
+            "finishedAt": job.finished_at.isoformat() if job.finished_at else None,
+            "result": job.result,
+            "error": job.error,
+            "logs": list(job.logs),
+        }
+
+
+def get_calibration_job_view(job_id: str) -> dict[str, Any]:
+    job = get_optimization_job(job_id)
+    if job is None:
+        raise LookupError("Job no encontrado")
+    return _serialize_calibration_job(job)
+
+
 def create_optimization_job(
     *,
     scenario_id: str | None = None,
@@ -439,6 +500,14 @@ def _run_background_worker(job_id: str, runner: Callable[[Any], dict[str, Any]])
             job.finished_at = datetime.now(timezone.utc)
             job.result = result
         _persist_job_snapshot(job, force=True)
+    except SweepCancelled:
+        # Los barridos de calibración señalan la cancelación entre corridas; el
+        # payload parcial se descarta y la caché no se escribe.
+        db.rollback()
+        with job.lock:
+            job.status = "cancelled"
+            job.finished_at = datetime.now(timezone.utc)
+        _persist_job_snapshot(job, force=True)
     except Exception as exc:  # noqa: BLE001
         db.rollback()
         import traceback as _tb
@@ -451,6 +520,154 @@ def _run_background_worker(job_id: str, runner: Callable[[Any], dict[str, Any]])
         _persist_job_snapshot(job, force=True)
     finally:
         db.close()
+
+
+def _sweep_cache_loader(sweep: str) -> dict[str, Any] | None:
+    """Payload en caché del barrido pedido (o ``None`` si no existe o está corrupto)."""
+    if sweep == SWEEP_SENSITIVITY:
+        from app.services.aco_sensitivity_service import load_aco_sensitivity
+
+        return load_aco_sensitivity()
+    from app.services.multiobjective_sweep_service import load_multiobjective_sweep
+
+    return load_multiobjective_sweep()
+
+
+def _sweep_runner(sweep: str) -> Callable[..., dict[str, Any]]:
+    if sweep == SWEEP_SENSITIVITY:
+        from app.services.aco_sensitivity_service import run_aco_sensitivity
+
+        return run_aco_sensitivity
+    from app.services.multiobjective_sweep_service import run_multiobjective_sweep
+
+    return run_multiobjective_sweep
+
+
+def _execute_calibration_sweep(
+    job: OptimizationJob,
+    sweep: str,
+    db: Session,
+    *,
+    scenario_id: str,
+    seed: int,
+) -> dict[str, Any]:
+    """Corre el barrido conectando ``on_run``/``cancel_check`` con el estado del job."""
+    sweep_label = SWEEP_PHASE_LABELS.get(sweep, sweep)
+
+    def on_run(index: int, total: int, label: str) -> None:
+        with job.lock:
+            job.phase = sweep_label
+            job.current = index + 1
+            job.total = total
+            job.current_label = label
+            # ``progress`` = corridas ya terminadas; se conserva el 10 % inicial del
+            # worker (nunca retrocede) y el 100 % final lo fija el worker.
+            job.progress = max(job.progress, int(100 * index / max(total, 1)))
+            job.logs.append(
+                {
+                    "id": f"log-{job.id}-{len(job.logs)}",
+                    "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                    "message": f"[{index + 1}/{total}] {label}",
+                    "type": "progress",
+                    "phaseId": sweep,
+                }
+            )
+        _persist_job_snapshot(job)
+
+    def cancel_check() -> bool:
+        return job.cancel_requested
+
+    return _sweep_runner(sweep)(
+        db,
+        scenario_id=scenario_id,
+        seed=seed,
+        on_run=on_run,
+        cancel_check=cancel_check,
+    )
+
+
+def _cache_matches(
+    payload: dict[str, Any] | None, *, scenario_id: str, seed: int
+) -> bool:
+    """True si el payload en caché corresponde al escenario y la semilla pedidos."""
+    if not payload:
+        return False
+    if payload.get("scenarioId") != scenario_id:
+        return False
+    cached_seed = payload.get("seed")
+    return cached_seed is None or int(cached_seed) == seed
+
+
+def create_calibration_job(
+    sweep: str,
+    *,
+    scenario_id: str | None = None,
+    seed: int | None = None,
+    refresh: bool = True,
+) -> OptimizationJob:
+    """Crea y arranca un job de calibración (sensibilidad ACO o pesos del objetivo).
+
+    - ``refresh=True`` (default): corre el barrido y reescribe la caché al terminar.
+    - ``refresh=False``: si hay caché del mismo escenario/semilla, el job nace
+      ``completed`` con ese payload y **no** recalcula.
+
+    El barrido se serializa con el semáforo de calibración (máximo 1 en paralelo); el
+    payload solo se persiste en la caché si el job termina sin cancelarse.
+    """
+    if sweep not in CALIBRATION_SWEEPS:
+        raise ValueError(f"Barrido de calibración desconocido: {sweep}")
+    resolved_scenario = scenario_id or DEFAULT_SWEEP_SCENARIO
+    resolved_seed = DEFAULT_SWEEP_SEED if seed is None else seed
+    now = datetime.now(timezone.utc)
+    job = OptimizationJob(
+        id=str(uuid.uuid4()),
+        status="pending",
+        scenario_id=resolved_scenario,
+        rain_intensity=None,
+        waste_level_pct=None,
+        estimated_duration_hours=None,
+        seed=resolved_seed,
+        job_type="calibration",
+        extra_params={"sweep": sweep, "refresh": refresh},
+        created_at=now,
+    )
+    if not refresh:
+        cached = _sweep_cache_loader(sweep)
+        if _cache_matches(cached, scenario_id=resolved_scenario, seed=resolved_seed):
+            with job.lock:
+                job.status = "completed"
+                job.phase = "caché reutilizada"
+                job.progress = 100
+                job.result = cached
+                job.started_at = now
+                job.finished_at = now
+            with _jobs_lock:
+                _jobs[job.id] = job
+            _persist_job_snapshot(job, force=True)
+            return job
+
+    def runner(db: Session) -> dict[str, Any]:
+        slot = _get_calibration_slot()
+        acquired = False
+        try:
+            while True:
+                with job.lock:
+                    if job.cancel_requested:
+                        raise SweepCancelled("Job de calibración cancelado")
+                if slot.acquire(timeout=0.25):
+                    acquired = True
+                    break
+            with job.lock:
+                job.phase = SWEEP_PHASE_LABELS.get(sweep, sweep)
+            _persist_job_snapshot(job, force=True)
+            return _execute_calibration_sweep(
+                job, sweep, db, scenario_id=resolved_scenario, seed=resolved_seed
+            )
+        finally:
+            if acquired:
+                slot.release()
+
+    return start_background_job(job, runner)
 
 
 def count_jobs_by_status() -> dict[str, int]:
