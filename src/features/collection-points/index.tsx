@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from 'solid-js';
-import { A } from '@solidjs/router';
+import { A, useSearchParams } from '@solidjs/router';
 import {
   Chart,
   CategoryScale,
@@ -111,10 +111,14 @@ function TableRowSkeleton() {
 export default function CollectionPointsPage() {
   let mapContainer!: HTMLDivElement;
   const mapRef: { current?: MapLibreMap } = {};
+  const [searchParams] = useSearchParams();
+  const firstParam = (value: string | string[] | undefined): string =>
+    Array.isArray(value) ? (value[0] ?? '') : (value ?? '');
 
   const [search, setSearch] = createSignal('');
-  const [statusFilter, setStatusFilter] = createSignal('');
-  const [sectorFilter, setSectorFilter] = createSignal('');
+  // Filtros por deep link: el dashboard enlaza aquí con ?status=critico&sector=…
+  const [statusFilter, setStatusFilter] = createSignal(firstParam(searchParams.status));
+  const [sectorFilter, setSectorFilter] = createSignal(firstParam(searchParams.sector));
   const [page, setPage] = createSignal(1);
   const [pageSize, setPageSize] = createSignal(10);
   const [selectedId, setSelectedId] = createSignal('');
@@ -256,6 +260,14 @@ export default function CollectionPointsPage() {
     const fromPoints = allPoints().map((p) => p.sector);
     const names = fromApi.length > 0 ? fromApi : fromPoints;
     return buildSectorFilterOptions(names);
+  });
+
+  createEffect(() => {
+    const status = firstParam(searchParams.status);
+    const sector = firstParam(searchParams.sector);
+    if (status) setStatusFilter(status);
+    if (sector) setSectorFilter(sector);
+    if (status || sector) setPage(1);
   });
 
   createEffect(() => {
