@@ -136,7 +136,7 @@ Modelo único de criticidad documentado en [adr-criticidad.md](./adr-criticidad.
 | Elemento | Estado | Efecto |
 |----------|--------|--------|
 | Umbral crítico `CRITICAL_FILL_PCT=80` | **Conectada** | Única fuente en `domain/criticality.py` |
-| `fill_threshold_pct` (admin) | **Conectada** | Gobierno del umbral crítico (`resolve_critical_threshold`) |
+| `fill_threshold_pct` (admin) | **Pendiente** | Persistido y editable, **sin consumidor**: `admin_service.resolve_critical_threshold` existe pero nadie lo llama; el motor y el catálogo usan el 80 fijo de `domain/criticality.py` (ver [fase-3/README-rigor.md](../fase-3/README-rigor.md), decisión D3a) |
 | `fill_rate_factor` por zona | **Conectada** | Horas efectivas de llenado (>1 = más rápido) |
 | `fill_rate_factor_override` por contenedor | **Conectada** | Override sobre el factor del sector |
 | Frecuencia requerida vs declarada | **Conectada** | `requiredVisitsPerWeek` (física) vs `visitsPerWeek`; `overloaded` |
