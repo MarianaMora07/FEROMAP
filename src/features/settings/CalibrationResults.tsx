@@ -11,6 +11,7 @@ import {
   AXIS_ORDER,
   amplitudeLabel,
   baselineKm,
+  bestGlobalKm,
   isValidRun,
   levelLabel,
   readingFindings,
@@ -36,6 +37,9 @@ export function CalibrationResults(props: CalibrationResultsProps) {
   const sensitive = createMemo(() => mostSensitiveAxis(summaries()));
   const stable = createMemo(() => stableAxes(summaries()));
   const findings = createMemo(() => readingFindings(props.payload));
+  // El KPI de resumen es la mejor distancia **global** (todos los ejes), igual que la
+  // lectura automática; el mejor nivel por eje vive en la tabla de cada pestaña.
+  const globalBestKm = createMemo(() => bestGlobalKm(props.payload.runs));
 
   const exportJson = () =>
     downloadText(
@@ -60,9 +64,10 @@ export function CalibrationResults(props: CalibrationResultsProps) {
       <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           title={tr('calibration.kpi.best')}
-          value={summary()?.bestKm?.toFixed(1) ?? '—'}
+          value={globalBestKm()?.toFixed(1) ?? '—'}
           unit="km"
           icon={<TrendingDown size={16} />}
+          footer={<span class="text-xs text-text-muted">{tr('calibration.kpi.bestHint')}</span>}
         />
         <KpiCard
           title={tr('calibration.kpi.baseline')}

@@ -98,6 +98,7 @@ export const es = {
   'calibration.kpi.stable': 'Eje estable',
   'calibration.kpi.baseline': 'Referencia',
   'calibration.kpi.baselineHint': 'ruta voraz del motor, no histórica',
+  'calibration.kpi.bestHint': 'mejor de todas las corridas válidas',
   'calibration.help.sensitivity':
     'Ahorro relativo a la referencia de esta corrida (ruta voraz del motor) · 1 instancia · 1 semilla · OFAT',
   'calibration.help.objective':
@@ -286,6 +287,7 @@ export const en: Record<MessageKey, string> = {
   'calibration.kpi.stable': 'Stable axis',
   'calibration.kpi.baseline': 'Reference',
   'calibration.kpi.baselineHint': 'engine greedy route, not historical',
+  'calibration.kpi.bestHint': 'best across all valid runs',
   'calibration.help.sensitivity':
     'Saving relative to the reference of each run (engine greedy route) · 1 instance · 1 seed · OFAT',
   'calibration.help.objective':

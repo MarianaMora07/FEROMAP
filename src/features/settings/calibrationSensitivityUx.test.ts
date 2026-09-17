@@ -5,6 +5,7 @@ import {
   amplitudeLabel,
   bestRun,
   bestRunWithoutEarlyStop,
+  bestGlobalKm,
   excludedRuns,
   isValidRun,
   levelLabel,
@@ -93,6 +94,8 @@ describe('sensibilidad ACO — derivaciones por eje (Fase 6)', () => {
     expect(beta?.best?.label).toBe('β 5');
     expect(beta?.bestKm).toBe(184.7);
     expect(bestRun(payload().runs)?.label).toBe('β 5');
+    // El KPI de resumen usa la mejor global (184.7), no la del eje elegido (hormigas: 190.6).
+    expect(bestGlobalKm(payload().runs)).toBe(184.7);
     expect(summaries).toHaveLength(AXIS_ORDER.length);
   });
 
