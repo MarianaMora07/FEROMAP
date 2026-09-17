@@ -17,6 +17,7 @@ import {
   AlertTriangle,
   ClipboardList,
   CalendarDays,
+  Settings,
 } from 'lucide-solid';
 import { authUser } from '../../core/stores/authStore';
 import { sidebarNavLayout, SIDEBAR_SECTION_LABEL_KEYS } from '../../core/auth/permissions';
@@ -44,6 +45,7 @@ const NAV_ICONS: Record<string, typeof LayoutDashboard> = {
   '/analytics': BarChart3,
   '/resident': Trash2,
   '/alerts': AlertTriangle,
+  '/settings': Settings,
 };
 
 interface SidebarProps {

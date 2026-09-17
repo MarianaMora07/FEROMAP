@@ -74,6 +74,16 @@ export interface KpiMetrics {
   unloadTimeHours?: number;
   shiftUtilizationPct?: number;
   uncoveredPoints?: number;
+  /** Fase 13 — uso de flota y tiempo de servicio (aditivos). */
+  activeVehicles?: number;
+  fleetUtilizationPct?: number;
+  vehicleWorkloadHours?: number[];
+  maxRouteHours?: number;
+  shiftSlackHours?: number;
+  finishUnderTargetPct?: number;
+  maxRouteHoursTarget?: number;
+  workloadStdHours?: number;
+  fairnessIndex?: number;
   engineMetrics?: EngineMetrics;
 }
 

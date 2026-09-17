@@ -17,6 +17,12 @@ import { fetchSimulationOptimizeJob } from './simulationJobs';
 import { dispatchOptimizedRoutes, type SimulationHistoryRow } from './simulationOperations';
 import { fetchOperationalHistory } from '../utils/operationalHistory';
 import { fetchVehicles, fetchVehiclesOptimizationContext, isAssignableVehicle } from './vehicles';
+import {
+  DEFAULT_MAX_ROUTE_HOURS_TARGET,
+  clampMaxRouteHoursTarget,
+  normalizeEstimatedDurationHours,
+  normalizeObjectiveWeights,
+} from '../../features/optimization/optimizationObjectiveUx';
 
 export const OPTIMIZATION_PRESET_KEY = 'feromap:optimization-preset';
 
@@ -70,6 +76,11 @@ async function optimizeDailyPlanAndWait(
     timeWindowEnabled: preset.constraints.time_window,
     kpiView: preset.kpiView,
     departureHour: preset.departureHour,
+    estimatedDurationHours: preset.estimatedDurationHours ?? undefined,
+    workloadBalanceWeight: preset.workloadBalanceWeight,
+    makespanWeight: preset.makespanWeight,
+    minActiveVehicles: preset.minActiveVehicles ?? undefined,
+    maxRouteHoursTarget: preset.maxRouteHoursTarget,
   });
   activeDailyOptimizationJobId = jobId;
   const startedAt = Date.now();
@@ -128,6 +139,20 @@ export interface OptimizationPreset {
   kpiView: KpiView;
   /** Hora de salida de la flota (0–23) para la franja de congestión (Tarea 4). */
   departureHour: number;
+  /**
+   * Jornada de turno en horas (1–12). Recorta el presupuesto del motor, de modo que
+   * jornadas más cortas reparten la carga entre más vehículos. `null` = jornada de la
+   * instalación (06:00–18:00 = 12 h).
+   */
+  estimatedDurationHours: number | null;
+  /** Fase 13 — peso de equidad de carga (σ/μ entre camiones). 0 = solo distancia. */
+  workloadBalanceWeight: number;
+  /** Fase 13 — peso del makespan (ruta más larga / jornada). 0 = solo distancia. */
+  makespanWeight: number;
+  /** Fase 13 — mínimo de vehículos activos del día (`null` = sin restricción). */
+  minActiveVehicles: number | null;
+  /** Fase 13 — jornada objetivo (h) del KPI de cumplimiento. */
+  maxRouteHoursTarget: number;
   constraints: OptimizationConstraints;
 }
 
@@ -152,6 +177,11 @@ const DEFAULT_PRESET: OptimizationPreset = {
   objective: 'distance_time',
   kpiView: 'distance',
   departureHour: 9,
+  estimatedDurationHours: null,
+  workloadBalanceWeight: 0,
+  makespanWeight: 0,
+  minActiveVehicles: null,
+  maxRouteHoursTarget: DEFAULT_MAX_ROUTE_HOURS_TARGET,
   constraints: {
     avoid_traffic: true,
     fill_level: true,
@@ -169,6 +199,13 @@ export function loadOptimizationPreset(): OptimizationPreset {
       ...DEFAULT_PRESET,
       ...parsed,
       kpiView: parsed.kpiView ?? DEFAULT_PRESET.kpiView,
+      estimatedDurationHours: normalizeEstimatedDurationHours(parsed.estimatedDurationHours),
+      // Fase 13: los pesos se acotan al rango visible de la UI (backend admite 0–10).
+      ...normalizeObjectiveWeights(parsed),
+      minActiveVehicles: parsed.minActiveVehicles ?? null,
+      maxRouteHoursTarget: clampMaxRouteHoursTarget(
+        parsed.maxRouteHoursTarget ?? DEFAULT_MAX_ROUTE_HOURS_TARGET,
+      ),
       constraints: { ...DEFAULT_PRESET.constraints, ...parsed.constraints },
     };
   } catch {

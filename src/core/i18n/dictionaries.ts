@@ -39,6 +39,8 @@ export const es = {
   'nav.operatorHome': 'Mi operación',
   'nav.operatorHome.description': 'Tu ruta en campo',
   'nav.admin': 'Administración',
+  'nav.settings': 'Configuración',
+  'nav.settings.description': 'Parámetros del motor y preferencias',
   'nav.profile': 'Perfil',
   // Secciones del sidebar
   'sections.consulta': 'Consulta y reportes',
@@ -101,6 +103,8 @@ export const en: Record<MessageKey, string> = {
   'nav.operatorHome': 'My operation',
   'nav.operatorHome.description': 'Your route in the field',
   'nav.admin': 'Administration',
+  'nav.settings': 'Settings',
+  'nav.settings.description': 'Engine parameters and preferences',
   'nav.profile': 'Profile',
   'sections.consulta': 'Insights and reports',
   'sections.catalogos': 'Catalogs',

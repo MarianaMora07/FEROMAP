@@ -11,13 +11,28 @@ describe('permissions — arquitectura de navegación (IA)', () => {
 
   it('orders planner primaries as planificar → operar → supervisar', () => {
     const layout = sidebarNavLayout('planificador');
+    // El ciclo operativo (planificar → operar → supervisar) se mantiene como prefijo;
+    // «Configuración» es un destino de sistema y se añade al final.
     expect(layout.primary.map((item) => item.href)).toEqual([
       '/',
       '/planning/weekly',
       '/optimization',
       '/monitoring',
       '/map',
+      '/settings',
     ]);
+  });
+
+  it('expone Configuración al planificador y al admin, no al conductor', () => {
+    const planner = sidebarNavLayout('planificador').primary.find((item) => item.href === '/settings');
+    expect(planner?.label).toBe('Configuración');
+    expect(planner?.sidebarPrimary).toBe(true);
+
+    const admin = sidebarNavLayout('administrador').primary.map((item) => item.href);
+    expect(admin).toContain('/settings');
+
+    const driver = sidebarNavLayout('conductor').primary.map((item) => item.href);
+    expect(driver).not.toContain('/settings');
   });
 
   it('groups sections as Consulta y reportes, Catálogos, Tesis y demostración', () => {

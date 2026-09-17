@@ -42,6 +42,7 @@ const AnalyticsPage = lazyPage(() => import('../features/analytics'));
 const ReportsPage = lazyPage(() => import('../features/reports'));
 const AlertsPage = lazyPage(() => import('../features/alerts'));
 const AdminPage = lazyPage(() => import('../features/admin'));
+const SettingsPage = lazyPage(() => import('../features/settings'));
 const ResidentPage = lazyPage(() => import('../features/resident'));
 const ProfilePage = lazyPage(() => import('../features/profile'));
 const OperatorPage = lazyPage(() => import('../features/operator'));
@@ -95,6 +96,7 @@ export default function App() {
         <Route path="/resident" component={ResidentPage} />
         <Route path="/alerts" component={AlertsPage} />
         <Route path="/admin" component={AdminPage} />
+        <Route path="/settings" component={SettingsPage} />
         <Route path="/profile" component={ProfilePage} />
       </Route>
     </Router>

@@ -89,6 +89,14 @@ export interface AlgorithmSettings {
   overflowPenaltyWeight: number;
   calibrationDefaultAlpha: number;
   calibrationWindowDays: number;
+  // Fase 13 — objetivo multiobjetivo (distancia · uso de flota · tiempo de servicio).
+  workloadBalanceWeight: number;
+  makespanWeight: number;
+  minActiveVehicles: number | null;
+  maxRouteHoursTarget: number;
+  /** Jornada de turno por defecto (h) cuando la corrida no la especifica. `null` = instalación. */
+  defaultShiftHours: number | null;
+  weeklyFleetRotation: boolean;
 }
 
 export type AlgorithmSettingsUpdate = Partial<AlgorithmSettings>;

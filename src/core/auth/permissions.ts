@@ -21,6 +21,7 @@ export const ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
   '/resident': ['residente'],
   '/alerts': ['administrador', 'planificador', 'conductor', 'residente'],
   '/admin': ['administrador'],
+  '/settings': ['administrador', 'planificador'],
   '/profile': ['administrador', 'planificador', 'conductor', 'residente'],
 };
 
@@ -198,6 +199,15 @@ export const MAIN_NAV_ITEMS: NavItemDef[] = [
     description: 'Convergencia del algoritmo (~2 min)',
     descriptionKey: 'nav.demostracion.description',
     kind: 'demo',
+    roles: ['administrador', 'planificador'],
+  },
+  {
+    href: '/settings',
+    label: 'Configuración',
+    labelKey: 'nav.settings',
+    description: 'Parámetros del motor y preferencias',
+    descriptionKey: 'nav.settings.description',
+    sidebarPrimary: true,
     roles: ['administrador', 'planificador'],
   },
 ];

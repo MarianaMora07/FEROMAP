@@ -5,6 +5,7 @@ import {
   formatSavingPct,
 } from '../../core/utils/optimizationResults';
 import type { KpiMetrics, KpiView } from '../../data/types/simulation';
+import { OptimizationServiceBadges } from './OptimizationServiceBadges';
 
 interface OptimizationComparisonPanelProps {
   kpis: KpiMetrics;
@@ -33,8 +34,11 @@ export function OptimizationComparisonPanel(props: OptimizationComparisonPanelPr
         title="Baseline vs ACO"
         subtitle={`Comparación explícita — métrica destacada: ${
           view() === 'distance' ? 'distancia' : view() === 'time' ? 'tiempo' : 'CO₂'
-        } (el solver minimiza distancia)`}
+        }`}
       />
+      <div class="pb-3">
+        <OptimizationServiceBadges kpis={props.kpis} />
+      </div>
       <div class="overflow-x-auto">
         <table class="w-full min-w-[28rem] text-sm">
           <thead>

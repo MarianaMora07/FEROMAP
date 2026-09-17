@@ -54,7 +54,6 @@ import { OptimizationDispatchBanner } from './OptimizationDispatchBanner';
 import { NotificationDeliveryPanel } from './NotificationDeliveryPanel';
 import { OptimizationComparisonPanel } from './OptimizationComparisonPanel';
 import { OptimizationConvergencePanel } from './OptimizationConvergencePanel';
-import { AlgorithmSettingsPanel } from './AlgorithmSettingsPanel';
 import { useGenerateButtonVisibility } from './useGenerateButtonVisibility';
 import { resolveOptimizationContextualMessage } from './optimizationLayoutUx';
 import { fetchDailyRoutePlayback } from '../../core/api/routePlayback';
@@ -153,7 +152,7 @@ export default function OptimizationPage() {
   const [paramsSheetOpen, setParamsSheetOpen] = createSignal(false);
   const [dispatchError, setDispatchError] = createSignal<string | null>(null);
   const [closeNotice, setCloseNotice] = createSignal<string | null>(null);
-  const [planTab, setPlanTab] = createSignal<'optimize' | 'results' | 'pending' | 'params'>(
+  const [planTab, setPlanTab] = createSignal<'optimize' | 'results' | 'pending'>(
     'optimize',
   );
   const [resultsTab, setResultsTab] = createSignal<
@@ -445,21 +444,6 @@ export default function OptimizationPage() {
           >
             Pendientes
           </button>
-
-          <button
-            type="button"
-            role="tab"
-            aria-selected={planTab() === 'params'}
-            data-testid="plan-day-tab-params"
-            onClick={() => setPlanTab('params')}
-            class={`shrink-0 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-              planTab() === 'params'
-                ? 'border-fero-green-mid text-fero-green-dark'
-                : 'border-transparent text-text-muted hover:text-text-secondary'
-            }`}
-          >
-            Parámetros del algoritmo
-          </button>
         </div>
 
         <div class="relative shrink-0">
@@ -651,10 +635,6 @@ export default function OptimizationPage() {
 
           </div>
         </div>
-      </Show>
-
-      <Show when={planTab() === 'params'}>
-        <AlgorithmSettingsPanel />
       </Show>
 
       <Show when={planTab() === 'results'}>

@@ -20,6 +20,7 @@ import { reportsPageMeta } from '../../data/mock/reports';
 import { analyticsPageMeta } from '../../data/mock/analytics';
 import { alertsPageMeta } from '../../data/mock/alerts';
 import { adminPageMeta } from '../../data/mock/admin';
+import { settingsPageMeta } from '../../data/mock/settings';
 import { profilePageMeta } from '../../data/mock/profile';
 import { UserMenu } from './UserMenu';
 import { useHeaderChrome } from './pageChromeSlots';
@@ -46,6 +47,7 @@ const pageMeta: Record<string, PageMeta> = {
   },
   '/alerts': alertsPageMeta,
   '/admin': adminPageMeta,
+  '/settings': settingsPageMeta,
   '/profile': profilePageMeta,
 };
 

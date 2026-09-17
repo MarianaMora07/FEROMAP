@@ -1,7 +1,7 @@
 import { For, Show } from 'solid-js';
 import { A } from '@solidjs/router';
 import { ChevronDown, Loader2, Sparkles } from 'lucide-solid';
-import { Button, Card, CardHeader, SelectField } from '../../design-system/components';
+import { Button, Card, CardHeader, SelectField, TextField } from '../../design-system/components';
 import { canOptimize } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
 import {
@@ -12,6 +12,15 @@ import {
 import { constraints as constraintDefs, objectives as objectiveOptions } from '../../data/mock/optimization';
 import type { KpiView, OptimizationConstraints } from '../../core/api/optimization';
 import type { ScenarioId } from '../../data/types/simulation';
+import {
+  OBJECTIVE_WEIGHT_STEP,
+  OBJECTIVE_WEIGHT_UI_MAX,
+  clampMaxRouteHoursTarget,
+  clampObjectiveWeight,
+  describeServiceLevel,
+  formatObjectiveWeight,
+  normalizeEstimatedDurationHours,
+} from './optimizationObjectiveUx';
 import { shouldFleetAccordionStartOpen } from './optimizationLayoutUx';
 
 /** Hora de salida de la flota → banda de congestión (Tarea 4). */
@@ -69,6 +78,8 @@ export function OptimizationParametersForm(props: OptimizationParametersFormProp
   const context = () => optimizationState.context;
   const assignableVehicles = () => context()?.assignableVehicles ?? [];
   const fleetOpen = () => shouldFleetAccordionStartOpen(assignableVehicles().length);
+  const serviceLevel = () =>
+    describeServiceLevel(preset().workloadBalanceWeight, preset().makespanWeight);
 
   const toggleConstraint = (id: keyof OptimizationConstraints) => {
     updateOptimizationPreset({
@@ -136,7 +147,8 @@ export function OptimizationParametersForm(props: OptimizationParametersFormProp
             </For>
           </SelectField>
           <p class="text-xs text-text-muted">
-            El motor ACO sigue minimizando distancia; esta opción solo cambia la narrativa de KPIs.
+            El motor ACO puede priorizar servicio además de distancia (panel «Objetivo de
+            servicio»). Esta opción solo cambia la narrativa de KPIs.
           </p>
           <p class="text-xs text-text-muted">
             Para comparar condiciones (lluvia, saturación, impacto en KPIs), usa{' '}
@@ -195,6 +207,143 @@ export function OptimizationParametersForm(props: OptimizationParametersFormProp
               }}
             </For>
           </ul>
+        </AccordionSection>
+
+        <AccordionSection title="Objetivo de servicio">
+          <div class="space-y-1">
+            <label class="flex items-center justify-between text-sm text-text-secondary">
+              <span>Equidad de carga entre camiones</span>
+              <b class="font-mono text-text-primary">
+                {formatObjectiveWeight(preset().workloadBalanceWeight)}
+              </b>
+            </label>
+            <input
+              type="range"
+              min="0"
+              max={OBJECTIVE_WEIGHT_UI_MAX}
+              step={OBJECTIVE_WEIGHT_STEP}
+              value={preset().workloadBalanceWeight}
+              class="w-full accent-fero-green-mid"
+              aria-label="Peso de equidad de carga"
+              onInput={(e) =>
+                updateOptimizationPreset({
+                  workloadBalanceWeight: clampObjectiveWeight(Number(e.currentTarget.value)),
+                })
+              }
+            />
+            <p class="text-[11px] text-text-muted">
+              Reparte las horas de servicio: evita que un camión trabaje el 100 % de la jornada
+              mientras otro queda ocioso.
+            </p>
+          </div>
+
+          <div class="space-y-1">
+            <label class="flex items-center justify-between text-sm text-text-secondary">
+              <span>Duración máxima de ruta (makespan)</span>
+              <b class="font-mono text-text-primary">
+                {formatObjectiveWeight(preset().makespanWeight)}
+              </b>
+            </label>
+            <input
+              type="range"
+              min="0"
+              max={OBJECTIVE_WEIGHT_UI_MAX}
+              step={OBJECTIVE_WEIGHT_STEP}
+              value={preset().makespanWeight}
+              class="w-full accent-fero-green-mid"
+              aria-label="Peso de makespan"
+              onInput={(e) =>
+                updateOptimizationPreset({
+                  makespanWeight: clampObjectiveWeight(Number(e.currentTarget.value)),
+                })
+              }
+            />
+            <p class="text-[11px] text-text-muted">
+              Acorta la ruta más larga de la flota, para que ninguna jornada quede al límite.
+            </p>
+          </div>
+
+          <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div class="space-y-1">
+              <SelectField
+                label="Jornada de turno (h)"
+                name="estimatedDurationHours"
+                value={
+                  preset().estimatedDurationHours == null
+                    ? ''
+                    : String(preset().estimatedDurationHours)
+                }
+                onChange={(e) => {
+                  const raw = e.currentTarget.value;
+                  updateOptimizationPreset({
+                    estimatedDurationHours: normalizeEstimatedDurationHours(
+                      raw === '' ? null : Number(raw),
+                    ),
+                  });
+                }}
+              >
+                <option value="">Instalación (06:00–18:00)</option>
+                <For each={[4, 6, 8, 10, 12]}>{(hours) => <option value={String(hours)}>{hours} h</option>}</For>
+              </SelectField>
+              <p class="text-[11px] text-text-muted">
+                Recorta el turno real del motor: una jornada más corta reparte la carga entre más
+                camiones y acorta las rutas.
+              </p>
+            </div>
+            <div class="space-y-1">
+              <TextField
+                label="Vehículos activos (mínimo)"
+                type="number"
+                min="1"
+                step="1"
+                placeholder="Sin restricción"
+                value={
+                  preset().minActiveVehicles == null ? '' : String(preset().minActiveVehicles)
+                }
+                onInput={(e) => {
+                  const raw = e.currentTarget.value.trim();
+                  updateOptimizationPreset({
+                    minActiveVehicles: raw === '' ? null : Math.max(1, Number(raw)),
+                  });
+                }}
+              />
+              <p class="text-[11px] text-text-muted">
+                Garantiza un mínimo de camiones con trabajo. Si es mayor que los puntos del día,
+                el motor lo degrada y avisa.
+              </p>
+            </div>
+            <div class="space-y-1">
+              <TextField
+                label="Jornada objetivo (h)"
+                type="number"
+                min="1"
+                max="18"
+                step="0.5"
+                value={String(preset().maxRouteHoursTarget)}
+                onInput={(e) =>
+                  updateOptimizationPreset({
+                    maxRouteHoursTarget: clampMaxRouteHoursTarget(Number(e.currentTarget.value)),
+                  })
+                }
+              />
+              <p class="text-[11px] text-text-muted">
+                Solo mide el cumplimiento (KPI «≤ objetivo»); no recorta el turno.
+              </p>
+            </div>
+          </div>
+
+          <p class="rounded-md border border-default bg-elevated/60 px-3 py-2 text-xs text-text-secondary">
+            <b>{serviceLevel().label}</b> — {serviceLevel().hint}
+          </p>
+          <p class="text-[11px] text-text-muted">
+            Rango recomendado 0–3: por encima la distancia crece más del 15 % (criterio de
+            aceptación). El motor admite hasta 10 vía API. Los valores por defecto y la{' '}
+            <b>rotación de flota semanal</b> se configuran en{' '}
+            <A href="/settings" class="font-medium text-fero-blue hover:underline">
+              Configuración → Algoritmo
+            </A>
+            .
+          </p>
         </AccordionSection>
 
         <AccordionSection title={`Flota (${assignableVehicles().length})`} open={fleetOpen()}>
