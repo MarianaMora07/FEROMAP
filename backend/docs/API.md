@@ -727,6 +727,8 @@ Consola de calibración (Fase 13 · [plan](../../docs/fase-13/plan-vista-calibra
 | POST | `/benchmarks/objective/sweep/jobs` | Planificador/Admin | Lanza el barrido de pesos como job → **202** `{jobId}` |
 | GET | `/benchmarks/calibration/jobs/{jobId}` | Planificador/Admin | Estado, progreso y resultado del job |
 | POST | `/benchmarks/calibration/jobs/{jobId}/cancel` | Planificador/Admin | Solicita la cancelación |
+| GET | `/benchmarks/calibration/history?limit=&offset=` | Planificador/Admin | Corridas guardadas en la BD (histórico) |
+| GET | `/benchmarks/calibration/history/{runId}` | Planificador/Admin | Payload completo de una corrida histórica |
 | GET | `/simulations/jobs?jobType=calibration` | Planificador/Admin | Historial de jobs de calibración |
 
 **Cuerpo de los `POST .../jobs`**
@@ -773,6 +775,19 @@ Consola de calibración (Fase 13 · [plan](../../docs/fase-13/plan-vista-calibra
 ```
 
 `current` es la corrida **en curso** (1-based) y `progress` el porcentaje de corridas **terminadas**: el progreso nunca retrocede. Al completar, `result` trae el payload del barrido y la caché queda reescrita.
+
+**Sello de instancia (evita enseñar números de otra BD).** Cada payload guarda `instanceFingerprint` al generarse y los `GET` de resultados añaden:
+
+| Campo | Significado |
+|---|---|
+| `instanceFingerprint` | Sello con el que se generó (`null` en cachés anteriores a esta versión) |
+| `currentFingerprint` | Sello de la instancia vigente |
+| `cacheState` | `fresh` (coincide) · `stale` (es de otra instancia) · `unknown` (sin sello) |
+| `stale` | Atajo booleano de `cacheState == "stale"` |
+
+El sello combina el **epoch de seed** (`data/cache/seed_epoch.json`, lo escribe `just seed`), el escenario, número y última edición de puntos, vehículos y zonas, y depósito, vertedero y jornada por defecto. `just db-reset` cambia el epoch sin borrar nada: la evidencia anterior queda marcada como `stale` y la vista ofrece recalcular.
+
+**Historial.** Cada corrida completada deja una fila (`jobType=calibration`) con su payload: las lanzadas por API/UI ya la escriben como job y las de CLI la escriben al terminar. `GET /benchmarks/calibration/history` las lista con su `cacheState` y `GET .../history/{runId}` devuelve el payload completo; abrir una corrida histórica no modifica la caché vigente.
 
 **Cancelación:** se aplica **entre corridas** (no interrumpe el ACO en curso) y **no** escribe la caché: el job queda en `cancelled` con `result = null`. Corre **un barrido a la vez** (semáforo de calibración); el siguiente espera su turno.
 
