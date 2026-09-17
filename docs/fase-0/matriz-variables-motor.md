@@ -140,10 +140,12 @@ Modelo único de criticidad documentado en [adr-criticidad.md](./adr-criticidad.
 | `fill_rate_factor` por zona | **Conectada** | Horas efectivas de llenado (>1 = más rápido) |
 | `fill_rate_factor_override` por contenedor | **Conectada** | Override sobre el factor del sector |
 | Frecuencia requerida vs declarada | **Conectada** | `requiredVisitsPerWeek` (física) vs `visitsPerWeek`; `overloaded` |
-| `at_risk_before_next_visit` | **Conectada** | KPI "En riesgo de rebose"; prioriza ACO y genera alertas |
+| `at_risk_before_next_visit` | **Conectada** | KPI "Se llenarán antes de la próxima visita"; prioriza ACO y genera alertas |
+| Fuente de "próxima visita" (`next_visit_service`) | **Conectada** | Plan semanal aprobado > agenda declarada; misma fuente para KPI, alertas `agenda` y sesgo ACO |
+| `operational_timezone` (config) | **Conectada** | Hora (07:00) y días de recolección en calendario **local** (por defecto `America/Caracas`) |
 | `priorityFillLevel` (toggle) | **Conectada** | Activa el sesgo ACO (riesgo `eta×1.5`, llenado `×1.35/1.10`) |
 | `criticalCoveragePct` (KPI) | **Conectada** | % contenedores ≥80 % atendidos (sin cambio de semántica) |
-| `atRiskContainers` / `mapMetrics["at_risk"]` | **Conectada** | KPI nuevo; no altera "Contenedores críticos" |
+| `atRiskContainers` / `mapMetrics["at_risk"]` | **Conectada** | KPI complementario: excluye los ya críticos, no altera "Contenedores críticos" y reporta cobertura no evaluable |
 | Alerta categoría `agenda` | **Conectada** | Puntos no críticos que rebosarán antes de la próxima visita |
 | `CRITICALITY_MODEL` (`state`/`risk`) | **Config** | `state` por defecto (sin cambio de comportamiento) |
 
