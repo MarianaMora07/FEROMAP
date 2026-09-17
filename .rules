@@ -11,3 +11,10 @@
   - Usa el footer `BREAKING CHANGE:` solo para cambios incompatibles.
 - No añadas trailers de co-autoría ni "generated with" salvo que se pidan explícitamente.
 - No hagas commit salvo que el usuario lo pida.
+
+## Pruebas
+
+- **No ejecutes tests (unitarios, integración ni e2e) salvo que el usuario lo pida explícitamente.**
+  - Nada de correrlos "de paso" para validar un cambio ni por inercia al cerrar una tarea.
+  - Si consideras que hace falta verificar con tests, propónlo y espera confirmación.
+  - Cuando no los ejecutes, dilo de forma explícita en el reporte en vez de dar por hecho el resultado.
