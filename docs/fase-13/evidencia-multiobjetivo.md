@@ -2,10 +2,11 @@
 
 | Campo | Valor |
 |-------|-------|
-| **Fecha** | 2026-09-15 |
+| **Fecha** | 2026-09-15 · **re-medido el 2026-09-18** sobre la instancia vigente |
 | **Fase** | 13 — Optimización multiobjetivo (implementa 13.1–13.5 de la [especificación](./especificacion-motor-multiobjetivo.md)) |
-| **Instancia** | Demo (120 puntos, 8 vehículos asignables, jornada base 12 h) |
+| **Instancia** | Demo (**180 puntos**, **10 vehículos**, **8 asignables** con conductor, jornada base 12 h) |
 | **Determinismo** | `seed=42`, escenario `normal` |
+| **Evidencia** | Barrido de 17 pesos `calibration_sweeps` **id 18** (271,2 s, sello `fresh`) · réplica de las candidatas `method`/C7 **id 20** — tablas en [evidencia-calibracion-metodologica.md](./evidencia-calibracion-metodologica.md) §9 |
 
 ## 1. Qué se implementó
 
@@ -22,8 +23,8 @@
 
 | Tema | Decisión | Motivo |
 |------|----------|--------|
-| Cómo repartir más la carga | **Jornada de turno por defecto** (`defaultShiftHours`) + mínimo de camiones activos + pesos de equidad/makespan, en el bloque **«Uso de flota»** | El nº de camiones lo fija la jornada y la demanda: con turnos de 12 h, 56 puntos caben en 2 camiones aunque los pesos estén activos (medido: 12 h→2, 8 h→3, 6 h→4 camiones). El panel ahora expone el mando que sí reparte. |
-| Rango de los pesos | **Backend `[0, 10]`** (contrato §9); **UI acotada a 0–3** | Por encima de ~3 la distancia supera el 15 % de AC-1; el tope visible evita romper el criterio sin recortar el contrato del motor. |
+| Cómo repartir más la carga | **Jornada de turno por defecto** (`defaultShiftHours`) + mínimo de camiones activos + pesos de equidad/makespan, en el bloque **«Uso de flota»** | El nº de camiones lo fija la jornada y la demanda: con turnos de 12 h la misma carga cabe en menos camiones que con 8 h (medido en la instancia vigente: 12 h→**6**, 8 h→**8** camiones, y aun así la jornada de 8 h deja puntos sin cubrir). El panel ahora expone el mando que sí reparte. |
+| Rango de los pesos | **Backend `[0, 10]`** (contrato §9); **UI acotada a 0–3** | Política conservadora: con la instancia vigente el barrido no rompe AC-1 hasta `w = 5` (ratio máximo 1,099), así que el tope evita el compromiso extremo sin recortar el contrato del motor. |
 | Territorios sector→conductor | Con el objetivo activo se usa **reparto global** (avisando); solo se respeta si el llamador fuerza `sector_partition=True` (entonces se avisa que el objetivo no aplica) | La equidad y el makespan son métricas de flota: en partición son degeneradas o dejarían puntos sin cubrir (R-4). |
 | Zona horaria de la ETA | **`America/Caracas`** (config operativa, con respaldo UTC si el valor es inválido) | Es la zona que usa el sistema; anclar en UTC mostraba la salida a las 02:00 locales. El reloj operativo quedó unificado (`backend/app/domain/operational_clock.py`) en el motor (ETA), el seed de demo del playback (06:15 local) y el respaldo del playback (06:00 local). |
 | 13.6 puntualidad | **No implementada** | Las ventanas son restricción dura: el cumplimiento ya es 100 % por construcción. Darle sentido al KPI exige *ablandar* la ventana (permitir llegar tarde y penalizar), lo que cambia el comportamiento del solver y debilita la garantía actual. |
@@ -57,41 +58,39 @@ min   w_d · (D / D_ref)              # eficiencia (D_ref = distancia baseline)
 
 ## 3. Barrido de pesos (`just phase13-sweep`)
 
-17 corridas sobre la instancia demo (≈ 186 s con `seed=42`).
+17 corridas sobre la instancia demo (271,2 s con `seed=42`; `calibration_sweeps` id 18).
 
-| Caso | Jornada | w_b | w_t | mín. veh. | Dist. km | Veh. activos | máx. h | holgura h | ≤ objetivo % | σ h | equidad |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| base 8 h (w=0) | 8 | 0.00 | 0.00 | — | 140.60 | 6 | 8.09 | 3.91 | 66.7 | 1.20 | 0.84 |
-| equidad 0.5 | 8 | 0.50 | 0.00 | — | 140.10 | 6 | 7.51 | 4.49 | 100.0 | 0.10 | 0.99 |
-| equidad 1 | 8 | 1.00 | 0.00 | — | 133.90 | 6 | 7.50 | 4.50 | 100.0 | 0.12 | 0.98 |
-| equidad 2 | 8 | 2.00 | 0.00 | — | 149.60 | 6 | 7.53 | 4.47 | 100.0 | 0.05 | 0.99 |
-| equidad 5 | 8 | 5.00 | 0.00 | — | 162.40 | 6 | 7.73 | 4.27 | 100.0 | 0.10 | 0.99 |
-| makespan 0.5 | 8 | 0.00 | 0.50 | — | 138.10 | 6 | 7.95 | 4.05 | 100.0 | 1.00 | 0.86 |
-| makespan 1 | 8 | 0.00 | 1.00 | — | 133.50 | 6 | 7.44 | 4.56 | 100.0 | 0.13 | 0.98 |
-| makespan 2 | 8 | 0.00 | 2.00 | — | 133.60 | 6 | 7.46 | 4.54 | 100.0 | 0.13 | 0.98 |
-| makespan 5 | 8 | 0.00 | 5.00 | — | 125.00 | 6 | 7.47 | 4.53 | 100.0 | 0.14 | 0.98 |
-| equidad 1 + makespan 2 | 8 | 1.00 | 2.00 | — | 133.20 | 6 | 7.48 | 4.52 | 100.0 | 0.12 | 0.98 |
-| equidad 2 + makespan 2 | 8 | 2.00 | 2.00 | — | 150.00 | 6 | 7.56 | 4.44 | 100.0 | 0.07 | 0.99 |
-| mín. 6 vehículos | 8 | 0.00 | 0.00 | 6 | 136.90 | 6 | 7.53 | 4.47 | 100.0 | 0.12 | 0.98 |
-| base 12 h (w=0) | — | 0.00 | 0.00 | — | 146.50 | 4 | 12.03 | −0.03 | 0.0 | 1.34 | 0.88 |
-| 12 h · makespan 2 | — | 0.00 | 2.00 | — | 144.80 | 4 | 11.32 | 0.68 | 0.0 | 0.12 | 0.99 |
-| 12 h · equidad 2 | — | 2.00 | 0.00 | — | 157.20 | 4 | 11.41 | 0.59 | 0.0 | 0.03 | 1.00 |
-| 12 h · equidad 2 + makespan 2 | — | 2.00 | 2.00 | — | 165.50 | 4 | 11.64 | 0.36 | 0.0 | 0.11 | 0.99 |
-| 12 h · mín. 4 vehículos | — | 0.00 | 0.00 | 4 | 142.30 | 4 | 12.07 | −0.07 | 0.0 | 1.26 | 0.89 |
+| Caso | Jornada | w_b | w_t | mín. veh. | Dist. km | Veh. activos | máx. h | holgura h | ≤ objetivo % | σ h | equidad | no cubiertos | s |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| base 8 h (w=0) | 8 | 0.00 | 0.00 | — | 165.70 | 8 | 7.96 | 4.04 | 100.00 | 0.07 | 0.99 | 8 | 3.49 |
+| equidad 0.5 | 8 | 0.50 | 0.00 | — | 165.70 | 8 | 7.96 | 4.04 | 100.00 | 0.07 | 0.99 | 8 | 3.32 |
+| equidad 1 | 8 | 1.00 | 0.00 | — | 165.70 | 8 | 7.96 | 4.04 | 100.00 | 0.07 | 0.99 | 8 | 3.33 |
+| equidad 2 | 8 | 2.00 | 0.00 | — | 165.70 | 8 | 7.96 | 4.04 | 100.00 | 0.07 | 0.99 | 8 | 3.34 |
+| equidad 5 | 8 | 5.00 | 0.00 | — | 165.70 | 8 | 7.96 | 4.04 | 100.00 | 0.07 | 0.99 | 8 | 3.13 |
+| makespan 0.5 | 8 | 0.00 | 0.50 | — | 166.00 | 8 | 7.91 | 4.09 | 100.00 | 0.10 | 0.99 | 8 | 3.59 |
+| makespan 1 | 8 | 0.00 | 1.00 | — | 166.00 | 8 | 7.91 | 4.09 | 100.00 | 0.10 | 0.99 | 8 | 3.57 |
+| makespan 2 | 8 | 0.00 | 2.00 | — | 166.00 | 8 | 7.91 | 4.09 | 100.00 | 0.10 | 0.99 | 8 | 3.42 |
+| makespan 5 | 8 | 0.00 | 5.00 | — | 174.60 | 8 | 7.87 | 4.13 | 100.00 | 0.09 | 0.99 | 10 | 4.53 |
+| equidad 1 + makespan 2 | 8 | 1.00 | 2.00 | — | 166.00 | 8 | 7.91 | 4.09 | 100.00 | 0.10 | 0.99 | 8 | 3.78 |
+| equidad 2 + makespan 2 | 8 | 2.00 | 2.00 | — | 166.00 | 8 | 7.91 | 4.09 | 100.00 | 0.10 | 0.99 | 8 | 3.56 |
+| mín. 6 vehículos | 8 | 0.00 | 0.00 | 6 | 166.00 | 8 | 7.91 | 4.09 | 100.00 | 0.10 | 0.99 | 8 | 3.61 |
+| base 12 h (w=0) | — | 0.00 | 0.00 | — | 194.20 | 6 | 11.81 | 0.19 | 0.00 | 1.33 | 0.88 | 0 | 3.61 |
+| 12 h · makespan 2 | — | 0.00 | 2.00 | — | 187.40 | 6 | 11.28 | 0.72 | 0.00 | 0.10 | 0.99 | 0 | 4.06 |
+| 12 h · equidad 2 | — | 2.00 | 0.00 | — | 198.60 | 6 | 11.35 | 0.65 | 0.00 | 0.12 | 0.99 | 0 | 3.41 |
+| 12 h · equidad 2 + makespan 2 | — | 2.00 | 2.00 | — | 213.50 | 6 | 11.36 | 0.64 | 0.00 | 0.12 | 0.99 | 0 | 3.70 |
+| 12 h · mín. 4 vehículos | — | 0.00 | 0.00 | 4 | 196.90 | 6 | 11.86 | 0.14 | 0.00 | 1.32 | 0.88 | 0 | 3.91 |
 
-**Lectura**: activar cualquier peso elimina las rutas al 100 % de jornada (máx. 8,09 h → 7,4–7,9 h) y
-reduce σ de 1,20 h a 0,03–0,15 h **sin sacrificar distancia** (varios puntos incluso recorren menos
-km que la línea base, porque las rutas de 12 h forzaban viajes redundantes). La frontera de Pareto
-(distancia ↓, makespan ↓, flota ↑) queda formada por `makespan 5` (125,0 km · 6 veh. · 7,47 h) y
-`makespan 1` (133,5 km · 6 veh. · 7,44 h).
+**Lectura (instancia vigente).** El resultado cambió de signo respecto a la medición de 2026-09-15, y el motivo es la instancia: con **180 puntos** la jornada de **8 h es infactible** — los 12 puntos del bloque dejan **8–10 puntos sin cubrir** —, así que la fila que «cumple» el objetivo lo hace a costa de no visitar todo. En el bloque de 8 h los pesos apenas mueven nada: `equidad` (0,5 a 5) deja la corrida **idéntica** a la base (165,70 km · 8 veh · 7,96 h · 8 sin cubrir), `makespan` 0,5/1/2 comparten 166,00 km · 7,91 h, y solo `makespan 5` se desvía (+8,9 km y 10 sin cubrir). En el bloque de 12 h — el único **factible** (0 sin cubrir) — sí hay compromiso: 194,20 km base → 187,40 km con `makespan 2` → 198,60 km con `equidad 2` → 213,50 km apilando ambos, con la flota fija en 6 camiones. La frontera de Pareto (distancia ↓, makespan ↓, flota ↑) queda con **una** solución: `12 h · makespan 2` (187,40 km · 6 veh. · 11,28 h).
+
+> La réplica con las 10 semillas del protocolo (C7, id 20) confirma que la lectura no es un artefacto de una semilla: las medianas del bloque de 8 h son 163,85 km (base), 164,85 km (`makespan 0.5`) y 170,35 km (`makespan 5`), con AC-2 sin candidatos.
 
 ## 4. Criterios de aceptación (Fase 13, §8)
 
 | Criterio | Resultado |
 |---|---|
-| **AC-1** `distanceKm.optimized ≤ 1.15 × distanceKm.optimized(w=0)` | ✅ en el punto de operación aceptado (`makespan 5`: 125,0 km vs 140,6 km ⇒ ratio **0,889**). 14 de los 15 puntos con pesos del barrido cumplen; la única excepción es el extremo `w_b = 5` (162,4 km ⇒ ratio 1,155, 0,5 pp por encima de la tolerancia), que es el final de la escala `[0,10]` donde el compromiso favorece explícitamente la equidad. Al **apilar** los tres objetivos en su rango alto (`w_b=1`, `w_t=2`, `minActiveVehicles=6`) el ratio sube a 1,22: es el límite del compromiso explícito (riesgo R-6), no un defecto del motor. |
-| **AC-2** `activeVehicles ≥ 3` y `maxRouteHours ≤ 8 h` | ✅ 11 puntos candidatos (p. ej. `makespan 5`: 6 vehículos y 7,47 h). |
-| **AC-3** `distinctVehiclesWeek ≥ 6` de 8 | ✅ verificado con el motor real en una semana demo (`just phase13-weekly`): `distinctVehiclesWeek=6`, `vehicleDaysUsed=20`, `usageStdDays=0,47`, `rotationIndex=0,86`. |
+| **AC-1** `distanceKm.optimized ≤ 1.15 × distanceKm.optimized(w=0)` | ⚠️ **Las 15 filas con pesos cumplen la tolerancia** (ratio máximo **1,099**: `12 h · equidad 2 + makespan 2`; el bloque de 8 h se queda en 1,000–1,054), **pero el criterio no se puede cerrar**: AC-1 se evalúa en el «punto de operación aceptado» y ese punto lo define AC-2, que no tiene candidatos. En la instancia vigente la jornada de 8 h deja 8–10 puntos sin cubrir, así que no existe el punto aceptado y `ac1.ok` queda en falso por construcción. |
+| **AC-2** `activeVehicles ≥ 3` **y** `maxRouteHours ≤ 8 h` | ❌ **FALLA**: 0 candidatos. Ninguna fila del bloque de 8 h deja 0 puntos sin cubrir (mínimo 8), de modo que cumplir la jornada de 8 h cuesta servicio no visitado. En la medición de 2026-09-15 sobre 120 puntos el bloque era factible (11 candidatos); con 180 puntos ya no lo es. La jornada de 12 h sí cubre todo (0 sin cubrir) con 6 vehículos. |
+| **AC-3** `distinctVehiclesWeek ≥ 6` de 8 y `usageStdDays ≤ 1` | ✅ verificado con el motor real en una semana demo (`just phase13-weekly`, 2026-09-18): `distinctVehiclesWeek=8`, `vehicleDaysUsed=30`, `usageStdDays=0,43`, `rotationIndex=0,88`. |
 
 ## 5. Verificación automatizada
 
@@ -123,5 +122,7 @@ del nivel de servicio.
   operativo lo usan el seed de demo del playback y su respaldo (antes anclaban en UTC).
 - El **ancla de demo TR-01** se desactiva sola cuando la rotación deja descansar a TR-01
   (no está en la flota del día), evitando sesgar el reparto (D4).
-- **Rango de pesos**: la UI ofrece 0–3; los valores 3–10 siguen disponibles por API y son los que
-  empujan la distancia por encima del 15 % (compromiso explícito, R-6).
+- **Rango de pesos**: la UI ofrece 0–3; el contrato del backend acepta `[0, 10]`. Con la instancia
+  vigente el barrido mide ratios de AC-1 ≤ 1,054 en el bloque de 8 h y ≤ 1,099 en el de 12 h hasta
+  `w = 5`, así que el tope de 0–3 es una **política conservadora**, no el punto donde se rompe la
+  tolerancia (en la instancia anterior de 120 puntos sí se rompía a `w_b = 5`).
