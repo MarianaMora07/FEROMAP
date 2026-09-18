@@ -54,6 +54,20 @@ class AcoValidationJobRequest(CalibrationJobRequest):
     profile: AcoValidationProfileRequest = Field(default_factory=AcoValidationProfileRequest)
 
 
+class CalibrationMethodJobRequest(CalibrationJobRequest):
+    """Cuerpo del job de una fase del protocolo metodológico (C0–C8).
+
+    Cada fase es un diseño distinto: ``phase`` es obligatoria. ``seeds`` permite la
+    **verificación corta** (``[42, 101]``) antes de gastar el juego completo de 10, y
+    ``resume`` continúa un barrido cortado desde el salvavidas de E0 en vez de repetirlo.
+    ``refresh=False`` devuelve la evidencia ya guardada de esa fase sin recalcular.
+    """
+
+    phase: str
+    seeds: list[int] | None = None
+    resume: bool = True
+
+
 class CalibrationJobCreated(CamelModel):
     job_id: str
 

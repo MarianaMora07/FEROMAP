@@ -104,13 +104,57 @@ phase3-sensitivity: _check
 phase3-report: _check
     {{compose}} exec api python -m scripts.generate_phase3_report
 
-# Barrido de pesos multiobjetivo (Fase 13) → data/cache/phase13/multiobjective_sweep.json
+# Barrido de pesos multiobjetivo (Fase 13) → fila en `calibration_sweeps` (barrido 'objective')
 phase13-sweep: _check
     {{compose}} exec api python -m scripts.phase13_sweep
 
 # Evidencia AC-3: rotación de flota en una semana demo real (Fase 13.4)
 phase13-weekly: _check
     {{compose}} exec api python -m scripts.phase13_weekly_evidence
+
+# ── Calibración metodológica del motor (docs/fase-13/plan-calibracion-metodologica.md) ──
+# Fases C0–C8 (C = calibración). Cada fase guarda su evidencia en calibration_sweeps
+# (sweep 'method') y admite --dry-run, --reuse y --run-id N. La misma fase se puede lanzar
+# desde la vista de calibración (un job por fase) y su evidencia se lee sin CPU en
+# `GET /benchmarks/calibration/method`.
+# Verificación en dos pasos: primero --seeds 42,101 (fontanería) y después las 10 semillas.
+# --resume reanuda un barrido cortado desde data/cache/phase13/method-<fase>.jsonl (E0).
+
+# C1 · Ruido base: perfil estándar × 10 semillas (~2 min) + análisis de δ y n
+calib-noise *args: _check
+    {{compose}} exec api python -m scripts.calibration_method noise {{args}}
+
+# C3 · Factorial 2⁴ (α, β, ρ, paciencia) + 4 centros (200 corridas ≈ 59 min) — implementada
+calib-factorial *args: _check
+    {{compose}} exec api python -m scripts.calibration_method factorial {{args}}
+
+# C3.2 · Eje de presupuesto (hormigas, iteraciones) a trabajo fijo — implementada (E1)
+calib-budget *args: _check
+    {{compose}} exec api python -m scripts.calibration_method budget {{args}}
+
+# C3.3 · Brazo de control sin corte (perfil estándar y mejor de C3) — implementada (E2)
+calib-nocut *args: _check
+    {{compose}} exec api python -m scripts.calibration_method nocut {{args}}
+
+# C4 · Razón β/α y validación de Q — implementada (E3)
+calib-identify *args: _check
+    {{compose}} exec api python -m scripts.calibration_method identify {{args}}
+
+# C5 · Superficie de respuesta local (Box-Behnken: β, ρ, I) — implementada (E7)
+calib-rsm *args: _check
+    {{compose}} exec api python -m scripts.calibration_method rsm {{args}}
+
+# C6 · Validación replicada de la combinación — implementada (E5)
+calib-validate *args: _check
+    {{compose}} exec api python -m scripts.calibration_method validate {{args}}
+
+# C7 · Réplica de las candidatas del barrido de pesos — pendiente (E6)
+calib-objective *args: _check
+    {{compose}} exec api python -m scripts.calibration_method objective {{args}}
+
+# C8 · Reporte del capítulo, desde la BD — implementada (E8)
+calib-report *args: _check
+    {{compose}} exec api python -m scripts.calibration_method report {{args}}
 
 # Backlog post-grado (OR-Tools, SSE, tráfico live…) — solo documentación, no implementar pre-defensa
 roadmap:

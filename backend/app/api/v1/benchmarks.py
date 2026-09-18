@@ -10,6 +10,7 @@ from app.schemas.calibration import (
     CalibrationJobCancelResponse,
     CalibrationJobCreated,
     CalibrationJobRequest,
+    CalibrationMethodJobRequest,
     ObjectiveSweepJobRequest,
 )
 from app.services.aco_sensitivity_service import load_aco_sensitivity, run_aco_sensitivity
@@ -20,6 +21,7 @@ from app.services.algorithm_benchmark_service import (
 )
 from app.services.benchmark_service import load_aco_benchmark, run_aco_benchmark
 from app.services.calibration_sweep_store import get_sweep, list_sweeps
+from app.services.calibration_evidence_service import build_evidence
 from app.services.instance_fingerprint import with_freshness
 from app.services.multiobjective_sweep_service import (
     load_multiobjective_sweep,
@@ -32,6 +34,7 @@ from app.services.optimization_job_service import (
 )
 from app.services.sweep_progress import (
     DEFAULT_SWEEP_SCENARIO,
+    SWEEP_METHOD,
     SWEEP_OBJECTIVE,
     SWEEP_SENSITIVITY,
     SWEEP_VALIDATION,
@@ -113,9 +116,12 @@ def _start_calibration_job(
     db: DbSession,
     *,
     profile: dict[str, Any] | None = None,
+    extra: dict[str, Any] | None = None,
 ) -> dict[str, str]:
-    # El perfil solo viaja en la validación; los demás barridos mantienen la llamada previa.
+    # El perfil solo viaja en la validación y la fase solo en el protocolo; los demás barridos
+    # mantienen la llamada previa.
     overrides: dict[str, Any] = {"profile": profile} if profile is not None else {}
+    overrides.update(extra or {})
     try:
         job = create_calibration_job(
             sweep,
@@ -200,6 +206,55 @@ def get_aco_validation(db: DbSession, _: PlannerOrAdmin):
     return with_freshness(
         payload, db, scenario_id=payload.get("scenarioId") or DEFAULT_SWEEP_SCENARIO
     )
+
+
+@router.get("/benchmarks/calibration/method")
+def get_calibration_method_evidence(
+    db: DbSession,
+    _: PlannerOrAdmin,
+    reference_run_id: int | None = Query(default=None, alias="referenceRunId"),
+    delta_km: float | None = Query(default=None, alias="deltaKm", gt=0),
+):
+    """Evidencia del protocolo metodológico de calibración (C0–C8), leída de la BD.
+
+    Devuelve las tablas de cada fase y el **perfil recomendado** con su justificación por
+    perilla. No ejecuta nada: la vista puede decir qué hiperparámetros son adecuados sin
+    optimizar en el momento. ``referenceRunId`` fija el factorial de referencia (del que
+    derivan C3.3, C6 y C5); sin él se elige la corrida más completa de esa fase.
+    """
+    try:
+        return build_evidence(db, reference_run_id=reference_run_id, delta_km=delta_km)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post(
+    "/benchmarks/calibration/method/jobs",
+    response_model=CalibrationJobCreated,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def start_calibration_method_job(
+    body: CalibrationMethodJobRequest, db: DbSession, _: PlannerOrAdmin
+):
+    """Lanza **una fase** del protocolo metodológico como job asíncrono.
+
+    Se lanza por fase (de 4 a 200 corridas) y no el protocolo entero: un job de ~2,5 h sería
+    un solo punto de fallo y dejaría la vista sin progreso útil. `resume` continúa un barrido
+    cortado; `refresh=false` devuelve la evidencia ya guardada sin recalcular.
+    """
+    try:
+        return _start_calibration_job(
+            SWEEP_METHOD,
+            body,
+            db,
+            extra={
+                "phase": body.phase,
+                "seeds": body.seeds,
+                "resume": body.resume,
+            },
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/benchmarks/calibration/history")

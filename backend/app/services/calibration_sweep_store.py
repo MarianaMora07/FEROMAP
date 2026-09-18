@@ -131,6 +131,51 @@ def latest_payload(db: Session, *, sweep: str) -> dict[str, Any] | None:
     return _payload_of(row)
 
 
+def latest_payload_of_phase(
+    db: Session, *, sweep: str, phase: str, limit: int = 100
+) -> dict[str, Any] | None:
+    """Payload más reciente de un barrido con una ``phase`` concreta.
+
+    El protocolo de calibración metodológica guarda todas sus fases en el mismo barrido
+    (``method``) y las distingue por el campo ``phase`` de la raíz del payload. La lectura
+    «vigente» del barrido completo no sirve para eso: cada fase necesita **su** última corrida.
+    """
+    rows = db.scalars(
+        select(CalibrationSweep)
+        .where(CalibrationSweep.sweep == sweep)
+        .order_by(CalibrationSweep.created_at.desc(), CalibrationSweep.id.desc())
+        .limit(limit)
+    ).all()
+    for row in rows:
+        payload = _payload_of(row)
+        if payload is not None and payload.get("phase") == phase:
+            return payload
+    return None
+
+
+def payloads_of_phase(
+    db: Session, *, sweep: str, phase: str, limit: int = 100
+) -> list[tuple[int, dict[str, Any]]]:
+    """Pares ``(id, payload)`` de un barrido con una ``phase``, del más reciente al más antiguo.
+
+    Es la lectura que necesita el reporte de C8: no siempre se quiere la corrida **más
+    reciente** de una fase (puede ser una verificación de fontanería con 2 semillas), sino la
+    **más completa**. El reporte elige con este listado y cita el id que usó.
+    """
+    rows = db.scalars(
+        select(CalibrationSweep)
+        .where(CalibrationSweep.sweep == sweep)
+        .order_by(CalibrationSweep.created_at.desc(), CalibrationSweep.id.desc())
+        .limit(limit)
+    ).all()
+    entries: list[tuple[int, dict[str, Any]]] = []
+    for row in rows:
+        payload = _payload_of(row)
+        if payload is not None and payload.get("phase") == phase:
+            entries.append((int(row.id), payload))
+    return entries
+
+
 def _state_for(db: Session, stamp: Any, scenario_id: Any, cache: dict[str, str]) -> str:
     """Estado del sello de una corrida frente a la instancia vigente de su escenario."""
     if not isinstance(stamp, str) or not stamp:

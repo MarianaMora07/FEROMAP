@@ -1963,6 +1963,8 @@ def _build_engine_metrics(
     graph_load_source: str,
     aco_parallel_workers: int,
     aco_convergence: list[dict[str, float | int]],
+    two_opt_passes: int = 10,
+    pheromone_elitist: bool = False,
     workload_balance_weight: float = 0.0,
     makespan_weight: float = 0.0,
     min_active_vehicles: int | None = None,
@@ -1979,6 +1981,8 @@ def _build_engine_metrics(
         "acoIterationsRun": aco_iterations_run,
         "acoStoppedEarly": aco_stopped_early,
         "acoPatience": aco_patience,
+        "twoOptPasses": two_opt_passes,
+        "pheromoneElitist": pheromone_elitist,
         "matrixCacheHit": matrix_cache_hit,
         "matrixCacheIncremental": matrix_cache_incremental,
         "matrixPatchedCells": matrix_patched_cells,
@@ -2263,6 +2267,9 @@ def run_optimization_engine(
     aco_beta: float | None = None,
     aco_rho: float | None = None,
     pheromone_q: float | None = None,
+    aco_patience: int | None = None,
+    two_opt_passes: int | None = None,
+    pheromone_elitist: bool | None = None,
     priority_fill_level: bool | None = None,
     time_window_enabled: bool | None = None,
     kpi_view: str | None = None,
@@ -2368,7 +2375,9 @@ def run_optimization_engine(
         if resolved_params.aco_iterations is not None
         else algorithm_settings.aco_iterations
     )
-    aco_patience = max(0, int(algorithm_settings.aco_patience))
+    aco_patience = max(
+        0, int(aco_patience if aco_patience is not None else algorithm_settings.aco_patience)
+    )
     overflow_weight = float(algorithm_settings.overflow_penalty_weight)
     # Fase 13 — hiperparámetros del ACO (request > admin). Expuestos por corrida para que
     # el barrido de sensibilidad pueda variar α/β/ρ/Q y quede registrado en la evidencia.
@@ -2378,8 +2387,17 @@ def run_optimization_engine(
     resolved_pheromone_q = float(
         pheromone_q if pheromone_q is not None else algorithm_settings.pheromone_q
     )
-    pheromone_elitist = bool(algorithm_settings.pheromone_elitist)
-    two_opt_passes = max(1, int(algorithm_settings.two_opt_passes))
+    # Regla de parada, local search y variante elitista: también por corrida (request > admin),
+    # con el mismo patrón que α/β/ρ/Q. El protocolo de calibración los necesita como **factores
+    # declarados**: heredarlos de Administración era lo que confundía el recorte por paciencia
+    # con una diferencia real entre configuraciones.
+    pheromone_elitist = bool(
+        pheromone_elitist if pheromone_elitist is not None else algorithm_settings.pheromone_elitist
+    )
+    two_opt_passes = max(
+        1,
+        int(two_opt_passes if two_opt_passes is not None else algorithm_settings.two_opt_passes),
+    )
     at_risk_multiplier = float(algorithm_settings.heuristic_at_risk_multiplier)
     critical_multiplier = float(algorithm_settings.heuristic_critical_multiplier)
     high_multiplier = float(algorithm_settings.heuristic_high_multiplier)
@@ -3077,6 +3095,8 @@ def run_optimization_engine(
         graph_load_source=graph_source,
         aco_parallel_workers=optimized_solution.aco_parallel_workers,
         aco_convergence=optimized_solution.aco_convergence,
+        two_opt_passes=two_opt_passes,
+        pheromone_elitist=pheromone_elitist,
         workload_balance_weight=resolved_workload_balance_weight,
         makespan_weight=resolved_makespan_weight,
         min_active_vehicles=effective_min_active_vehicles,

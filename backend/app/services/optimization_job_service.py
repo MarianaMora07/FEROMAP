@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import threading
 import time as _time
@@ -20,6 +21,7 @@ from app.services.sweep_progress import (
     CALIBRATION_SWEEPS,
     DEFAULT_SWEEP_SCENARIO,
     DEFAULT_SWEEP_SEED,
+    SWEEP_METHOD,
     SWEEP_PHASE_LABELS,
     SWEEP_SENSITIVITY,
     SWEEP_VALIDATION,
@@ -531,6 +533,14 @@ def _sweep_latest_payload(db: Session, sweep: str) -> dict[str, Any] | None:
     return latest_payload(db, sweep=sweep)
 
 
+def _method_phase_payload(db: Session, phase: str) -> dict[str, Any] | None:
+    """Payload vigente de una **fase** del protocolo (la corrida más completa de esa fase)."""
+    from app.services.calibration_evidence_service import richest_entry
+
+    entry = richest_entry(db, phase=phase)
+    return entry[1] if entry is not None else None
+
+
 def _sweep_runner(sweep: str) -> Callable[..., dict[str, Any]]:
     if sweep == SWEEP_SENSITIVITY:
         from app.services.aco_sensitivity_service import run_aco_sensitivity
@@ -540,6 +550,10 @@ def _sweep_runner(sweep: str) -> Callable[..., dict[str, Any]]:
         from app.services.aco_validation_service import run_aco_validation
 
         return run_aco_validation
+    if sweep == SWEEP_METHOD:
+        from app.services.calibration_method_runner import run_calibration_method
+
+        return run_calibration_method
     from app.services.multiobjective_sweep_service import run_multiobjective_sweep
 
     return run_multiobjective_sweep
@@ -584,21 +598,45 @@ def _execute_calibration_sweep(
     def cancel_check() -> bool:
         return job.cancel_requested
 
+    def on_result(run: dict[str, Any]) -> None:
+        """Latido por corrida terminada: sin esto, un barrido de 200 corridas no dice nada."""
+        if "error" in run:
+            detail = f"✗ {run['error']}"
+        else:
+            detail = (
+                f"{run.get('distanceKmOptimized')} km · {run.get('acoIterationsRun')} iter"
+            )
+        with job.lock:
+            job.logs.append(
+                {
+                    "id": f"log-{job.id}-{len(job.logs)}",
+                    "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                    "message": f"{run.get('label')} → {detail}",
+                    "type": "result",
+                    "phaseId": sweep,
+                }
+            )
+        _persist_job_snapshot(job)
+
     # El sello lo calcula quien invoca el barrido (el servicio se mantiene sin BD propia).
     fingerprint = current_fingerprint(db, scenario_id=scenario_id)
     with job.lock:
         # Queda en params_json: el historial puede decir si la corrida sigue vigente.
         job.extra_params = {**(job.extra_params or {}), "instanceFingerprint": fingerprint}
     _persist_job_snapshot(job, force=True)
-    return _sweep_runner(sweep)(
-        db,
-        scenario_id=scenario_id,
-        seed=seed,
-        on_run=on_run,
-        cancel_check=cancel_check,
-        instance_fingerprint=fingerprint,
+    runner = _sweep_runner(sweep)
+    kwargs: dict[str, Any] = {
+        "scenario_id": scenario_id,
+        "seed": seed,
+        "on_run": on_run,
+        "cancel_check": cancel_check,
+        "instance_fingerprint": fingerprint,
         **(extra or {}),
-    )
+    }
+    # ``on_result`` solo lo aceptan los barridos que lo declaran (sensibilidad y protocolo).
+    if "on_result" in inspect.signature(runner).parameters:
+        kwargs["on_result"] = on_result
+    return runner(db, **kwargs)
 
 
 def _cache_matches(
@@ -621,14 +659,20 @@ def create_calibration_job(
     seed: int | None = None,
     refresh: bool = True,
     profile: dict[str, Any] | None = None,
+    phase: str | None = None,
+    seeds: list[int] | None = None,
+    resume: bool = True,
 ) -> OptimizationJob:
-    """Crea y arranca un job de calibración (sensibilidad, pesos o validación).
+    """Crea y arranca un job de calibración (sensibilidad, pesos, validación o fase del protocolo).
 
     - ``refresh=True`` (default): corre el barrido y guarda la corrida al terminar.
     - ``refresh=False``: si la BD ya tiene una corrida vigente del mismo escenario/semilla,
       el job nace ``completed`` con ese payload y **no** recalcula.
     - ``profile``: combinación a probar en el barrido de validación (queda en el job y,
       por tanto, en su journal).
+    - ``phase``/``seeds``/``resume``: solo para el protocolo metodológico (``sweep='method'``).
+      La fase es obligatoria — cada una es un diseño distinto — y ``seeds`` permite la
+      verificación corta (``[42, 101]``) antes del juego completo.
 
     El barrido se serializa con el semáforo de calibración (máximo 1 en paralelo); la
     corrida solo se guarda si el job termina sin cancelarse. La validación **siempre
@@ -637,6 +681,24 @@ def create_calibration_job(
     """
     if sweep not in CALIBRATION_SWEEPS:
         raise ValueError(f"Barrido de calibración desconocido: {sweep}")
+    from app.services.calibration_method_runner import (
+        ALL_PHASES,
+        METHOD_PHASE_RUNS,
+        is_known_phase,
+    )
+
+    is_method = sweep == SWEEP_METHOD
+    if is_method and not phase:
+        raise ValueError("El protocolo metodológico necesita una fase (`phase`)")
+    if not is_method and (phase is not None or seeds is not None):
+        raise ValueError(
+            f"`phase`/`seeds` solo valen para el protocolo metodológico (sweep='{SWEEP_METHOD}')"
+        )
+    if is_method and not is_known_phase(str(phase)):
+        raise ValueError(
+            f"Fase desconocida: '{phase}'. Válidas: {', '.join(sorted(METHOD_PHASE_RUNS))} "
+            f"o '{ALL_PHASES}' para el protocolo completo"
+        )
     resolved_scenario = scenario_id or DEFAULT_SWEEP_SCENARIO
     resolved_seed = DEFAULT_SWEEP_SEED if seed is None else seed
     now = datetime.now(timezone.utc)
@@ -653,11 +715,39 @@ def create_calibration_job(
             "sweep": sweep,
             "refresh": refresh,
             **({"profile": profile} if profile else {}),
+            **(
+                {"phase": phase, "seeds": list(seeds or []), "resume": resume}
+                if is_method
+                else {}
+            ),
         },
         created_at=now,
     )
     if not refresh and sweep != SWEEP_VALIDATION:
-        cached = _sweep_latest_payload(db, sweep)
+        if is_method and phase == ALL_PHASES:
+            # El protocolo entero ya está en la BD si ninguna fase quedó sin evidencia.
+            from app.services.calibration_evidence_service import build_evidence
+
+            evidence = build_evidence(db)
+            if all(info.get("runId") is not None for info in evidence["phases"].values()):
+                with job.lock:
+                    job.status = "completed"
+                    job.phase = "caché reutilizada"
+                    job.progress = 100
+                    job.result = evidence
+                    job.started_at = now
+                    job.finished_at = now
+                with _jobs_lock:
+                    _jobs[job.id] = job
+                _persist_job_snapshot(job, force=True)
+                return job
+            cached = None
+        else:
+            cached = (
+                _method_phase_payload(db, str(phase))
+                if is_method
+                else _sweep_latest_payload(db, sweep)
+            )
         if _cache_matches(cached, scenario_id=resolved_scenario, seed=resolved_seed):
             with job.lock:
                 job.status = "completed"
@@ -685,13 +775,18 @@ def create_calibration_job(
             with job.lock:
                 job.phase = SWEEP_PHASE_LABELS.get(sweep, sweep)
             _persist_job_snapshot(job, force=True)
+            extra: dict[str, Any] = {}
+            if profile:
+                extra["profile"] = profile
+            if is_method:
+                extra.update({"phase": phase, "seeds": seeds, "resume": resume})
             return _execute_calibration_sweep(
                 job,
                 sweep,
                 db,
                 scenario_id=resolved_scenario,
                 seed=resolved_seed,
-                extra={"profile": profile} if profile else None,
+                extra=extra or None,
             )
         finally:
             if acquired:
