@@ -9,8 +9,11 @@ import type {
   CalibrationJobRequest,
   CalibrationJobSnapshot,
   CalibrationJobStatus,
+  CalibrationMethodJobRequest,
+  CalibrationMethodTarget,
   CalibrationSweep,
 } from '../../core/api/benchmark';
+import { CALIBRATION_METHOD_TARGETS } from '../../core/api/calibrationMethodPhases';
 
 /** Estados de la vista (§8 del plan de la vista de calibración). */
 export type CalibrationViewState =
@@ -25,6 +28,10 @@ export interface CalibrationRunConfig {
   scenarioId: string;
   seed: number;
   reuseCache: boolean;
+  /** Objetivo del protocolo metodológico; solo se usa cuando `mode === 'method'`. */
+  methodPhase: CalibrationMethodTarget;
+  /** Verificación corta con 2 semillas en vez del juego completo de 10. */
+  methodShort: boolean;
 }
 
 /**
@@ -58,7 +65,20 @@ export const CALIBRATION_MAX_WAIT_MS = 60 * 60 * 1000;
 export const CALIBRATION_MODES: { value: CalibrationSweep; labelKey: string }[] = [
   { value: 'sensitivity', labelKey: 'calibration.mode.sensitivity' },
   { value: 'objective', labelKey: 'calibration.mode.objective' },
+  { value: 'method', labelKey: 'calibration.mode.method' },
 ];
+
+/** Selector de objetivo del protocolo (protocolo completo + cada fase, mismo orden que el backend). */
+export const CALIBRATION_METHOD_PHASE_OPTIONS: {
+  value: CalibrationMethodTarget;
+  labelKey: string;
+}[] = CALIBRATION_METHOD_TARGETS.map((target) => ({
+  value: target,
+  labelKey: target === 'all' ? 'calibration.method.target.all' : `calibration.method.phase.${target}`,
+}));
+
+/** Semillas de la verificación corta (plan §C0: fontanería antes del juego completo). */
+export const CALIBRATION_METHOD_SHORT_SEEDS: readonly number[] = [42, 101];
 
 export function defaultRunConfig(): CalibrationRunConfig {
   return {
@@ -66,6 +86,8 @@ export function defaultRunConfig(): CalibrationRunConfig {
     scenarioId: CALIBRATION_DEFAULT_SCENARIO,
     seed: CALIBRATION_DEFAULT_SEED,
     reuseCache: false,
+    methodPhase: 'factorial',
+    methodShort: false,
   };
 }
 
@@ -119,6 +141,18 @@ export function viewStateFor(input: {
 /** Cuerpo del POST de creación del job (`refresh=false` reutiliza caché). */
 export function jobRequestFor(config: CalibrationRunConfig): CalibrationJobRequest {
   return {
+    scenarioId: config.scenarioId,
+    seed: config.seed,
+    refresh: !config.reuseCache,
+  };
+}
+
+/** Cuerpo del POST de una fase del protocolo (`seeds=null` = juego completo de 10). */
+export function methodJobRequestFor(config: CalibrationRunConfig): CalibrationMethodJobRequest {
+  return {
+    phase: config.methodPhase,
+    seeds: config.methodShort ? [...CALIBRATION_METHOD_SHORT_SEEDS] : null,
+    resume: true,
     scenarioId: config.scenarioId,
     seed: config.seed,
     refresh: !config.reuseCache,

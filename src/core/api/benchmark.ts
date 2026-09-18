@@ -130,7 +130,7 @@ export function runAcoSensitivity(): Promise<AcoSensitivityPayload> {
 
 // --- Calibración del motor: jobs asíncronos y barrido de pesos (Fase 13) -----
 
-export type CalibrationSweep = 'sensitivity' | 'objective' | 'validation';
+export type CalibrationSweep = 'sensitivity' | 'objective' | 'validation' | 'method';
 export type CalibrationJobStatus =
   | 'pending'
   | 'running'
@@ -337,6 +337,199 @@ export interface CalibrationJobRequest {
   profile?: AcoValidationParams;
 }
 
+// --- Protocolo metodológico de calibración (C0–C8) ------------------------
+
+// Tipos y constantes de las fases: en un módulo sin dependencias para que los helpers de UX
+// puedan importarlos sin arrastrar el cliente HTTP (y con él el DOM).
+import type {
+  CalibrationMethodPhase,
+  CalibrationMethodTarget,
+} from './calibrationMethodPhases';
+export {
+  CALIBRATION_METHOD_ALL,
+  CALIBRATION_METHOD_PHASES,
+  CALIBRATION_METHOD_TARGETS,
+  type CalibrationMethodPhase,
+  type CalibrationMethodTarget,
+} from './calibrationMethodPhases';
+
+/** Resumen declarado del protocolo (δ, semillas y perfil estándar). */
+export interface CalibrationMethodProtocol {
+  deltaKm: number;
+  seeds: number;
+  iterations: number;
+  standardProfile: string;
+  standardHyperparameters: string;
+  scenario: string;
+  referenceRunId: number | null;
+}
+
+/** Trazabilidad de una fase: qué corrida de la BD la respalda. */
+export interface CalibrationMethodPhaseTrace {
+  runId: number | null;
+  seeds: number;
+  generatedAt: string | null;
+  scenarioId: string | null;
+  /** Sello de instancia de la corrida frente a la instancia vigente. */
+  cacheState?: CalibrationCacheState;
+  /** `true` si la corrida se midió con otra instancia: no es comparable con la actual. */
+  stale?: boolean;
+}
+
+/** Perfil de hiperparámetros (estándar o recomendado). */
+export interface CalibrationMethodProfile {
+  acoAlpha: number;
+  acoBeta: number;
+  acoRho: number;
+  pheromoneQ: number;
+  acoPatience: number;
+  acoAnts: number;
+  acoIterations: number;
+}
+
+/** Justificación medida de una perilla del perfil (α/β/ρ/P/Q). */
+export interface CalibrationMethodKnobJustification {
+  value?: number;
+  moved?: boolean;
+  effectKm?: number | null;
+  significant?: boolean;
+  material?: boolean;
+  reason?: string;
+}
+
+/** El presupuesto no es una perilla de distancia: conserva el estándar y declara alternativa. */
+export interface CalibrationMethodBudgetJustification {
+  value?: { acoAnts: number; acoIterations: number };
+  alternative?: { acoAnts: number; acoIterations: number };
+  moved?: boolean;
+  reason?: string;
+}
+
+export interface CalibrationMethodJustification {
+  acoAlpha?: CalibrationMethodKnobJustification;
+  acoBeta?: CalibrationMethodKnobJustification;
+  acoRho?: CalibrationMethodKnobJustification;
+  acoPatience?: CalibrationMethodKnobJustification;
+  pheromoneQ?: CalibrationMethodKnobJustification;
+  budget?: CalibrationMethodBudgetJustification;
+}
+
+/** Perfil recomendado (E4) derivado del factorial de referencia. */
+export interface CalibrationMethodRecommendation {
+  available: boolean;
+  phase?: string;
+  deltaKm: number;
+  ratioGoverns: boolean | null;
+  standard: CalibrationMethodProfile;
+  profile: CalibrationMethodProfile;
+  justification: CalibrationMethodJustification;
+  warnings: string[];
+  rule?: string;
+  limitations: string[];
+}
+
+/** Estadísticos descriptivos de una corrida (solo se consume la mediana). */
+export interface CalibrationMethodStats {
+  median: number | null;
+}
+
+/** Veredicto de validación del perfil recomendado frente al control (C6). */
+export interface CalibrationMethodValidationAnalysis {
+  comparable?: boolean;
+  reason?: string;
+  verdict?: 'equal' | 'better' | 'worse' | 'not-comparable';
+  verdictReason?: string;
+  delta?: {
+    medianKm: number | null;
+    ci: [number, number] | null;
+    test?: { pValue: number | null };
+    tost?: { pValue: number | null } | null;
+  };
+  control?: { stats?: CalibrationMethodStats };
+  recommended?: { stats?: CalibrationMethodStats };
+  limitations?: string[];
+}
+
+/** Un eje de la meseta de equivalencia del RSM (C5). */
+export interface CalibrationMethodPlateauEntry {
+  symbol: string;
+  naturalRange: [number, number];
+  bestNatural: number;
+  curvature: number;
+  linear?: number;
+}
+
+/** Ajuste de segundo orden y meseta de equivalencia (C5). */
+export interface CalibrationMethodRsmAnalysis {
+  comparable?: boolean;
+  reason?: string;
+  plateau?: Record<string, CalibrationMethodPlateauEntry>;
+  warnings?: string[];
+  limitations?: string[];
+}
+
+/** Análisis de cada fase; `null` cuando no hay evidencia de esa fase. */
+export interface CalibrationMethodAnalyses {
+  noise: Record<string, unknown> | null;
+  factorial: Record<string, unknown> | null;
+  budget: Record<string, unknown> | null;
+  nocut: Record<string, unknown> | null;
+  ratio: Record<string, unknown> | null;
+  validation: CalibrationMethodValidationAnalysis | null;
+  objective: CalibrationMethodObjectiveAnalysis | null;
+  rsm: CalibrationMethodRsmAnalysis | null;
+}
+
+/**
+ * C7 · criterios de aceptación evaluados sobre la **mediana** (no sobre un valor puntual).
+ *
+ * AC-1 compara la distancia mediana con la referencia (w = 0) y AC-2 exige 0 puntos sin cubrir,
+ * flota suficiente y jornada bajo el techo. `ac2Reason` es la lectura que el backend declara
+ * (incluye por qué AC-2 no se sostiene cuando el bloque de 8 h deja puntos sin cubrir).
+ */
+export interface CalibrationMethodObjectiveAnalysis {
+  comparable?: boolean;
+  reason?: string | null;
+  blockHours?: number;
+  deltaKm?: number | null;
+  baselineLabel?: string | null;
+  ac1?: { criterion?: string; ok?: boolean };
+  ac2?: { criterion?: string; ok?: boolean };
+  ac2Reason?: string | null;
+  distanceInert?: boolean | null;
+  headline?: string | null;
+  points?: Record<string, unknown>[];
+}
+
+/**
+ * Evidencia completa del protocolo metodológico, leída de la BD (0 CPU).
+ *
+ * El backend responde `409` si falta el factorial de referencia, del que derivan el
+ * perfil recomendado y los análisis de C3.3/C5/C6.
+ */
+export interface CalibrationMethodEvidence {
+  protocol: CalibrationMethodProtocol;
+  phases: Record<CalibrationMethodPhase, CalibrationMethodPhaseTrace>;
+  /** Fases cuya evidencia se midió con otra instancia (sello `stale`). */
+  stalePhases?: CalibrationMethodPhase[];
+  analyses: CalibrationMethodAnalyses;
+  recommendation: CalibrationMethodRecommendation;
+}
+
+export interface CalibrationMethodEvidenceQuery {
+  referenceRunId?: number;
+  deltaKm?: number;
+}
+
+export interface CalibrationMethodJobRequest extends CalibrationJobRequest {
+  /** Una fase, o `all` para correr el protocolo entero en un solo job. */
+  phase: CalibrationMethodTarget;
+  /** `null`/omitido = juego completo de 10 semillas; `[42, 101]` = verificación corta. */
+  seeds?: number[] | null;
+  /** Continúa un barrido cortado desde el salvavidas de E0. Por defecto, `true`. */
+  resume?: boolean;
+}
+
 /** Lectura de la validación de la combinación (404 si nunca se ha lanzado). */
 export function fetchAcoValidation(): Promise<AcoValidationPayload> {
   if (useMocks) {
@@ -376,6 +569,133 @@ export function startCalibrationJob(
         ? '/api/v1/benchmarks/aco/validation/jobs'
         : '/api/v1/benchmarks/objective/sweep/jobs';
   return apiPost<{ jobId: string }>(path, request);
+}
+
+/** Lee la evidencia del protocolo metodológico (0 CPU). */
+export function fetchCalibrationMethodEvidence(
+  query: CalibrationMethodEvidenceQuery = {},
+): Promise<CalibrationMethodEvidence> {
+  if (useMocks) return Promise.resolve(mockCalibrationMethodEvidence());
+  const params = new URLSearchParams();
+  if (query.referenceRunId !== undefined) params.set('referenceRunId', String(query.referenceRunId));
+  if (query.deltaKm !== undefined) params.set('deltaKm', String(query.deltaKm));
+  const suffix = params.toString();
+  return apiGet<CalibrationMethodEvidence>(
+    `/api/v1/benchmarks/calibration/method${suffix ? `?${suffix}` : ''}`,
+  );
+}
+
+/** Lanza **una fase** del protocolo metodológico como job asíncrono (202 `{jobId}`). */
+export function startCalibrationMethodJob(
+  request: CalibrationMethodJobRequest,
+): Promise<{ jobId: string }> {
+  if (useMocks) {
+    return Promise.reject(
+      new ApiError('Ejecución deshabilitada en modo demo; usa just calib-report.', 400),
+    );
+  }
+  return apiPost<{ jobId: string }>('/api/v1/benchmarks/calibration/method/jobs', request);
+}
+
+/** Evidencia plausible para el modo demo: no hay backend, pero la vista debe verse. */
+function mockCalibrationMethodEvidence(): CalibrationMethodEvidence {
+  const standard: CalibrationMethodProfile = {
+    acoAlpha: 1,
+    acoBeta: 3,
+    acoRho: 0.12,
+    pheromoneQ: 1,
+    acoPatience: 5,
+    acoAnts: 12,
+    acoIterations: 20,
+  };
+  const profile: CalibrationMethodProfile = { ...standard, acoBeta: 5 };
+  return {
+    protocol: {
+      deltaKm: 5.07,
+      seeds: 10,
+      iterations: 20,
+      standardProfile: '12×20',
+      standardHyperparameters: 'α1 β3 ρ0.12 Q1',
+      scenario: 'normal',
+      referenceRunId: 4,
+    },
+    phases: {
+      noise: { runId: 1, seeds: 10, generatedAt: '2026-09-18T01:10:00+00:00', scenarioId: 'normal' },
+      factorial: { runId: 4, seeds: 10, generatedAt: '2026-09-18T01:27:24+00:00', scenarioId: 'normal' },
+      budget: { runId: 5, seeds: 10, generatedAt: '2026-09-18T01:40:00+00:00', scenarioId: 'normal' },
+      nocut: { runId: 6, seeds: 10, generatedAt: '2026-09-18T01:52:00+00:00', scenarioId: 'normal' },
+      identify: { runId: 7, seeds: 10, generatedAt: '2026-09-18T02:03:00+00:00', scenarioId: 'normal' },
+      validate: { runId: null, seeds: 0, generatedAt: null, scenarioId: null },
+      rsm: { runId: null, seeds: 0, generatedAt: null, scenarioId: null },
+    },
+    analyses: {
+      noise: { phase: 'noise', limitations: [] },
+      factorial: { phase: 'factorial', limitations: [] },
+      budget: { phase: 'budget', limitations: [] },
+      nocut: { phase: 'nocut', limitations: [] },
+      ratio: { phase: 'ratio', limitations: [] },
+      validation: null,
+      rsm: null,
+    },
+    recommendation: {
+      available: true,
+      deltaKm: 5.07,
+      ratioGoverns: false,
+      standard,
+      profile,
+      justification: {
+        acoAlpha: {
+          value: 1,
+          moved: false,
+          effectKm: -8.2,
+          significant: true,
+          material: false,
+          reason: 'efecto no material: se queda en el estándar 1',
+        },
+        acoBeta: {
+          value: 5,
+          moved: true,
+          effectKm: -45.81,
+          significant: true,
+          material: true,
+          reason: 'interacción material con acoAlpha pero el efecto simple supera δ: se mueve a 5',
+        },
+        acoRho: {
+          value: 0.12,
+          moved: false,
+          effectKm: 1.4,
+          significant: false,
+          material: false,
+          reason: 'efecto no material: se queda en el estándar 0.12',
+        },
+        acoPatience: {
+          value: 5,
+          moved: false,
+          effectKm: 2.1,
+          significant: false,
+          material: false,
+          reason: 'sin contraste: se queda en el estándar 5',
+        },
+        pheromoneQ: {
+          value: 1,
+          moved: false,
+          material: false,
+          reason: 'Q inerte dentro del ruido (C4): se queda en el estándar',
+        },
+        budget: {
+          value: { acoAnts: 12, acoIterations: 20 },
+          alternative: { acoAnts: 8, acoIterations: 30 },
+          moved: false,
+          reason: 'trabajo fijo equivalente: se conserva 12×20 y se declara (8×30) como opción de coste',
+        },
+      },
+      warnings: ['β = 10 se midió fuera del rango del factorial: es extrapolación.'],
+      rule: 'se mueve una perilla solo si su efecto desde el centro supera δ y es significativo',
+      limitations: [
+        'Una sola instancia y un solo escenario: la recomendación no generaliza entre instancias.',
+      ],
+    },
+  };
 }
 
 export function fetchCalibrationJob(jobId: string): Promise<CalibrationJobSnapshot> {

@@ -8,14 +8,17 @@ import {
   fetchAcoValidation,
   fetchCalibrationHistory,
   fetchCalibrationJob,
+  fetchCalibrationMethodEvidence,
   fetchCalibrationRun,
   fetchObjectiveSweep,
   startCalibrationJob,
+  startCalibrationMethodJob,
   type AcoSensitivityPayload,
   type AcoValidationPayload,
   type CalibrationHistoryPage,
   type CalibrationHistoryRun,
   type CalibrationJobSnapshot,
+  type CalibrationMethodEvidence,
   type ObjectiveSweepPayload,
 } from '../../core/api/benchmark';
 import { fetchScenarios } from '../../core/api/simulation';
@@ -30,6 +33,7 @@ import { CalibrationObjectiveResults } from './CalibrationObjectiveResults';
 import { CalibrationProgress } from './CalibrationProgress';
 import { CalibrationResults } from './CalibrationResults';
 import { CalibrationRunControls } from './CalibrationRunControls';
+import { MethodEvidencePanel } from './MethodEvidencePanel';
 import { advisorProfileParams, isStandardProfile } from './calibrationAdvisorUx';
 import { profileLabel } from './acoValidationUx';
 import {
@@ -38,6 +42,7 @@ import {
   defaultRunConfig,
   isJobRunning,
   jobRequestFor,
+  methodJobRequestFor,
   pendingSnapshot,
   viewStateFor,
   wasServedFromCache,
@@ -81,6 +86,12 @@ export default function CalibrationPage() {
   const [tab, setTab] = createSignal<CalibrationResultTab>('sensitivity');
   const [history, setHistory] = createSignal<CalibrationHistoryPage | null>(null);
   const [historyRun, setHistoryRun] = createSignal<CalibrationHistoryRun | null>(null);
+  /** Evidencia del protocolo metodológico leída de la BD (0 CPU). */
+  const [methodEvidence, setMethodEvidence] = createSignal<CalibrationMethodEvidence | null>(null);
+  const [methodError, setMethodError] = createSignal<string | null>(null);
+  const [applyingMethod, setApplyingMethod] = createSignal(false);
+  const [appliedMethod, setAppliedMethod] = createSignal<string | null>(null);
+  const [applyMethodError, setApplyMethodError] = createSignal<string | null>(null);
   /** Corrida de validación abierta desde el historial (vive en su panel, no en las pestañas). */
   const [validationRun, setValidationRun] = createSignal<CalibrationHistoryRun | null>(null);
 
@@ -100,6 +111,16 @@ export default function CalibrationPage() {
       setHistory(await fetchCalibrationHistory());
     } catch {
       setHistory(null);
+    }
+  };
+
+  const loadMethodEvidence = async () => {
+    try {
+      setMethodEvidence(await fetchCalibrationMethodEvidence());
+      setMethodError(null);
+    } catch (cause) {
+      setMethodEvidence(null);
+      setMethodError(errorMessage(cause, tr('calibration.method.noEvidence')));
     }
   };
 
@@ -126,6 +147,7 @@ export default function CalibrationPage() {
     setValidation(val);
     if (sens) setTab((current) => (obj ? current : 'sensitivity'));
     else if (obj) setTab('objective');
+    await loadMethodEvidence();
     setLoadingCache(false);
   };
 
@@ -185,7 +207,10 @@ export default function CalibrationPage() {
     setReusedCache(false);
     stopPolling();
     try {
-      const { jobId } = await startCalibrationJob(config().mode, jobRequestFor(config()));
+      const { jobId } =
+        config().mode === 'method'
+          ? await startCalibrationMethodJob(methodJobRequestFor(config()))
+          : await startCalibrationJob(config().mode, jobRequestFor(config()));
       waitStartedAt = Date.now();
       setJob(pendingSnapshot(jobId, config().mode));
       pollTimer = window.setInterval(() => void poll(jobId), CALIBRATION_POLL_MS);
@@ -303,6 +328,43 @@ export default function CalibrationPage() {
     }
   };
 
+  /**
+   * Aplica el perfil recomendado por el protocolo metodológico a la configuración del motor.
+   */
+  const applyMethodRecommended = async () => {
+    const evidence = methodEvidence();
+    if (!evidence) return;
+    setApplyMethodError(null);
+    setAppliedMethod(null);
+    setApplyingMethod(true);
+    try {
+      const profile = evidence.recommendation.profile;
+      const updated = await updateAlgorithmSettings({
+        acoAnts: profile.acoAnts,
+        acoIterations: profile.acoIterations,
+        acoAlpha: profile.acoAlpha,
+        acoBeta: profile.acoBeta,
+        acoRho: profile.acoRho,
+        pheromoneQ: profile.pheromoneQ,
+      });
+      // Se confirma con lo que el motor guardó, no con lo que se pidió.
+      setAppliedMethod(
+        `${tr('calibration.method.applied')} ${profileLabel({
+          acoAnts: updated.acoAnts,
+          acoIterations: updated.acoIterations,
+          acoAlpha: updated.acoAlpha,
+          acoBeta: updated.acoBeta,
+          acoRho: updated.acoRho,
+          pheromoneQ: updated.pheromoneQ,
+        })}`,
+      );
+    } catch (cause) {
+      setApplyMethodError(errorMessage(cause, tr('calibration.method.applyError')));
+    } finally {
+      setApplyingMethod(false);
+    }
+  };
+
   /** Combinación que la vista recomienda; `null` si ya coincide con el perfil estándar. */
   const recommendedProfile = createMemo(() => {
     const payload = sensitivity();
@@ -388,6 +450,19 @@ export default function CalibrationPage() {
       </Show>
 
       <Show when={!loadingCache()}>
+        <MethodEvidencePanel
+          evidence={methodEvidence()}
+          error={methodError()}
+          onApply={
+            methodEvidence()?.recommendation.available
+              ? () => void applyMethodRecommended()
+              : undefined
+          }
+          applying={applyingMethod()}
+          appliedMessage={appliedMethod()}
+          applyError={applyMethodError()}
+        />
+
         <Show when={sensitivity() || objective()}>
           <CalibrationAdvicePanel
             sensitivity={sensitivity()}

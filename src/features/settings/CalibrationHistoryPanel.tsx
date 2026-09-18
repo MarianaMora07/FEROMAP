@@ -1,7 +1,7 @@
 import { For, Show, createMemo } from 'solid-js';
 import { Card, CardHeader } from '../../design-system/components';
 import { useLocale } from '../../core/i18n/solid';
-import type { CalibrationHistoryItem, CalibrationHistoryPage, CalibrationHistoryRun } from '../../core/api/benchmark';
+import type { CalibrationHistoryItem, CalibrationHistoryPage, CalibrationHistoryRun, CalibrationSweep } from '../../core/api/benchmark';
 
 interface CalibrationHistoryPanelProps {
   history: CalibrationHistoryPage | null;
@@ -15,13 +15,25 @@ function stampLabel(createdAt: string | null): string {
   return new Date(createdAt).toLocaleString('es-VE');
 }
 
+/** Barridos que esta vista sabe renderizar (el resto de `calibration_sweeps` no se lista). */
+const VIEW_SWEEPS: readonly CalibrationSweep[] = ['sensitivity', 'objective', 'validation'];
+
 /**
  * Historial de corridas guardadas en la BD: permite abrir una anterior sin perder la
  * caché vigente (el sello de cada corrida dice si sigue siendo de la instancia actual).
+ *
+ * Solo los barridos de esta vista. El protocolo de calibración metodológica (barrido `method`)
+ * escribe en la misma tabla y **no** se lista aquí: sus fases (C0–C8) no comparten el contrato de
+ * payload de estos barridos y su lectura es el panel de evidencia del protocolo (que cita el id de
+ * la corrida más completa de cada fase).
  */
 export function CalibrationHistoryPanel(props: CalibrationHistoryPanelProps) {
   const tr = useLocale();
-  const items = createMemo(() => props.history?.items ?? []);
+  const items = createMemo(() =>
+    (props.history?.items ?? []).filter(
+      (item) => item.sweep !== null && VIEW_SWEEPS.includes(item.sweep),
+    ),
+  );
 
   return (
     <Card data-testid="calibration-history">

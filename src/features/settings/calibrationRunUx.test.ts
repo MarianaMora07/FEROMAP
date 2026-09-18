@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { CalibrationJobSnapshot } from '../../core/api/benchmark';
 import {
+  CALIBRATION_METHOD_PHASE_OPTIONS,
   CALIBRATION_POLL_MS,
   controlsDisabled,
   defaultRunConfig,
   etaSeconds,
   formatEta,
   jobRequestFor,
+  methodJobRequestFor,
   pendingSnapshot,
   progressPercent,
   runCounterLabel,
@@ -71,8 +73,61 @@ describe('calibración — petición del job y reutilización de caché (Fase 5)
       scenarioId: 'normal',
       seed: 42,
       reuseCache: false,
+      methodPhase: 'factorial',
+      methodShort: false,
     });
     expect(jobRequestFor(config)).toEqual({ scenarioId: 'normal', seed: 42, refresh: true });
+  });
+
+  it('la fase del protocolo viaja en su propia petición, no en la de los barridos', () => {
+    const config = {
+      ...defaultRunConfig(),
+      mode: 'method' as const,
+      methodPhase: 'rsm' as const,
+    };
+
+    // ``jobRequestFor`` es la petición de los barridos clásicos: no debe llevar la fase.
+    expect(jobRequestFor(config)).toEqual({ scenarioId: 'normal', seed: 42, refresh: true });
+
+    const full = methodJobRequestFor(config);
+    expect(full).toEqual({
+      phase: 'rsm',
+      seeds: null,
+      resume: true,
+      scenarioId: 'normal',
+      seed: 42,
+      refresh: true,
+    });
+
+    // La verificación corta usa las dos semillas de fontanería del protocolo.
+    const short = methodJobRequestFor({ ...config, methodShort: true });
+    expect(short.seeds).toEqual([42, 101]);
+  });
+
+  it('las opciones de objetivo incluyen el protocolo completo y las ocho fases', () => {
+    expect(CALIBRATION_METHOD_PHASE_OPTIONS.map((option) => option.value)).toEqual([
+      'all',
+      'noise',
+      'factorial',
+      'budget',
+      'nocut',
+      'identify',
+      'validate',
+      'objective',
+      'rsm',
+    ]);
+    expect(CALIBRATION_METHOD_PHASE_OPTIONS[0].labelKey).toBe('calibration.method.target.all');
+    expect(CALIBRATION_METHOD_PHASE_OPTIONS[1].labelKey).toBe('calibration.method.phase.noise');
+  });
+
+  it('el protocolo completo viaja como objetivo `all` en su propia petición', () => {
+    const config = {
+      ...defaultRunConfig(),
+      mode: 'method' as const,
+      methodPhase: 'all' as const,
+    };
+
+    expect(methodJobRequestFor(config).phase).toBe('all');
   });
 
   it('reusar caché se traduce en refresh=false', () => {

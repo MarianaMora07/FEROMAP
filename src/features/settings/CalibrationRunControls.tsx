@@ -7,9 +7,14 @@ import {
   TextField,
 } from '../../design-system/components';
 import { useLocale } from '../../core/i18n/solid';
-import type { CalibrationJobStatus, CalibrationSweep } from '../../core/api/benchmark';
+import type {
+  CalibrationJobStatus,
+  CalibrationMethodPhase,
+  CalibrationSweep,
+} from '../../core/api/benchmark';
 import type { Scenario } from '../../data/types/simulation';
 import {
+  CALIBRATION_METHOD_PHASE_OPTIONS,
   CALIBRATION_MODES,
   controlsDisabled,
   type CalibrationRunConfig,
@@ -72,6 +77,38 @@ export function CalibrationRunControls(props: CalibrationRunControlsProps) {
           onChange={(event) => props.onChange({ seed: Number(event.currentTarget.value) })}
         />
       </div>
+
+      <Show when={props.config.mode === 'method'}>
+        <div class="mt-3 grid gap-3 sm:grid-cols-2">
+          <SelectField
+            label={tr('calibration.method.phaseLabel')}
+            data-testid="calibration-method-phase"
+            disabled={disabled()}
+            value={props.config.methodPhase}
+            onChange={(event) =>
+              props.onChange({
+                methodPhase: event.currentTarget.value as CalibrationMethodPhase,
+              })
+            }
+          >
+            <For each={CALIBRATION_METHOD_PHASE_OPTIONS}>
+              {(phase) => <option value={phase.value}>{tr(phase.labelKey)}</option>}
+            </For>
+          </SelectField>
+
+          <label class="flex items-center gap-2 self-end text-sm text-text-secondary sm:mb-3">
+            <input
+              type="checkbox"
+              data-testid="calibration-method-short"
+              class="h-4 w-4 rounded border-border text-fero-blue focus:ring-fero-blue"
+              checked={props.config.methodShort}
+              disabled={disabled()}
+              onChange={(event) => props.onChange({ methodShort: event.currentTarget.checked })}
+            />
+            {tr('calibration.method.short')}
+          </label>
+        </div>
+      </Show>
 
       <label class="mt-3 flex items-center gap-2 text-sm text-text-secondary">
         <input
