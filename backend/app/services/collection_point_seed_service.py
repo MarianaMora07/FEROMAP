@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 # Total del catálogo demo: los puntos de data/seeds/collection_points.json + relleno
 # automático repartido por sector. A jornada de 12 h el motor reparte ~30 puntos por
 # camión, así que un catálogo mayor es lo que hace emerger más flota sin forzar la
-# restricción `min_active_vehicles` (180 puntos -> ~6 camiones en la instancia completa).
-TARGET_COLLECTION_POINTS = 180
+# restricción `min_active_vehicles` (300 puntos -> ~9 camiones en la instancia completa).
+TARGET_COLLECTION_POINTS = 300
 
 # Coordenadas aproximadas por sector (zona Ciudad Guayana)
 # Basadas en los puntos existentes y distribución geográfica conocida
@@ -82,6 +82,76 @@ _SECTOR_COORDS: dict[str, tuple[float, float]] = {
 
 DEFAULT_LAT = 8.2750
 DEFAULT_LNG = -62.7500
+
+# Geometría de sectores (nombre -> polígono) para ubicar puntos auto dentro del sector.
+_SECTOR_GEOMETRY: dict[str, dict] | None = None
+
+
+def _sector_geometry_by_name() -> dict[str, dict]:
+    global _SECTOR_GEOMETRY
+    if _SECTOR_GEOMETRY is None:
+        from app.services.seed_loader import load_seed
+
+        try:
+            rows = load_seed("sectors.json")
+        except FileNotFoundError:
+            rows = []
+        _SECTOR_GEOMETRY = {row["name"]: row.get("geometry") or {} for row in rows}
+    return _SECTOR_GEOMETRY
+
+
+def _polygon_points(geometry: dict) -> list[tuple[float, float]]:
+    """Extrae los vértices de un Polygon GeoJSON como (lng, lat)."""
+    if geometry.get("type") != "Polygon":
+        return []
+    rings = geometry.get("coordinates") or []
+    if not rings or not rings[0]:
+        return []
+    return [(float(c[0]), float(c[1])) for c in rings[0]]
+
+
+def _point_in_polygon(x: float, y: float, ring: list[tuple[float, float]]) -> bool:
+    """Ray casting: True si (x, y) está dentro del anillo cerrado."""
+    inside = False
+    n = len(ring)
+    if n < 3:
+        return False
+    j = n - 1
+    for i in range(n):
+        xi, yi = ring[i]
+        xj, yj = ring[j]
+        if (yi > y) != (yj > y) and x < (xj - xi) * (y - yi) / (yj - yi + 1e-30) + xi:
+            inside = not inside
+        j = i
+    return inside
+
+
+def _coords_for_sector(sector_name: str, index_in_sector: int) -> tuple[float, float]:
+    """Lat/lng del punto: dentro del polígono del sector si existe geometría."""
+    ring = _polygon_points(_sector_geometry_by_name().get(sector_name) or {})
+    if ring:
+        lngs = [p[0] for p in ring]
+        lats = [p[1] for p in ring]
+        min_lng, max_lng = min(lngs), max(lngs)
+        min_lat, max_lat = min(lats), max(lats)
+        # Offset determinista en malla 3×3 dentro del bbox del polígono.
+        cell = index_in_sector % 9
+        col, row = cell % 3, cell // 3
+        lat = min_lat + (max_lat - min_lat) * (0.25 + row * 0.25)
+        lng = min_lng + (max_lng - min_lng) * (0.25 + col * 0.25)
+        # Si cae fuera (polígono irregular), usar el centroide de vértices.
+        if not _point_in_polygon(lng, lat, ring):
+            lat = sum(p[1] for p in ring) / len(ring)
+            lng = sum(p[0] for p in ring) / len(ring)
+        # Pequeño desplazamiento por índice para no apilar puntos idénticos.
+        lat += (index_in_sector % 5) * 0.0003
+        lng += (index_in_sector % 3) * 0.0004
+        return lat, lng
+
+    lat, lng = _SECTOR_COORDS.get(sector_name, (DEFAULT_LAT, DEFAULT_LNG))
+    lat += (index_in_sector % 5) * 0.0003
+    lng += (index_in_sector % 3) * 0.0004
+    return lat, lng
 
 
 def ensure_collection_points_coverage(
@@ -161,9 +231,7 @@ def _build_point_for_sector(
     code_serial: int,
     existing_codes: set[str],
 ) -> tuple[CollectionPoint, int]:
-    lat, lng = _SECTOR_COORDS.get(sector.name, (DEFAULT_LAT, DEFAULT_LNG))
-    lat += (index_in_sector % 5) * 0.0003
-    lng += (index_in_sector % 3) * 0.0004
+    lat, lng = _coords_for_sector(sector.name, index_in_sector)
 
     code_serial += 1
     code = f"CNT-{code_serial:03d}"

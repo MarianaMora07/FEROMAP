@@ -37,7 +37,7 @@ def db():
 
 
 def _db_has_seed_demo(db: Session) -> bool:
-    """True si la BD global ya trae el catálogo demo (≈180 collection points)."""
+    """True si la BD global ya trae el catálogo demo (≈300 collection points)."""
     total = db.scalar(
         select(func.count()).select_from(CollectionPoint).where(CollectionPoint.deleted_at.is_(None))
     )
