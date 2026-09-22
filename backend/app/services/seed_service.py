@@ -75,9 +75,11 @@ def clear_tables(session: Session) -> None:
         "pending_visits", "vehicle_incidents", "route_waypoints",
         "visit_schedules", "optimized_routes", "daily_plans",
         "weekly_plan_days", "weekly_plans", "simulations",
+        "case_study_points", "case_studies",
         "collection_points", "vehicles",
         "sectors",
         "drivers", "parishes", "users",
+        "statistical_validations",
     ]:
         try:
             session.execute(text(f"DELETE FROM {tbl}"))
