@@ -2,8 +2,9 @@
   {
     "name": "Terrazas del caroni A-B-C",
     "parishName": "Unare",
-    "population": 1035,
+    "population": 2105,
     "avgWasteKg": 120,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -87,8 +88,9 @@
   {
     "name": "Terrazas del aluminio",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1048,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -140,8 +142,9 @@
   {
     "name": "Villa Betania",
     "parishName": "Unare",
-    "population": 6669,
+    "population": 5974,
     "avgWasteKg": 220,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -193,8 +196,9 @@
   {
     "name": "Mini fincas",
     "parishName": "Unare",
-    "population": 5757,
+    "population": 4600,
     "avgWasteKg": 215,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -282,8 +286,9 @@
   {
     "name": "Villa Ikabaru",
     "parishName": "Unare",
-    "population": 785,
+    "population": 1597,
     "avgWasteKg": 115,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -347,8 +352,9 @@
   {
     "name": "Rio negro",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1048,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -408,8 +414,9 @@
   {
     "name": "Los Bucares",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1049,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -445,8 +452,9 @@
   {
     "name": "La Pastoreña",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1049,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -494,8 +502,9 @@
   {
     "name": "Altos de Caroní",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1049,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -539,8 +548,9 @@
   {
     "name": "Manuelita Saenz",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1049,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -580,8 +590,9 @@
   {
     "name": "Las Mercedes",
     "parishName": "Unare",
-    "population": 620,
+    "population": 1261,
     "avgWasteKg": 112,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -649,8 +660,9 @@
   {
     "name": "Rio Aro",
     "parishName": "Unare",
-    "population": 767,
+    "population": 1560,
     "avgWasteKg": 115,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -690,8 +702,9 @@
   {
     "name": "Res Caroni plaza A-B-C-D",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1049,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -743,8 +756,9 @@
   {
     "name": "Paratepuy",
     "parishName": "Unare",
-    "population": 864,
+    "population": 1758,
     "avgWasteKg": 117,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -788,8 +802,9 @@
   {
     "name": "Las Garzas",
     "parishName": "Unare",
-    "population": 535,
+    "population": 1088,
     "avgWasteKg": 110,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -853,8 +868,9 @@
   {
     "name": "Las Peonias",
     "parishName": "Unare",
-    "population": 1291,
+    "population": 2626,
     "avgWasteKg": 125,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -894,8 +910,9 @@
   {
     "name": "Sierra Parima",
     "parishName": "Unare",
-    "population": 418,
+    "population": 850,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -927,8 +944,9 @@
   {
     "name": "Unare I",
     "parishName": "Unare",
-    "population": 1874,
+    "population": 3812,
     "avgWasteKg": 137,
+    "perCapitaKgPerDay": 0.78,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1008,8 +1026,9 @@
   {
     "name": "Villa Caroni",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1048,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1041,8 +1060,9 @@
   {
     "name": "El tiamo Country Club",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1049,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1090,8 +1110,9 @@
   {
     "name": "Isla Dorada",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1049,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1163,8 +1184,9 @@
   {
     "name": "Isla Coral",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1049,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1212,8 +1234,9 @@
   {
     "name": "Isla Bonita",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1049,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1261,8 +1284,9 @@
   {
     "name": "Villa Guayana",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1048,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1298,8 +1322,9 @@
   {
     "name": "Yuruani",
     "parishName": "Unare",
-    "population": 1127,
+    "population": 2293,
     "avgWasteKg": 122,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1383,8 +1408,9 @@
   {
     "name": "Rio Yocoima",
     "parishName": "Unare",
-    "population": 406,
+    "population": 826,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1420,8 +1446,9 @@
   {
     "name": "Uchire",
     "parishName": "Unare",
-    "population": 487,
+    "population": 991,
     "avgWasteKg": 109,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1477,8 +1504,9 @@
   {
     "name": "Curagua B",
     "parishName": "Unare",
-    "population": 812,
+    "population": 1652,
     "avgWasteKg": 116,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1554,8 +1582,9 @@
   {
     "name": "Don Guillermo",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1049,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1591,8 +1620,9 @@
   {
     "name": "Caujaro",
     "parishName": "Unare",
-    "population": 1481,
+    "population": 3013,
     "avgWasteKg": 129,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1644,8 +1674,9 @@
   {
     "name": "Bloques de Curagua",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1049,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1681,8 +1712,9 @@
   {
     "name": "Villa Apso",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1048,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1726,8 +1758,9 @@
   {
     "name": "Las palmeras I y II",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1049,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1759,8 +1792,9 @@
   {
     "name": "Yara Yara I y II",
     "parishName": "Unare",
-    "population": 678,
+    "population": 1379,
     "avgWasteKg": 113,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1804,8 +1838,9 @@
   {
     "name": "Guamo A-B-C",
     "parishName": "Unare",
-    "population": 1349,
+    "population": 2744,
     "avgWasteKg": 126,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1877,8 +1912,9 @@
   {
     "name": "Barrio Guayana",
     "parishName": "Unare",
-    "population": 1765,
+    "population": 3590,
     "avgWasteKg": 135,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1918,8 +1954,9 @@
   {
     "name": "El caimito 1-2-3-4",
     "parishName": "Unare",
-    "population": 1438,
+    "population": 2925,
     "avgWasteKg": 128,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1959,8 +1996,9 @@
   {
     "name": "Urb. Villa del Caroní",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1049,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1992,8 +2030,9 @@
   {
     "name": "Unare II",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1048,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2057,8 +2096,9 @@
   {
     "name": "UD 292",
     "parishName": "Unare",
-    "population": 951,
+    "population": 1935,
     "avgWasteKg": 119,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2106,8 +2146,9 @@
   {
     "name": "Rio Cuyuní",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1048,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2151,8 +2192,9 @@
   {
     "name": "Ventuari",
     "parishName": "Unare",
-    "population": 830,
+    "population": 1688,
     "avgWasteKg": 116,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2188,8 +2230,9 @@
   {
     "name": "Villa Yenisha",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1048,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2225,8 +2268,9 @@
   {
     "name": "Res. Atlantico Plaza",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1049,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2266,8 +2310,9 @@
   {
     "name": "Camino Real",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1049,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2331,8 +2376,9 @@
   {
     "name": "Lomas del caroni",
     "parishName": "Unare",
-    "population": 703,
+    "population": 1430,
     "avgWasteKg": 114,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2372,8 +2418,9 @@
   {
     "name": "Los Rosales",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1049,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2413,8 +2460,9 @@
   {
     "name": "Villa Victoria",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1048,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2454,8 +2502,9 @@
   {
     "name": "Colegio Integral Guayana",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1049,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2499,8 +2548,9 @@
   {
     "name": "Urb. Sur Aeropuerto",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1049,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2536,8 +2586,9 @@
   {
     "name": "Res. Prasanthy country",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1049,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2581,8 +2632,9 @@
   {
     "name": "Rio Caura",
     "parishName": "Unare",
-    "population": 400,
+    "population": 1048,
     "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2616,1783 +2668,558 @@
     }
   },
   {
-    "name": "FARMACON CARONÍ",
+    "name": "C.C Los Andes",
     "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
+    "population": 1758,
+    "avgWasteKg": 117,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
         [
           [
-            -62.8001471,
-            8.2469393
+            -62.7936639,
+            8.2599533
           ],
           [
-            -62.8029938,
-            8.2439239
+            -62.797934,
+            8.2556957
           ],
           [
-            -62.8001757,
-            8.2409367
+            -62.7994736,
+            8.2539384
           ],
           [
-            -62.7995892,
-            8.2415029
+            -62.7972635,
+            8.2516928
           ],
           [
-            -62.7971573,
-            8.2427346
+            -62.7956156,
+            8.2524985
           ],
           [
-            -62.7972717,
-            8.2431877
+            -62.7941393,
+            8.2536227
           ],
           [
-            -62.7984734,
-            8.2452971
+            -62.7903681,
+            8.2569141
           ],
           [
-            -62.8001471,
-            8.2469393
+            -62.7936639,
+            8.2599533
           ]
         ]
       ]
     }
   },
   {
-    "name": "LIBERTY EXPRESS UNARE",
+    "name": "Res. El Gigante",
     "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
+    "population": 1758,
+    "avgWasteKg": 117,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
         [
           [
-            -62.7756907,
-            8.2788266
+            -62.7936639,
+            8.2599533
           ],
           [
-            -62.7748181,
-            8.2756698
+            -62.797934,
+            8.2556957
           ],
           [
-            -62.7658202,
-            8.2788691
+            -62.7994736,
+            8.2539384
           ],
           [
-            -62.767079,
-            8.2821533
+            -62.7972635,
+            8.2516928
           ],
           [
-            -62.7712561,
-            8.2806244
+            -62.7956156,
+            8.2524985
           ],
           [
-            -62.7756907,
-            8.2788266
+            -62.7941393,
+            8.2536227
+          ],
+          [
+            -62.7903681,
+            8.2569141
+          ],
+          [
+            -62.7936639,
+            8.2599533
           ]
         ]
       ]
     }
   },
   {
-    "name": "CARRERA PRESPUNTAL / GUANIPA",
+    "name": "Res. Kanayma Sur",
     "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
+    "population": 1758,
+    "avgWasteKg": 117,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
         [
           [
-            -62.7666164,
-            8.2814963
+            -62.7936639,
+            8.2599533
           ],
           [
-            -62.7656294,
-            8.2788491
+            -62.797934,
+            8.2556957
           ],
           [
-            -62.7594996,
-            8.2809513
+            -62.7994736,
+            8.2539384
           ],
           [
-            -62.760383,
-            8.2831136
+            -62.7972635,
+            8.2516928
           ],
           [
-            -62.7622176,
-            8.2834285
+            -62.7956156,
+            8.2524985
           ],
           [
-            -62.7637697,
-            8.2828765
+            -62.7941393,
+            8.2536227
           ],
           [
-            -62.7667023,
-            8.2817369
+            -62.7903681,
+            8.2569141
           ],
           [
-            -62.7666164,
-            8.2814963
+            -62.7936639,
+            8.2599533
           ]
         ]
       ]
     }
   },
   {
-    "name": "Polígono 62",
+    "name": "Campito",
     "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
+    "population": 1935,
+    "avgWasteKg": 119,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
         [
           [
-            -62.7602519,
-            8.2830539
+            -62.7656131,
+            8.2787032
           ],
           [
-            -62.759508,
-            8.2810792
+            -62.7644329,
+            8.2751465
           ],
           [
-            -62.7549375,
-            8.2827284
+            -62.7639287,
+            8.2736388
           ],
           [
-            -62.7559461,
-            8.2856515
+            -62.7643364,
+            8.2706448
           ],
           [
-            -62.756411,
-            8.2855029
+            -62.7588647,
+            8.2713561
           ],
           [
-            -62.7576913,
-            8.2839812
+            -62.7590059,
+            8.2722888
           ],
           [
-            -62.7589501,
-            8.2834857
+            -62.7593582,
+            8.2732566
           ],
           [
-            -62.7602519,
-            8.2830539
+            -62.7618044,
+            8.2799985
+          ],
+          [
+            -62.7656131,
+            8.2787032
           ]
         ]
       ]
     }
   },
   {
-    "name": "URBANIZACIÓN DOÑA LUISA",
+    "name": "Posada Daniel",
     "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
+    "population": 1688,
+    "avgWasteKg": 116,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
         [
           [
-            -62.7646457,
-            8.265259
+            -62.7722465,
+            8.2687251
           ],
           [
-            -62.76461,
-            8.2638257
+            -62.7704655,
+            8.2637137
           ],
           [
-            -62.7628612,
-            8.2641229
+            -62.7647792,
+            8.26537
           ],
           [
-            -62.7616345,
-            8.2643919
+            -62.7649723,
+            8.2682155
           ],
           [
-            -62.7617955,
-            8.2649723
+            -62.764629,
+            8.270169
           ],
           [
-            -62.7619457,
-            8.265712
-          ],
-          [
-            -62.7631151,
-            8.2655209
-          ],
-          [
-            -62.7640557,
-            8.2653369
-          ],
-          [
-            -62.7646457,
-            8.265259
+            -62.7722465,
+            8.2687251
           ]
         ]
       ]
     }
   },
   {
-    "name": "POSADA VILLA FELICIDAD",
+    "name": "Curagua A",
     "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
+    "population": 1652,
+    "avgWasteKg": 116,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
         [
           [
-            -62.8015444,
-            8.2590931
+            -62.7827166,
+            8.2699676
           ],
           [
-            -62.7999279,
-            8.2574933
+            -62.7808551,
+            8.2681202
           ],
           [
-            -62.7951929,
-            8.2616554
+            -62.7800209,
+            8.2671752
           ],
           [
-            -62.7971813,
-            8.2634109
+            -62.779294,
+            8.2665488
           ],
           [
-            -62.7984688,
-            8.2620943
+            -62.7790902,
+            8.2662621
           ],
           [
-            -62.8015444,
-            8.2590931
+            -62.7783284,
+            8.2666125
+          ],
+          [
+            -62.7754531,
+            8.2688209
+          ],
+          [
+            -62.7755819,
+            8.2691819
+          ],
+          [
+            -62.7774621,
+            8.270817
+          ],
+          [
+            -62.777957,
+            8.2718097
+          ],
+          [
+            -62.7764234,
+            8.2727122
+          ],
+          [
+            -62.7773736,
+            8.2742676
+          ],
+          [
+            -62.7777116,
+            8.2743923
+          ],
+          [
+            -62.7783661,
+            8.2740498
+          ],
+          [
+            -62.783489,
+            8.2706789
+          ],
+          [
+            -62.7827166,
+            8.2699676
           ]
         ]
       ]
     }
   },
   {
-    "name": "CONJUNTO RESIDENCIAL SAN VENANZO",
+    "name": "PPL de Curagua",
     "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
+    "population": 1049,
+    "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
         [
           [
-            -62.8065736,
-            8.2539689
+            -62.7778807,
+            8.2717892
           ],
           [
-            -62.8056295,
-            8.2529638
+            -62.7773121,
+            8.2707752
           ],
           [
-            -62.8048141,
-            8.2537637
+            -62.7738521,
+            8.2725218
           ],
           [
-            -62.8039987,
-            8.2537141
+            -62.7742115,
+            8.2735251
           ],
           [
-            -62.800122,
-            8.2574091
+            -62.7762499,
+            8.2727341
           ],
           [
-            -62.8015239,
-            8.2588955
-          ],
-          [
-            -62.803312,
-            8.2570834
-          ],
-          [
-            -62.8065736,
-            8.2539689
+            -62.7778807,
+            8.2717892
           ]
         ]
       ]
     }
   },
   {
-    "name": "CORPORACION CMI GUAYANA, CA",
+    "name": "Res Gran Royal",
     "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
+    "population": 1049,
+    "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
         [
           [
-            -62.8128377,
-            8.260216
+            -62.7870455,
+            8.2549588
           ],
           [
-            -62.8067437,
-            8.2541427
+            -62.7859297,
+            8.2539077
           ],
           [
-            -62.8026668,
-            8.2581349
+            -62.7846691,
+            8.255203
           ],
           [
-            -62.797288,
-            8.2636136
+            -62.7859244,
+            8.2563603
           ],
           [
-            -62.8032533,
-            8.2697433
-          ],
-          [
-            -62.8050557,
-            8.2680446
-          ],
-          [
-            -62.8128377,
-            8.260216
+            -62.7870455,
+            8.2549588
           ]
         ]
       ]
     }
   },
   {
-    "name": "SUVALCAR",
+    "name": "Trailers de Bauxilum-Alcasa-Venalum",
     "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
+    "population": 1049,
+    "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
         [
           [
-            -62.8030534,
-            8.2696922
+            -62.7870455,
+            8.2549588
           ],
           [
-            -62.7973985,
-            8.2640017
+            -62.7859297,
+            8.2539077
           ],
           [
-            -62.7881288,
-            8.2725805
+            -62.7846691,
+            8.255203
           ],
           [
-            -62.7851533,
-            8.2762045
+            -62.7859244,
+            8.2563603
           ],
           [
-            -62.7814626,
-            8.2780165
-          ],
-          [
-            -62.7874421,
-            8.27997
-          ],
-          [
-            -62.7904748,
-            8.2803098
-          ],
-          [
-            -62.7950811,
-            8.2777617
-          ],
-          [
-            -62.8030534,
-            8.2696922
+            -62.7870455,
+            8.2549588
           ]
         ]
       ]
     }
   },
   {
-    "name": "CAMPO SANTA INES",
+    "name": "Plaza El Delfín",
     "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
+    "population": 1049,
+    "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
         [
           [
-            -62.7650118,
-            8.2615831
+            -62.7870455,
+            8.2549588
           ],
           [
-            -62.7664423,
-            8.2592614
+            -62.7859297,
+            8.2539077
           ],
           [
-            -62.7669001,
-            8.2570105
+            -62.7846691,
+            8.255203
           ],
           [
-            -62.7604485,
-            8.2577608
+            -62.7859244,
+            8.2563603
           ],
           [
-            -62.7604199,
-            8.2562885
-          ],
-          [
-            -62.7594471,
-            8.255977
-          ],
-          [
-            -62.7536965,
-            8.2556939
-          ],
-          [
-            -62.7556849,
-            8.2581147
-          ],
-          [
-            -62.7563286,
-            8.2591057
-          ],
-          [
-            -62.7563286,
-            8.2606488
-          ],
-          [
-            -62.7541399,
-            8.2622343
-          ],
-          [
-            -62.7559281,
-            8.261753
-          ],
-          [
-            -62.7578593,
-            8.2624467
-          ],
-          [
-            -62.7588606,
-            8.2621635
-          ],
-          [
-            -62.7590037,
-            8.2633385
-          ],
-          [
-            -62.7605915,
-            8.2640039
-          ],
-          [
-            -62.763424,
-            8.2638057
-          ],
-          [
-            -62.7645255,
-            8.2630412
-          ],
-          [
-            -62.7650118,
-            8.2615831
+            -62.7870455,
+            8.2549588
           ]
         ]
       ]
     }
   },
   {
-    "name": "CASA MORICHAL",
+    "name": "Villa Sicilia",
     "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
+    "population": 1049,
+    "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
         [
           [
-            -62.7426947,
-            8.2696376
+            -62.755811,
+            8.2653859
           ],
           [
-            -62.7412212,
-            8.2675283
+            -62.7555132,
+            8.2644754
           ],
           [
-            -62.7370298,
-            8.2693686
+            -62.7542741,
+            8.2657124
           ],
           [
-            -62.7384747,
-            8.2716336
+            -62.7544001,
+            8.2659433
           ],
           [
-            -62.7407778,
-            8.2702888
+            -62.7554569,
+            8.2656619
           ],
           [
-            -62.7426947,
-            8.2696376
+            -62.755811,
+            8.2653859
           ]
         ]
       ]
     }
   },
   {
-    "name": "TERMINAL TRANSBOLIVAR",
+    "name": "Res. Atlantis",
     "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
+    "population": 1049,
+    "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
         [
           [
-            -62.7559461,
-            8.2856515
+            -62.755811,
+            8.2653859
           ],
           [
-            -62.7549375,
-            8.2827284
+            -62.7555132,
+            8.2644754
           ],
           [
-            -62.7523757,
-            8.2835235
+            -62.7542741,
+            8.2657124
           ],
           [
-            -62.7451373,
-            8.2861565
+            -62.7544001,
+            8.2659433
           ],
           [
-            -62.7470399,
-            8.2892566
+            -62.7554569,
+            8.2656619
           ],
           [
-            -62.7518321,
-            8.2877844
-          ],
-          [
-            -62.7518321,
-            8.2870625
-          ],
-          [
-            -62.7559461,
-            8.2856515
+            -62.755811,
+            8.2653859
           ]
         ]
       ]
     }
   },
   {
-    "name": "RESIDENCIAS VILLA TOCOMA",
+    "name": "Villa Ángela",
     "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
+    "population": 1049,
+    "avgWasteKg": 108,
+    "perCapitaKgPerDay": 0.65,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
         [
           [
-            -62.7891,
-            8.2578325
+            -62.755811,
+            8.2653859
           ],
           [
-            -62.7890106,
-            8.2566504
+            -62.7555132,
+            8.2644754
           ],
           [
-            -62.7882346,
-            8.2560629
+            -62.7542741,
+            8.2657124
           ],
           [
-            -62.7872401,
-            8.2550557
+            -62.7544001,
+            8.2659433
           ],
           [
-            -62.7866396,
-            8.2556949
+            -62.7554569,
+            8.2656619
           ],
           [
-            -62.7861604,
-            8.2563815
-          ],
-          [
-            -62.7866682,
-            8.256516
-          ],
-          [
-            -62.7848228,
-            8.2586961
-          ],
-          [
-            -62.7825912,
-            8.2571389
-          ],
-          [
-            -62.7813753,
-            8.2583563
-          ],
-          [
-            -62.7814039,
-            8.2590925
-          ],
-          [
-            -62.7815612,
-            8.2629431
-          ],
-          [
-            -62.782348,
-            8.262929
-          ],
-          [
-            -62.7845081,
-            8.2611169
-          ],
-          [
-            -62.786096,
-            8.2600976
-          ],
-          [
-            -62.7891,
-            8.2578325
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "name": "PERSIANOVA BLINDS",
-    "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [
-            -62.7795156,
-            8.257238
-          ],
-          [
-            -62.7782138,
-            8.2588801
-          ],
-          [
-            -62.7797302,
-            8.2599419
-          ],
-          [
-            -62.7795156,
-            8.2617398
-          ],
-          [
-            -62.7808174,
-            8.2638491
-          ],
-          [
-            -62.7814754,
-            8.2632546
-          ],
-          [
-            -62.7811035,
-            8.2617115
-          ],
-          [
-            -62.7810892,
-            8.2586961
-          ],
-          [
-            -62.7795156,
-            8.257238
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "name": "CALLE LOS PROCERES, IGLESIA PENTECOSTAL LOMAS Y ANGELES",
-    "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [
-            -62.7730671,
-            8.2559943
-          ],
-          [
-            -62.7703849,
-            8.2555802
-          ],
-          [
-            -62.7692762,
-            8.2564438
-          ],
-          [
-            -62.767531,
-            8.2549998
-          ],
-          [
-            -62.7669803,
-            8.2559589
-          ],
-          [
-            -62.767016,
-            8.2570136
-          ],
-          [
-            -62.7668086,
-            8.2588823
-          ],
-          [
-            -62.7659217,
-            8.2601635
-          ],
-          [
-            -62.7678958,
-            8.2594415
-          ],
-          [
-            -62.7706352,
-            8.2596609
-          ],
-          [
-            -62.7707497,
-            8.2592999
-          ],
-          [
-            -62.7723518,
-            8.2573746
-          ],
-          [
-            -62.7730671,
-            8.2559943
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "name": "GFAM #4 DISTRITO #2",
-    "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [
-            -62.7938048,
-            8.2537385
-          ],
-          [
-            -62.7870671,
-            8.2529103
-          ],
-          [
-            -62.7875606,
-            8.253965
-          ],
-          [
-            -62.7883903,
-            8.2550409
-          ],
-          [
-            -62.7895347,
-            8.2542694
-          ],
-          [
-            -62.7917163,
-            8.2555223
-          ],
-          [
-            -62.7938048,
-            8.2537385
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "name": "CONJUNTO RESIDENCIAL RIBERAS DEL CARONI",
-    "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [
-            -62.8060311,
-            8.2412432
-          ],
-          [
-            -62.8026909,
-            8.237442
-          ],
-          [
-            -62.8002805,
-            8.2408539
-          ],
-          [
-            -62.8031701,
-            8.2437208
-          ],
-          [
-            -62.8060311,
-            8.2412432
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "name": "RADIO ESTACION CERRO QUEMADO",
-    "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [
-            -62.8000166,
-            8.2475193
-          ],
-          [
-            -62.7963402,
-            8.2432721
-          ],
-          [
-            -62.7874281,
-            8.2465991
-          ],
-          [
-            -62.7851107,
-            8.2498977
-          ],
-          [
-            -62.7862265,
-            8.2507047
-          ],
-          [
-            -62.7867987,
-            8.2524035
-          ],
-          [
-            -62.7906611,
-            8.2522053
-          ],
-          [
-            -62.7970412,
-            8.2507188
-          ],
-          [
-            -62.8000166,
-            8.2475193
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "name": "FUNDACION CRISTIANA CANTARES",
-    "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [
-            -62.8227822,
-            8.2375968
-          ],
-          [
-            -62.8169671,
-            8.2319479
-          ],
-          [
-            -62.8160087,
-            8.2321036
-          ],
-          [
-            -62.8068177,
-            8.2403929
-          ],
-          [
-            -62.8079907,
-            8.2416104
-          ],
-          [
-            -62.8102366,
-            8.2442012
-          ],
-          [
-            -62.8127972,
-            8.2431465
-          ],
-          [
-            -62.8157298,
-            8.2419714
-          ],
-          [
-            -62.8183762,
-            8.2421413
-          ],
-          [
-            -62.8227822,
-            8.2375968
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "name": "SABANA LINA",
-    "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [
-            -62.8249887,
-            8.2477292
-          ],
-          [
-            -62.8394511,
-            8.2330904
-          ],
-          [
-            -62.8352884,
-            8.2254169
-          ],
-          [
-            -62.8191808,
-            8.2418964
-          ],
-          [
-            -62.8220847,
-            8.2441332
-          ],
-          [
-            -62.8249887,
-            8.2477292
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "name": "CANCHA VILLA ESMERALDA",
-    "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [
-            -62.8165609,
-            8.2312085
-          ],
-          [
-            -62.8116971,
-            8.2247242
-          ],
-          [
-            -62.8026277,
-            8.2371264
-          ],
-          [
-            -62.8060609,
-            8.2406374
-          ],
-          [
-            -62.8165609,
-            8.2312085
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "name": "EL SAZON DE GOITTERA",
-    "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [
-            -62.8114601,
-            8.2247674
-          ],
-          [
-            -62.8092356,
-            8.2227287
-          ],
-          [
-            -62.8052588,
-            8.222941
-          ],
-          [
-            -62.8030844,
-            8.2253054
-          ],
-          [
-            -62.8049512,
-            8.2281299
-          ],
-          [
-            -62.8000589,
-            8.2344584
-          ],
-          [
-            -62.8014894,
-            8.2387623
-          ],
-          [
-            -62.8027912,
-            8.2365821
-          ],
-          [
-            -62.8075977,
-            8.2299917
-          ],
-          [
-            -62.8114601,
-            8.2247674
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "name": "CESART`S WIFI",
-    "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [
-            -62.8014331,
-            8.2390415
-          ],
-          [
-            -62.7997308,
-            8.2349075
-          ],
-          [
-            -62.8002744,
-            8.2338598
-          ],
-          [
-            -62.7984147,
-            8.2309858
-          ],
-          [
-            -62.7973561,
-            8.2312124
-          ],
-          [
-            -62.7977853,
-            8.2320052
-          ],
-          [
-            -62.7977424,
-            8.2335484
-          ],
-          [
-            -62.7970271,
-            8.2339165
-          ],
-          [
-            -62.7948384,
-            8.2321043
-          ],
-          [
-            -62.7914624,
-            8.2332935
-          ],
-          [
-            -62.7919059,
-            8.233874
-          ],
-          [
-            -62.7935796,
-            8.2352898
-          ],
-          [
-            -62.7942233,
-            8.2358844
-          ],
-          [
-            -62.7955251,
-            8.2390132
-          ],
-          [
-            -62.7967696,
-            8.2426658
-          ],
-          [
-            -62.7973561,
-            8.2423827
-          ],
-          [
-            -62.7998023,
-            8.2409386
-          ],
-          [
-            -62.8014331,
-            8.2390415
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "name": "IGLESIA PENTECOSTAL UNIDA DE VENEZUELA, VILLA BAHIA",
-    "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [
-            -62.7965565,
-            8.2428003
-          ],
-          [
-            -62.7940817,
-            8.2360614
-          ],
-          [
-            -62.7912922,
-            8.233513
-          ],
-          [
-            -62.7859993,
-            8.235764
-          ],
-          [
-            -62.7866287,
-            8.2387371
-          ],
-          [
-            -62.7873583,
-            8.2440603
-          ],
-          [
-            -62.7896185,
-            8.2449381
-          ],
-          [
-            -62.7873154,
-            8.245292
-          ],
-          [
-            -62.7874584,
-            8.2463396
-          ],
-          [
-            -62.7965565,
-            8.2428003
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "name": "CASA MISIONERA RIOS DE AGUA VIVA",
-    "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [
-            -62.7805178,
-            8.2484635
-          ],
-          [
-            -62.7760546,
-            8.2416681
-          ],
-          [
-            -62.7730469,
-            8.2399515
-          ],
-          [
-            -62.7719705,
-            8.2429917
-          ],
-          [
-            -62.7693169,
-            8.2447544
-          ],
-          [
-            -62.7699034,
-            8.247784
-          ],
-          [
-            -62.7730899,
-            8.2503995
-          ],
-          [
-            -62.7751176,
-            8.2518435
-          ],
-          [
-            -62.7763729,
-            8.2528947
-          ],
-          [
-            -62.7784579,
-            8.2500491
-          ],
-          [
-            -62.7805178,
-            8.2484635
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "name": "LA POSADA DE GAMA",
-    "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [
-            -62.7835392,
-            8.2675794
-          ],
-          [
-            -62.78095,
-            8.2649463
-          ],
-          [
-            -62.7792262,
-            8.2661779
-          ],
-          [
-            -62.7819228,
-            8.2690729
-          ],
-          [
-            -62.7835392,
-            8.2675794
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "name": "VILLAS DEL VALLE II",
-    "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [
-            -62.7771719,
-            8.2707562
-          ],
-          [
-            -62.7754982,
-            8.2694255
-          ],
-          [
-            -62.7752908,
-            8.2687743
-          ],
-          [
-            -62.7726658,
-            8.2693406
-          ],
-          [
-            -62.773846,
-            8.2724267
-          ],
-          [
-            -62.7771719,
-            8.2707562
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "name": "SUPERMERCADO LA PRINCIPAL, C.A",
-    "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [
-            -62.8307721,
-            8.2297975
-          ],
-          [
-            -62.8244207,
-            8.2235751
-          ],
-          [
-            -62.8168533,
-            8.2306399
-          ],
-          [
-            -62.8229615,
-            8.237393
-          ],
-          [
-            -62.8307721,
-            8.2297975
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "name": "MACIZO GYM",
-    "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [
-            -62.8355572,
-            8.2248069
-          ],
-          [
-            -62.8303287,
-            8.2190942
-          ],
-          [
-            -62.8245208,
-            8.2233982
-          ],
-          [
-            -62.8308294,
-            8.2295994
-          ],
-          [
-            -62.8355572,
-            8.2248069
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "name": "CLUB CAMPESTRE PAVO REAL",
-    "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [
-            -62.7874584,
-            8.2463396
-          ],
-          [
-            -62.7848051,
-            8.2456495
-          ],
-          [
-            -62.7810142,
-            8.2468387
-          ],
-          [
-            -62.7845476,
-            8.2503639
-          ],
-          [
-            -62.7874584,
-            8.2463396
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "name": "IGLESIA EVANGELICA LUZ DEL MUNDO",
-    "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [
-            -62.8241988,
-            8.2233457
-          ],
-          [
-            -62.8176757,
-            8.2175125
-          ],
-          [
-            -62.8118392,
-            8.2244146
-          ],
-          [
-            -62.8165599,
-            8.2305167
-          ],
-          [
-            -62.8241988,
-            8.2233457
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "name": "IGLESIA VCINA",
-    "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [
-            -62.8301699,
-            8.2191053
-          ],
-          [
-            -62.8262217,
-            8.2206486
-          ],
-          [
-            -62.8198559,
-            8.2130456
-          ],
-          [
-            -62.8176815,
-            8.2173639
-          ],
-          [
-            -62.8244621,
-            8.2232537
-          ],
-          [
-            -62.8301699,
-            8.2191053
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "name": "ALBERTO MECANICO",
-    "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [
-            -62.7877687,
-            8.2445739
-          ],
-          [
-            -62.7870964,
-            8.2442765
-          ],
-          [
-            -62.7859519,
-            8.2373536
-          ],
-          [
-            -62.7806734,
-            8.2403691
-          ],
-          [
-            -62.7778839,
-            8.2422521
-          ],
-          [
-            -62.779014,
-            8.2439085
-          ],
-          [
-            -62.7821182,
-            8.243597
-          ],
-          [
-            -62.7819894,
-            8.2456781
-          ],
-          [
-            -62.7877687,
-            8.2445739
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "name": "SECTOR VALLES DEL CARON",
-    "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [
-            -62.7856721,
-            8.2370639
-          ],
-          [
-            -62.7817239,
-            8.2354783
-          ],
-          [
-            -62.7797784,
-            8.2334254
-          ],
-          [
-            -62.7747573,
-            8.2372763
-          ],
-          [
-            -62.7729692,
-            8.2370922
-          ],
-          [
-            -62.772211,
-            8.2373471
-          ],
-          [
-            -62.7782478,
-            8.2416368
-          ],
-          [
-            -62.7856721,
-            8.2370639
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "name": "CAMPO AMEZQUITA",
-    "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [
-            -62.7914227,
-            8.2315109
-          ],
-          [
-            -62.7853573,
-            8.2289625
-          ],
-          [
-            -62.7797068,
-            8.2307039
-          ],
-          [
-            -62.780093,
-            8.233224
-          ],
-          [
-            -62.7822388,
-            8.2354609
-          ],
-          [
-            -62.785157,
-            8.2359139
-          ],
-          [
-            -62.7866019,
-            8.2352485
-          ],
-          [
-            -62.7914227,
-            8.2315109
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "name": "parque canaima",
-    "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [
-            -62.8176815,
-            8.2173639
-          ],
-          [
-            -62.8096825,
-            8.2119653
-          ],
-          [
-            -62.806378,
-            8.2162836
-          ],
-          [
-            -62.8082663,
-            8.2190444
-          ],
-          [
-            -62.8133303,
-            8.2223574
-          ],
-          [
-            -62.8176815,
-            8.2173639
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "name": "sierra parima",
-    "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [
-            -62.8197597,
-            8.2130243
-          ],
-          [
-            -62.8157865,
-            8.2108581
-          ],
-          [
-            -62.8124963,
-            8.2117572
-          ],
-          [
-            -62.812035,
-            8.2133925
-          ],
-          [
-            -62.8176354,
-            8.2172435
-          ],
-          [
-            -62.8197597,
-            8.2130243
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "name": "calle francisco de miranda B",
-    "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [
-            -62.7764666,
-            8.2530853
-          ],
-          [
-            -62.7698005,
-            8.2481587
-          ],
-          [
-            -62.77259,
-            8.2554354
-          ],
-          [
-            -62.7738059,
-            8.2564263
-          ],
-          [
-            -62.7764666,
-            8.2530853
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "name": "COCO CLUB",
-    "parishName": "Unare",
-    "population": 800,
-    "avgWasteKg": 100,
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [
-            -62.770728,
-            8.2553882
-          ],
-          [
-            -62.7703417,
-            8.2516932
-          ],
-          [
-            -62.768668,
-            8.2527125
-          ],
-          [
-            -62.7638186,
-            8.2523161
-          ],
-          [
-            -62.7645768,
-            8.2570587
-          ],
-          [
-            -62.766651,
-            8.256634
-          ],
-          [
-            -62.767352,
-            8.254652
-          ],
-          [
-            -62.7691544,
-            8.256096
-          ],
-          [
-            -62.770728,
-            8.2553882
+            -62.755811,
+            8.2653859
           ]
         ]
       ]

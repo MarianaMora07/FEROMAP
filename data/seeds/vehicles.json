@@ -2,7 +2,7 @@
   {
     "code": "TR-01",
     "licensePlate": "A12BC3D",
-    "maxCapacityKg": 15000,
+    "maxCapacityKg": 7000,
     "fuelConsumptionRate": 0.35,
     "status": "available",
     "vehicleType": "Compactadora",
@@ -10,59 +10,9 @@
     "driverPhone": "+58 414-555-0192"
   },
   {
-    "code": "TR-03",
-    "licensePlate": "B45DE6F",
-    "maxCapacityKg": 12000,
-    "fuelConsumptionRate": 0.35,
-    "status": "available",
-    "vehicleType": "Volteo",
-    "driverName": "Carlos Rivas",
-    "driverPhone": "+58 424-555-0144"
-  },
-  {
-    "code": "TR-11",
-    "licensePlate": "C78GH9I",
-    "maxCapacityKg": 15000,
-    "fuelConsumptionRate": 0.35,
-    "status": "available",
-    "vehicleType": "Compactadora",
-    "driverName": "Ana Pérez",
-    "driverPhone": "+58 412-555-0177"
-  },
-  {
-    "code": "TR-07",
-    "licensePlate": "D01JK2L",
-    "maxCapacityKg": 8000,
-    "fuelConsumptionRate": 0.35,
-    "status": "available",
-    "vehicleType": "Compactadora",
-    "driverName": null,
-    "driverPhone": null
-  },
-  {
-    "code": "TR-04",
-    "licensePlate": "E34MN5O",
-    "maxCapacityKg": 15000,
-    "fuelConsumptionRate": 0.35,
-    "status": "available",
-    "vehicleType": "Compactadora",
-    "driverName": "Luis Méndez",
-    "driverPhone": "+58 416-555-0108"
-  },
-  {
-    "code": "TR-15",
-    "licensePlate": "F67PQ8R",
-    "maxCapacityKg": 12000,
-    "fuelConsumptionRate": 0.35,
-    "status": "available",
-    "vehicleType": "Volteo",
-    "driverName": null,
-    "driverPhone": null
-  },
-  {
     "code": "TR-02",
     "licensePlate": "G90ST1U",
-    "maxCapacityKg": 8000,
+    "maxCapacityKg": 6000,
     "fuelConsumptionRate": 0.35,
     "status": "available",
     "vehicleType": "Compactadora",
@@ -70,19 +20,39 @@
     "driverPhone": "+58 426-555-0133"
   },
   {
-    "code": "TR-19",
-    "licensePlate": "H23VW4X",
-    "maxCapacityKg": 18000,
+    "code": "TR-03",
+    "licensePlate": "B45DE6F",
+    "maxCapacityKg": 3000,
+    "fuelConsumptionRate": 0.35,
+    "status": "available",
+    "vehicleType": "Volteo",
+    "driverName": "Carlos Rivas",
+    "driverPhone": "+58 424-555-0144"
+  },
+  {
+    "code": "TR-04",
+    "licensePlate": "E34MN5O",
+    "maxCapacityKg": 7000,
     "fuelConsumptionRate": 0.35,
     "status": "available",
     "vehicleType": "Compactadora",
-    "driverName": "Pedro Silva",
-    "driverPhone": "+58 414-555-0166"
+    "driverName": "Luis Méndez",
+    "driverPhone": "+58 416-555-0108"
+  },
+  {
+    "code": "TR-05",
+    "licensePlate": "K12LM3N",
+    "maxCapacityKg": 2500,
+    "fuelConsumptionRate": 0.35,
+    "status": "available",
+    "vehicleType": "Volteo",
+    "driverName": "Rafael Núñez",
+    "driverPhone": "+58 414-555-0201"
   },
   {
     "code": "TR-06",
     "licensePlate": "I56YZ7A",
-    "maxCapacityKg": 10000,
+    "maxCapacityKg": 1500,
     "fuelConsumptionRate": 0.35,
     "status": "available",
     "vehicleType": "Volteo",
@@ -90,13 +60,183 @@
     "driverPhone": "+58 424-555-0199"
   },
   {
+    "code": "TR-07",
+    "licensePlate": "D01JK2L",
+    "maxCapacityKg": 6000,
+    "fuelConsumptionRate": 0.35,
+    "status": "available",
+    "vehicleType": "Compactadora",
+    "driverName": "José Herrera",
+    "driverPhone": "+58 424-555-0202"
+  },
+  {
+    "code": "TR-08",
+    "licensePlate": "L34OP5Q",
+    "maxCapacityKg": 1200,
+    "fuelConsumptionRate": 0.35,
+    "status": "available",
+    "vehicleType": "Volteo",
+    "driverName": "Andrea Salazar",
+    "driverPhone": "+58 412-555-0203"
+  },
+  {
+    "code": "TR-09",
+    "licensePlate": "M56RS7T",
+    "maxCapacityKg": 2800,
+    "fuelConsumptionRate": 0.35,
+    "status": "available",
+    "vehicleType": "Volteo",
+    "driverName": "Miguel Rojas",
+    "driverPhone": "+58 416-555-0204"
+  },
+  {
+    "code": "TR-10",
+    "licensePlate": "N78UV9W",
+    "maxCapacityKg": 2000,
+    "fuelConsumptionRate": 0.35,
+    "status": "available",
+    "vehicleType": "Volteo",
+    "driverName": "Paola Vargas",
+    "driverPhone": "+58 426-555-0205"
+  },
+  {
+    "code": "TR-11",
+    "licensePlate": "C78GH9I",
+    "maxCapacityKg": 6500,
+    "fuelConsumptionRate": 0.35,
+    "status": "available",
+    "vehicleType": "Compactadora",
+    "driverName": "Ana Pérez",
+    "driverPhone": "+58 412-555-0177"
+  },
+  {
     "code": "TR-12",
     "licensePlate": "J89BC0D",
-    "maxCapacityKg": 8000,
+    "maxCapacityKg": 6500,
     "fuelConsumptionRate": 0.35,
     "status": "available",
     "vehicleType": "Compactadora",
     "driverName": "Diego Torres",
     "driverPhone": "+58 412-555-0121"
+  },
+  {
+    "code": "TR-13",
+    "licensePlate": "O90XY1Z",
+    "maxCapacityKg": 1500,
+    "fuelConsumptionRate": 0.35,
+    "status": "available",
+    "vehicleType": "Volteo",
+    "driverName": "Jesús Medina",
+    "driverPhone": "+58 414-555-0206"
+  },
+  {
+    "code": "TR-14",
+    "licensePlate": "P12AB3C",
+    "maxCapacityKg": 3000,
+    "fuelConsumptionRate": 0.35,
+    "status": "available",
+    "vehicleType": "Volteo",
+    "driverName": "Daniela Castro",
+    "driverPhone": "+58 424-555-0207"
+  },
+  {
+    "code": "TR-15",
+    "licensePlate": "F67PQ8R",
+    "maxCapacityKg": 2000,
+    "fuelConsumptionRate": 0.35,
+    "status": "available",
+    "vehicleType": "Volteo",
+    "driverName": "Héctor Peña",
+    "driverPhone": "+58 412-555-0208"
+  },
+  {
+    "code": "TR-16",
+    "licensePlate": "Q34DE5F",
+    "maxCapacityKg": 1800,
+    "fuelConsumptionRate": 0.35,
+    "status": "available",
+    "vehicleType": "Volteo",
+    "driverName": "Yulimar Blanco",
+    "driverPhone": "+58 416-555-0209"
+  },
+  {
+    "code": "TR-17",
+    "licensePlate": "R56GH7I",
+    "maxCapacityKg": 2500,
+    "fuelConsumptionRate": 0.35,
+    "status": "available",
+    "vehicleType": "Volteo",
+    "driverName": "Omar Guerrero",
+    "driverPhone": "+58 426-555-0210"
+  },
+  {
+    "code": "TR-18",
+    "licensePlate": "S78JK9L",
+    "maxCapacityKg": 1300,
+    "fuelConsumptionRate": 0.35,
+    "status": "available",
+    "vehicleType": "Volteo",
+    "driverName": "Keila Mora",
+    "driverPhone": "+58 414-555-0211"
+  },
+  {
+    "code": "TR-19",
+    "licensePlate": "H23VW4X",
+    "maxCapacityKg": 7000,
+    "fuelConsumptionRate": 0.35,
+    "status": "available",
+    "vehicleType": "Compactadora",
+    "driverName": "Pedro Silva",
+    "driverPhone": "+58 414-555-0166"
+  },
+  {
+    "code": "TR-20",
+    "licensePlate": "T90MN1O",
+    "maxCapacityKg": 2200,
+    "fuelConsumptionRate": 0.35,
+    "status": "available",
+    "vehicleType": "Volteo",
+    "driverName": "Rubén Cabrera",
+    "driverPhone": "+58 424-555-0212"
+  },
+  {
+    "code": "TR-21",
+    "licensePlate": "U12PQ3R",
+    "maxCapacityKg": 1600,
+    "fuelConsumptionRate": 0.35,
+    "status": "available",
+    "vehicleType": "Volteo",
+    "driverName": "Néstor Aponte",
+    "driverPhone": "+58 412-555-0213"
+  },
+  {
+    "code": "TR-22",
+    "licensePlate": "V34ST5U",
+    "maxCapacityKg": 2700,
+    "fuelConsumptionRate": 0.35,
+    "status": "available",
+    "vehicleType": "Volteo",
+    "driverName": "Gleidy Suárez",
+    "driverPhone": "+58 416-555-0214"
+  },
+  {
+    "code": "TR-23",
+    "licensePlate": "W56VW7X",
+    "maxCapacityKg": 1400,
+    "fuelConsumptionRate": 0.35,
+    "status": "available",
+    "vehicleType": "Volteo",
+    "driverName": "Franklin Boada",
+    "driverPhone": "+58 426-555-0215"
+  },
+  {
+    "code": "TR-24",
+    "licensePlate": "X78YZ9A",
+    "maxCapacityKg": 1900,
+    "fuelConsumptionRate": 0.35,
+    "status": "available",
+    "vehicleType": "Volteo",
+    "driverName": "Yesenia Quintero",
+    "driverPhone": "+58 414-555-0216"
   }
 ]

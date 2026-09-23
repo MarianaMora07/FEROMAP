@@ -38,6 +38,7 @@ from app.domain.visit_schedule_distribution import (
 from app.services.admin_service import ensure_default_settings
 from app.services.case_study_seed_service import case_study_seed_summary, seed_case_studies
 from app.services.collection_point_seed_service import ensure_collection_points_coverage
+from app.services.sector_service import distribute_sector_generation_rate
 from app.services.visit_schedule_service import ensure_visit_schedules_coverage
 from app.services.planning_service import (
     seed_daily_plan_demo,
@@ -104,11 +105,15 @@ def seed_into_session(session: Session) -> dict[str, Any]:
     sector_by_name: dict[str, Sector] = {}
     for row in sectors_data:
         raw_population = row.get("population")
+        raw_per_capita = row.get("perCapitaKgPerDay")
         sector = Sector(
             parish_id=parish.id,
             name=row["name"],
             fill_rate_factor=Decimal(str(sector_fill_rate_factor(row["name"]))),
             population=int(raw_population) if raw_population is not None else None,
+            per_capita_kg_per_day=(
+                Decimal(str(raw_per_capita)) if raw_per_capita is not None else None
+            ),
         )
         session.add(sector)
         sector_by_name[row["name"]] = sector
@@ -245,6 +250,12 @@ def seed_into_session(session: Session) -> dict[str, Any]:
             .order_by(CollectionPoint.code)
         ).all()
     )
+
+    # GPC (Fase I): reparte la tasa de generación de cada zona entre sus contenedores para
+    # que la demanda del motor derive de población × per cápita, no de la capacidad.
+    for sector in sector_by_name.values():
+        distribute_sector_generation_rate(session, sector)
+    session.flush()
 
     studies_by_code = seed_case_studies(session, collection_points=collection_points)
     case_study_stats = case_study_seed_summary(studies_by_code)

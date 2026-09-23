@@ -54,5 +54,117 @@
     "lastName": "Torres",
     "phone": "+58 412-555-0121",
     "slug": "DIEGOTORRES"
+  },
+  {
+    "document": "V-0000009",
+    "firstName": "Rafael",
+    "lastName": "Núñez",
+    "phone": "+58 414-555-0201",
+    "slug": "RAFANUNEZ"
+  },
+  {
+    "document": "V-0000010",
+    "firstName": "José",
+    "lastName": "Herrera",
+    "phone": "+58 424-555-0202",
+    "slug": "JOSEHERRERA"
+  },
+  {
+    "document": "V-0000011",
+    "firstName": "Andrea",
+    "lastName": "Salazar",
+    "phone": "+58 412-555-0203",
+    "slug": "ANDREASALAZAR"
+  },
+  {
+    "document": "V-0000012",
+    "firstName": "Miguel",
+    "lastName": "Rojas",
+    "phone": "+58 416-555-0204",
+    "slug": "MIGUELROJAS"
+  },
+  {
+    "document": "V-0000013",
+    "firstName": "Paola",
+    "lastName": "Vargas",
+    "phone": "+58 426-555-0205",
+    "slug": "PAOLAVARGAS"
+  },
+  {
+    "document": "V-0000014",
+    "firstName": "Jesús",
+    "lastName": "Medina",
+    "phone": "+58 414-555-0206",
+    "slug": "JESUSMEDINA"
+  },
+  {
+    "document": "V-0000015",
+    "firstName": "Daniela",
+    "lastName": "Castro",
+    "phone": "+58 424-555-0207",
+    "slug": "DANIELACASTRO"
+  },
+  {
+    "document": "V-0000016",
+    "firstName": "Héctor",
+    "lastName": "Peña",
+    "phone": "+58 412-555-0208",
+    "slug": "HECTORPENA"
+  },
+  {
+    "document": "V-0000017",
+    "firstName": "Yulimar",
+    "lastName": "Blanco",
+    "phone": "+58 416-555-0209",
+    "slug": "YULIMARBLANCO"
+  },
+  {
+    "document": "V-0000018",
+    "firstName": "Omar",
+    "lastName": "Guerrero",
+    "phone": "+58 426-555-0210",
+    "slug": "OMARGUERRERO"
+  },
+  {
+    "document": "V-0000019",
+    "firstName": "Keila",
+    "lastName": "Mora",
+    "phone": "+58 414-555-0211",
+    "slug": "KEILAMORA"
+  },
+  {
+    "document": "V-0000020",
+    "firstName": "Rubén",
+    "lastName": "Cabrera",
+    "phone": "+58 424-555-0212",
+    "slug": "RUBENCABRERA"
+  },
+  {
+    "document": "V-0000021",
+    "firstName": "Néstor",
+    "lastName": "Aponte",
+    "phone": "+58 412-555-0213",
+    "slug": "NESTORAPONTE"
+  },
+  {
+    "document": "V-0000022",
+    "firstName": "Gleidy",
+    "lastName": "Suárez",
+    "phone": "+58 416-555-0214",
+    "slug": "GLEIDYSUAREZ"
+  },
+  {
+    "document": "V-0000023",
+    "firstName": "Franklin",
+    "lastName": "Boada",
+    "phone": "+58 426-555-0215",
+    "slug": "FRANKLINBOADA"
+  },
+  {
+    "document": "V-0000024",
+    "firstName": "Yesenia",
+    "lastName": "Quintero",
+    "phone": "+58 414-555-0216",
+    "slug": "YESENIAQUINTERO"
   }
 ]
