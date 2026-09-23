@@ -465,9 +465,15 @@ def run_contingency_background(
     job_type: str,
     scenario_id: str,
     params: dict[str, Any],
-    runner: Callable[[Any], dict[str, Any]],
+    runner: Callable[..., dict[str, Any]],
+    with_progress: bool = False,
 ) -> OptimizationJob:
-    """Crea y arranca un job asíncrono de contingencia (Tarea 8)."""
+    """Crea y arranca un job asíncrono de contingencia (Tarea 8).
+
+    Con ``with_progress=True`` el runner recibe un callback adicional
+    ``on_progress(message, value)`` para publicar avance intermedio (el 100 % final
+    lo fija el worker al terminar).
+    """
     job = OptimizationJob(
         id=str(uuid.uuid4()),
         status="pending",
@@ -481,6 +487,20 @@ def run_contingency_background(
         extra_params=params,
         created_at=datetime.now(timezone.utc),
     )
+    if with_progress:
+
+        def _report(message: str, value: int) -> None:
+            with job.lock:
+                if job.status not in ("pending", "running"):
+                    job.status = "running"
+                job.phase = message
+                # Nunca retrocede y se detiene en 99 %: el 100 % lo pone el worker.
+                job.progress = max(job.progress, min(99, int(value)))
+
+        def _wrapped(session: Any) -> dict[str, Any]:
+            return runner(session, _report)
+
+        return start_background_job(job, _wrapped)
     return start_background_job(job, runner)
 
 

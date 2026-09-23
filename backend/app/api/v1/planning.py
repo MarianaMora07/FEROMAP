@@ -204,7 +204,10 @@ def validate_weekly(plan_id: int, db: DbSession, _: PlannerOrAdmin):
         job_type="planning_validation",
         scenario_id=plan["scenarioId"],
         params={"weeklyPlanId": plan_id, "kind": "weekly_by_day"},
-        runner=lambda _session: validate_weekly_plan_days(_session, plan_id=plan_id),
+        runner=lambda _session, on_progress=None: validate_weekly_plan_days(
+            _session, plan_id=plan_id, on_progress=on_progress
+        ),
+        with_progress=True,
     )
     return {"jobId": job.id, "weeklyPlanId": plan_id}
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any
+from typing import Any, Callable
 
 from fastapi import HTTPException, status
 from sqlalchemy import delete, func, select, update
@@ -112,6 +112,32 @@ def _plan_fleet_vehicles(db: Session, plan: WeeklyPlan) -> list[Any]:
         selected.append(vehicle)
         used[vtype] = used.get(vtype, 0) + 1
     return selected or list(vehicles)
+
+
+def _estimate_fleet_for_points(db: Session, plan: WeeklyPlan, point_ids: list[int]) -> int:
+    """Vehículos necesarios para mover la demanda del día en un cargamento.
+
+    Dimensiona con la demanda estimada (llenado actual de los puntos del día) frente a
+    las capacidades de la flota asignable, de mayor a menor, sin tope distinto del
+    tamaño de la flota. Devuelve al menos 1.
+    """
+    capacities = sorted(
+        (float(vehicle.max_capacity_kg) or 0.0 for vehicle in _plan_fleet_vehicles(db, plan)),
+        reverse=True,
+    )
+    if not capacities or not point_ids:
+        return 1
+    demand_kg = 0.0
+    for point in db.scalars(select(CollectionPoint).where(CollectionPoint.id.in_(point_ids))):
+        demand_kg += float(point.current_fill_level_kg or 0)
+    # Margen del 5 % (mismo umbral del pre-flight) para no quedar al borde.
+    target = demand_kg / 0.95 if demand_kg > 0 else 0.0
+    cumulative = 0.0
+    for index, capacity in enumerate(capacities, start=1):
+        cumulative += capacity
+        if cumulative >= target:
+            return index
+    return len(capacities)
 
 
 def monday_of_week(value: date) -> date:
@@ -694,12 +720,18 @@ def _simulation_route_rows(db: Session, simulation_id: int) -> list[dict[str, An
     return rows
 
 
-def validate_weekly_plan_days(db: Session, *, plan_id: int) -> dict[str, Any]:
+def validate_weekly_plan_days(
+    db: Session,
+    *,
+    plan_id: int,
+    on_progress: Callable[[str, int], None] | None = None,
+) -> dict[str, Any]:
     """Valida la semana ejecutando el motor ACO **por día** (Tarea 9).
 
     Cada día corre su propia optimización (escenario del día y flota esperada) y se
     persiste el resultado junto al pre-flight heurístico. Devuelve KPIs agregados de
-    la semana (compatibles con el contrato del job).
+    la semana (compatibles con el contrato del job). Con ``on_progress`` publica el
+    avance día a día (10 % → 95 %); el 100 % final lo fija el worker del job.
     """
     from app.services.optimization_service import run_optimization_engine
 
@@ -707,8 +739,15 @@ def validate_weekly_plan_days(db: Session, *, plan_id: int) -> dict[str, Any]:
     if plan is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan semanal no encontrado")
 
+    days = sorted(plan.days, key=lambda row: row.operation_date)
+    total = max(len(days), 1)
     rows: list[dict[str, Any]] = []
-    for day in sorted(plan.days, key=lambda row: row.operation_date):
+    for index, day in enumerate(days, start=1):
+        if on_progress is not None:
+            on_progress(
+                f"Validando {day.operation_date.isoformat()} ({index}/{total})",
+                10 + int(85 * (index - 1) / total),
+            )
         resolved_ids, _source, _case = resolve_weekly_day_point_ids(db, plan, day)
         entry: dict[str, Any] = {"operationDate": day.operation_date.isoformat()}
         if not resolved_ids:
@@ -752,6 +791,11 @@ def validate_weekly_plan_days(db: Session, *, plan_id: int) -> dict[str, Any]:
         finally:
             db.rollback()
         rows.append(entry)
+        if on_progress is not None:
+            on_progress(
+                f"Validado {day.operation_date.isoformat()} ({index}/{total})",
+                10 + int(85 * index / total),
+            )
 
     aggregate = _aggregate_weekly_day_results(rows)
     preflight: dict[str, Any] = {"feasible": aggregate["feasible"], "rows": []}
@@ -1582,7 +1626,7 @@ def autofill_weekly_plan_from_schedules(db: Session, plan_id: int) -> dict[str, 
         point_ids = sorted(points_by_weekday.get(offset, []))
         if not point_ids:
             continue
-        fleet_estimate = max(1, min(4, (len(point_ids) + 11) // 12))
+        fleet_estimate = _estimate_fleet_for_points(db, plan, point_ids)
         db.add(
             WeeklyPlanDay(
                 weekly_plan_id=plan.id,
@@ -1635,7 +1679,7 @@ def autofill_weekly_plan_from_case_study(
         db.delete(day)
     db.flush()
 
-    fleet_estimate = max(1, min(4, (len(point_ids) + 11) // 12))
+    fleet_estimate = _estimate_fleet_for_points(db, plan, point_ids)
     for offset in range(5):
         operation_date = plan.week_start_date + timedelta(days=offset)
         db.add(
