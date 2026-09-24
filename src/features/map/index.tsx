@@ -196,8 +196,12 @@ export default function MapPage() {
       return fetchDailyRoutePlayback(dailyPlanId);
     },
   );
-  const [routeSnapshot] = createResource(operationDate, (date) => fetchOperatorRouteSnapshot(date));
   const operatorMode = () => isConductor(authUser()?.role) && !residentScope();
+  // Solo conductor/admin/planner pueden llamar /planning/operator-snapshot (403 en residente).
+  const [routeSnapshot] = createResource(
+    () => (operatorMode() ? operationDate() : null),
+    (date) => (date ? fetchOperatorRouteSnapshot(date) : Promise.resolve(undefined)),
+  );
   const nextStopHolder: { marker?: maplibregl.Marker } = {};
   const residentNextStopHolder: { marker?: maplibregl.Marker } = {};
   const landfillMarkerHolder: { marker?: maplibregl.Marker } = {};

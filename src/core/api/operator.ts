@@ -132,7 +132,37 @@ function mockOperatorRouteSnapshot(): OperatorRouteSnapshot {
   };
 }
 
+function emptyOperatorRouteSnapshot(operationDate?: string): OperatorRouteSnapshot {
+  return {
+    operationDate: operationDate ?? new Date().toISOString().slice(0, 10),
+    dailyPlanId: null,
+    dailyPlanStatus: null,
+    dailyPlanClosedAt: null,
+    routeId: null,
+    vehicleId: null,
+    routeLabel: null,
+    progress: 0,
+    stopsDone: 0,
+    stopsTotal: 0,
+    totalDistanceKm: null,
+    traveledDistanceKm: null,
+    remainingDistanceKm: null,
+    nextStop: null,
+    stops: [],
+    lineCoordinates: null,
+  };
+}
+
+/** Roles que el backend acepta en `/planning/operator-snapshot` (403 en el resto). */
+function canFetchOperatorRouteSnapshot(): boolean {
+  const role = authUser()?.role;
+  return role === 'conductor' || role === 'administrador' || role === 'planificador';
+}
+
 export function fetchOperatorRouteSnapshot(operationDate?: string): Promise<OperatorRouteSnapshot> {
+  if (!canFetchOperatorRouteSnapshot()) {
+    return Promise.resolve(emptyOperatorRouteSnapshot(operationDate));
+  }
   const query = operationDate ? `?operationDate=${encodeURIComponent(operationDate)}` : '';
   if (useMocks) {
     return Promise.resolve(mockOperatorRouteSnapshot());
