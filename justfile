@@ -172,6 +172,14 @@ phase0-baseline *args: _check
 wilcoxon *args: _check
     {{compose}} exec api python -m scripts.statistical_validation {{args}}
 
+# Flujo de la semana: reinicia la BD, arma el plan de la semana actual, lo optimiza y lo imprime.
+week *args: db-reset
+    {{compose}} exec api python -m scripts.weekly_plan_demo {{args}}
+
+# Igual que `week` pero sin reiniciar la BD (usa la instancia actual).
+week-plan *args: _check
+    {{compose}} exec api python -m scripts.weekly_plan_demo {{args}}
+
 # Optimización real + tabla de planes por conductor (BD con seed, sin UI)
 optimization-driver-report *args:
     bash scripts/optimization-driver-report.sh {{args}}
