@@ -14,10 +14,11 @@ const toneClass = {
 } as const;
 
 const quickActionIcons = {
-  monitoring: 'Monitoreo',
+  monitoring: 'Mi ruta',
   map: 'Mapa',
   alerts: 'Alertas',
   breakdown: 'Avería',
+  notifications: 'Avisos',
 } as const;
 
 interface OperatorHubDashboardMinimalProps {

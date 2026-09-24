@@ -315,25 +315,47 @@ export interface ContainerMarkerOptions {
 export function syncContainerMarkers(
   map: MapLibreMap,
   containers: ContainerCollection,
-  markers: Marker[],
+  markersById: Map<string, Marker>,
   options: ContainerMarkerOptions,
 ) {
   if (!map.isStyleLoaded()) return;
 
-  markers.forEach((marker) => marker.remove());
-  markers.length = 0;
-
+  const visible: Array<{ id: string; bucket: string; feature: ContainerCollection['features'][number] }> = [];
   for (const feature of containers.features) {
+    const id = feature.properties.id;
     const bucket =
       (feature.properties as { bucket?: string }).bucket ??
       containerBucket(feature.properties.fillLevel);
     if (options.visibleBuckets && !options.visibleBuckets.has(bucket)) continue;
+    visible.push({ id, bucket, feature });
+  }
+
+  const nextIds = new Set(visible.map((row) => row.id));
+  for (const [id, marker] of markersById.entries()) {
+    if (!nextIds.has(id)) {
+      marker.remove();
+      markersById.delete(id);
+    }
+  }
+
+  for (const { id, bucket, feature } of visible) {
+    const coords = feature.geometry.coordinates as [number, number];
+    const existing = markersById.get(id);
+    if (existing) {
+      const prevBucket = existing.getElement().dataset.bucket;
+      if (prevBucket === bucket) {
+        existing.setLngLat(coords);
+        continue;
+      }
+      existing.remove();
+      markersById.delete(id);
+    }
 
     const color = CONTAINER_BUCKET_COLORS[bucket] ?? CONTAINER_BUCKET_COLORS.normal;
     const element = options.createMarkerElement(color);
-    const marker = new maplibregl.Marker({ element }).setLngLat(
-      feature.geometry.coordinates as [number, number],
-    );
+    element.dataset.bucket = bucket;
+    element.dataset.containerId = id;
+    const marker = new maplibregl.Marker({ element }).setLngLat(coords);
 
     if (options.buildPopupHtml) {
       marker.setPopup(
@@ -342,6 +364,6 @@ export function syncContainerMarkers(
     }
 
     marker.addTo(map);
-    markers.push(marker);
+    markersById.set(id, marker);
   }
 }

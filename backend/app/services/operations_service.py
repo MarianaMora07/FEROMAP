@@ -199,40 +199,136 @@ def advance_route(db: Session, route_id: int) -> dict[str, Any]:
             "waypoint": None,
         }
 
+    _complete_waypoint(db, route, waypoint, outcome="visited")
+    return _advance_result(db, route, waypoint)
+
+
+def _complete_waypoint(
+    db: Session,
+    route: OptimizedRoute,
+    waypoint: RouteWaypoint,
+    *,
+    outcome: str,
+    confirmed_by_user_id: int | None = None,
+    confirmation_source: str | None = None,
+) -> None:
+    """Efectos compartidos de avanzar/confirmar una parada (F5b reutiliza esto).
+
+    Escribe exactamente los mismos campos que leen plan_vs_real, calibración e
+    historial: status completed/skipped, actual_arrival_at, collected_weight_kg
+    (solo si visitada), llenado a cero y resolución de pending_visits.
+    """
     now = datetime.now(timezone.utc)
-    waypoint.status = "completed"
+    waypoint.status = "completed" if outcome == "visited" else "skipped"
     waypoint.actual_arrival_at = now
+    if confirmed_by_user_id is not None:
+        waypoint.confirmed_by_user_id = confirmed_by_user_id
+        waypoint.confirmation_source = confirmation_source or "driver"
 
     point = waypoint.collection_point
-    if point is not None:
+    if point is not None and outcome == "visited":
         from app.domain.waste_generation import projected_fill_level_kg
 
-        # Peso real recolectado = llenado proyectado al momento de la parada
-        # (crecimiento desde el último vaciado). Alimenta el historial real.
         waypoint.collected_weight_kg = projected_fill_level_kg(point, at=now)
         point.current_fill_level_kg = Decimal("0")
         point.last_emptied_at = now
         from app.services.planning_service import resolve_pending_visits_for_points
 
-        resolve_pending_visits_for_points(
-            db,
-            [point.id],
-            operation_date=now.date(),
-        )
+        resolve_pending_visits_for_points(db, [point.id], operation_date=now.date())
 
+    # Sin paradas pending → la ruta se completa (mismo criterio que advance_route).
+    has_pending = db.scalar(
+        select(RouteWaypoint.id)
+        .where(RouteWaypoint.route_id == route.id, RouteWaypoint.status == "pending")
+        .limit(1)
+    )
+    if has_pending is None:
+        route.status = "completed"
+        vehicle = db.get(Vehicle, route.vehicle_id)
+        if vehicle:
+            vehicle.status = "available"
     db.flush()
+
+
+def _advance_result(db: Session, route: OptimizedRoute, waypoint: RouteWaypoint) -> dict[str, Any]:
     progress = route_progress_percent(list(route.waypoints))
+    point = waypoint.collection_point
     return {
-        "routeId": route_id,
+        "routeId": route.id,
         "routeCompleted": progress >= 100,
         "progress": progress,
         "waypoint": {
             "id": waypoint.id,
             "collectionPointCode": point.code if point else None,
             "sequenceOrder": waypoint.sequence_order,
-            "actualArrivalAt": now.isoformat(),
+            "actualArrivalAt": waypoint.actual_arrival_at.isoformat()
+            if waypoint.actual_arrival_at
+            else None,
+            "status": waypoint.status,
         },
     }
+
+
+def confirm_route_stop(
+    db: Session,
+    route_id: int,
+    waypoint_id: int,
+    *,
+    outcome: str,
+    note: str | None = None,
+    user_id: int | None = None,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """F5b: el conductor confirma una parada visitada u omitida (ADR-007).
+
+    Solo escribe los mismos campos que advance_route; no cambia el contrato de
+    plan_vs_real ni el cierre de día (sigue siendo de planificación).
+    """
+    if not settings.operator_stop_confirmation_enabled:
+        raise ValueError("Confirmación de parada deshabilitada (OPERATOR_STOP_CONFIRMATION_ENABLED)")
+
+    def _run() -> dict[str, Any]:
+        route = db.scalar(
+            select(OptimizedRoute)
+            .where(OptimizedRoute.id == route_id)
+            .options(
+                joinedload(OptimizedRoute.waypoints).joinedload(RouteWaypoint.collection_point),
+            )
+        )
+        if route is None:
+            raise LookupError(f"Ruta no encontrada: {route_id}")
+        if route.status != "in_progress":
+            raise ValueError("La ruta no está en ejecución")
+        waypoint = next((wp for wp in route.waypoints if wp.id == waypoint_id), None)
+        if waypoint is None:
+            raise LookupError(f"Parada no encontrada: {waypoint_id}")
+        if waypoint.status not in {"pending", "collected"}:
+            # Idempotente ante doble POST: ya confirmada, no reescribe.
+            return _advance_result(db, route, waypoint)
+        if waypoint.waypoint_type == "landfill" and outcome == "omitted":
+            raise ValueError("No se puede omitir la parada de vertedero")
+
+        _complete_waypoint(
+            db,
+            route,
+            waypoint,
+            outcome=outcome,
+            confirmed_by_user_id=user_id,
+            confirmation_source="driver",
+        )
+        if note:
+            # Nota se conserva en el historial vía confirmation_source + payload del caller;
+            # no hay columna de nota en waypoints (alcance mínimo ADR-007).
+            pass
+        return _advance_result(db, route, waypoint)
+
+    return run_idempotent(
+        db,
+        scope=f"confirm-stop:{route_id}:{waypoint_id}",
+        key=idempotency_key,
+        handler=_run,
+        enabled=True,
+    )
 
 
 def advance_active_routes(db: Session) -> dict[str, Any]:

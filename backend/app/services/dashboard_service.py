@@ -52,6 +52,8 @@ def role_kpis(
             {"id": "routes", "label": "Rutas planificadas", "value": routes_planned, "tone": "amber", "icon": "route"},
         ]
     if value == "conductor":
+        # KPIs personales del conductor se calculan en dashboard_summary cuando
+        # hay sesión; aquí se mantienen los agregados de flota como fallback.
         return [
             {"id": "routes", "label": "Rutas en ejecución", "value": routes_in_progress, "tone": "blue", "icon": "route"},
             {"id": "critical", "label": "Contenedores críticos", "value": critical, "tone": "red", "icon": "trash"},
@@ -329,6 +331,70 @@ def _recent_alerts_view(db: Session) -> list[dict[str, Any]]:
     ]
 
 
+def _role_kpis_with_operator_personal(
+    db: Session,
+    current_user: User | None,
+    points,
+    critical: list,
+    fleet: dict[str, Any],
+    routes_in_progress: int,
+    routes_completed: int,
+    routes_planned: int,
+    *,
+    at_risk_count: int = 0,
+) -> list[dict[str, Any]]:
+    """Para conductor, sustituye los KPIs de flota por los suyos del día."""
+    if current_user is None or current_user.role != UserRole.conductor:
+        return role_kpis(
+            current_user.role if current_user is not None else None,
+            total_containers=len(points),
+            critical=len(critical),
+            at_risk=at_risk_count,
+            active_vehicles=fleet["activeVehicles"],
+            routes_in_progress=routes_in_progress,
+            routes_completed=routes_completed,
+            routes_planned=routes_planned,
+        )
+
+    from app.services.operator_service import operator_route_snapshot
+
+    snap = operator_route_snapshot(db, current_user)
+    stops_done = snap.get("stopsDone", 0)
+    stops_total = snap.get("stopsTotal", 0)
+    progress = snap.get("progress", 0)
+    pending = max(0, stops_total - stops_done)
+    return [
+        {
+            "id": "stops",
+            "label": "Paradas de hoy",
+            "value": f"{stops_done}/{stops_total}",
+            "tone": "green",
+            "icon": "route",
+        },
+        {
+            "id": "progress",
+            "label": "Avance de ruta",
+            "value": f"{progress}%",
+            "tone": "blue",
+            "icon": "route",
+        },
+        {
+            "id": "pending",
+            "label": "Pendientes",
+            "value": pending,
+            "tone": "amber",
+            "icon": "trash",
+        },
+        {
+            "id": "critical",
+            "label": "Contenedores críticos",
+            "value": len(critical),
+            "tone": "red",
+            "icon": "trash",
+        },
+    ]
+
+
 def dashboard_summary(db: Session, *, current_user: User | None = None) -> dict[str, Any]:
     points = db.scalars(
         select(CollectionPoint).options(joinedload(CollectionPoint.sector)).order_by(CollectionPoint.code)
@@ -457,15 +523,16 @@ def dashboard_summary(db: Session, *, current_user: User | None = None) -> dict[
         "dateLabel": now.strftime("%d/%m/%Y"),
         "notifications": len(critical),
         "user": user_block,
-        "roleKpis": role_kpis(
-            current_user.role if current_user is not None else None,
-            total_containers=len(points),
-            critical=len(critical),
-            at_risk=len(at_risk),
-            active_vehicles=fleet["activeVehicles"],
-            routes_in_progress=routes_in_progress,
-            routes_completed=routes_completed,
-            routes_planned=routes_planned,
+        "roleKpis": _role_kpis_with_operator_personal(
+            db,
+            current_user,
+            points,
+            critical,
+            fleet,
+            routes_in_progress,
+            routes_completed,
+            routes_planned,
+            at_risk_count=len(at_risk),
         ),
         "residentSchedule": resident_schedule,
         "metrics": {

@@ -17,7 +17,7 @@ import {
 } from '../../core/api/operator';
 import { PlanningEmptyState } from '../planning/PlanningEmptyState';
 import { OPERATOR_EMPTY_PRESETS } from '../../core/operator/operatorEmptyStates';
-import { operatorMapHref, operatorMonitoringHref } from '../../core/operator/operatorDeepLinks';
+import { operatorMapHref } from '../../core/operator/operatorDeepLinks';
 import { OperatorStopDrawer } from './OperatorStopDrawer';
 
 interface OperatorRoutePanelProps {
@@ -127,6 +127,12 @@ export function OperatorRoutePanel(props: OperatorRoutePanelProps) {
                         </div>
                         <p class="mt-0.5 truncate text-xs text-text-muted">
                           {stop.sectorName ?? 'Sin sector'} · ETA {formatEstimatedTime(stop.estimatedArrivalAt)}
+                          <Show when={stop.fillLevelPct != null}>
+                            {' · '}
+                            <span class={stop.fillLevelPct! >= 80 ? 'font-semibold text-red-600' : ''}>
+                              {stop.fillLevelPct}%
+                            </span>
+                          </Show>
                         </p>
                       </div>
                       <ChevronRight size={16} class="shrink-0 text-text-muted" />
@@ -139,16 +145,16 @@ export function OperatorRoutePanel(props: OperatorRoutePanelProps) {
 
           <Show when={!props.embedded}>
             <div class="flex flex-wrap gap-2 pt-1">
-              <A href={operatorMonitoringHref(linkParams())}>
-                <Button variant="outline" size="sm" class="gap-2">
+              <A href={operatorMapHref({ ...linkParams(), focus: 'route' })}>
+                <Button variant="outline" size="sm" class="gap-2 min-h-11">
                   <MapPin size={14} />
-                  Abrir en monitoreo
+                  Mapa mi ruta
                 </Button>
               </A>
-              <A href={operatorMapHref({ ...linkParams(), focus: 'route' })}>
-                <Button variant="outline" size="sm" class="gap-2">
+              <A href="/operator/plan">
+                <Button variant="outline" size="sm" class="gap-2 min-h-11">
                   <FileText size={14} />
-                  Mapa mi ruta
+                  Ver plan del día
                 </Button>
               </A>
             </div>
@@ -160,6 +166,9 @@ export function OperatorRoutePanel(props: OperatorRoutePanelProps) {
         stop={selectedStop()}
         open={selectedStop() != null}
         onClose={() => setSelectedStop(null)}
+        stopConfirmationEnabled={props.snapshot?.stopConfirmationEnabled}
+        routeId={props.snapshot?.routeId}
+        onConfirmed={props.onRefresh}
       />
     </>
   );

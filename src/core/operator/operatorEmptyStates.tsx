@@ -15,9 +15,9 @@ export const OPERATOR_EMPTY_PRESETS = {
     testId: 'empty-operator-no-route',
     title: 'Sin ruta despachada',
     description:
-      'Planificación aún no ha despachado tu jornada. Cuando esté lista, verás tu ruta aquí y en monitoreo.',
-    actionLabel: 'Ver estado en monitoreo',
-    actionHref: '/monitoring',
+      'Planificación aún no ha despachado tu jornada. Cuando esté lista, verás tu ruta aquí.',
+    actionLabel: 'Actualizar',
+    actionHref: '/operator',
     icon: <Radio size={22} />,
   },
   noVehicleAssigned: {
@@ -31,8 +31,8 @@ export const OPERATOR_EMPTY_PRESETS = {
     testId: 'empty-operator-no-stops',
     title: 'Sin paradas pendientes',
     description: 'Completaste las paradas de tu ruta o aún no hay puntos activos para hoy.',
-    actionLabel: 'Ver mapa',
-    actionHref: '/map',
+    actionLabel: 'Ver plan del día',
+    actionHref: '/operator/plan',
     icon: <CheckCircle2 size={22} />,
   },
   noFleetInMonitoring: {
@@ -55,8 +55,8 @@ export const OPERATOR_EMPTY_PRESETS = {
     title: 'Sin alertas en tu ruta',
     description:
       'No hay avisos que afecten tu vehículo, tus paradas o tu sector en este momento.',
-    actionLabel: 'Ver mapa de mi ruta',
-    actionHref: '/map?focus=route',
+    actionLabel: 'Ver plan del día',
+    actionHref: '/operator/plan',
     icon: <CheckCircle2 size={22} />,
   },
   dayClosedByPlanning: {

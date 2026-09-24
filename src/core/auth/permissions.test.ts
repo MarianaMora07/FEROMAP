@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { CALIBRATION_ROUTE, DEMO_NAV_HIDDEN_HREFS, sidebarNavLayout } from './permissions';
+import {
+  CALIBRATION_ROUTE,
+  DEMO_NAV_HIDDEN_HREFS,
+  RESIDENT_BOTTOM_NAV_ITEMS,
+  canEnsureDailyPlan,
+  sidebarNavLayout,
+} from './permissions';
 
 describe('permissions — arquitectura de navegación (IA)', () => {
   it('exposes analytics in the planner sidebar (F6)', () => {
@@ -113,5 +119,23 @@ describe('permissions — arquitectura de navegación (IA)', () => {
     ];
     expect(residentHrefs).toContain('/alerts?scope=sector');
     expect(residentHrefs).not.toContain('/simulation');
+  });
+
+  it('solo admin y planificador pueden asegurar el plan del día', () => {
+    expect(canEnsureDailyPlan('administrador')).toBe(true);
+    expect(canEnsureDailyPlan('planificador')).toBe(true);
+    expect(canEnsureDailyPlan('conductor')).toBe(false);
+    expect(canEnsureDailyPlan('residente')).toBe(false);
+    expect(canEnsureDailyPlan(undefined)).toBe(false);
+  });
+
+  it('expone bottom nav móvil del residente (5 destinos)', () => {
+    expect(RESIDENT_BOTTOM_NAV_ITEMS.map((item) => item.href)).toEqual([
+      '/resident',
+      '/map?scope=sector',
+      '/collection-points',
+      '/alerts?scope=sector',
+      '/profile',
+    ]);
   });
 });

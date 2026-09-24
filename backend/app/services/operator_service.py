@@ -9,6 +9,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
+from app.config import settings
 from app.db.models import CollectionPoint, DailyPlan, OptimizedRoute, RouteWaypoint, User, UserRole, Vehicle
 from app.services.collection_point_service import seed_meta_by_code
 from app.services.geo_service import fill_level_pct
@@ -259,6 +260,7 @@ def _serialize_route_snapshot(
         "stops": stops,
         "lineCoordinates": line_coordinates,
         "shiftUtilizationPct": shift_utilization_pct,
+        "stopConfirmationEnabled": settings.operator_stop_confirmation_enabled,
     }
 
 

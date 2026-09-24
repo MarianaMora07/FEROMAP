@@ -171,13 +171,13 @@ export const alertsList: SystemAlert[] = [
     priority: 'advertencia',
     title: 'Retraso en recolección',
     detail: '+18 min vs planificado',
-    source: 'Ruta Sur 01',
-    location: 'Villa Asia',
+    source: 'Ruta TR-01',
+    location: 'Unare I',
     datetime: '25/06/2026 08:05 AM',
     status: 'en-progreso',
     category: 'trafico',
-    lng: -62.708,
-    lat: 8.285,
+    lng: -62.75,
+    lat: 8.27,
   },
 ];
 

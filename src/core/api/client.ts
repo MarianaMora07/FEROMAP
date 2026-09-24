@@ -64,10 +64,49 @@ async function ensureOk(res: Response): Promise<void> {
   throw new ApiError(message, res.status);
 }
 
+/** Refresca el access token vía cookie de refresh (evita corte a 60 min en ruta). */
+let refreshPromise: Promise<boolean> | null = null;
+async function tryRefreshToken(): Promise<boolean> {
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      try {
+        const res = await fetch(resolveUrl('/api/v1/auth/refresh'), {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        });
+        if (!res.ok) return false;
+        const data = (await res.json()) as { accessToken?: string };
+        if (data.accessToken) {
+          setAuthToken(data.accessToken);
+          return true;
+        }
+        return false;
+      } catch {
+        return false;
+      } finally {
+        // Permite reintentos en la siguiente expiración.
+        setTimeout(() => {
+          refreshPromise = null;
+        }, 1000);
+      }
+    })();
+  }
+  return refreshPromise;
+}
+
+async function fetchWithAuthRetry(path: string, init: RequestInit, retried = false): Promise<Response> {
+  const res = await fetch(resolveUrl(path), { ...init, credentials: 'include' });
+  if (res.status === 401 && !retried && (await tryRefreshToken())) {
+    return fetchWithAuthRetry(path, init, true);
+  }
+  return res;
+}
+
 export async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(resolveUrl(path), {
+  const res = await fetchWithAuthRetry(path, {
     headers: authHeaders(),
-    credentials: 'include',
   });
   await ensureOk(res);
   return res.json() as Promise<T>;
@@ -78,10 +117,9 @@ export async function apiPost<T>(
   body: unknown,
   options?: { signal?: AbortSignal; headers?: Record<string, string> },
 ): Promise<T> {
-  const res = await fetch(resolveUrl(path), {
+  const res = await fetchWithAuthRetry(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders(), ...(options?.headers ?? {}) },
-    credentials: 'include',
     body: JSON.stringify(body),
     signal: options?.signal,
   });

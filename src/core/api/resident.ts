@@ -71,8 +71,19 @@ export interface ResidentOverview {
   };
 }
 
-export function fetchResidentOverview(): Promise<ResidentOverview> {
-  return apiGet<ResidentOverview>('/api/v1/resident/overview');
+export const RESIDENT_OVERVIEW_CACHE_TTL_MS = 12_000;
+
+let residentOverviewCache: { data: ResidentOverview; at: number } | null = null;
+
+export function fetchResidentOverview(options?: { force?: boolean }): Promise<ResidentOverview> {
+  const now = Date.now();
+  if (!options?.force && residentOverviewCache && now - residentOverviewCache.at < RESIDENT_OVERVIEW_CACHE_TTL_MS) {
+    return Promise.resolve(residentOverviewCache.data);
+  }
+  return apiGet<ResidentOverview>('/api/v1/resident/overview').then((data) => {
+    residentOverviewCache = { data, at: Date.now() };
+    return data;
+  });
 }
 
 export function fetchResidentProximity(): Promise<ResidentProximity> {

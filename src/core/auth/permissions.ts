@@ -11,6 +11,8 @@ export const ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
   '/': ['administrador', 'planificador', 'conductor', 'residente'],
   '/operator': ['administrador', 'planificador', 'conductor'],
   '/operator/plan': ['administrador', 'planificador', 'conductor'],
+  '/operator/notifications': ['administrador', 'planificador', 'conductor'],
+  '/operator/week': ['administrador', 'planificador', 'conductor'],
   '/optimization': ['administrador', 'planificador'],
   '/planning': ['administrador', 'planificador'],
   '/planning/weekly': ['administrador', 'planificador'],
@@ -22,7 +24,7 @@ export const ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
   '/case-studies': ['administrador', 'planificador'],
   '/simulation': ['administrador', 'planificador'],
   '/demostracion': ['administrador', 'planificador'],
-  '/monitoring': ['administrador', 'planificador', 'conductor'],
+  '/monitoring': ['administrador', 'planificador'],
   '/analytics': ['administrador', 'planificador'],
   '/reports': ['administrador', 'planificador'],
   '/resident': ['residente'],
@@ -148,7 +150,7 @@ export const MAIN_NAV_ITEMS: NavItemDef[] = [
     description: 'Flota, rutas e incidencias del día',
     descriptionKey: 'nav.monitoring.description',
     sidebarPrimary: true,
-    roles: ['administrador', 'planificador', 'conductor'],
+    roles: ['administrador', 'planificador'],
   },
   {
     href: '/map',
@@ -264,13 +266,31 @@ export const RESIDENT_MAIN_NAV_ITEMS: NavItemDef[] = [
 
 /** Nav lateral reducida para conductores en campo. */
 export const OPERATOR_MAIN_NAV_ITEMS: NavItemDef[] = [
-  { href: '/', label: 'Dashboard', labelKey: 'nav.dashboard', sidebarPrimary: true, roles: ['conductor'] },
   {
     href: '/operator',
     label: 'Mi operación',
     labelKey: 'nav.operatorHome',
     description: 'Tu ruta en campo',
     descriptionKey: 'nav.operatorHome.description',
+    sidebarPrimary: true,
+    roles: ['conductor'],
+  },
+  { href: '/', label: 'Dashboard', labelKey: 'nav.dashboard', sidebarPrimary: true, roles: ['conductor'] },
+  {
+    href: '/operator/notifications',
+    label: 'Notificaciones',
+    labelKey: 'nav.notifications',
+    description: 'Avisos y acuses',
+    descriptionKey: 'nav.notifications.description',
+    sidebarPrimary: true,
+    roles: ['conductor'],
+  },
+  {
+    href: '/operator/week',
+    label: 'Mi semana',
+    labelKey: 'nav.operatorWeek',
+    description: 'Días y frecuencias',
+    descriptionKey: 'nav.operatorWeek.description',
     sidebarPrimary: true,
     roles: ['conductor'],
   },
@@ -286,6 +306,25 @@ export const BOTTOM_NAV_ITEMS: NavItemDef[] = [
     labelKey: 'nav.profile',
     roles: ['administrador', 'planificador', 'conductor', 'residente'],
   },
+];
+
+/** Bottom nav fijo para conductor en campo (móvil). */
+export const CONDUCTOR_BOTTOM_NAV_ITEMS: NavItemDef[] = [
+  { href: '/operator', label: 'Ruta', labelKey: 'nav.operatorHome', roles: ['conductor'] },
+  { href: '/operator/notifications', label: 'Avisos', labelKey: 'nav.notifications', roles: ['conductor'] },
+  { href: '/operator/week', label: 'Semana', labelKey: 'nav.operatorWeek', roles: ['conductor'] },
+  { href: '/map', label: 'Mapa', labelKey: 'nav.map', roles: ['conductor'] },
+  { href: '/alerts', label: 'Alertas', labelKey: 'nav.alerts', roles: ['conductor'] },
+  { href: '/profile', label: 'Perfil', labelKey: 'nav.profile', roles: ['conductor'] },
+];
+
+/** Bottom nav móvil para residente (vista ciudadano). */
+export const RESIDENT_BOTTOM_NAV_ITEMS: NavItemDef[] = [
+  { href: '/resident', label: 'Mi rec.', labelKey: 'nav.residentHome', roles: ['residente'] },
+  { href: '/map?scope=sector', label: 'Mapa', labelKey: 'nav.residentMap', roles: ['residente'] },
+  { href: '/collection-points', label: 'Puntos', labelKey: 'nav.residentPoints', roles: ['residente'] },
+  { href: '/alerts?scope=sector', label: 'Alertas', labelKey: 'nav.alerts', roles: ['residente'] },
+  { href: '/profile', label: 'Perfil', labelKey: 'nav.profile', roles: ['residente'] },
 ];
 
 export function navItemsForRole(role: UserRole | undefined) {
@@ -320,10 +359,15 @@ export function isResident(role: UserRole | undefined): boolean {
 
 export function isOperatorHome(path: string): boolean {
   const normalized = path.split('?')[0] ?? path;
-  return normalized === '/operator' || normalized === '/monitoring';
+  return normalized === '/operator' || normalized.startsWith('/operator/');
 }
 
 export function canOptimize(role: UserRole | undefined): boolean {
+  return role === 'administrador' || role === 'planificador';
+}
+
+/** Solo planificación/admin puede crear el plan del día (`POST .../ensure`). */
+export function canEnsureDailyPlan(role: UserRole | undefined): boolean {
   return role === 'administrador' || role === 'planificador';
 }
 

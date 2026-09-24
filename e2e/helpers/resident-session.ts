@@ -30,7 +30,7 @@ export function residentOverviewMock() {
     },
     proximity: {
       status: 'approaching',
-      vehicleCode: 'TR-08',
+      vehicleCode: 'TR-01',
       routeId: 42,
       estimatedMinutes: 18,
       stopsBeforeSector: 2,
@@ -62,7 +62,7 @@ export function residentOverviewMock() {
     activeRoutesInSector: [
       {
         routeId: 42,
-        vehicle: 'TR-08',
+        vehicle: 'TR-01',
         status: 'in_progress',
         stopsInSector: 3,
         pendingStops: 2,

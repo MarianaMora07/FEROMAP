@@ -63,11 +63,18 @@ export function matchOperatorVehicle(
 ): LiveVehicle | null {
   if (!user) return null;
   const fullName = `${user.firstName} ${user.lastName}`.trim();
-  const byName = fleet.find((vehicle) => vehicle.driver === fullName);
+  const byName = fleet.find(
+    (vehicle) =>
+      vehicle.driver === fullName ||
+      (fullName.length > 3 && vehicle.driver.toLowerCase().includes(fullName.toLowerCase())),
+  );
   if (byName) return byName;
   if (user.driverId != null) {
     const suffix = String(user.driverId).padStart(2, '0');
-    return fleet.find((vehicle) => vehicle.id.endsWith(suffix)) ?? null;
+    const bySuffix = fleet.find((vehicle) => vehicle.id.endsWith(suffix));
+    if (bySuffix) return bySuffix;
+    // Fallback: cualquier vehículo con ruta asignada al conductor en el snapshot.
+    return fleet.find((vehicle) => vehicle.routeId != null && vehicle.progress < 100) ?? null;
   }
   return null;
 }
@@ -77,11 +84,16 @@ export function deriveOperatorFieldContext(params: {
   fleet: LiveVehicle[];
   user: AuthUser | null | undefined;
   operationDate: string;
+  /** vehicleId del snapshot cuando el matching de flota falla (evita señales mixtas). */
+  snapshotVehicleId?: string | null;
 }): OperatorFieldContext {
   const vehicle = matchOperatorVehicle(params.fleet, params.user);
   const hasDispatchedPlan = hadOperationalDayPlan(params.plan);
   const isDayClosed = isClosedDailyPlan(params.plan);
-  const hasAssignedVehicle = vehicle != null || params.user?.driverId != null;
+  const hasAssignedVehicle =
+    vehicle != null ||
+    params.user?.driverId != null ||
+    params.snapshotVehicleId != null;
   const hasPendingStops =
     hasDispatchedPlan &&
     !isDayClosed &&

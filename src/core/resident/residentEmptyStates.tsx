@@ -17,6 +17,8 @@ export const RESIDENT_EMPTY_PRESETS = {
     title: 'Sin sector asignado',
     description:
       'Tu cuenta no está vinculada a un sector de recolección. Contacta a la administración municipal.',
+    actionLabel: 'Revisar mi perfil',
+    actionHref: '/profile',
     icon: <UserX size={22} />,
   },
   noRouteToday: {
@@ -33,6 +35,8 @@ export const RESIDENT_EMPTY_PRESETS = {
     title: 'Sin recolección programada esta semana',
     description:
       'Tu sector no aparece en el plan semanal aprobado. Contacta a la administración si crees que es un error.',
+    actionLabel: 'Ver puntos de recolección',
+    actionHref: '/collection-points',
     icon: <Calendar size={22} />,
   },
   notScheduledToday: {

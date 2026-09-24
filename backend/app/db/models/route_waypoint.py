@@ -21,6 +21,9 @@ class RouteWaypoint(Base):
     estimated_arrival_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     actual_arrival_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     collected_weight_kg: Mapped[Decimal | None] = mapped_column(Numeric(8, 2), nullable=True)
+    # F5b — auditoría de confirmación por el conductor (ADR-007).
+    confirmed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    confirmation_source: Mapped[str | None] = mapped_column(String(30), nullable=True)
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

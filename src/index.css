@@ -12,3 +12,28 @@
 .progress-indeterminate {
   animation: progress-indeterminate-slide 1.35s ease-in-out infinite;
 }
+
+@keyframes fero-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fero-rise {
+  animation: fero-rise 0.35s ease-out both;
+}
+
+.fero-rise-delay-1 {
+  animation-delay: 0.05s;
+}
+.fero-rise-delay-2 {
+  animation-delay: 0.1s;
+}
+.fero-rise-delay-3 {
+  animation-delay: 0.15s;
+}

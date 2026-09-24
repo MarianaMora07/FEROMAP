@@ -260,9 +260,14 @@ def process_due_outbox(
     return {"processed": len(rows), "sent": sent, "retried": retried, "failed": failed}
 
 
-def ack_notification(db: Session, notification_id: int) -> dict[str, Any]:
+def ack_notification(
+    db: Session, notification_id: int, *, driver_id: int | None = None
+) -> dict[str, Any]:
     notification = db.get(DriverNotification, notification_id)
     if notification is None:
+        raise LookupError("Notificación no encontrada")
+    # Scoping: el conductor solo puede acusar sus propias notificaciones.
+    if driver_id is not None and notification.driver_id is not None and notification.driver_id != driver_id:
         raise LookupError("Notificación no encontrada")
     now = _now()
     notification.ack_at = now
@@ -308,8 +313,13 @@ def notify_routes_dispatched(
     return sent
 
 
-def list_recent_notifications(db: Session, *, limit: int = 20) -> list[dict[str, Any]]:
-    rows = db.scalars(
-        select(DriverNotification).order_by(DriverNotification.created_at.desc()).limit(limit)
-    ).all()
+def list_recent_notifications(
+    db: Session, *, limit: int = 20, driver_id: int | None = None
+) -> list[dict[str, Any]]:
+    stmt = select(DriverNotification).order_by(DriverNotification.created_at.desc())
+    if driver_id is not None:
+        if driver_id < 0:
+            return []
+        stmt = stmt.where(DriverNotification.driver_id == driver_id)
+    rows = db.scalars(stmt.limit(limit)).all()
     return [_serialize_notification(row) for row in rows]
