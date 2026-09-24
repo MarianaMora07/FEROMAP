@@ -9,8 +9,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.services import calibration_figures_service as figures
-from app.services import calibration_method_service as svc
+import pytest
+
+# matplotlib es la única dependencia de las figuras (F1–F4) y es opcional en el entorno de test:
+# el análisis puro del protocolo no lo arrastra (la CLI lo importa de forma perezosa). Si no está
+# instalado, el módulo se salta en vez de abortar toda la suite al recolectar.
+pytest.importorskip("matplotlib", reason="figuras del reporte C8 (matplotlib no instalado)")
+
+from app.services import calibration_figures_service as figures  # noqa: E402
+from app.services import calibration_method_service as svc  # noqa: E402
 
 SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
