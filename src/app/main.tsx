@@ -16,7 +16,7 @@ applyThemePreference(getStoredThemePreference());
 
 void initAuth();
 void initAppData();
-void initSimulationData();
+void initSimulationData().catch(() => undefined);
 
 const root = document.getElementById('root');
 if (root) {

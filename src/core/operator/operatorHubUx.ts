@@ -2,7 +2,7 @@ import type { OperatorFieldContext } from './operatorUx';
 import { operatorAlertsHref, operatorMapHref, operatorMonitoringHref } from './operatorDeepLinks';
 
 export interface OperatorQuickAction {
-  id: 'monitoring' | 'map' | 'alerts' | 'breakdown';
+  id: 'monitoring' | 'map' | 'alerts' | 'breakdown' | 'notifications';
   label: string;
   href: string;
   description: string;
@@ -16,9 +16,9 @@ export function getOperatorQuickActions(params: {
   const actions: OperatorQuickAction[] = [
     {
       id: 'monitoring',
-      label: 'Monitoreo',
+      label: 'Mi ruta',
       href: operatorMonitoringHref(params),
-      description: 'Mapa',
+      description: 'Paradas del día',
     },
     {
       id: 'map',
@@ -31,6 +31,12 @@ export function getOperatorQuickActions(params: {
       label: 'Alertas',
       href: operatorAlertsHref({ ...params, scope: 'mine' }),
       description: 'Avisos',
+    },
+    {
+      id: 'notifications',
+      label: 'Notificaciones',
+      href: '/operator/notifications',
+      description: 'Mensajes',
     },
     {
       id: 'breakdown',
@@ -90,9 +96,9 @@ export function deriveNextOperatorAction(
   if (!context.hasDispatchedPlan) {
     return {
       message: 'Tu ruta aún no está despachada',
-      detail: 'Planificación debe activar la jornada. Revisa el estado en monitoreo.',
-      href: operatorMonitoringHref(links),
-      label: 'Ver estado',
+      detail: 'Planificación debe activar la jornada. Recarga para ver el estado.',
+      href: '/operator',
+      label: 'Actualizar',
       tone: 'warning',
     };
   }
@@ -100,7 +106,7 @@ export function deriveNextOperatorAction(
   if (!context.hasAssignedVehicle) {
     return {
       message: 'Sin vehículo asignado',
-      detail: 'Contacta a planificación antes de salir a campo.',
+      detail: 'Contacta a planificación antes de salir a ruta.',
       href: '/operator',
       label: 'Actualizar',
       tone: 'warning',
@@ -122,16 +128,16 @@ export function deriveNextOperatorAction(
       message: `Siguiente parada: ${vehicle.nextPoint}`,
       detail: `${vehicle.id} · ${vehicle.route} · ${vehicle.progress}% de avance`,
       href: operatorMonitoringHref(links),
-      label: 'Ir a siguiente parada',
+      label: 'Ir a mi ruta',
       tone: 'info',
     };
   }
 
   return {
     message: 'Ruta activa',
-    detail: 'Abre monitoreo para ver tu vehículo y el mapa.',
+    detail: 'Abre tu ruta para ver las paradas del día.',
     href: operatorMonitoringHref(links),
-    label: 'Abrir monitoreo',
+    label: 'Abrir mi ruta',
     tone: 'info',
   };
 }

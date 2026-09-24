@@ -34,7 +34,11 @@ export function OperatorMobilePlayback(props: OperatorMobilePlaybackProps) {
 
   const [playbackPayload] = createResource(planId, async (id) => {
     if (!id) return mockDailyRoutePlayback(0);
-    return fetchDailyRoutePlayback(id);
+    try {
+      return await fetchDailyRoutePlayback(id);
+    } catch {
+      return null;
+    }
   });
 
   const playbackRoutes = createMemo(() =>

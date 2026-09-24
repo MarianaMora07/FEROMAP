@@ -3,23 +3,17 @@ import { ResidentLevelBanner } from './ResidentLevelBanner';
 
 export default function ResidentPage() {
   return (
-    <div class="space-y-5">
-      <div>
-        <h1 class="font-heading text-2xl font-bold text-text-primary dark:text-white">
-          Mi Recolección
-        </h1>
+    <div class="space-y-4">
+      <div class="fero-rise">
+        <p class="text-xs font-semibold uppercase tracking-wide text-fero-blue">Mi zona</p>
         <p class="mt-1 text-sm text-text-secondary">
-          Consulta el horario de paso del camión, el estado de tu sector y los contenedores de tu
-          barrio.
+          Horario, camión y estado de contenedores de tu sector — consulta ciudadana.
         </p>
       </div>
 
-      <ResidentLevelBanner title="Vista ciudadano — solo tu sector">
-        <p class="text-sm text-text-secondary">
-          Usa «Qué hacer ahora» para saber si hay camión en camino y las acciones rápidas para mapa,
-          alertas y puntos de recolección.
-        </p>
-      </ResidentLevelBanner>
+      <div class="fero-rise fero-rise-delay-1">
+        <ResidentLevelBanner title="Vista ciudadano — solo tu sector" />
+      </div>
 
       <ResidentHubSection variant="landing" />
     </div>

@@ -16,10 +16,10 @@ function buildQuery(params: Record<string, string | undefined>): string {
 }
 
 export function operatorMonitoringHref(params: OperatorDeepLinkParams = {}): string {
-  return `/monitoring${buildQuery({
+  // IA unificada: el conductor opera desde /operator (no /monitoring).
+  return `/operator${buildQuery({
     date: params.date,
     vehicleId: params.vehicleId,
-    dailyPlanId: params.dailyPlanId != null ? String(params.dailyPlanId) : undefined,
   })}`;
 }
 

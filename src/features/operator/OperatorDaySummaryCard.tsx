@@ -80,6 +80,18 @@ export function OperatorDaySummaryCard(props: OperatorDaySummaryCardProps) {
             </span>
           }
         />
+        <KpiCard
+          title="Pendientes / omitidas"
+          value={`${props.summary.stopsPending} / ${props.summary.stopsOmitted}`}
+          iconTone="amber"
+          footer={
+            <span class="text-xs text-text-muted">
+              {props.summary.shiftUtilizationPct != null
+                ? `Uso de turno ${props.summary.shiftUtilizationPct}%`
+                : 'Sin dato de turno'}
+            </span>
+          }
+        />
         <Show when={props.summary.vehicleId}>
           {(vehicleId) => (
             <KpiCard

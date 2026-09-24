@@ -1,11 +1,15 @@
 import { Show, createResource } from 'solid-js';
-import { useLocation } from '@solidjs/router';
+import { A, useLocation } from '@solidjs/router';
 import { Menu, Bell, RefreshCw, CalendarDays } from 'lucide-solid';
 import { toggleSidebar } from '../../core/stores/appStore';
 import { dashboardSummary, loadDashboardData } from '../../core/stores/dashboardStore';
 import { canOptimize, isConductor, isResident } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
 import { fetchPlanningDashboardSnapshot } from '../../core/api/planningAnalytics';
+import { fetchRecentDriverNotifications } from '../../core/api/notifications';
+import { fetchResidentOverview } from '../../core/api/resident';
+import { residentAlertsPreview } from '../../core/resident/residentAlertsUx';
+import { residentAlertsHref } from '../../core/resident/residentDeepLinks';
 import {
   plannerHomeDateChipLabel,
   plannerHomeHeaderSubtitle,
@@ -62,6 +66,50 @@ export function Header(props: HeaderProps) {
     () => (isPlannerHome() ? 'planner-home-header' : null),
     () => fetchPlanningDashboardSnapshot(),
   );
+
+  // Badge del conductor = notificaciones sin acusar (no críticos de flota).
+  const [driverNotifs] = createResource(
+    () => (isConductor(authUser()?.role) ? 'driver-unacked' : null),
+    async () => {
+      try {
+        const rows = await fetchRecentDriverNotifications(50);
+        return rows.filter((n) => !n.ackAt).length;
+      } catch {
+        return 0;
+      }
+    },
+  );
+
+  // Badge del residente = avisos del sector (no totales ciudadanos).
+  const [residentAlertCount] = createResource(
+    () => (isResident(authUser()?.role) ? 'resident-sector-alerts' : null),
+    async () => {
+      try {
+        const overview = await fetchResidentOverview({ force: true });
+        return residentAlertsPreview(overview, [], 99).length;
+      } catch {
+        return 0;
+      }
+    },
+  );
+
+  const notifCount = () => {
+    if (isConductor(authUser()?.role)) return driverNotifs() ?? 0;
+    if (isResident(authUser()?.role)) return residentAlertCount() ?? 0;
+    return dashboardSummary().notifications;
+  };
+  const notifHref = () => {
+    if (isConductor(authUser()?.role)) return '/operator/notifications';
+    if (isResident(authUser()?.role)) return residentAlertsHref();
+    return null;
+  };
+
+  const handleRefresh = () => {
+    void loadDashboardData();
+    if (isResident(authUser()?.role)) {
+      window.dispatchEvent(new CustomEvent('feromap:resident-refresh'));
+    }
+  };
 
   const title = () => {
     if (props.title) return props.title;
@@ -122,24 +170,43 @@ export function Header(props: HeaderProps) {
             </div>
           </Show>
 
-          <button
-            type="button"
-            class="relative flex h-9 w-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
-            aria-label="Notificaciones"
-          >
-            <Bell size={18} />
-            <Show when={dashboardSummary().notifications > 0}>
-              <span class="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-                {dashboardSummary().notifications}
-              </span>
-            </Show>
-          </button>
+          <Show when={notifHref()}>
+            {(href) => (
+              <A
+                href={href()}
+                class="relative flex h-9 w-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+                aria-label="Notificaciones"
+                data-testid="header-notifications"
+              >
+                <Bell size={18} />
+                <Show when={notifCount() > 0}>
+                  <span class="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                    {notifCount()}
+                  </span>
+                </Show>
+              </A>
+            )}
+          </Show>
+          <Show when={!notifHref()}>
+            <button
+              type="button"
+              class="relative flex h-9 w-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+              aria-label="Notificaciones"
+            >
+              <Bell size={18} />
+              <Show when={notifCount() > 0}>
+                <span class="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                  {notifCount()}
+                </span>
+              </Show>
+            </button>
+          </Show>
 
           <button
             type="button"
             class="flex h-9 w-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
             aria-label="Actualizar"
-            onClick={() => void loadDashboardData()}
+            onClick={handleRefresh}
           >
             <RefreshCw size={18} />
           </button>

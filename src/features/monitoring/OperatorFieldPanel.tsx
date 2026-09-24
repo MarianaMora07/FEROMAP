@@ -66,7 +66,7 @@ interface OperatorFieldBottomPanelProps {
 export function OperatorFieldBottomPanel(props: OperatorFieldBottomPanelProps) {
   const linkParams = () => ({
     date: props.operationDate,
-    vehicleId: props.vehicle?.id ?? props.snapshot?.vehicleId,
+    vehicleId: props.vehicle?.id ?? props.snapshot?.vehicleId ?? undefined,
   });
   const mapHref = () => operatorMapHref({ ...linkParams(), focus: 'route' });
   const monitoringHref = () => operatorMonitoringHref(linkParams());

@@ -68,7 +68,7 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
   const [routeLayerView, setRouteLayerView] = createSignal<RouteLayerView>('both');
   const landfillMarkerHolder: { marker?: maplibregl.Marker } = {};
   const routeLandfillMarkers: maplibregl.Marker[] = [];
-  const containerMarkers: maplibregl.Marker[] = [];
+  const containerMarkers = new Map<string, maplibregl.Marker>();
   const [facilities, setFacilities] = createSignal(DEFAULT_MAP_FACILITIES);
 
   const syncRoutes = () => {

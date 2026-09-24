@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     # Fase 4 — acciones confiables (idempotencia + outbox de notificaciones).
     dispatch_idempotency_enabled: bool = True
     notifications_outbox_enabled: bool = True
+    # F5b — confirmación de parada por el conductor (ADR-007). Off por defecto
+    # para no alterar el flujo de defensa congelado ni el demo del planificador.
+    operator_stop_confirmation_enabled: bool = False
     notification_max_attempts: int = 3
     notification_backoff_base_seconds: int = 30
     # Lista de canales (webhook,smtp,whatsapp); vacío → autodetecta webhook o mock.

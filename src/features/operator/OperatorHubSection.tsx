@@ -3,6 +3,7 @@ import { A } from '@solidjs/router';
 import {
   AlertTriangle,
   ArrowRight,
+  Bell,
   MapPin,
   Radio,
   Wrench,
@@ -56,6 +57,7 @@ const quickActionIcons = {
   map: MapPin,
   alerts: AlertTriangle,
   breakdown: Wrench,
+  notifications: Bell,
 } as const;
 
 interface OperatorHubSectionProps {
@@ -83,6 +85,7 @@ export function OperatorHubSection(props: OperatorHubSectionProps) {
       fleet: monitoring()?.liveFleet ?? [],
       user: authUser(),
       operationDate: operationDate(),
+      snapshotVehicleId: routeSnapshot()?.vehicleId ?? null,
     }),
   );
 
@@ -182,7 +185,7 @@ export function OperatorHubSection(props: OperatorHubSectionProps) {
             <p class="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
               Campo
             </p>
-            <h2 class="font-heading text-xl font-bold text-text-primary dark:text-white">Mi operación</h2>
+            <h1 class="font-heading text-xl font-bold text-text-primary dark:text-white">Mi operación</h1>
           </div>
         </div>
       </Show>
@@ -296,7 +299,7 @@ export function OperatorHubSection(props: OperatorHubSectionProps) {
               const Icon = quickActionIcons[item.id];
               return (
                 <A href={item.href}>
-                  <Button variant="outline" size="sm" class="gap-2">
+                  <Button variant="outline" size="sm" class="gap-2 min-h-11">
                     <Icon size={14} />
                     {item.label}
                   </Button>

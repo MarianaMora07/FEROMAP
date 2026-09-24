@@ -132,13 +132,18 @@ function statusForBadge(status: FleetLiveStatus) {
 }
 
 export default function MonitoringPage() {
-  // IA: /monitoring es vista de supervisión; el conductor opera desde /operator.
-  if (isConductor(authUser()?.role)) return <Navigate href="/operator" />;
+  // IA: /monitoring es supervisión; el conductor opera desde /operator.
+  // Conserva query params al redirigir para no romper deep links.
+  if (isConductor(authUser()?.role)) {
+    const qs = typeof window !== 'undefined' ? window.location.search : '';
+    return <Navigate href={`/operator${qs}`} />;
+  }
 
   const [searchParams] = useSearchParams();
   const mapRef: { current?: MapLibreMap } = {};
   const markersById = new Map<string, Marker>();
-  const binMarkers: Marker[] = [];
+  const binMarkers = new Map<string, Marker>();
+  const [userMovedMap, setUserMovedMap] = createSignal(false);
 
   const operationDate = () => {
     const date = Array.isArray(searchParams.date) ? searchParams.date[0] : searchParams.date;
@@ -370,7 +375,7 @@ export default function MonitoringPage() {
 
     const first = mapFleet()[0];
     if (first && (!selectedId() || fieldMode()) && !playbackOpen()) setSelectedId(first.id);
-    if (!playbackOpen()) {
+    if (!playbackOpen() && !userMovedMap()) {
       fitMapToOperationalData(map, {
         vehicles: mapFleet(),
         routes: operationalRoutes(),
@@ -443,6 +448,14 @@ export default function MonitoringPage() {
   const handleMonitoringMapReady = (map: MapLibreMap) => {
     mapRef.current = map;
     setMapInstance(map);
+    const flagUserGesture = (e?: { originalEvent?: Event }) => {
+      if (e?.originalEvent) setUserMovedMap(true);
+    };
+    map.on('dragstart', () => setUserMovedMap(true));
+    map.on('zoomstart', flagUserGesture);
+    map.on('movestart', flagUserGesture);
+    map.on('rotatestart', flagUserGesture);
+    map.on('pitchstart', flagUserGesture);
     setupMonitoringMap(map);
     setMapReady(true);
     const first = mapFleet()[0];
@@ -467,6 +480,7 @@ export default function MonitoringPage() {
       markersById.forEach((m) => m.remove());
       markersById.clear();
       binMarkers.forEach((m) => m.remove());
+      binMarkers.clear();
       mapRef.current = undefined;
       setMapInstance(undefined);
     });

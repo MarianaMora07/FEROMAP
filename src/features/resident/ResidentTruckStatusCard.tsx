@@ -1,4 +1,4 @@
-import { Show, createMemo } from 'solid-js';
+import { Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { A } from '@solidjs/router';
 import { ArrowRight, CheckCircle2, Radio, Truck } from 'lucide-solid';
 import { Badge, Button, Card, CardHeader, ProgressBar } from '../../design-system/components';
@@ -18,7 +18,24 @@ interface ResidentTruckStatusCardProps {
   sectorId?: number | null;
 }
 
+function relativeFrom(iso: string, nowMs: number): string {
+  const diff = Math.max(0, nowMs - new Date(iso).getTime());
+  const s = Math.floor(diff / 1000);
+  if (s < 15) return 'hace un momento';
+  if (s < 60) return `hace ${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `hace ${m} min`;
+  return `hace ${Math.floor(m / 60)} h`;
+}
+
 export function ResidentTruckStatusCard(props: ResidentTruckStatusCardProps) {
+  const [nowMs, setNowMs] = createSignal(Date.now());
+
+  onMount(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 15_000);
+    onCleanup(() => window.clearInterval(timer));
+  });
+
   const proximity = () => props.context.proximity;
   const phase = () => props.context.phase;
   const route = () => props.context.primaryRoute;
@@ -57,14 +74,40 @@ export function ResidentTruckStatusCard(props: ResidentTruckStatusCardProps) {
         ? 'Ya pasó hoy'
         : 'Sin camión en ruta';
 
+  const isLive = () => phase() === 'approaching' || phase() === 'in_sector';
+  const isStale = createMemo(() => {
+    const iso = proximity()?.lastUpdatedAt;
+    if (!iso || !isLive()) return false;
+    return nowMs() - new Date(iso).getTime() > 90_000;
+  });
+
+  const updatedLabel = createMemo(() => {
+    const iso = proximity()?.lastUpdatedAt;
+    if (!iso) return 'Sin actualización reciente';
+    return `Actualizado ${relativeFrom(iso, nowMs())}`;
+  });
+
   return (
     <Card data-testid="resident-truck-status-card">
       <CardHeader
         title="Estado del camión"
-        subtitle={
-          proximity()?.lastUpdatedAt
-            ? `Actualizado ${new Date(proximity()!.lastUpdatedAt).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })}`
-            : 'Sin actualización reciente'
+        subtitle={updatedLabel()}
+        action={
+          <Show when={isLive()}>
+            <span
+              class={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                isStale()
+                  ? 'border-amber-300/60 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
+                  : 'border-fero-green/40 bg-fero-green/10 text-fero-green-dark'
+              }`}
+            >
+              <span
+                class={`h-1.5 w-1.5 rounded-full ${isStale() ? 'bg-amber-500' : 'animate-pulse bg-fero-green'}`}
+                aria-hidden="true"
+              />
+              {isStale() ? 'Retrasado' : 'En vivo'}
+            </span>
+          </Show>
         }
       />
       <Show when={showActive()} fallback={<PlanningEmptyState {...emptyPreset()} compact />}>
@@ -77,7 +120,7 @@ export function ResidentTruckStatusCard(props: ResidentTruckStatusCardProps) {
               {statusLabel()}
             </Badge>
             <Show when={props.context.estimatedMinutes != null && phase() === 'approaching'}>
-              <span class="text-xs font-medium text-fero-blue">
+              <span class="inline-flex items-center gap-1 rounded-full bg-fero-blue/10 px-2 py-0.5 text-xs font-semibold text-fero-blue">
                 ETA ~{props.context.estimatedMinutes} min
               </span>
             </Show>
@@ -134,8 +177,8 @@ export function ResidentTruckStatusCard(props: ResidentTruckStatusCardProps) {
           </Show>
 
           <Show when={phase() === 'approaching'}>
-            <div class="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm dark:border-dark-border">
-              <Radio size={16} class="shrink-0 text-fero-blue" />
+            <div class="flex items-center gap-2 rounded-md border border-fero-blue/30 bg-fero-blue/5 px-3 py-2 text-sm">
+              <Radio size={16} class="shrink-0 animate-pulse text-fero-blue" />
               <span class="text-text-secondary">
                 El vehículo se acerca a tu barrio. Sigue su ubicación en el mapa.
               </span>
@@ -148,8 +191,13 @@ export function ResidentTruckStatusCard(props: ResidentTruckStatusCardProps) {
                 focus: phase() === 'in_sector' ? 'routes' : 'truck',
                 sectorId: props.sectorId ?? undefined,
               })}
+              class="inline-block transition-transform duration-150 hover:-translate-y-0.5"
             >
-              <Button variant="outline" size="sm" class="gap-2">
+              <Button
+                variant={phase() === 'approaching' ? 'gradient' : 'outline'}
+                size="sm"
+                class="gap-2"
+              >
                 Ver camión en mapa
                 <ArrowRight size={14} />
               </Button>

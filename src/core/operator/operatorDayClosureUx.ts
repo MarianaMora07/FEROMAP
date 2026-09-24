@@ -14,6 +14,9 @@ export interface OperatorDaySummary {
   partialClose: boolean;
   closedAt: string | null;
   vehicleId: string | null;
+  stopsPending: number;
+  stopsOmitted: number;
+  shiftUtilizationPct: number | null;
 }
 
 export function isClosedDailyPlan(plan: DailyPlan | null | undefined): boolean {
@@ -51,6 +54,10 @@ export function buildOperatorDaySummary(params: {
       ? Math.round(snapshot.totalDistanceKm * (snapshot.progress / 100) * 10) / 10
       : null);
 
+  const stops = snapshot?.stops ?? [];
+  const stopsOmitted = stops.filter((stop) => stop.status === 'omitted').length;
+  const stopsPending = stops.filter((stop) => stop.status === 'pending').length;
+
   return {
     operationDate: snapshot?.operationDate ?? plan?.operationDate ?? new Date().toISOString().slice(0, 10),
     stopsDone: snapshot?.stopsDone ?? 0,
@@ -64,6 +71,9 @@ export function buildOperatorDaySummary(params: {
     partialClose: plan?.status === 'partial',
     closedAt: plan?.closedAt ?? snapshot?.dailyPlanClosedAt ?? null,
     vehicleId: snapshot?.vehicleId ?? null,
+    stopsPending,
+    stopsOmitted,
+    shiftUtilizationPct: snapshot?.shiftUtilizationPct ?? null,
   };
 }
 

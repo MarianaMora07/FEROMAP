@@ -147,7 +147,7 @@ export default function MapPage() {
   const navigate = useNavigate();
   const mapRef: { current?: MapLibreMap } = {};
   const vehicleMarkersById = new Map<string, Marker>();
-  const containerMarkers: Marker[] = [];
+  const containerMarkers = new Map<string, Marker>();
   const [searchParams] = useSearchParams();
   const residentScope = () => parseResidentScope(searchParams.scope);
   const residentMode = () => isResident(authUser()?.role) && residentScope();
@@ -182,10 +182,12 @@ export default function MapPage() {
     return Number.isFinite(parsed) ? parsed : undefined;
   };
   const dailyPlanSource = createMemo(() => (residentMode() ? null : operationDate()));
-  const [dailyPlan] = createResource(dailyPlanSource, (date) => fetchDailyPlan(date).catch(() => null));
+  const [dailyPlan] = createResource(dailyPlanSource, (date) => fetchDailyPlan(date));
   const [playbackOpen, setPlaybackOpen] = createSignal(false);
   const [cameraMode, setCameraMode] = createSignal<PlaybackCameraMode>('free');
   const [mapInstance, setMapInstance] = createSignal<MapLibreMap | undefined>();
+  const [userMovedMap, setUserMovedMap] = createSignal(false);
+  const [focusedFlyId, setFocusedFlyId] = createSignal<string | undefined>();
   const playbackPlanId = () => dailyPlan()?.id ?? dailyPlanIdParam() ?? 0;
   const [playbackPayload] = createResource(
     () => (playbackOpen() && !residentMode() ? playbackPlanId() : null),
@@ -212,6 +214,7 @@ export default function MapPage() {
     const sectorId = Array.isArray(rawSectorId) ? rawSectorId[0] : rawSectorId;
     return `${residentMapFocus()}|${residentSectorName()}|${sectorId ?? ''}`;
   });
+  const [lastResidentFitKey, setLastResidentFitKey] = createSignal<string | null>(null);
 
   const focusVehicleId = () => {
     const fromParam = parseVehicleIdParam(searchParams.vehicleId) ?? parseVehicleIdParam(searchParams.vehicle);
@@ -465,6 +468,7 @@ export default function MapPage() {
   const recenterOperationalView = () => {
     const map = getMap();
     if (!map) return;
+    setUserMovedMap(false);
     fitMapToOperationalData(map, {
       vehicles: operationalFleet(),
       routes: operationalRoutes(),
@@ -526,7 +530,7 @@ export default function MapPage() {
     vehicleMarkersById.forEach((marker) => marker.remove());
     vehicleMarkersById.clear();
     containerMarkers.forEach((marker) => marker.remove());
-    containerMarkers.length = 0;
+    containerMarkers.clear();
   };
 
   const syncOverlayLayers = () => {
@@ -621,7 +625,7 @@ export default function MapPage() {
       });
     } else {
       containerMarkers.forEach((marker) => marker.remove());
-      containerMarkers.length = 0;
+      containerMarkers.clear();
     }
 
     if (state.vehicles && !playbackActive()) {
@@ -651,7 +655,8 @@ export default function MapPage() {
       if (focusedId) {
         const focused = filteredFleet.find((vehicle) => vehicle.id === focusedId);
         const marker = vehicleMarkersById.get(focusedId);
-        if (focused && marker) {
+        if (focused && marker && focusedFlyId() !== focusedId) {
+          setFocusedFlyId(focusedId);
           map.flyTo({
             center: [focused.lng, focused.lat],
             zoom: Math.max(map.getZoom(), 14),
@@ -660,6 +665,8 @@ export default function MapPage() {
           const popup = marker.getPopup();
           if (popup && !popup.isOpen()) marker.togglePopup();
         }
+      } else if (focusedFlyId()) {
+        setFocusedFlyId(undefined);
       }
     } else if (playbackActive()) {
       vehicleMarkersById.forEach((marker) => marker.remove());
@@ -714,6 +721,10 @@ export default function MapPage() {
     syncOverlayLayers();
   };
 
+  const flagUserCameraGesture = (e?: { originalEvent?: Event }) => {
+    if (e?.originalEvent) setUserMovedMap(true);
+  };
+
   const handleGisMapReady = (map: MapLibreMap) => {
     mapRef.current = map;
     setMapInstance(map);
@@ -723,6 +734,11 @@ export default function MapPage() {
       const c = map.getCenter();
       setCoords({ lng: +c.lng.toFixed(5), lat: +c.lat.toFixed(5), zoom: +map.getZoom().toFixed(1) });
     });
+    map.on('dragstart', () => setUserMovedMap(true));
+    map.on('zoomstart', flagUserCameraGesture);
+    map.on('movestart', flagUserCameraGesture);
+    map.on('rotatestart', flagUserCameraGesture);
+    map.on('pitchstart', flagUserCameraGesture);
     requestAnimationFrame(() => map.resize());
   };
 
@@ -747,6 +763,7 @@ export default function MapPage() {
     if (mapFocus() === 'routes') {
       setLayerState((state) => ({ ...state, routes: true }));
     }
+    if (userMovedMap()) return;
     fitMapToOperationalData(map, {
       vehicles: operationalFleet(),
       routes: operationalRoutes(),
@@ -772,6 +789,8 @@ export default function MapPage() {
     if (!map?.isStyleLoaded()) return;
     const overview = residentOverview();
     if (!overview) return;
+    const intentionalKey = residentFitKey();
+    if (userMovedMap() && intentionalKey === lastResidentFitKey()) return;
 
     const focus = residentMapFocus();
     const sectorFeature = residentSectorFeature();
@@ -785,6 +804,7 @@ export default function MapPage() {
     });
 
     if (focus === 'truck' && truck) {
+      setLastResidentFitKey(intentionalKey);
       map.flyTo({
         center: [truck.lng, truck.lat],
         zoom: Math.max(map.getZoom(), 14.5),
@@ -793,9 +813,11 @@ export default function MapPage() {
       return;
     }
     if (focus === 'routes' && routePoints.length > 0) {
+      setLastResidentFitKey(intentionalKey);
       fitMapToSector(map, { points: routePoints, padding: 64 });
       return;
     }
+    setLastResidentFitKey(intentionalKey);
     fitMapToSector(map, {
       sectorFeature,
       points: overview.collectionPoints.map((point) => ({ lng: point.lng, lat: point.lat })),
@@ -809,6 +831,7 @@ export default function MapPage() {
     const map = getMap();
     if (!map?.isStyleLoaded()) return;
     syncOverlayLayers();
+    if (userMovedMap()) return;
     const snapshot = routeSnapshot();
     if (snapshot && snapshot.stops.length > 0) {
       fitMapToOperatorRoute(map, snapshot);
@@ -964,29 +987,49 @@ export default function MapPage() {
           >
             {appState.darkMode ? <Sun size={18} /> : <Moon size={18} />}
           </button>
-          <button
-            type="button"
-            class="relative flex h-9 w-9 items-center justify-center rounded-md text-text-secondary hover:bg-app"
-            aria-label="Notificaciones"
-          >
-            <Bell size={18} />
-            <span class="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-              {dashboardSummary().notifications}
-            </span>
-          </button>
-          <button
-            type="button"
-            class="flex h-9 w-9 items-center justify-center rounded-md text-text-secondary hover:bg-app"
-            aria-label="Pantalla completa"
-            onClick={() => document.documentElement.requestFullscreen?.()}
-          >
-            <Maximize2 size={18} />
-          </button>
-          <A href="/login">
-            <Button variant="gradient" size="sm" icon={<LogOut size={14} />}>
-              Salir
-            </Button>
-          </A>
+          <Show when={!isResident(authUser()?.role)}>
+            <button
+              type="button"
+              class="relative flex h-9 w-9 items-center justify-center rounded-md text-text-secondary hover:bg-app"
+              aria-label="Notificaciones"
+            >
+              <Bell size={18} />
+              <span class="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                {dashboardSummary().notifications}
+              </span>
+            </button>
+          </Show>
+          <Show when={isResident(authUser()?.role)}>
+            <A
+              href="/alerts?scope=sector"
+              class="flex h-9 w-9 items-center justify-center rounded-md text-text-secondary hover:bg-app"
+              aria-label="Alertas de mi sector"
+            >
+              <Bell size={18} />
+            </A>
+          </Show>
+          <Show when={!isResident(authUser()?.role)}>
+            <button
+              type="button"
+              class="flex h-9 w-9 items-center justify-center rounded-md text-text-secondary hover:bg-app"
+              aria-label="Pantalla completa"
+              onClick={() => document.documentElement.requestFullscreen?.()}
+            >
+              <Maximize2 size={18} />
+            </button>
+            <A href="/login">
+              <Button variant="gradient" size="sm" icon={<LogOut size={14} />}>
+                Salir
+              </Button>
+            </A>
+          </Show>
+          <Show when={isResident(authUser()?.role)}>
+            <A href="/resident">
+              <Button variant="outline" size="sm" icon={<LogOut size={14} />}>
+                Salir
+              </Button>
+            </A>
+          </Show>
         </div>
       </header>
 

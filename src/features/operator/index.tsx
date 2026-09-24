@@ -5,7 +5,7 @@ export default function OperatorPage() {
   return (
     <div class="space-y-4">
       <OperatorFieldIntro />
-      <OperatorHubSection variant="landing" showPageHeader={false} />
+      <OperatorHubSection variant="landing" showPageHeader />
     </div>
   );
 }

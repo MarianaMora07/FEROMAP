@@ -2,7 +2,7 @@ from datetime import date
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 
-from app.api.deps import CurrentUser, DbSession, PlannerOrAdmin
+from app.api.deps import CurrentUser, DbSession, OperationsStaff, PlannerOrAdmin
 from app.schemas.contingency import ContingencySimulationRequest
 from app.schemas.route_constraints import DailyOptimizeRequest
 from app.schemas.planning import (
@@ -68,9 +68,10 @@ router = APIRouter(prefix="/planning", tags=["planning"])
 @router.get("/visit-schedules")
 def list_visit_schedules(
     db: DbSession,
-    _: PlannerOrAdmin,
+    _: OperationsStaff,
     reference: date | None = None,
 ):
+    """Frecuencias activas. Lectura también para conductores (mi semana)."""
     return {"items": list_active_visit_schedules(db, reference=reference)}
 
 
@@ -469,8 +470,11 @@ def close_daily(daily_plan_id: int, db: DbSession, user: CurrentUser, _: Planner
 
 
 @router.get("/daily/{daily_plan_id}/routes/playback")
-def daily_routes_playback(daily_plan_id: int, db: DbSession, _: PlannerOrAdmin):
-    """Solo lectura: payload para animación de rutas planificadas (sin mutar BD)."""
+def daily_routes_playback(daily_plan_id: int, db: DbSession, _: OperationsStaff):
+    """Solo lectura: payload para animación de rutas planificadas (sin mutar BD).
+
+    Conductores lo usan en «Mi operación» / plan del día (mapa de ruta).
+    """
     return build_daily_route_playback(db, daily_plan_id)
 
 

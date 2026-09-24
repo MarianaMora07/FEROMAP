@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const webPort = Number(process.env.E2E_WEB_PORT ?? 5173);
+// 5174: evita reutilizar el frontend Docker de :5173 (VITE_USE_MOCKS=false).
+const webPort = Number(process.env.E2E_WEB_PORT ?? 5174);
 const apiUrl = process.env.E2E_API_URL ?? 'http://localhost:8000';
 
 export default defineConfig({

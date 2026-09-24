@@ -49,6 +49,10 @@ const ResidentPage = lazyPage(() => import('../features/resident'));
 const ProfilePage = lazyPage(() => import('../features/profile'));
 const OperatorPage = lazyPage(() => import('../features/operator'));
 const OperatorDailyPlanPage = lazyPage(() => import('../features/operator/OperatorDailyPlanPage'));
+const OperatorNotificationsPage = lazyPage(
+  () => import('../features/operator/OperatorNotificationsPage'),
+);
+const OperatorWeekPage = lazyPage(() => import('../features/operator/OperatorWeekPage'));
 const PlanningWeeklyPage = lazyPage(() => import('../features/planning/weekly'));
 const PlanningHistoryPage = lazyPage(() => import('../features/planning/history'));
 const LoginPage = lazyPage(() => import('../features/auth'));
@@ -81,6 +85,8 @@ export default function App() {
         <Route path="/optimization/levels" component={OptimizationLevelsPage} />
         <Route path="/operator" component={OperatorPage} />
         <Route path="/operator/plan" component={OperatorDailyPlanPage} />
+        <Route path="/operator/notifications" component={OperatorNotificationsPage} />
+        <Route path="/operator/week" component={OperatorWeekPage} />
         <Route path="/planning" component={() => <Navigate href="/" />} />
         <Route path="/planning/weekly" component={PlanningWeeklyPage} />
         <Route path="/planning/history" component={PlanningHistoryPage} />

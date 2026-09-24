@@ -1,13 +1,19 @@
-import { Show } from 'solid-js';
-import { MapPin } from 'lucide-solid';
-import { Drawer, Badge } from '../../design-system/components';
+import { Show, createSignal } from 'solid-js';
+import { MapPin, Navigation, CheckCircle2, CircleSlash } from 'lucide-solid';
+import { Drawer, Badge, Button } from '../../design-system/components';
 import type { OperatorRouteStop } from '../../core/api/operator';
 import { operatorStopStatusLabel, operatorStopStatusVariant } from '../../core/api/operator';
+import { confirmOperatorStop } from '../../core/api/operator';
+import { globalToast } from '../../core/stores/toastStore';
 
 interface OperatorStopDrawerProps {
   stop: OperatorRouteStop | null;
   open: boolean;
   onClose: () => void;
+  /** F5b: botones de confirmación solo si el flag está activo y hay routeId. */
+  stopConfirmationEnabled?: boolean;
+  routeId?: number | null;
+  onConfirmed?: () => void;
 }
 
 function formatDateTime(iso: string | null | undefined): string {
@@ -23,6 +29,45 @@ function formatDateTime(iso: string | null | undefined): string {
 }
 
 export function OperatorStopDrawer(props: OperatorStopDrawerProps) {
+  const [busy, setBusy] = createSignal(false);
+  const canConfirm = () =>
+    props.stopConfirmationEnabled === true &&
+    props.routeId != null &&
+    props.stop?.status === 'pending' &&
+    props.stop?.stopType !== 'landfill';
+
+  const confirm = async (outcome: 'visited' | 'omitted') => {
+    const stop = props.stop;
+    const routeId = props.routeId;
+    if (!stop || routeId == null || busy()) return;
+    setBusy(true);
+    try {
+      await confirmOperatorStop(routeId, {
+        waypointId: stop.waypointId,
+        outcome,
+      });
+      globalToast.addToast(
+        outcome === 'visited' ? 'Parada marcada como visitada' : 'Parada omitida',
+        'success',
+      );
+      props.onConfirmed?.();
+      props.onClose();
+    } catch (error) {
+      globalToast.addToast(
+        error instanceof Error ? error.message : 'No se pudo confirmar la parada',
+        'error',
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const mapsHref = () => {
+    const stop = props.stop;
+    if (stop?.lng == null || stop?.lat == null) return null;
+    return `https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lng}`;
+  };
+
   return (
     <Drawer
       open={props.open}
@@ -39,6 +84,11 @@ export function OperatorStopDrawer(props: OperatorStopDrawerProps) {
               <Badge variant={operatorStopStatusVariant(stop().status)}>
                 {operatorStopStatusLabel(stop().status)}
               </Badge>
+              <Show when={stop().fillLevelPct != null && (stop().fillLevelPct ?? 0) >= 80}>
+                <Badge variant="danger" size="sm">
+                  Llenado crítico {stop().fillLevelPct}%
+                </Badge>
+              </Show>
             </div>
 
             <div class="space-y-3 text-sm">
@@ -86,6 +136,43 @@ export function OperatorStopDrawer(props: OperatorStopDrawerProps) {
                 </div>
               </Show>
             </div>
+
+            <Show when={mapsHref()}>
+              {(href) => (
+                <a
+                  href={href()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex min-h-11 items-center gap-2 rounded-lg border border-default px-4 py-2.5 text-sm font-medium text-fero-blue hover:bg-surface-hover"
+                >
+                  <Navigation size={16} />
+                  Navegar a este punto
+                </a>
+              )}
+            </Show>
+
+            <Show when={canConfirm()}>
+              <div class="flex flex-col gap-2 border-t border-default pt-3" data-testid="stop-confirm-actions">
+                <Button
+                  variant="primary"
+                  class="min-h-12 w-full gap-2"
+                  disabled={busy()}
+                  onClick={() => void confirm('visited')}
+                >
+                  <CheckCircle2 size={16} />
+                  Marcar visitada
+                </Button>
+                <Button
+                  variant="outline"
+                  class="min-h-12 w-full gap-2"
+                  disabled={busy()}
+                  onClick={() => void confirm('omitted')}
+                >
+                  <CircleSlash size={16} />
+                  Omitir parada
+                </Button>
+              </div>
+            </Show>
           </div>
         )}
       </Show>

@@ -12,6 +12,16 @@ import type { MonitoringStatus } from './monitoring';
 import { DEFAULT_MAP_FACILITIES } from '../utils/landfillUx';
 
 export const MAP_CONTEXT_POLL_MS = 20_000;
+/** Evita refetch en cada montaje de vista (el poll fuerza con `force`). */
+export const MAP_CONTEXT_CACHE_TTL_MS = 12_000;
+
+type MapContextCacheEntry = { data: MapOperationalContext; at: number };
+const mapContextCache = new Map<string, MapContextCacheEntry>();
+
+function mapContextCacheKey(filters?: MapContextFilters): string {
+  const merged: MapContextFilters = { bbox: UNARE_BBOX_QUERY, ...filters };
+  return buildQuery(merged);
+}
 
 function buildMockMapContext(): MapOperationalContext {
   return {
@@ -54,13 +64,27 @@ function buildQuery(filters?: MapContextFilters): string {
   return query ? `?${query}` : '';
 }
 
-export function fetchMapContext(filters?: MapContextFilters): Promise<MapOperationalContext> {
+export function fetchMapContext(
+  filters?: MapContextFilters,
+  options?: { force?: boolean },
+): Promise<MapOperationalContext> {
   const merged: MapContextFilters = { bbox: UNARE_BBOX_QUERY, ...filters };
+  const key = mapContextCacheKey(merged);
+  const now = Date.now();
+  if (!options?.force) {
+    const hit = mapContextCache.get(key);
+    if (hit && now - hit.at < MAP_CONTEXT_CACHE_TTL_MS) {
+      return Promise.resolve(hit.data);
+    }
+  }
   return withMockFallback(
     'map-context',
     () => apiGet<MapOperationalContext>(`/api/v1/map/context${buildQuery(merged)}`),
     buildMockMapContext(),
-  );
+  ).then((data) => {
+    mapContextCache.set(key, { data, at: Date.now() });
+    return data;
+  });
 }
 
 export function mapContextFromMonitoring(status: MonitoringStatus): MapOperationalContext {

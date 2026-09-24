@@ -1,6 +1,6 @@
 import { For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { Calendar, ChevronDown, ChevronUp, Clock, Truck } from 'lucide-solid';
-import { Badge, Button, Card, CardHeader } from '../../design-system/components';
+import { Badge, Card, CardHeader } from '../../design-system/components';
 import type { ResidentSchedule } from '../../core/api/resident';
 import { RESIDENT_EMPTY_PRESETS } from '../../core/resident/residentEmptyStates';
 import { PlanningEmptyState } from '../planning/PlanningEmptyState';
@@ -26,7 +26,7 @@ export function ResidentScheduleStrip(props: { sectorName: string; schedule: Res
   return (
     <div
       role="status"
-      class="rounded-lg border border-fero-blue/30 bg-fero-blue/5 px-3 py-2.5 dark:border-fero-blue/40 dark:bg-fero-blue/10"
+      class="fero-rise rounded-lg border border-fero-blue/30 bg-gradient-to-r from-fero-blue/10 to-fero-blue/4 px-3 py-2.5 dark:border-fero-blue/40"
       data-testid="resident-schedule-strip"
     >
       <p class="text-sm font-semibold text-fero-blue">
@@ -44,7 +44,7 @@ export function ResidentScheduleCard(props: ResidentScheduleCardProps) {
   const [nowMs, setNowMs] = createSignal(Date.now());
 
   onMount(() => {
-    const timer = window.setInterval(() => setNowMs(Date.now()), 60_000);
+    const timer = window.setInterval(() => setNowMs(Date.now()), 15_000);
     onCleanup(() => window.clearInterval(timer));
   });
 
@@ -91,7 +91,7 @@ export function ResidentScheduleCard(props: ResidentScheduleCardProps) {
             </p>
             <Show when={countdown()}>
               <p class="mt-1 flex items-center gap-1.5 text-xs font-medium text-fero-blue">
-                <Clock size={13} />
+                <Clock size={13} class="animate-pulse" />
                 {countdown()}
               </p>
             </Show>
@@ -125,16 +125,6 @@ export function ResidentScheduleCard(props: ResidentScheduleCardProps) {
               </ul>
             </Show>
           </div>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            class="gap-2 px-0 text-fero-blue hover:text-fero-blue"
-            onClick={() => setCalendarOpen(true)}
-          >
-            <Calendar size={14} />
-            Ver calendario del sector
-          </Button>
         </div>
       </Show>
     </Card>

@@ -274,8 +274,12 @@ export function runDailyOptimizationJob(
   return optimizeDailyPlanAndWait(dailyPlanId, loadOptimizationPreset(), onProgress);
 }
 
-export function loadDailyPlanForDate(operationDate: string): Promise<DailyPlan> {
-  return fetchDailyPlan(operationDate);
+export async function loadDailyPlanForDate(operationDate: string): Promise<DailyPlan> {
+  const plan = await fetchDailyPlan(operationDate);
+  if (!plan) {
+    throw new Error('No hay plan del día para la fecha seleccionada');
+  }
+  return plan;
 }
 
 export function openDailyPlanForDate(operationDate: string): Promise<DailyPlan> {

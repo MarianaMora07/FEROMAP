@@ -1,4 +1,4 @@
-import { apiGet, useMocks, withMockFallback } from './client';
+import { apiGet, apiPost, useMocks, withMockFallback } from './client';
 import { densifyLineByDistance } from '../route-playback/routePlaybackGeometry';
 import { authUser } from '../stores/authStore';
 import { collectionPointsList } from '../../data/mock/collectionPoints';
@@ -42,6 +42,8 @@ export interface OperatorRouteSnapshot {
   /** Geometría vial [lng, lat] (misma fuente que optimización/monitoreo). */
   lineCoordinates?: Array<[number, number]> | null;
   shiftUtilizationPct?: number | null;
+  /** F5b: botones de confirmación de parada en el drawer. */
+  stopConfirmationEnabled?: boolean;
 }
 
 function isDemoOperatorClosedDay(): boolean {
@@ -169,4 +171,14 @@ export function operatorStopStatusVariant(
 export function isOperatorLandfillStop(stop: Pick<OperatorRouteStop, 'code' | 'stopType'>): boolean {
   if (stop.stopType === 'landfill') return true;
   return stop.code.toUpperCase() === 'VERTEDERO';
+}
+
+/** F5b — confirmación de parada por el conductor (ADR-007). */
+export function confirmOperatorStop(
+  routeId: number,
+  body: { waypointId: number; outcome: 'visited' | 'omitted'; note?: string },
+): Promise<{ routeId: number; progress: number; routeCompleted: boolean }> {
+  return apiPost(`/api/v1/routes/${routeId}/confirm-stop`, body, {
+    headers: { 'Idempotency-Key': `${routeId}-${body.waypointId}-${body.outcome}` },
+  });
 }

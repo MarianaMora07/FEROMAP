@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPatch, apiPost, useMocks } from './client';
+import { apiDelete, apiGet, apiPatch, apiPost, ApiError, useMocks } from './client';
 import { idempotencyHeaders } from './idempotency';
 import { tomorrowIso } from '../planning/planningUx';
 import {
@@ -7,6 +7,8 @@ import {
   mondayIso,
   parseIsoDateLocal,
 } from '../planning/isoDate';
+import { authUser } from '../stores/authStore';
+import { canEnsureDailyPlan } from '../auth/permissions';
 import type { ScenarioId } from '../../data/types/simulation';
 
 export { addWeeksToMonday, mondayIso };
@@ -640,12 +642,19 @@ export function approveWeeklyPlan(
   return apiPost(`/api/v1/planning/weekly/${planId}/approve`, payload ?? {});
 }
 
-export async function fetchDailyPlan(operationDate: string): Promise<DailyPlan> {
+/**
+ * Carga el plan del día. Si no existe:
+ * - admin/planificador → lo crea (`POST .../ensure`)
+ * - conductor/residente → devuelve `null` (solo lectura; no tiene permiso)
+ */
+export async function fetchDailyPlan(operationDate: string): Promise<DailyPlan | null> {
   if (useMocks) return Promise.resolve(mockDailyPlan(operationDate));
   try {
     return await apiGet<DailyPlan>(`/api/v1/planning/daily/${operationDate}`);
-  } catch {
-    // GET es solo lectura (Tarea 9): si el día aún no existe, se crea explícitamente.
+  } catch (error) {
+    const isNotFound = error instanceof ApiError && error.status === 404;
+    if (!isNotFound) throw error;
+    if (!canEnsureDailyPlan(authUser()?.role)) return null;
     return apiPost<DailyPlan>(`/api/v1/planning/daily/${operationDate}/ensure`, {});
   }
 }

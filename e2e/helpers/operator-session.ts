@@ -53,6 +53,7 @@ function operatorSnapshotMock() {
     remainingDistanceKm: 12.4,
     nextStop,
     stops,
+    stopConfirmationEnabled: false,
   };
 }
 
@@ -78,6 +79,22 @@ export async function setupOperatorApiMocks(page: Page) {
     await route.continue();
   });
 
+  await page.route('**/api/v1/notifications/drivers/recent**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([]),
+    });
+  });
+
+  await page.route('**/api/v1/auth/refresh', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ accessToken: 'e2e-operator-token', tokenType: 'bearer' }),
+    });
+  });
+
   await page.route('**/api/v1/auth/me', async (route) => {
     const auth = route.request().headers()['authorization'] ?? '';
     if (auth.includes('e2e-operator-token')) {
@@ -85,6 +102,39 @@ export async function setupOperatorApiMocks(page: Page) {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify(OPERATOR_USER),
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.route('**/api/v1/profile/me', async (route) => {
+    const auth = route.request().headers()['authorization'] ?? '';
+    if (auth.includes('e2e-operator-token')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: OPERATOR_USER.id,
+          email: OPERATOR_USER.email,
+          firstName: OPERATOR_USER.firstName,
+          lastName: OPERATOR_USER.lastName,
+          role: OPERATOR_USER.role,
+          roleLabel: 'Conductor',
+          active: true,
+          preferences: {
+            theme: 'system',
+            language: 'es',
+            units: 'metric',
+            defaultView: 'operator',
+            reportFrequency: 'weekly',
+            pageSize: 20,
+            emailNotifications: true,
+            systemNotifications: true,
+            timezone: 'America/Caracas',
+          },
+          security: { activeSessions: 1, twoFactorEnabled: false },
+        }),
       });
       return;
     }

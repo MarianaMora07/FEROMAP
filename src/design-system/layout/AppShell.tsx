@@ -1,5 +1,5 @@
-import { type JSX, Show, createEffect } from 'solid-js';
-import { useLocation } from '@solidjs/router';
+import { type JSX, Show, createEffect, createMemo, For } from 'solid-js';
+import { A, useLocation } from '@solidjs/router';
 import { ToastContainer } from '../components/Toast';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
@@ -11,6 +11,14 @@ import {
 } from '../../core/stores/appStore';
 import { globalToast } from '../../core/stores/toastStore';
 import { useLocale } from '../../core/i18n/solid';
+import {
+  CONDUCTOR_BOTTOM_NAV_ITEMS,
+  RESIDENT_BOTTOM_NAV_ITEMS,
+  isConductor,
+  isResident,
+} from '../../core/auth/permissions';
+import { authUser } from '../../core/stores/authStore';
+import { isNavItemActive } from './sidebar/navUtils';
 
 interface AppShellProps {
   children: JSX.Element;
@@ -24,6 +32,13 @@ export function AppShell(props: AppShellProps) {
   const tr = useLocale();
   const isMapView = () => props.fullWidth || location.pathname === '/map';
   const isOptimization = () => location.pathname === '/optimization';
+  const bottomNavItems = createMemo(() => {
+    if (isMapView()) return [];
+    const role = authUser()?.role;
+    if (isConductor(role)) return CONDUCTOR_BOTTOM_NAV_ITEMS;
+    if (isResident(role)) return RESIDENT_BOTTOM_NAV_ITEMS;
+    return [];
+  });
 
   createEffect(() => {
     location.pathname;
@@ -66,12 +81,53 @@ export function AppShell(props: AppShellProps) {
               ? 'overflow-hidden p-0'
               : isOptimization()
                 ? 'overflow-auto bg-app px-4 pb-4 pt-3 md:px-6 md:pb-6 md:pt-3'
-                : 'overflow-auto bg-app p-4 md:p-6'
+                : `overflow-auto bg-app p-4 md:p-6 ${bottomNavItems().length > 0 ? 'pb-24 lg:pb-6' : ''}`
           }`}
         >
           {props.children}
         </main>
       </div>
+
+      <Show when={bottomNavItems().length > 0}>
+        <nav
+          class="fixed inset-x-0 bottom-0 z-40 border-t border-default bg-elevated/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden"
+          data-testid="role-bottom-nav"
+          aria-label="Navegación rápida"
+        >
+          <ul class="mx-auto flex max-w-lg items-stretch justify-between">
+            <For each={bottomNavItems()}>
+              {(item) => {
+                const active = () => isNavItemActive(item.href, location.pathname);
+                return (
+                  <li class="flex-1">
+                    <A
+                      href={item.href}
+                      class={`relative flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[11px] font-medium transition-colors ${
+                        active() ? 'text-fero-blue' : 'text-text-muted'
+                      }`}
+                      data-testid={`bottom-nav-${item.href.replace(/^\//, '').replace(/[/?=&]/g, '-')}`}
+                    >
+                      <span
+                        class={`absolute inset-x-3 top-0 h-0.5 rounded-full bg-fero-blue transition-transform duration-200 ${
+                          active() ? 'scale-x-100' : 'scale-x-0'
+                        }`}
+                        aria-hidden="true"
+                      />
+                      <span
+                        class={`rounded-full px-2.5 py-0.5 transition-all duration-200 ${
+                          active() ? 'bg-fero-blue/10 font-semibold' : ''
+                        }`}
+                      >
+                        {item.label}
+                      </span>
+                    </A>
+                  </li>
+                );
+              }}
+            </For>
+          </ul>
+        </nav>
+      </Show>
 
       <ToastContainer toasts={globalToast.toasts()} onDismiss={globalToast.removeToast} />
     </div>

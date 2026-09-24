@@ -2,10 +2,12 @@ import { type JSX, splitProps } from 'solid-js';
 
 interface CardProps {
   children: JSX.Element;
+  id?: string;
   class?: string;
   padding?: boolean;
   hover?: boolean;
   glass?: boolean;
+  'data-testid'?: string;
 }
 
 export function Card(props: CardProps) {
