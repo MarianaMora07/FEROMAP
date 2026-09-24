@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 from pathlib import Path
 
 from app.config import settings
@@ -22,22 +21,10 @@ from app.services.statistical_validation import (
     DEFAULT_N_RUNS,
     run_statistical_validations,
 )
+from app.services.worker_pool import MAX_DEFAULT_WORKERS, default_workers
 
 # Corridas del atajo de iteración (``--quick``): suficiente para validar la fontanería.
 QUICK_N_RUNS = 10
-
-# Tope de procesos por defecto: con más, la BD y el API del contenedor compiten por CPU y el
-# lote rinde peor (medido: 18 workers = 5m00s vs 8 workers = 4m14s en 5 escenarios × 30).
-MAX_DEFAULT_WORKERS = 8
-
-
-def _default_workers() -> int:
-    """Hasta :data:`MAX_DEFAULT_WORKERS` procesos (respeta la afinidad del contenedor)."""
-    try:
-        cores = len(os.sched_getaffinity(0))
-    except AttributeError:  # plataformas sin afinidad
-        cores = os.cpu_count() or 1
-    return max(1, min(cores, MAX_DEFAULT_WORKERS))
 
 
 def _output_path() -> Path:
@@ -71,8 +58,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--workers",
         type=int,
-        default=_default_workers(),
-        help=f"Procesos en paralelo (default: min(núcleos, {MAX_DEFAULT_WORKERS}) = {_default_workers()}); 1 = secuencial.",
+        default=default_workers(),
+        help=f"Procesos en paralelo (default: min(núcleos, {MAX_DEFAULT_WORKERS}) = {default_workers()}); 1 = secuencial.",
     )
     return parser.parse_args()
 

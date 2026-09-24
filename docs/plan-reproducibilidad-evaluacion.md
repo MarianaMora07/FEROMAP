@@ -179,6 +179,12 @@ El **endpoint HTTP se conserva** para un escenario/UI y corre secuencial (`worke
 **Pendiente opcional:** paralelizar también el `phase0-baseline` (hoy secuencial con 1 corrida
 de calentamiento por escenario) y cachear en proceso la matriz resuelta.
 
+**Calibración metodológica (Fase 13, C1–C8):** ya hereda `persist=False` (via
+`aco_sensitivity_service._run_sensitivity_case`) y el lote de nodos, y ahora también corre en
+paralelo por semilla con `--workers` en `just calib-*` (`run_aco_sensitivity(workers=N)`); el job
+del API queda secuencial. Medido en C1 · ruido base (8 semillas): 65,1 s → **16,9 s** con 8 workers,
+análisis idéntico.
+
 ## Resumen de entregables
 
 | Fase | Archivos principales | Entregable |

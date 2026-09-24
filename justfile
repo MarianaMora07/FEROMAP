@@ -114,9 +114,9 @@ phase13-weekly: _check
 
 # ── Calibración metodológica del motor (docs/fase-13/plan-calibracion-metodologica.md) ──
 # Fases C0–C8 (C = calibración). Cada fase guarda su evidencia en calibration_sweeps
-# (sweep 'method') y admite --dry-run, --reuse y --run-id N. La misma fase se puede lanzar
-# desde la vista de calibración (un job por fase) y su evidencia se lee sin CPU en
-# `GET /benchmarks/calibration/method`.
+# (sweep 'method') y admite --dry-run, --reuse, --run-id N y --workers N (default min(núcleos, 8);
+# 1 = secuencial). La misma fase se puede lanzar desde la vista de calibración (un job por fase,
+# secuencial) y su evidencia se lee sin CPU en `GET /benchmarks/calibration/method`.
 # Verificación en dos pasos: primero --seeds 42,101 (fontanería) y después las 10 semillas.
 # --resume reanuda un barrido cortado desde data/cache/phase13/method-<fase>.jsonl (E0).
 
@@ -161,9 +161,10 @@ roadmap:
     @echo "═══ FEROMAP — backlog post-grado ═══"
     @sed -n '1,80p' docs/post-grado/README.md
 
-# Fase 0: 5 escenarios → data/cache/phase0-baseline-metrics.json (caché caliente)
-phase0-baseline: _check
-    {{compose}} exec api python -m scripts.phase0_baseline_metrics
+# Fase 0: 5 escenarios → data/cache/phase0-baseline-metrics.json
+# Escenarios en paralelo por proceso (--workers, default min(núcleos, 8); 1 = secuencial).
+phase0-baseline *args: _check
+    {{compose}} exec api python -m scripts.phase0_baseline_metrics {{args}}
 
 # Validación estadística Wilcoxon reproducible → data/cache/statistical-validations.json
 # Corre los 5 escenarios en paralelo por semilla (--workers, default min(núcleos, 8));

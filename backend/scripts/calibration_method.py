@@ -95,6 +95,7 @@ from app.services.calibration_evidence_service import (
 from app.services.calibration_sweep_store import get_sweep, latest_payload_of_phase, latest_row
 from app.services.instance_fingerprint import current_fingerprint
 from app.services.multiobjective_sweep_service import load_multiobjective_sweep
+from app.services.worker_pool import MAX_DEFAULT_WORKERS, default_workers
 
 # Identificador propio del protocolo: la vista de calibración sigue leyendo los suyos.
 SWEEP_METHOD = "method"
@@ -132,6 +133,7 @@ class PhaseOptions:
     reference_run_id: int | None = None
     profile_only: bool = False
     resume: bool = False
+    workers: int = 1
 
     @property
     def stored_only(self) -> bool:
@@ -261,6 +263,7 @@ def _load_or_run(
         instance_fingerprint=current_fingerprint(db, scenario_id=options.scenario_id),
         resume_path=calibration_resume_path(sweep=SWEEP_METHOD, phase=phase),
         resume=options.resume,
+        workers=options.workers,
     )
     row = latest_row(db, sweep=SWEEP_METHOD)
     print(f"  guardado     : calibration_sweeps id={row.id if row else '—'} (sweep '{SWEEP_METHOD}')")
@@ -923,6 +926,15 @@ def main() -> int:
         help="imprime el plan y el coste estimado sin ejecutar corridas",
     )
     parser.add_argument(
+        "--workers",
+        type=int,
+        default=default_workers(),
+        help=(
+            "corridas en paralelo por proceso "
+            f"(default: min(núcleos, {MAX_DEFAULT_WORKERS}) = {default_workers()}); 1 = secuencial"
+        ),
+    )
+    parser.add_argument(
         "--profile",
         action="store_true",
         help="(fase report) imprime solo la síntesis de la recomendación de E4, sin escribir el "
@@ -947,6 +959,7 @@ def main() -> int:
         reference_run_id=args.reference_run_id,
         profile_only=args.profile,
         resume=args.resume,
+        workers=args.workers,
     )
 
     phase = PHASE_HANDLERS[args.phase]

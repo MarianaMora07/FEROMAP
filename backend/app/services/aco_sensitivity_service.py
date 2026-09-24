@@ -360,6 +360,132 @@ def _run_sensitivity_case(
     }
 
 
+def _case_run_kwargs(
+    case: dict[str, Any], *, scenario_id: str, label: str, run_seed: int
+) -> dict[str, Any]:
+    """Argumentos de :func:`_run_sensitivity_case` para un caso y semilla del plan."""
+    hyperparameters = _case_hyperparameters(case)
+    return {
+        "scenario_id": scenario_id,
+        "label": label,
+        "aco_ants": int(case["acoAnts"]),
+        "aco_iterations": int(case["acoIterations"]),
+        "axis": str(case.get("axis") or "custom"),
+        "seed": run_seed,
+        "aco_alpha": hyperparameters["acoAlpha"],
+        "aco_beta": hyperparameters["acoBeta"],
+        "aco_rho": hyperparameters["acoRho"],
+        "pheromone_q": hyperparameters["pheromoneQ"],
+        "aco_patience": case.get("acoPatience"),
+        "two_opt_passes": case.get("twoOptPasses"),
+        "pheromone_elitist": case.get("pheromoneElitist"),
+        "estimated_duration_hours": case.get("durationHours"),
+        "workload_balance_weight": case.get("workloadBalanceWeight"),
+        "makespan_weight": case.get("makespanWeight"),
+        "min_active_vehicles": case.get("minActiveVehicles"),
+        "max_route_hours_target": case.get("maxRouteHoursTarget"),
+    }
+
+
+_SENSITIVITY_WORKER_DB: Session | None = None
+
+
+def _init_sensitivity_worker() -> None:
+    """Sesión propia por proceso: el ``fork`` hereda el pool de conexiones del padre."""
+    global _SENSITIVITY_WORKER_DB
+    from app.db.session import SessionLocal, engine
+
+    engine.dispose(close=False)
+    _SENSITIVITY_WORKER_DB = SessionLocal()
+
+
+def _sensitivity_worker_task(
+    task: tuple[int, str, dict[str, Any]],
+) -> tuple[int, str, dict[str, Any]]:
+    index, identity, kwargs = task
+    assert _SENSITIVITY_WORKER_DB is not None
+    return index, identity, _run_sensitivity_case(_SENSITIVITY_WORKER_DB, **kwargs)
+
+
+def _run_plan_parallel(
+    plan: list[tuple[dict[str, Any], int]],
+    *,
+    scenario_id: str,
+    replicated: bool,
+    total: int,
+    cached: dict[str, dict[str, Any]],
+    working_file: Any | None,
+    on_result: OnResult | None,
+    cancel_check: CancelCheck | None,
+    workers: int,
+) -> tuple[list[dict[str, Any]], int]:
+    """Corre el plan en un pool de procesos y devuelve (runs en orden, reutilizadas).
+
+    Los resultados se reindexan a su posición del plan para que el payload no dependa del
+    orden de terminación. La cancelación con pool es más gruesa (entre resultados, no a mitad
+    de una corrida). ``on_run`` no se usa aquí: es un hook previo al lanzamiento y solo lo
+    consume el job del API, que corre secuencial.
+    """
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+
+    # Pre-calienta el grafo en el padre para que los hijos lo hereden por copy-on-write.
+    try:
+        from app.services.graph_service import warm_road_graph_cache
+
+        warm_road_graph_cache()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("No se pudo precalentar el grafo: %s", exc)
+
+    runs: list[dict[str, Any] | None] = [None] * len(plan)
+    tasks: list[tuple[int, str, dict[str, Any]]] = []
+    reused = 0
+    for index, (case, run_seed) in enumerate(plan):
+        base_label = str(case.get("label") or case.get("axis") or "corrida")
+        label = f"{base_label} · semilla {run_seed}" if replicated else base_label
+        identity = _case_identity(case, run_seed)
+        previous = cached.get(identity)
+        if previous is not None:
+            reused += 1
+            runs[index] = previous
+            if on_result is not None:
+                on_result(previous)
+            continue
+        tasks.append(
+            (
+                index,
+                identity,
+                _case_run_kwargs(case, scenario_id=scenario_id, label=label, run_seed=run_seed),
+            )
+        )
+
+    cancelled = False
+    with ProcessPoolExecutor(max_workers=workers, initializer=_init_sensitivity_worker) as pool:
+        futures = [pool.submit(_sensitivity_worker_task, task) for task in tasks]
+        try:
+            for future in as_completed(futures):
+                index, identity, run = future.result()
+                runs[index] = run
+                if working_file is not None:
+                    working_file.write(
+                        json.dumps({"identity": identity, "run": run}, default=str) + "\n"
+                    )
+                    working_file.flush()
+                if on_result is not None:
+                    on_result(run)
+                if cancel_check is not None and cancel_check():
+                    cancelled = True
+                    break
+        finally:
+            if cancelled:
+                for future in futures:
+                    future.cancel()
+
+    if cancelled:
+        done = sum(1 for run in runs if run is not None)
+        raise SweepCancelled(f"Sensibilidad ACO cancelada tras {done}/{total} corridas")
+    return [run for run in runs if run is not None], reused
+
+
 def run_aco_sensitivity(
     db: Session,
     *,
@@ -375,6 +501,7 @@ def run_aco_sensitivity(
     instance_fingerprint: str | None = None,
     resume_path: Path | None = None,
     resume: bool = False,
+    workers: int = 1,
 ) -> dict[str, Any]:
     """Corridas del barrido (escenario dado, semilla(s) explícita(s)).
 
@@ -403,6 +530,10 @@ def run_aco_sensitivity(
     al fichero y, con ``resume=True``, las que ya están se reutilizan en lugar de recalcularse.
     La fila de ``calibration_sweeps`` se sigue escribiendo **al final** y el fichero se borra al
     guardarla: la BD es la verdad y el JSONL solo cubre el hueco de un corte.
+
+    Con ``workers > 1`` las corridas (caso × semilla) se reparten en un pool de procesos; el
+    resultado es idéntico porque cada (caso, semilla) es determinista. El job del API corre
+    secuencial (``workers=1``): un ``fork`` dentro de uvicorn con hilos es riesgoso.
     """
     started = datetime.now(timezone.utc)
     seed_list = [int(value) for value in seeds] if seeds else [int(seed)]
@@ -427,57 +558,54 @@ def run_aco_sensitivity(
     reused = 0
     plan = [(case, run_seed) for case in case_list for run_seed in seed_list]
     try:
-        for index, (case, run_seed) in enumerate(plan):
-            if cancel_check is not None and cancel_check():
-                raise SweepCancelled(f"Sensibilidad ACO cancelada tras {len(runs)}/{total} corridas")
-            base_label = str(case.get("label") or case.get("axis") or "corrida")
-            label = f"{base_label} · semilla {run_seed}" if replicated else base_label
-            if on_run is not None:
-                on_run(index, total, label)
-            identity = _case_identity(case, run_seed)
-            previous = cached.get(identity) if resume else None
-            if previous is not None:
-                # Ya estaba hecha: se reutiliza el resultado, no se gasta CPU.
-                reused += 1
-                runs.append(previous)
-                if on_result is not None:
-                    on_result(previous)
-                continue
-            logger.info(
-                "Sensibilidad ACO %s (%s×%s, semilla %s)",
-                base_label,
-                case["acoAnts"],
-                case["acoIterations"],
-                run_seed,
-            )
-            hyperparameters = _case_hyperparameters(case)
-            run = _run_sensitivity_case(
-                db,
+        if workers and workers > 1 and len(plan) > 1:
+            runs, reused = _run_plan_parallel(
+                plan,
                 scenario_id=scenario_id,
-                label=label,
-                aco_ants=int(case["acoAnts"]),
-                aco_iterations=int(case["acoIterations"]),
-                axis=str(case.get("axis") or "custom"),
-                seed=run_seed,
-                aco_alpha=hyperparameters["acoAlpha"],
-                aco_beta=hyperparameters["acoBeta"],
-                aco_rho=hyperparameters["acoRho"],
-                pheromone_q=hyperparameters["pheromoneQ"],
-                aco_patience=case.get("acoPatience"),
-                two_opt_passes=case.get("twoOptPasses"),
-                pheromone_elitist=case.get("pheromoneElitist"),
-                estimated_duration_hours=case.get("durationHours"),
-                workload_balance_weight=case.get("workloadBalanceWeight"),
-                makespan_weight=case.get("makespanWeight"),
-                min_active_vehicles=case.get("minActiveVehicles"),
-                max_route_hours_target=case.get("maxRouteHoursTarget"),
+                replicated=replicated,
+                total=total,
+                cached=cached if resume else {},
+                working_file=working_file,
+                on_result=on_result,
+                cancel_check=cancel_check,
+                workers=workers,
             )
-            runs.append(run)
-            if working_file is not None:
-                working_file.write(json.dumps({"identity": identity, "run": run}, default=str) + "\n")
-                working_file.flush()
-            if on_result is not None:
-                on_result(run)
+        else:
+            for index, (case, run_seed) in enumerate(plan):
+                if cancel_check is not None and cancel_check():
+                    raise SweepCancelled(f"Sensibilidad ACO cancelada tras {len(runs)}/{total} corridas")
+                base_label = str(case.get("label") or case.get("axis") or "corrida")
+                label = f"{base_label} · semilla {run_seed}" if replicated else base_label
+                if on_run is not None:
+                    on_run(index, total, label)
+                identity = _case_identity(case, run_seed)
+                previous = cached.get(identity) if resume else None
+                if previous is not None:
+                    # Ya estaba hecha: se reutiliza el resultado, no se gasta CPU.
+                    reused += 1
+                    runs.append(previous)
+                    if on_result is not None:
+                        on_result(previous)
+                    continue
+                logger.info(
+                    "Sensibilidad ACO %s (%s×%s, semilla %s)",
+                    base_label,
+                    case["acoAnts"],
+                    case["acoIterations"],
+                    run_seed,
+                )
+                run = _run_sensitivity_case(
+                    db,
+                    **_case_run_kwargs(
+                        case, scenario_id=scenario_id, label=label, run_seed=run_seed
+                    ),
+                )
+                runs.append(run)
+                if working_file is not None:
+                    working_file.write(json.dumps({"identity": identity, "run": run}, default=str) + "\n")
+                    working_file.flush()
+                if on_result is not None:
+                    on_result(run)
     finally:
         if working_file is not None:
             working_file.close()
