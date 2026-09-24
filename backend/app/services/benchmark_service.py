@@ -11,17 +11,12 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.domain.scenarios import scenario_entries
 from app.services.optimization_service import run_optimization_engine
 
 logger = logging.getLogger(__name__)
 
-BENCHMARK_SCENARIOS: list[dict[str, str]] = [
-    {"id": "normal", "label": "Tráfico normal"},
-    {"id": "peak_traffic", "label": "Tráfico pico"},
-    {"id": "rain", "label": "Lluvia intensa"},
-    {"id": "saturated", "label": "Contenedores saturados"},
-    {"id": "broken_vehicle", "label": "Vehículo averiado"},
-]
+BENCHMARK_SCENARIOS: list[dict[str, str]] = scenario_entries()
 
 ACO_BENCHMARK_PROFILES: list[dict[str, Any]] = [
     {"id": "fast", "label": "Rápido", "acoAnts": 6, "acoIterations": 10},
@@ -76,6 +71,7 @@ def run_aco_benchmark(db: Session) -> dict[str, Any]:
                     aco_iterations=profile["acoIterations"],
                     auto_commit=False,
                     auto_dispatch=False,
+                    persist=False,
                     reporter=None,
                 )
                 db.rollback()

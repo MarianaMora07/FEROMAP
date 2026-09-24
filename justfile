@@ -161,9 +161,15 @@ roadmap:
     @echo "═══ FEROMAP — backlog post-grado ═══"
     @sed -n '1,80p' docs/post-grado/README.md
 
-# Fase 0: 3 escenarios (normal, lluvia, saturado) → data/cache/phase0-baseline-metrics.json
+# Fase 0: 5 escenarios → data/cache/phase0-baseline-metrics.json (caché caliente)
 phase0-baseline: _check
     {{compose}} exec api python -m scripts.phase0_baseline_metrics
+
+# Validación estadística Wilcoxon reproducible → data/cache/statistical-validations.json
+# Corre los 5 escenarios en paralelo por semilla (--workers, default min(núcleos, 8));
+# --scenario acota a uno y --quick usa 10 corridas para iterar.
+wilcoxon *args: _check
+    {{compose}} exec api python -m scripts.statistical_validation {{args}}
 
 # Optimización real + tabla de planes por conductor (BD con seed, sin UI)
 optimization-driver-report *args:

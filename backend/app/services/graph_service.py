@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import networkx as nx
+import numpy as np
 import osmnx as ox
 
 from app.config import settings
@@ -205,6 +206,21 @@ def apply_scenario_weights(
 
 def nearest_node(graph: nx.MultiDiGraph, lon: float, lat: float) -> int:
     return ox.distance.nearest_nodes(graph, lon, lat)
+
+
+def nearest_nodes(
+    graph: nx.MultiDiGraph, lons: list[float], lats: list[float]
+) -> list[int]:
+    """Nodos más cercanos para varias coordenadas en una sola pasada.
+
+    OSMnx reconstruye el índice espacial (KDTree) en cada llamada a ``nearest_nodes``;
+    resolver punto a punto lo repite N veces (~3 s con 300 puntos). Con listas, el índice
+    se construye una sola vez.
+    """
+    if not lons:
+        return []
+    nodes = ox.distance.nearest_nodes(graph, X=list(lons), Y=list(lats))
+    return [int(node) for node in np.atleast_1d(nodes)]
 
 
 def weakly_connected_component_nodes(graph: nx.MultiDiGraph, node: int) -> set[int]:

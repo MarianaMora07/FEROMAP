@@ -83,6 +83,7 @@ from app.services.graph_service import (
     graph_load_source,
     load_road_graph,
     nearest_node,
+    nearest_nodes,
     path_metrics_between_nodes,
 )
 from app.services.geo_service import fill_level_pct
@@ -2280,6 +2281,7 @@ def run_optimization_engine(
     contingency_meta: dict[str, Any] | None = None,
     auto_dispatch: bool = False,
     auto_commit: bool = True,
+    persist: bool = True,
     reporter: OptimizationProgressReporter | None = None,
     operation_date: date | None = None,
     daily_plan_id: int | None = None,
@@ -2295,7 +2297,12 @@ def run_optimization_engine(
     min_active_vehicles: int | None = None,
     max_route_hours_target: float | None = None,
 ) -> dict[str, Any]:
-    """Ejecuta el motor real de optimización y persiste resultados."""
+    """Ejecuta el motor real de optimización y persiste resultados.
+
+    Con ``persist=False`` omite el ensamblado de GeoJSON y la escritura de la simulación
+    (rutas y waypoints) en la BD: pensado para consumidores que solo leen los KPIs
+    (validación estadística, benchmark, barridos). Evita INSERTs que luego se revierten.
+    """
     computation_started = time.perf_counter()
     aco_seconds = 0.0
     graph_seconds = 0.0
@@ -2550,9 +2557,17 @@ def run_optimization_engine(
     # Misma "próxima visita" que el KPI y las alertas (plan aprobado > agenda).
     visits = next_visits_by_point(db)
 
+    # Nodos del grafo para los 300 puntos en una sola pasada (OSMnx reconstruye el índice
+    # espacial por llamada; resolver punto a punto era el mayor costo de la fase de grafo).
+    graph_nodes = nearest_nodes(
+        graph,
+        [float(point.longitude) for point in points],
+        [float(point.latitude) for point in points],
+    )
+
     overflow_deadlines: list[float | None] = []
     overflow_rates: list[float] = []
-    for point in points:
+    for index, point in enumerate(points):
         membership = memberships.get(point.id)
         demand, boosted_pct = resolve_customer_demand(
             point,
@@ -2572,7 +2587,7 @@ def run_optimization_engine(
             CustomerNode(
                 point_id=point.id,
                 code=point.code,
-                graph_node=nearest_node(graph, float(point.longitude), float(point.latitude)),
+                graph_node=graph_nodes[index],
                 demand_kg=demand,
                 fill_pct=boosted_pct,
                 lon=float(point.longitude),
@@ -3147,6 +3162,49 @@ def run_optimization_engine(
             f"La duración optimizada supera la jornada de referencia ({duration_h or 12} h)",
             "warning",
         )
+
+    if not persist:
+        # Camino sin persistencia: los consumidores de métricas descartan rutas y waypoints,
+        # así que evitamos ensamblar el GeoJSON y escribir la simulación en la BD (INSERTs que
+        # el llamador revierte con `auto_commit=False`). Es la mayor parte del tiempo de pared.
+        log_entries = _optimization_logs(scenario_label, len(customers), len(vehicles))
+        if contingency_meta:
+            log_entries = [
+                {
+                    "message": f"Contingencia: avería en {contingency_meta.get('brokenVehicleCode', 'vehículo')}",
+                    "type": "warning",
+                },
+                {
+                    "message": f"Reasignando {contingency_meta.get('pendingPointsCount', 0)} puntos pendientes",
+                    "type": "info",
+                },
+                *log_entries,
+            ]
+        return {
+            "simulationId": None,
+            "scenarioId": normalized,
+            "caseStudyId": case_study_id,
+            "scenario": scenario,
+            "kpis": kpis,
+            "routes": {
+                "current": {"type": "FeatureCollection", "features": []},
+                "optimized": {"type": "FeatureCollection", "features": []},
+            },
+            "logs": [
+                {
+                    "id": f"log-dryrun-{index}",
+                    "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                    "message": entry["message"],
+                    "type": entry["type"],
+                }
+                for index, entry in enumerate(log_entries)
+            ],
+            "dispatch": {"dispatchedRouteIds": [], "count": 0},
+            "contingency": contingency_meta,
+            "servedPointCodes": sorted(served_codes),
+            "engineMetrics": engine_metrics,
+            "dailyPlanId": daily_plan_id,
+        }
 
     current_features = _routes_to_geojson(
         graph,

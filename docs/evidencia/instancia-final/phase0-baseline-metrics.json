@@ -1,13 +1,16 @@
 {
-  "generatedAt": "2026-09-22T22:42:12.701889+00:00",
+  "generatedAt": "2026-09-24T20:47:45.205714+00:00",
   "acoProfile": {
     "ants": 12,
     "iterations": 20
   },
+  "cacheState": "warm",
   "scenarioIds": [
     "normal",
+    "peak_traffic",
     "rain",
-    "saturated"
+    "saturated",
+    "broken_vehicle"
   ],
   "runs": [
     {
@@ -31,10 +34,50 @@
         "current": 100,
         "optimized": 100
       },
+      "criticalCoveragePct": {
+        "current": 100,
+        "optimized": 100
+      },
       "containersServed": 300,
       "landfillTrips": 43,
-      "computationSeconds": 10.3,
+      "computationSeconds": 2.7,
+      "graphLoadSeconds": 0.23,
+      "acoSeconds": 2.43,
+      "overheadSeconds": 0.02,
       "savingPct": 40.5
+    },
+    {
+      "scenarioId": "peak_traffic",
+      "distanceKm": {
+        "current": 1851.4,
+        "optimized": 1148.3
+      },
+      "durationHours": {
+        "current": 163.61,
+        "optimized": 147.94
+      },
+      "uncoveredPoints": 0,
+      "uncoveredPointCodes": [],
+      "co2KgAvoided": 659.6,
+      "fuelLiters": {
+        "current": 648.0,
+        "optimized": 401.9
+      },
+      "coveragePct": {
+        "current": 100,
+        "optimized": 100
+      },
+      "criticalCoveragePct": {
+        "current": 100,
+        "optimized": 100
+      },
+      "containersServed": 300,
+      "landfillTrips": 45,
+      "computationSeconds": 3.0,
+      "graphLoadSeconds": 0.21,
+      "acoSeconds": 2.75,
+      "overheadSeconds": 0.01,
+      "savingPct": 38.0
     },
     {
       "scenarioId": "rain",
@@ -57,9 +100,16 @@
         "current": 100,
         "optimized": 100
       },
+      "criticalCoveragePct": {
+        "current": 100,
+        "optimized": 100
+      },
       "containersServed": 300,
       "landfillTrips": 46,
-      "computationSeconds": 10.7,
+      "computationSeconds": 2.7,
+      "graphLoadSeconds": 0.21,
+      "acoSeconds": 2.44,
+      "overheadSeconds": 0.01,
       "savingPct": 37.5
     },
     {
@@ -83,10 +133,50 @@
         "current": 100,
         "optimized": 100
       },
+      "criticalCoveragePct": {
+        "current": 100,
+        "optimized": 100
+      },
       "containersServed": 300,
       "landfillTrips": 50,
-      "computationSeconds": 10.9,
+      "computationSeconds": 3.0,
+      "graphLoadSeconds": 0.21,
+      "acoSeconds": 2.77,
+      "overheadSeconds": 0.01,
       "savingPct": 36.6
+    },
+    {
+      "scenarioId": "broken_vehicle",
+      "distanceKm": {
+        "current": 1823.8,
+        "optimized": 1148.9
+      },
+      "durationHours": {
+        "current": 159.91,
+        "optimized": 147.37
+      },
+      "uncoveredPoints": 0,
+      "uncoveredPointCodes": [],
+      "co2KgAvoided": 633.0,
+      "fuelLiters": {
+        "current": 638.3,
+        "optimized": 402.1
+      },
+      "coveragePct": {
+        "current": 100,
+        "optimized": 100
+      },
+      "criticalCoveragePct": {
+        "current": 100,
+        "optimized": 100
+      },
+      "containersServed": 300,
+      "landfillTrips": 44,
+      "computationSeconds": 2.7,
+      "graphLoadSeconds": 0.24,
+      "acoSeconds": 2.49,
+      "overheadSeconds": 0.02,
+      "savingPct": 37.0
     }
   ]
 }

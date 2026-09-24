@@ -106,6 +106,7 @@ def _run_sweep_case(
             seed=seed,
             auto_commit=False,
             auto_dispatch=False,
+            persist=False,
             reporter=None,
         )
         db.rollback()
