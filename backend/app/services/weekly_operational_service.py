@@ -7,6 +7,7 @@ y guarda un resumen camión × día en ``weekly_plans.operational_plan_json``.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import math
@@ -272,6 +273,88 @@ def _prepare_draft_daily_plan(
     return daily.id, final_ids
 
 
+def _signature_entry(day: Any, ctx: dict[str, Any]) -> dict[str, Any]:
+    """Configuración que determina la optimización de un día (para la firma de reuso)."""
+    return {
+        "operationDate": day.operation_date.isoformat(),
+        "scenarioId": ctx["scenarioId"],
+        "fleetLimit": ctx["fleetLimit"],
+        "sectorPartition": ctx["sectorPartition"],
+        "pointIds": sorted(int(point_id) for point_id in ctx["pointIds"]),
+    }
+
+
+def _hash_signature(
+    plan: WeeklyPlan, entries: list[dict[str, Any]], *, rotation_enabled: bool
+) -> str:
+    """Hash estable de la configuración semanal que produce el plan operativo.
+
+    Si la configuración cambia (puntos, escenario, flota esperada o por tipo, rotación),
+    la firma cambia y el resumen persistido deja de ser reutilizable.
+    """
+    payload = {
+        "weekStartDate": plan.week_start_date.isoformat(),
+        "scenarioId": plan.scenario_id,
+        "fleetByType": _fleet_by_type(plan),
+        "rotation": bool(rotation_enabled),
+        "days": entries,
+    }
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _signature_entry_for_day(db: Session, plan: WeeklyPlan, day: Any) -> dict[str, Any]:
+    """Prepara el día (crea/reutiliza su ``DailyPlan``) y devuelve su entrada de firma."""
+    if plan.status == "approved":
+        from app.services.planning_service import open_daily_plan
+
+        daily = open_daily_plan(db, day.operation_date)
+        ctx = _collect_engine_context(db, plan, day, int(daily["id"]))
+    else:
+        daily_plan_id, final_ids = _prepare_draft_daily_plan(db, plan, day)
+        ctx = _collect_engine_context(db, plan, day, daily_plan_id, point_ids=final_ids)
+    return _signature_entry(day, ctx)
+
+
+def _reuse_persisted_operational_summary(
+    db: Session,
+    plan: WeeklyPlan,
+    days: list[Any],
+    *,
+    rotation_enabled: bool,
+) -> dict[str, Any] | None:
+    """Devuelve el resumen operativo persistido si sigue siendo válido para ``plan``.
+
+    Reutilizar evita la segunda pasada del motor cuando la semana ya fue optimizada
+    (p. ej. la validación persistente): basta con que la configuración coincida. Un
+    día con error invalida el resumen para forzar el recálculo.
+    """
+    if not plan.operational_plan_json:
+        return None
+    try:
+        stored = json.loads(plan.operational_plan_json)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(stored, dict) or not stored.get("signature"):
+        return None
+    stored_days = stored.get("days")
+    if not isinstance(stored_days, list) or len(stored_days) != len(days):
+        return None
+    if bool(stored.get("fleetRotationEnabled")) != bool(rotation_enabled):
+        return None
+    if any(isinstance(row, dict) and row.get("status") == "error" for row in stored_days):
+        return None
+
+    try:
+        entries = [_signature_entry_for_day(db, plan, day) for day in days]
+    except Exception:  # noqa: BLE001
+        db.rollback()
+        return None
+    if stored.get("signature") != _hash_signature(plan, entries, rotation_enabled=rotation_enabled):
+        return None
+    return stored
+
+
 def generate_weekly_operational_plan(
     db: Session,
     plan_id: int,
@@ -279,7 +362,13 @@ def generate_weekly_operational_plan(
     weekly_fleet_rotation: bool | None = None,
     on_progress: ProgressCallback | None = None,
 ) -> dict[str, Any]:
-    """Optimiza la semana día por día y persiste el resumen camión × día."""
+    """Optimiza la semana día por día y persiste el resumen camión × día.
+
+    Si ya existe un resumen persistido con la **misma configuración** (ver
+    :func:`_reuse_persisted_operational_summary`), se reutiliza sin volver a correr el
+    motor: la semana se optimiza una sola vez aunque se valide y luego se pida «Ver
+    plan».
+    """
     from app.services.admin_service import get_algorithm_settings
     from app.services.optimization_service import run_optimization_engine
     from app.services.planning_service import open_daily_plan
@@ -327,6 +416,7 @@ def generate_weekly_operational_plan(
 
     total = len(days)
     result_rows: list[dict[str, Any]] = []
+    signature_entries: list[dict[str, Any]] = []
 
     # Fase 13.4 — rotación de flota en el horizonte (uso acumulado de la semana).
     rotation_enabled = (
@@ -334,6 +424,15 @@ def generate_weekly_operational_plan(
         if weekly_fleet_rotation is not None
         else bool(get_algorithm_settings(db).weekly_fleet_rotation)
     )
+
+    # Reutiliza el resumen ya persistido (p. ej. el que deja la validación) cuando la
+    # configuración no cambió: evita la segunda pasada del motor.
+    reused = _reuse_persisted_operational_summary(
+        db, plan, days, rotation_enabled=rotation_enabled
+    )
+    if reused is not None:
+        return reused
+
     fleet_rows = _assignable_vehicle_rows(db) if rotation_enabled else []
     code_to_vehicle_id = {row["code"]: int(row["id"]) for row in fleet_rows}
     usage_days: dict[int, int] = {int(row["id"]): 0 for row in fleet_rows}
@@ -360,6 +459,7 @@ def generate_weekly_operational_plan(
             else:
                 daily_plan_id, final_ids = _prepare_draft_daily_plan(db, plan, day)
                 ctx = _collect_engine_context(db, plan, day, daily_plan_id, point_ids=final_ids)
+            signature_entries.append(_signature_entry(day, ctx))
             if not ctx["pointIds"]:
                 day_summary.update({"status": "skipped", "reason": "sin puntos"})
                 result_rows.append(day_summary)
@@ -407,15 +507,28 @@ def generate_weekly_operational_plan(
 
             kpis = result["kpis"]
             served = int(kpis.get("containersServed") or 0) or len(result.get("servedPointCodes") or [])
+            uncovered = int(kpis.get("uncoveredPoints") or 0)
+            # `coveragePct` es un KPI con forma {current, optimized} (igual que `distanceKm`).
+            coverage_raw = kpis.get("coveragePct")
+            coverage_pct = (
+                coverage_raw.get("optimized") if isinstance(coverage_raw, dict) else coverage_raw
+            )
             current_day = db.get(DailyPlan, daily_plan_id)
             day_summary.update(
                 {
                     "dailyPlanId": daily_plan_id,
                     "simulationId": result.get("simulationId"),
                     "status": current_day.status if current_day else "optimized",
+                    "scenarioId": ctx["scenarioId"],
                     "pointCount": len(ctx["pointIds"]),
                     "servedPoints": served,
-                    "uncoveredPoints": int(kpis.get("uncoveredPoints") or 0),
+                    "uncoveredPoints": uncovered,
+                    # Base comparable y cobertura para derivar el forecast de la validación.
+                    "baselineDistanceKm": round(
+                        float((kpis.get("distanceKm") or {}).get("current") or 0), 1
+                    ),
+                    "coveragePct": coverage_pct,
+                    "feasible": uncovered == 0,
                     "distanceKm": round(kpis["distanceKm"]["optimized"], 1),
                     "durationHours": round(float(kpis["durationHours"]["optimized"]), 2),
                     "vehicles": _route_vehicle_rows(db, daily_plan_id),
@@ -449,6 +562,9 @@ def generate_weekly_operational_plan(
         "weekStartDate": plan.week_start_date.isoformat(),
         "fleetByType": _fleet_by_type(plan),
         "fleetRotationEnabled": bool(rotation_enabled),
+        "signature": _hash_signature(
+            plan, signature_entries, rotation_enabled=rotation_enabled
+        ),
         "days": result_rows,
     }
     # Fase 13.4 — KPIs de horizonte (distinctVehiclesWeek, vehicleDaysUsed, …).

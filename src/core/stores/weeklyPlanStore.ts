@@ -548,9 +548,10 @@ export async function runWeeklyValidation(): Promise<void> {
   if (isWeeklyPlanEditable()) {
     await saveWeeklyPlanDraft(state.plan.scenarioId ?? 'normal', state.plan.days ?? []);
   }
+  const planId = state.plan.id;
   setState({ isValidating: true, error: null, notice: null, validationCompleted: false, validationSummary: null, validationProgress: 0 });
   try {
-    const { jobId } = await validateWeeklyPlan(state.plan.id);
+    const { jobId } = await validateWeeklyPlan(planId);
     setState({ validationJobId: jobId });
     while (true) {
       const snapshot = await fetchSimulationOptimizeJob(jobId);
@@ -621,6 +622,10 @@ export async function runWeeklyValidation(): Promise<void> {
             days,
           },
         });
+        // La validación persiste el plan operativo de la semana: refrescamos el plan
+        // para que «Ver plan» lo reutilice (una sola pasada del motor) en vez de
+        // volver a optimizar.
+        await refreshSelectedPlanPreservingValidation(planId);
         break;
       }
       if (snapshot.status === 'failed') {

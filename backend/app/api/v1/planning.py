@@ -201,12 +201,14 @@ def validate_weekly(plan_id: int, db: DbSession, _: PlannerOrAdmin):
         preflight_weekly_feasibility(db, db_plan)
         db.commit()
     # Validación por día con el motor ACO (corre en background, no bloquea el request).
+    # Persiste el plan operativo de la semana: validar y «Ver plan» comparten una sola
+    # pasada del motor (ver `validate_weekly_plan_days(..., persist_operational=True)`).
     job = run_contingency_background(
         job_type="planning_validation",
         scenario_id=plan["scenarioId"],
         params={"weeklyPlanId": plan_id, "kind": "weekly_by_day"},
         runner=lambda _session, on_progress=None: validate_weekly_plan_days(
-            _session, plan_id=plan_id, on_progress=on_progress
+            _session, plan_id=plan_id, on_progress=on_progress, persist_operational=True
         ),
         with_progress=True,
     )

@@ -39,8 +39,9 @@ test.describe('Plan operativo semanal — generar, abrir y notificar', () => {
     await page.getByTestId('weekly-plan-stepper').getByRole('button', { name: 'Aprobar' }).click();
     await expect(page.getByTestId('weekly-plan-approve-blocked')).toHaveCount(0);
 
-    // "Ver plan" genera el plan operativo de la semana y abre la planificación
-    // operativa. Volvemos (SPA) para aprobar la semana ya revisada.
+    // "Ver plan" reutiliza el plan operativo ya persistido por la validación (una sola
+    // pasada del motor) y abre la planificación operativa. Volvemos (SPA) para aprobar
+    // la semana ya revisada.
     await page.getByTestId('weekly-plan-review-cta').click();
     await expect(page).toHaveURL(/\/optimization/, { timeout: 1_500_000 });
     await page.goBack();

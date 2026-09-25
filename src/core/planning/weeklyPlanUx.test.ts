@@ -5,7 +5,6 @@ import {
   canReachWeeklyPlanStep,
   deriveWeeklyPlanFlowStep,
   deriveWeeklyPlanNextAction,
-  weeklyPlanApproveBlockReason,
   weeklyPlanHasScheduledPoints,
   weeklyPlanPreflightIssues,
   weeklyPlanSavingPct,
@@ -86,9 +85,9 @@ describe('weeklyPlanUx', () => {
     expect(weeklyPlanStepGuideText(2)).toContain('simulación rápida');
   });
 
-  it('blocks approve until validation completes', () => {
-    expect(weeklyPlanApproveBlockReason(false)).toBe('Falta validar');
-    expect(weeklyPlanApproveBlockReason(true)).toBeNull();
+  it('does not block approve on missing validation', () => {
+    // La validación es opcional: el gate real al aprobar es el pre-flight heurístico.
+    expect(canReachWeeklyPlanStep(3, 2)).toBe(true);
   });
 
   it('warns when validation exceeds workday', () => {

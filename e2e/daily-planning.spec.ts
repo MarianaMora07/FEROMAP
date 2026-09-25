@@ -63,7 +63,7 @@ test.describe('Planificación operativa — flujo semanal', () => {
     await expect(page.getByTestId('weekly-plan-week-calendar')).toBeVisible();
   });
 
-  test('muestra bloqueo de aprobación cuando falta validar', async ({ page, request }) => {
+  test('permite aprobar sin validar (la validación es opcional)', async ({ page, request }) => {
     await ensurePlannerSession(page, '/planning/weekly');
     await expect(page.getByTestId('weekly-plan-tab')).toBeVisible({ timeout: 45_000 });
 
@@ -71,8 +71,11 @@ test.describe('Planificación operativa — flujo semanal', () => {
     await autofillIfNeeded(page);
 
     await page.getByTestId('weekly-plan-stepper').getByRole('button', { name: 'Aprobar' }).click();
-    await expect(page.getByTestId('weekly-plan-approve-blocked')).toBeVisible();
-    await expect(page.getByText('Falta validar', { exact: true })).toBeVisible();
+    // Ya no hay bloqueo por falta de validación: se ofrece validar como acción opcional
+    // y el gate real al aprobar es el pre-flight heurístico.
+    await expect(page.getByTestId('weekly-plan-optional-validation')).toBeVisible();
+    await expect(page.getByTestId('weekly-plan-primary-cta')).toBeVisible();
+    await expect(page.getByText('Falta validar', { exact: true })).toHaveCount(0);
   });
 
   test('flujo completo: borrador, autocompletar, validar y ver plan', async ({
@@ -95,8 +98,9 @@ test.describe('Planificación operativa — flujo semanal', () => {
     await page.getByTestId('weekly-plan-stepper').getByRole('button', { name: 'Aprobar' }).click();
     await expect(page.getByTestId('weekly-plan-approve-blocked')).toHaveCount(0);
 
-    // "Ver plan" genera el plan operativo de la semana (motor real) y abre la
-    // planificación operativa del primer día; la aprobación queda para después.
+    // "Ver plan" reutiliza el plan operativo persistido por la validación (una sola
+    // pasada del motor) y abre la planificación operativa del primer día; la
+    // aprobación queda para después.
     await page.getByTestId('weekly-plan-review-cta').click();
     await expect(page).toHaveURL(/\/optimization/, { timeout: 1_500_000 });
   });

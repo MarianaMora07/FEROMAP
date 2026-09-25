@@ -14,7 +14,7 @@ export interface WeeklyPlanNextAction {
 
 export const weeklyPlanFlowSteps = [
   { id: 1, label: 'Configurar días', guide: 'asigna puntos por día y la condición de la semana' },
-  { id: 2, label: 'Validar', guide: 'ejecuta una simulación rápida con todos los puntos de la semana' },
+  { id: 2, label: 'Validar', guide: 'valida (opcional) con una simulación rápida; también puedes aprobar con el pre-flight' },
   { id: 3, label: 'Aprobar', guide: 'revisa el resultado y aprueba para habilitar el plan del día' },
   { id: 4, label: 'Ir al día', guide: 'continúa en planificación operativa para optimizar y despachar' },
 ] as const;
@@ -93,11 +93,6 @@ export interface WeeklyPlanValidationSummary {
 export function weeklyPlanValidationWorkdayWarning(summary: WeeklyPlanValidationSummary): string | null {
   if (!summary.exceedsWorkday) return null;
   return `La duración estimada supera la jornada de referencia (${summary.workdayHours} h). Revisa la carga diaria antes de aprobar.`;
-}
-
-export function weeklyPlanApproveBlockReason(validationCompleted: boolean): string | null {
-  if (validationCompleted) return null;
-  return 'Falta validar';
 }
 
 function roundTo(value: number, digits: number): number {
@@ -279,8 +274,8 @@ export function deriveWeeklyPlanNextAction(input: {
       };
     case 2:
       return {
-        message: 'Valida el plan',
-        detail: 'Ejecuta una simulación con los puntos de la semana antes de aprobar.',
+        message: 'Valida el plan (opcional)',
+        detail: 'Simula los puntos de la semana para revisar kilometraje y asignaciones; puedes aprobar sin validar.',
         tone: 'info',
         primaryActionId: 'validate',
         primaryLabel: 'Validar con simulación',

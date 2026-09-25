@@ -5,7 +5,6 @@ import { Button, LoadingPanel } from '../../../design-system/components';
 import {
   buildWeeklyPlanForecastFromValidation,
   buildWeeklyPlanPostApprovalChecklist,
-  weeklyPlanApproveBlockReason,
   weeklyPlanPreflightIssues,
   weeklyPlanScheduledPointCount,
 } from '../../../core/planning/weeklyPlanUx';
@@ -15,7 +14,7 @@ import { weeklyPlanState, generateWeeklyOperationalPlanForWeek } from '../../../
 import { optimizationHref } from '../../../core/planning/operationalLinks';
 import { WeeklyPlanConfigurePanel } from './WeeklyPlanConfigurePanel';
 import {
-  WeeklyPlanApproveBlockedPanel,
+  WeeklyPlanOptionalValidationPanel,
   WeeklyPlanPostApprovalChecklist,
   WeeklyPlanPreflightWarningPanel,
 } from './WeeklyPlanClosurePanels';
@@ -40,16 +39,15 @@ export function WeeklyPlanStepPanels(props: WeeklyPlanStepPanelsProps) {
   const navigate = useNavigate();
   const totalPoints = () => weeklyPlanScheduledPointCount(props.plan);
   const validationSummary = () => weeklyPlanState.validationSummary;
-  const approveBlockReason = () => weeklyPlanApproveBlockReason(weeklyPlanState.validationCompleted);
   const postApprovalSteps = () => buildWeeklyPlanPostApprovalChecklist();
   // Aviso de viabilidad (pre-flight) antes de validar; ya se recomputó al configurar.
   const preflightIssues = () => weeklyPlanPreflightIssues(weeklyPlanState.preflight);
-  // Mejoras previstas de la validación en curso (no persistida) para el paso de aprobación.
+  // Mejoras previstas a partir del resumen de la validación de esta sesión.
   const liveForecast = () =>
     buildWeeklyPlanForecastFromValidation(validationSummary()?.days ?? [], props.plan.weekStartDate);
 
-  // El plan operativo ya generado habilita la aprobación; si no, "Ver plan" lo genera
-  // y abre la planificación operativa para revisarlo antes de aprobar.
+  // El plan operativo ya generado (p. ej. por la validación) permite abrir el plan del
+  // día; si no existe, «Ver plan» lo genera y abre la planificación operativa.
   const planGenerated = () => (props.plan.operationalPlan?.days?.length ?? 0) > 0;
 
   const handleViewPlan = async () => {
@@ -113,6 +111,13 @@ export function WeeklyPlanStepPanels(props: WeeklyPlanStepPanelsProps) {
             </p>
           </Show>
 
+          <Show when={props.editable && totalPoints() > 0 && !validationSummary()}>
+            <p class="text-sm text-text-secondary">
+              La validación con el motor es opcional: puedes aprobar la semana en el paso
+              «Aprobar» con el pre-flight.
+            </p>
+          </Show>
+
           <Show when={props.editable && totalPoints() > 0 && !weeklyPlanState.isValidating}>
             <Button
               variant="primary"
@@ -140,11 +145,27 @@ export function WeeklyPlanStepPanels(props: WeeklyPlanStepPanelsProps) {
             when={liveForecast()}
             fallback={
               <p class="text-sm text-text-secondary">
-                Completa la validación en el paso anterior para ver las mejoras previstas.
+                Aún no has validado la semana. Puedes aprobar con el pre-flight o validar con el motor
+                si quieres revisar las mejoras previstas.
               </p>
             }
           >
             <WeeklyPlanForecastPanel forecast={liveForecast()} source="Validación en curso" />
+          </Show>
+
+          <Show when={props.editable && weeklyPlanState.isValidating}>
+            <LoadingPanel label="Validando con simulación ACO…" progress={weeklyPlanState.validationProgress} />
+          </Show>
+
+          <Show
+            when={
+              props.editable && !weeklyPlanState.validationCompleted && !weeklyPlanState.isValidating
+            }
+          >
+            <WeeklyPlanOptionalValidationPanel
+              loading={weeklyPlanState.isValidating}
+              onValidate={() => props.onValidate()}
+            />
           </Show>
 
           <Show when={props.editable && weeklyPlanState.isGeneratingOperational}>
@@ -162,26 +183,8 @@ export function WeeklyPlanStepPanels(props: WeeklyPlanStepPanelsProps) {
             </div>
           </Show>
 
-          <Show when={props.editable && approveBlockReason()}>
-            {(reason) => <WeeklyPlanApproveBlockedPanel reason={reason()} />}
-          </Show>
-
-          <Show when={props.editable && weeklyPlanState.validationCompleted}>
-            <Show
-              when={planGenerated()}
-              fallback={
-                <Button
-                  variant="primary"
-                  class="gap-2"
-                  icon={<Eye size={14} />}
-                  loading={weeklyPlanState.isGeneratingOperational}
-                  data-testid="weekly-plan-review-cta"
-                  onClick={() => void handleViewPlan()}
-                >
-                  Ver plan
-                </Button>
-              }
-            >
+          <Show when={props.editable}>
+            <div class="flex flex-wrap items-center gap-2">
               <Button
                 variant="primary"
                 class="gap-2"
@@ -192,7 +195,17 @@ export function WeeklyPlanStepPanels(props: WeeklyPlanStepPanelsProps) {
                 Aprobar plan
                 <ArrowRight size={14} />
               </Button>
-            </Show>
+              <Button
+                variant="outline"
+                class="gap-2"
+                icon={<Eye size={14} />}
+                loading={weeklyPlanState.isGeneratingOperational}
+                onClick={() => void handleViewPlan()}
+                data-testid="weekly-plan-review-cta"
+              >
+                {planGenerated() ? 'Abrir plan operativo' : 'Ver plan'}
+              </Button>
+            </div>
           </Show>
         </div>
       </Show>

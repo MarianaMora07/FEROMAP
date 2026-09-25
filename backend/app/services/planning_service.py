@@ -740,14 +740,39 @@ def validate_weekly_plan_days(
     *,
     plan_id: int,
     on_progress: Callable[[str, int], None] | None = None,
+    persist_operational: bool = False,
 ) -> dict[str, Any]:
     """Valida la semana ejecutando el motor ACO **por día** (Tarea 9).
 
-    Cada día corre su propia optimización (escenario del día y flota esperada) y se
-    persiste el resultado junto al pre-flight heurístico. Devuelve KPIs agregados de
-    la semana (compatibles con el contrato del job). Con ``on_progress`` publica el
-    avance día a día (10 % → 95 %); el 100 % final lo fija el worker del job.
+    Con ``persist_operational=False`` (por defecto) es una **simulación**: cada día
+    corre su propia optimización, se lee el resultado en sesión y se descarta con un
+    ``rollback`` (no crea rutas ni planes de día).
+
+    Con ``persist_operational=True`` la validación **es** la generación del plan
+    operativo: persiste las rutas del día y el resumen camión × día, de modo que
+    «Ver plan» reutiliza ese resultado en vez de optimizar la semana una segunda vez.
+    Cae a la simulación cuando el plan no está en borrador/aprobado o cuando no se
+    puede generar el operativo (sin días laborables, días ya despachados).
+
+    Devuelve KPIs agregados de la semana (contrato del job). Con ``on_progress``
+    publica el avance día a día (10 % → 95 %); el 100 % final lo fija el worker.
     """
+    if persist_operational:
+        plan_status = db.scalar(select(WeeklyPlan.status).where(WeeklyPlan.id == plan_id))
+        if plan_status in ("draft", "approved"):
+            return _validate_weekly_plan_days_persisted(
+                db, plan_id=plan_id, on_progress=on_progress
+            )
+    return _validate_weekly_plan_days_simulated(db, plan_id=plan_id, on_progress=on_progress)
+
+
+def _validate_weekly_plan_days_simulated(
+    db: Session,
+    *,
+    plan_id: int,
+    on_progress: Callable[[str, int], None] | None = None,
+) -> dict[str, Any]:
+    """Simulación no persistente: optimiza cada día y descarta las rutas con ``rollback``."""
     from app.services.optimization_service import run_optimization_engine
 
     plan = db.scalar(select(WeeklyPlan).where(WeeklyPlan.id == plan_id).options(joinedload(WeeklyPlan.days)))
@@ -786,13 +811,19 @@ def validate_weekly_plan_days(
                 operation_date=day.operation_date,
             )
             kpis = result["kpis"]
+            # `coveragePct` es un KPI con forma {current, optimized} (igual que `distanceKm`),
+            # no un escalar: se toma el valor optimizado del día.
+            coverage_raw = kpis.get("coveragePct")
+            coverage_pct = (
+                coverage_raw.get("optimized") if isinstance(coverage_raw, dict) else coverage_raw
+            )
             entry.update(
                 {
                     "scenarioId": scenario_id,
                     "distanceKm": round(kpis["distanceKm"]["optimized"], 1),
                     "baselineDistanceKm": round(float((kpis.get("distanceKm") or {}).get("current") or 0), 1),
                     "durationHours": kpis["durationHours"]["optimized"],
-                    "coveragePct": kpis.get("coveragePct"),
+                    "coveragePct": coverage_pct,
                     "uncoveredPoints": kpis.get("uncoveredPoints"),
                     "servedPoints": len(result.get("servedPointCodes") or []),
                     "feasible": int(kpis.get("uncoveredPoints", 0) or 0) == 0,
@@ -811,6 +842,111 @@ def validate_weekly_plan_days(
                 f"Validado {day.operation_date.isoformat()} ({index}/{total})",
                 10 + int(85 * index / total),
             )
+
+    aggregate = _aggregate_weekly_day_results(rows)
+    preflight: dict[str, Any] = {"feasible": aggregate["feasible"], "rows": []}
+    if plan.preflight_json:
+        try:
+            preflight = json.loads(plan.preflight_json)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            preflight = {"feasible": aggregate["feasible"], "rows": []}
+    preflight["simulation"] = {"feasible": aggregate["feasible"], "rows": rows}
+    preflight["feasible"] = preflight["feasible"] and aggregate["feasible"]
+    plan.preflight_json = json.dumps(preflight, ensure_ascii=False)
+    db.commit()
+
+    return {
+        "kpis": aggregate["kpis"],
+        "perDay": rows,
+        "feasible": aggregate["feasible"],
+        "weeklyPlanId": plan.id,
+    }
+
+
+def _validation_row_from_operational_day(day: dict[str, Any]) -> dict[str, Any]:
+    """Traduce un día del resumen operativo a la fila de validación (previsualización)."""
+    operation_date = str(day.get("operationDate") or "?")
+    status = day.get("status")
+    if status == "skipped":
+        return {"operationDate": operation_date, "skipped": True}
+    if status == "error":
+        return {
+            "operationDate": operation_date,
+            "error": day.get("error") or "Error al optimizar el día",
+        }
+    uncovered = int(day.get("uncoveredPoints") or 0)
+    return {
+        "operationDate": operation_date,
+        "scenarioId": day.get("scenarioId"),
+        "distanceKm": day.get("distanceKm"),
+        "baselineDistanceKm": day.get("baselineDistanceKm", 0.0),
+        "durationHours": day.get("durationHours"),
+        "coveragePct": day.get("coveragePct"),
+        "uncoveredPoints": uncovered,
+        "servedPoints": day.get("servedPoints"),
+        "feasible": uncovered == 0,
+        "vehicles": day.get("vehicles") or [],
+    }
+
+
+def _validate_weekly_plan_days_persisted(
+    db: Session,
+    *,
+    plan_id: int,
+    on_progress: Callable[[str, int], None] | None = None,
+) -> dict[str, Any]:
+    """Valida reutilizando la generación del plan operativo (una sola pasada).
+
+    Delegar en :func:`generate_weekly_operational_plan` evita que la semana se
+    optimice dos veces (validar + «Ver plan»): el motor corre una vez, persiste las
+    rutas y el resumen camión × día, y las filas de validación se derivan de ese
+    resumen. Si «Ver plan» se pide después con la misma configuración, el backend
+    reutiliza el resumen persistido (ver ``_reuse_persisted_operational_summary``).
+
+    Solo el horizonte operativo (Lun–Vie) se optimiza; los días fuera de él se
+    reportan como ``skipped`` (el pre-flight los sigue cubriendo).
+    """
+    from app.services.weekly_operational_service import generate_weekly_operational_plan
+
+    plan = db.scalar(
+        select(WeeklyPlan).where(WeeklyPlan.id == plan_id).options(joinedload(WeeklyPlan.days))
+    )
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan semanal no encontrado")
+
+    # Fechas calculadas antes de delegar: el generador hace commit y expira los objetos ORM.
+    day_dates = [day.operation_date.isoformat() for day in plan.days]
+    day_dates.sort()
+
+    def _scaled(message: str, value: int) -> None:
+        if on_progress is not None:
+            on_progress(message, 10 + int(85 * max(0, min(100, int(value))) / 100))
+
+    try:
+        summary = generate_weekly_operational_plan(
+            db, plan_id, on_progress=_scaled if on_progress is not None else None
+        )
+    except HTTPException as exc:
+        # Sin días laborables o con días ya despachados no se puede persistir: se cae a la
+        # simulación clásica (no destructiva) en vez de fallar la validación.
+        if exc.status_code == status.HTTP_400_BAD_REQUEST:
+            db.rollback()
+            return _validate_weekly_plan_days_simulated(db, plan_id=plan_id, on_progress=on_progress)
+        raise
+
+    operational_by_date = {
+        str(row.get("operationDate")): row
+        for row in summary.get("days") or []
+        if isinstance(row, dict)
+    }
+    rows: list[dict[str, Any]] = []
+    for operation_date in day_dates:
+        operational = operational_by_date.get(operation_date)
+        if operational is None:
+            # Día fuera del horizonte operativo (p. ej. fin de semana).
+            rows.append({"operationDate": operation_date, "skipped": True})
+            continue
+        rows.append(_validation_row_from_operational_day(operational))
 
     aggregate = _aggregate_weekly_day_results(rows)
     preflight: dict[str, Any] = {"feasible": aggregate["feasible"], "rows": []}

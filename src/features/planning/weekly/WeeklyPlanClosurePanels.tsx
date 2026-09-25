@@ -1,6 +1,7 @@
 import { A } from '@solidjs/router';
-import { AlertTriangle, Check, ExternalLink, Truck, UserRound } from 'lucide-solid';
+import { AlertTriangle, Check, ExternalLink, Info, Truck, UserRound } from 'lucide-solid';
 import { For, Show } from 'solid-js';
+import { Button } from '../../../design-system/components';
 import {
   weeklyPlanValidationWorkdayWarning,
   type WeeklyPlanPostApprovalStep,
@@ -203,27 +204,39 @@ export function WeeklyPlanDayPreviewPanel(props: WeeklyPlanDayPreviewPanelProps)
   );
 }
 
-interface WeeklyPlanApproveBlockedPanelProps {
-  reason: string;
+interface WeeklyPlanOptionalValidationPanelProps {
+  loading: boolean;
+  onValidate: () => void;
 }
 
-export function WeeklyPlanApproveBlockedPanel(props: WeeklyPlanApproveBlockedPanelProps) {
+/**
+ * La validación con el motor es **opcional**: la guarda real al aprobar es el
+ * pre-flight heurístico. Este panel ofrece el motor como acción voluntaria (más
+ * lenta) para quien quiera revisar las mejoras previstas antes de aprobar.
+ */
+export function WeeklyPlanOptionalValidationPanel(props: WeeklyPlanOptionalValidationPanelProps) {
   return (
     <div
-      class="rounded-xl border border-amber-300/70 bg-amber-50/90 px-4 py-4 dark:border-amber-900/40 dark:bg-amber-950/25"
-      data-testid="weekly-plan-approve-blocked"
+      class="rounded-xl border border-border bg-surface/40 px-4 py-4 dark:border-dark-border"
+      data-testid="weekly-plan-optional-validation"
     >
-      <p class="font-semibold text-amber-900 dark:text-amber-100">{props.reason}</p>
-      <p class="mt-1 text-sm text-amber-800 dark:text-amber-200">
-        Ejecuta la validación en el paso 2 antes de aprobar la semana.
+      <p class="flex items-center gap-2 font-semibold text-text-primary dark:text-white">
+        <Info size={16} class="shrink-0 text-fero-blue" aria-hidden="true" />
+        Validación opcional
       </p>
-      <button
-        type="button"
-        disabled
-        class="mt-3 inline-flex cursor-not-allowed items-center rounded-lg border border-amber-300/60 bg-white/60 px-4 py-2 text-sm font-semibold text-amber-900 opacity-80 dark:border-amber-900/40 dark:bg-dark-surface/40 dark:text-amber-100"
+      <p class="mt-1 text-sm text-text-secondary">
+        Puedes aprobar la semana con el pre-flight heurístico. Validar con el motor es opcional:
+        tarda más y sirve para revisar el kilometraje y las asignaciones previstas.
+      </p>
+      <Button
+        variant="outline"
+        class="mt-3 gap-2"
+        loading={props.loading}
+        onClick={() => props.onValidate()}
+        data-testid="weekly-plan-validate-cta"
       >
-        Aprobar plan
-      </button>
+        Validar con motor
+      </Button>
     </div>
   );
 }
@@ -266,7 +279,7 @@ export function WeeklyPlanPreflightWarningPanel(props: WeeklyPlanPreflightWarnin
           </ul>
           <p class="mt-1 text-sm text-amber-800 dark:text-amber-200">
             Ajusta la flota por tipo o la cobertura de esos días en «Configurar días» antes de
-            validar.
+            aprobar.
           </p>
         </div>
       </div>
