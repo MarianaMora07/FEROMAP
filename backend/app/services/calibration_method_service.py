@@ -3111,6 +3111,90 @@ def analyze_rsm(payload: dict[str, Any], *, delta_km: float | None = None) -> di
     return analysis
 
 
+def _beta_rho_medians(runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Mediana de la distancia por celda (β, ρ), con el número de corridas."""
+    cells: dict[tuple[float, float], list[float]] = {}
+    for run in runs:
+        try:
+            key = (float(run["acoBeta"]), float(run["acoRho"]))
+            value = float(run["distanceKmOptimized"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        cells.setdefault(key, []).append(value)
+    return [
+        {
+            "beta": beta,
+            "rho": rho,
+            "medianKm": round(float(np.median(values)), 2),
+            "runs": len(values),
+        }
+        for (beta, rho), values in sorted(cells.items())
+    ]
+
+
+def beta_rho_surface(
+    rsm_payload: dict[str, Any], *, delta_km: float | None = None
+) -> dict[str, Any] | None:
+    """Rejilla β×ρ del modelo RSM (I en el centro) con la región ≤ mejor + δ.
+
+    Función **pura** (numpy): devuelve la superficie para dibujar y las celdas medidas, o
+    ``None`` si la evidencia RSM no es un Box-Behnken completo. La figura la pinta el servicio
+    de figuras (matplotlib es opcional y no se importa aquí).
+    """
+    analysis = analyze_rsm(rsm_payload, delta_km=delta_km)
+    if not analysis.get("comparable"):
+        return None
+    runs = _valid_runs(rsm_payload)
+    betas = sorted({float(r["acoBeta"]) for r in runs if r.get("acoBeta") is not None})
+    rhos = sorted({float(r["acoRho"]) for r in runs if r.get("acoRho") is not None})
+    iterations = sorted(
+        {float(r["acoIterations"]) for r in runs if r.get("acoIterations") is not None}
+    )
+    if len(betas) != 3 or len(rhos) != 3 or len(iterations) != 3:
+        return None
+    beta_low, beta_center, beta_high = betas
+    rho_low, rho_center, rho_high = rhos
+    iterations_center = iterations[1]
+    coefficients = [float(row["coefficientKm"]) for row in analysis["terms"]]
+    delta = analysis.get("deltaKm")
+
+    grid_size = 61
+    axis_beta = np.linspace(beta_low, beta_high, grid_size)
+    axis_rho = np.linspace(rho_low, rho_high, grid_size)
+    values = np.empty((grid_size, grid_size), dtype=float)
+
+    def _code(value: float, low: float, center: float, high: float) -> float:
+        # Por tramos: low→-1, center→0, high→+1. Los niveles del RSM (paso geométrico ×2) no
+        # son equidistantes, así que la mitad del rango no es el centro.
+        if value <= center:
+            return (value - center) / (center - low) if center > low else 0.0
+        return (value - center) / (high - center) if high > center else 0.0
+
+    for row_index, rho in enumerate(axis_rho):
+        coded_rho = _code(rho, rho_low, rho_center, rho_high)
+        for column_index, beta in enumerate(axis_beta):
+            coded_beta = _code(beta, beta_low, beta_center, beta_high)
+            values[row_index, column_index] = _rsm_predict(
+                coefficients, coded_beta, coded_rho, 0.0
+            )
+
+    best = float(np.min(values))
+    threshold = best + delta if delta is not None else None
+    return {
+        "axisBeta": [float(value) for value in axis_beta],
+        "axisRho": [float(value) for value in axis_rho],
+        "values": [[float(value) for value in row] for row in values],
+        "bestKm": best,
+        "deltaKm": delta,
+        "thresholdKm": threshold,
+        "iterationsCenter": iterations_center,
+        "betaRange": [beta_low, beta_high],
+        "rhoRange": [rho_low, rho_high],
+        "samples": _beta_rho_medians(runs),
+        "source": "RSM (Box-Behnken)",
+    }
+
+
 def _rsm_center_keys(coding: dict[str, dict[float, int]]) -> list[tuple[float, ...]]:
     """Claves de los puntos centrales (β, ρ, I en el centro), en cualquier réplica."""
     center = {

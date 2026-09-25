@@ -156,6 +156,10 @@ calib-objective *args: _check
 calib-report *args: _check
     {{compose}} exec api python -m scripts.calibration_method report {{args}}
 
+# F5 · Mapa de calor β×ρ del RSM con la región ≤ mejor+δ → docs/fase-13/f5-heatmap-beta-rho.png (0 CPU)
+calib-heatmap *args: _check
+    {{compose}} exec api python -m scripts.calibration_method heatmap {{args}}
+
 # Backlog post-grado (OR-Tools, SSE, tráfico live…) — solo documentación, no implementar pre-defensa
 roadmap:
     @echo "═══ FEROMAP — backlog post-grado ═══"

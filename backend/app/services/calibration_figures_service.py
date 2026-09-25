@@ -380,6 +380,68 @@ def render_pareto(objective_analysis: dict[str, Any], path: Path) -> Path | None
     return _finish(fig, path)
 
 
+def render_beta_rho_heatmap(surface: dict[str, Any] | None, path: Path) -> Path | None:
+    """F5 — mapa de calor β×ρ del modelo RSM con la región ≤ mejor + δ marcada.
+
+    La superficie la prepara ``calibration_method_service.beta_rho_surface`` (pura); aquí solo
+    se dibuja. Es una **lectura visual** de C5, complementaria a F1–F4, no un veredicto.
+    """
+    if not surface or not surface.get("values"):
+        return None
+    axis_beta = np.asarray(surface["axisBeta"], dtype=float)
+    axis_rho = np.asarray(surface["axisRho"], dtype=float)
+    values = np.asarray(surface["values"], dtype=float)
+    fig, axis = plt.subplots(figsize=(7.5, 5.5))
+    image = axis.imshow(
+        values,
+        origin="lower",
+        aspect="auto",
+        extent=[float(axis_beta[0]), float(axis_beta[-1]), float(axis_rho[0]), float(axis_rho[-1])],
+        cmap="viridis",
+    )
+    fig.colorbar(image, ax=axis, label="distancia predicha (km)")
+
+    threshold = surface.get("thresholdKm")
+    if threshold is not None and float(values.min()) < threshold < float(values.max()):
+        contour = axis.contour(
+            axis_beta,
+            axis_rho,
+            values,
+            levels=[threshold],
+            colors="white",
+            linewidths=1.8,
+            linestyles="--",
+        )
+        axis.clabel(contour, fmt={threshold: f"mejor+δ = {threshold:.1f} km"}, fontsize=8)
+
+    for sample in surface.get("samples") or []:
+        axis.plot(
+            sample["beta"],
+            sample["rho"],
+            marker="s",
+            markersize=7,
+            markerfacecolor="none",
+            markeredgecolor="white",
+            markeredgewidth=1.2,
+        )
+        axis.annotate(
+            f"{sample['medianKm']:.0f}",
+            (sample["beta"], sample["rho"]),
+            color="white",
+            fontsize=7,
+            ha="center",
+            va="bottom",
+        )
+
+    axis.set_xlabel("β")
+    axis.set_ylabel("ρ")
+    axis.set_title(
+        f"F5 · Mapa de calor β×ρ del RSM (I={surface['iterationsCenter']:g}) · región ≤ mejor+δ",
+        fontsize=11,
+    )
+    return _finish(fig, path)
+
+
 def render_figures(
     payload: dict[str, Any],
     output_dir: Path,

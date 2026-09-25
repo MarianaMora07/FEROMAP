@@ -857,6 +857,38 @@ def _report_path() -> Path:
     return _repo_root() / "docs" / "fase-13" / "evidencia-calibracion-metodologica.md"
 
 
+def phase_heatmap(db: Session, options: PhaseOptions) -> dict[str, Any] | None:
+    """F5 — Mapa de calor β×ρ del modelo RSM con la región ≤ mejor + δ (0 CPU).
+
+    Lee la evidencia de C5 (Box-Behnken de β, ρ, I), evalúa la superficie en el plano β×ρ con
+    I en el centro, marca el contorno «mejor + δ» y superpone las celdas medidas. Es una lectura
+    **visual** de C5 que complementa a F1–F4; el veredicto sigue siendo el de C5/C6.
+    """
+    payload = _load_reference(db, phase="rsm", run_id=options.run_id)
+    if payload is None:
+        return None
+    from app.services.calibration_method_service import beta_rho_surface
+
+    surface = beta_rho_surface(payload, delta_km=options.delta_km)
+    if surface is None:
+        print("  ✗ La evidencia RSM no alcanza: falta el Box-Behnken completo de C5.")
+        return None
+    try:
+        from app.services.calibration_figures_service import render_beta_rho_heatmap
+    except ImportError as exc:  # matplotlib no disponible: el resto del protocolo sigue
+        print(f"  aviso        : sin figura (matplotlib no disponible: {exc})")
+        return None
+    path = _report_path().parent / "f5-heatmap-beta-rho.png"
+    if render_beta_rho_heatmap(surface, path) is None:
+        return None
+    print(f"  ✓ mapa β×ρ   : {path}")
+    print(
+        f"    mejor predicho {surface['bestKm']:.1f} km · umbral mejor+δ "
+        f"{surface['thresholdKm']:.1f} km (I = {surface['iterationsCenter']:g})"
+    )
+    return {"path": str(path), "bestKm": surface["bestKm"], "thresholdKm": surface["thresholdKm"]}
+
+
 PHASE_HANDLERS = {
     "noise": phase_noise,
     "factorial": phase_factorial,
@@ -867,6 +899,7 @@ PHASE_HANDLERS = {
     "validate": phase_validate,
     "objective": phase_objective,
     "report": phase_report,
+    "heatmap": phase_heatmap,
 }
 
 
