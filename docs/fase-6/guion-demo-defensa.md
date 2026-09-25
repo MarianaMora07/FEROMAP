@@ -19,7 +19,7 @@ No hace falta explicar “dos pantallas parecidas”: los banners y el menú ya 
 
 | Tiempo | Pantalla | Qué hacer | Qué decir (apoyado en la UI) |
 |--------|----------|-----------|------------------------------|
-| **0:00–0:45** | `/login` → `/` → `/simulation` | Iniciar sesión como planificador | Dashboard = hub del día (grupo **Tesis y demostración → Simulación ACO** para la evaluación del algoritmo) |
+| **0:00–0:45** | `/login` → `/` → `/simulation` | Iniciar sesión como planificador | Dashboard = hub del día (acceso a **Simulación ACO**, fuera del menú lateral, para la evaluación del algoritmo) |
 | **0:45–1:30** | `/simulation` paso 1 | Escenario **Tráfico pico** o toggles tráfico + saturación | «Aquí defino las condiciones del día: lluvia, avería, saturación… El sistema deriva el escenario automáticamente.» |
 | **1:30–2:00** | Paso 1 → **Continuar** | Revisar resumen lateral (vehículos, puntos) | «Antes de calcular, valida que hay camiones y contenedores suficientes.» |
 | **2:00–4:00** | Paso 2 | **Ejecutar simulación** | **Señalar el wizard:** aparece «Ejecutando — fase X de 8». **Stepper izquierdo:** 8 etapas en español claro. **Panel central:** «Qué está haciendo ahora» + barra de progreso real. **Mapa:** animación según la fase (red de calles → exploración → ruta final). |
@@ -96,7 +96,7 @@ Documentación técnica: [docs/fase-8/adr-dotacion-tiempo-servicio.md](../fase-8
 
 ### Secuencia
 
-1. **Ir a** `/demostracion` (grupo **Tesis y demostración → Demostración ACO**).
+1. **Ir a** `/demostracion` (fuera del menú lateral).
 2. **Pestaña Laberinto** (por defecto): pulsar **Modo presentación (60 s)** *o* **Iniciar demo**.
    - Narrar: «Cada hormiga elige el siguiente paso con probabilidad según feromonas (α) y distancia (β).»
    - Señalar el heatmap: azul = poca feromona, ámbar = mucha (contraste legible).
@@ -120,8 +120,8 @@ Si el tribunal quiere ver el flujo directivo real (semana completa):
 | Pantalla | Qué hacer | Qué decir |
 |---|---|---|
 | `/planning/weekly` · Configurar días | Mostrar **zonas por día** (pills que añaden puntos, repetibles) y **flota por tipo** | «El plan semanal es la configuración base: aquí decido qué zonas se cubren cada día y con qué flota, sin tocar el algoritmo.» |
-| Validar → Aprobar | Aprobar la semana | «Al aprobar queda congelada la cobertura.» |
-| Paso final: **Generar plan operativo de la semana** | Correr la generación (Lun→Vie en secuencia) | «El sistema optimiza cada día con el motor real usando esa configuración y me deja la tabla Camión × Día.» |
+| Validar (opcional) → Aprobar | Aprobar la semana | «La validación con el motor es opcional; la guarda al aprobar es el pre-flight. Si valido, el plan operativo ya queda calculado y «Ver plan» no repite el cálculo.» |
+| Paso final: **Generar plan operativo de la semana** (si no lo generó la validación) | Correr la generación (Lun→Vie en secuencia) | «El sistema optimiza cada día con el motor real usando esa configuración y me deja la tabla Camión × Día.» |
 | Tabla Camión × Día | Señalar filas/columnas + **Notificar** un día | «Veo qué camión sale cada día; notifico a los conductores y el estado queda persistido para Monitoreo.» |
 
 > Precaución: el motor real tarda; ensaya con semana pequeña o deja generado el plan antes de la demo (Plan B abajo).

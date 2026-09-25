@@ -182,7 +182,7 @@ Con `VITE_USE_MOCKS=false` en `.env` y el stack levantado:
 
 1. **Login** — `plan@fero.com` / `123456789`
 2. **Dashboard** (`/`) — hub del día: "Qué hacer ahora", accesos a Plan semanal y Monitoreo
-3. **Simulación ACO** (`/simulation`, grupo **Tesis y demostración**) — Configurar escenario → **Ejecutar simulación** → KPIs en paso 3
+3. **Simulación ACO** (`/simulation`, fuera del menú lateral) — Configurar escenario → **Ejecutar simulación** → KPIs en paso 3
 4. **Acciones post-resultado** — Reportes, mapa o Plan del día (deep links con `simulationId`)
 5. **Historial** — Pestaña Historial en `/simulation`
 6. *(Opcional)* **Plan del día** (`/optimization`) — pestaña Optimizar y despachar (generar → simular → despachar); pestaña **Pendientes** para carry-over

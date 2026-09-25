@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |-------|-------|
-| **Actualizado** | 2026-09-17 |
+| **Actualizado** | 2026-09-24 |
 | **Alcance** | Módulos del frontend vs. fase de implementación y estado |
 | **Relación** | [ux/arquitectura-navegacion.md](./ux/arquitectura-navegacion.md) define la IA destino; esta matriz indica qué está listo y qué falta |
 | **Leyenda** | ✅ sólido · 🟡 parcial (funciona; sin e2e o backend incompleto) · 🧪 demo/mocks · ⚠️ duplicado/andamiaje |
@@ -12,10 +12,11 @@
 | Módulo (ruta · etiqueta) | Fase IA | Estado | Evidencia / pendiente |
 |---|---|---|---|
 | `/` Dashboard (hub integrado) | 0–2 | ✅ | e2e `planner-dashboard` + `daily-planning` (hub). KPIs agregados por rol pendientes. |
-| `/planning/weekly` Plan semanal (config base) | 1–3 | ✅ | **Config base**: zonas por día + flota por tipo. Validar → Aprobar → **Generar plan operativo** (tabla Camión × Día) → notificar por día/todo. e2e `daily-planning` + `weekly-operational` (motor real, lento). |
+| `/planning/weekly` Plan semanal (config base) | 1–3 | ✅ | **Config base**: zonas por día + flota por tipo. Flujo: Configurar → **Validar (opcional)** → Aprobar → **plan operativo** (tabla Camión × Día) → notificar. Aprobar lo gobierna el **pre-flight** heurístico, no la validación. La validación **persiste** el plan operativo y «Ver plan» lo reutiliza: la semana se optimiza **una sola vez** (ver deuda §7). e2e `daily-planning` + `weekly-operational` (motor real, lento). |
 | `/optimization` Plan del día (tabs Optimizar/Resultados/Pendientes) | 1–4 | ✅ | Toolbar: Generar/Regenerar Plan Operativo + **Notificar a conductores** (aparece tras generar). Pendientes: cancelar antiguos / marcar ya visitado. e2e `daily-planning` (#pendientes) + `route-playback`. Los **parámetros del algoritmo** viven en `/settings`. |
 | `/settings` Configuración (sección *Algoritmo*) | 13 | ✅ | Parámetros del motor (ACO, heurísticos, calibración) + **objetivo multiobjetivo** (equidad, makespan, mín. vehículos, jornada objetivo, rotación semanal). Vitest `optimizationObjectiveUx`. Antes era una pestaña de `/optimization`. |
 | `/settings/calibration` Calibración del motor | 13 | ✅ | Consola de ambos barridos (sensibilidad ACO 18 corridas y pesos del objetivo) como **job asíncrono** con progreso `k/total`, ETA y cancelación; resultados desde caché con frontera de Pareto, AC-1/AC-2/AC-3 y export JSON/CSV. API `POST /benchmarks/*/jobs` + `GET /benchmarks/calibration/jobs/{id}` (`backend/docs/API.md`). Vitest `calibrationRunUx`, `calibrationSensitivityUx`, `calibrationObjectiveUx`, `calibrationExport`. |
+| `/evidence` Evidencias (hermana de Configuración) | 13 | ✅ | Pestañas con las tablas del capítulo de resultados: **comparativa** base vs optimizado (5 escenarios) y **validación estadística** (Wilcoxon + Holm). Lee la caché JSON compartida con las recetas `just` y la regenera como job con progreso. La pestaña de **casos de estudio** está implementada pero **oculta** (D8: el caso combinatorio es solo anexo). API `GET|POST /benchmarks/thesis/{kind}`; snapshot por `GET /simulations/jobs/{id}`. |
 | `/planning/history` Historial unificado | 0–2 | ✅ | e2e `daily-planning`. |
 | `/monitoring` Monitoreo (tabs Mapa en vivo / Incidencias) | 2–4 | 🟡 | e2e básico de tabs OK; avance de flota usa "demo" que muta BD; e2e profundo pendiente. |
 | `/map` Mapa GIS | — | ✅ | e2e `operational-map` + residente. |
@@ -183,5 +184,6 @@ Ciclo de mejora ejecutado sobre el rol planificador. Fuente de verdad de reglas:
    Header, Sidebar, UserMenu, AppShell, Table, ConfirmDialog, LoadingPanel, KpiCard y StatusBadge.
    El copy de las features sigue en español y migra de forma incremental. `<html lang>`/`dir` se
    sincronizan con el locale. PWA offline queda fuera de alcance (opcional).
-7. **Seeds/fixtures asumen Unare:** la configuración por zona ya es real, pero el seed y varios
+7. **Reutilización de la optimización semanal:** la validación (`POST /planning/weekly/{id}/validate`, `persist_operational=True`) y «Ver plan» (`POST …/generate-operational`) comparten una **firma de configuración** por día (puntos, escenario, flota esperada/por tipo y rotación; `weekly_operational_service._hash_signature`). Si coincide, el segundo paso reutiliza `operational_plan_json` sin re-optimizar. Límite conocido: un cambio de **parámetros del motor** entre ambos pasos no entra en la firma (se reutiliza igual); un día con `error` sí invalida el resumen y fuerza el recálculo.
+8. **Seeds/fixtures asumen Unare:** la configuración por zona ya es real, pero el seed y varios
    fixtures siguen creando un único conjunto Unare; parametrizarlos es incremental.

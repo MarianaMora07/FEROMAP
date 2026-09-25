@@ -38,7 +38,7 @@ Este documento es la **fuente de verdad** de la arquitectura de información (IA
 | **Primario** | Decisión frecuente (diaria/semanal), datos agregados/KPIs o herramienta transversal (mapa). | Fijo, siempre visible, arriba. |
 | **Consulta y reportes** | Resultados ya generados que se consultan (historial, reportes). | Grupo colapsable propio. |
 | **Catálogo** | Gestión esporádica: CRUD bajo demanda (se gestiona poco). | Grupo colapsable "Catálogos". |
-| **Tesis / demostración** | Evidencia académica y guion de defensa; no forma parte de la operación diaria. | Grupo colapsable "Tesis y demostración" con badge **demo** visible solo para rol `administrador`. |
+| **Tesis / demostración** | Evidencia académica y guion de defensa; no forma parte de la operación diaria. | **Oculta del sidebar** (2026-09-24, `DEMO_NAV_HIDDEN_HREFS`): los módulos siguen accesibles por URL. Al mostrarse, el grupo es colapsable con badge **demo** solo para `administrador`. |
 | **Utilidades** | Perfil, administración. | Bottom del sidebar. |
 | **Personas de campo** | Conductor y residente: nav mínima de 4 ítems. | No cambia con este documento. |
 
@@ -50,16 +50,17 @@ El orden de los primarios sigue el ciclo **planificar → operar → supervisar*
 
 | Nivel | Ítems (etiqueta · ruta) |
 |-------|-------------------------|
-| **Primarios** | Dashboard `/` · Plan semanal `/planning/weekly` · Plan del día `/optimization` · Monitoreo en vivo `/monitoring` · Mapa GIS `/map` · Configuración `/settings` |
+| **Primarios** | Dashboard `/` · Plan semanal `/planning/weekly` · Plan del día `/optimization` · Monitoreo en vivo `/monitoring` · Mapa GIS `/map` · Configuración `/settings` · Evidencias `/evidence` |
 | ▸ **Consulta y reportes** | Historial unificado `/planning/history` · Reportes `/reports` · Analítica `/analytics` |
 | ▸ **Catálogos** | Vehículos `/vehicles` · Conductores `/drivers` · Puntos de Recolección `/collection-points` |
-| ▸ **Tesis y demostración** | Simulación ACO `/simulation` · Casos de estudio `/case-studies` · Demostración ACO `/demostracion` |
+| ▸ **Tesis y demostración** | *(oculta del sidebar)* Simulación ACO `/simulation` · Casos de estudio `/case-studies` · Demostración ACO `/demostracion` |
 | **Bottom** | Administración `/admin` (solo admin) · Perfil `/profile` |
 
 Notas:
 - **Alertas** no aparece en el menú del planificador/administrador: se consume desde los paneles del Dashboard y del Monitoreo. La ruta `/alerts` se conserva (enlaces directos).
-- Los ítems de Tesis y demostración llevan badge **demo** para `administrador` (no para `planificador`), para no contaminar la demo operativa.
-- **Analítica** sí aparece (grupo «Consulta y reportes»). F6 reemplazó sus mocks por KPIs reales (`/api/v1/analytics/*`) y la sacó de `DEMO_NAV_HIDDEN_HREFS` (hoy vacío). Esto reconcilia §5 y §6, que aún decían «oculta».
+- **Evidencias** (`/evidence`) es **hermana de Configuración**, no una sección suya: reúne las tablas del capítulo de resultados (comparativa base vs optimizado y validación estadística) con la caché JSON que comparten las recetas `just`.
+- **Tesis y demostración** está **oculta del sidebar** (`DEMO_NAV_HIDDEN_HREFS` contiene `/simulation`, `/case-studies` y `/demostracion`): las rutas siguen vivas. `/simulation` conserva enlaces contextuales (`/optimization`, `/vehicles`, `/collection-points`); `/case-studies` y `/demostracion` quedan solo por URL directa. Sus ítems conservan `kind: 'demo'` (badge solo `administrador`) por si se vuelven a listar, lo que se hace vaciando ese set.
+- **Analítica** sí aparece (grupo «Consulta y reportes»). F6 reemplazó sus mocks por KPIs reales (`/api/v1/analytics/*`) y la sacó de `DEMO_NAV_HIDDEN_HREFS`. Esto reconcilia §5 y §6, que aún decían «oculta».
 
 ### Conductor (sin cambios)
 
@@ -79,6 +80,7 @@ Mi Recolección `/resident` · Mapa mi sector `/map?scope=sector` · Puntos de r
 | **Monitoreo en vivo** `/monitoring` | 1) Mapa en vivo · 2) Incidencias y alertas. Sin "modo campo" (eso es `/operator`). |
 | **Mapa GIS** `/map` | Capas + leyenda + playback de recorrido (solo lectura). |
 | **Configuración** `/settings` | 1) Algoritmo (motor ACO y objetivo) · 2) Calibración `/settings/calibration`: barridos de sensibilidad y pesos con job asíncrono. La consola es una **sección** de Configuración, no un destino propio del sidebar. |
+| **Evidencias** `/evidence` | 1) Comparativa · 2) Validación estadística. Cada pestaña lee la caché JSON de su receta `just` (0 CPU) y puede regenerarse como job con progreso. |
 | **Historial unificado** `/planning/history` | Buscador único: Semana / Día / Incidencia. Único destino de historial. |
 | **Reportes** `/reports` | Resumen → Generar / descargar → Guardados. |
 | **Simulación ACO** `/simulation` | 1) Baseline vs ACO · 2) Historial de simulaciones. Benchmarks y sensibilidad como subvistas de resultados. Sin contenido de Plan semanal. |
@@ -117,10 +119,11 @@ Mi Recolección `/resident` · Mapa mi sector `/map?scope=sector` · Puntos de r
 | `/map` | Conservar | Sin cambios. |
 | `/vehicles` `/drivers` `/collection-points` | Conservar · mover | Al grupo colapsable "Catálogos" (hoy son ítems fijos). |
 | `/alerts` | **Fuera del menú** (planner/admin) | Acceso desde paneles Dashboard/Monitoreo; ruta conservada. Sigue en la nav de conductor y residente. |
-| `/simulation` | Conservar · depurar | Al grupo "Tesis y demostración". Mover componentes `WeeklyPlan*` a `features/planning` (Fase 3). El redirect legacy `?view=weekly` → `/planning/weekly` ya está activo. |
-| `/case-studies` | Conservar | Al grupo "Tesis y demostración". |
-| `/demostracion` | Conservar | Al grupo "Tesis y demostración". |
-| `/analytics` | Conservar | **Visible** en el menú (F6). KPIs reales; `DEMO_NAV_HIDDEN_HREFS` está vacío. |
+| `/evidence` | **Nueva** | Evidencias de la evaluación: comparativa base vs optimizado y validación estadística (Wilcoxon). Caché JSON compartida con las recetas `just`. |
+| `/simulation` | **Fuera del menú** | Oculto en `DEMO_NAV_HIDDEN_HREFS`. Mover componentes `WeeklyPlan*` a `features/planning` (Fase 3) ya hecho. El redirect legacy `?view=weekly` → `/planning/weekly` sigue activo. |
+| `/case-studies` | **Fuera del menú** | Oculto en `DEMO_NAV_HIDDEN_HREFS`; ruta conservada. |
+| `/demostracion` | **Fuera del menú** | Oculto en `DEMO_NAV_HIDDEN_HREFS`; ruta conservada. |
+| `/analytics` | Conservar | **Visible** en el menú (F6). KPIs reales. |
 | `/reports` | Conservar | Grupo "Consulta y reportes". |
 | `/admin` `/profile` | Conservar | Bottom nav. |
 | `/operator` `/operator/plan` `/resident` | Conservar | Personas de campo; sin cambios. |
@@ -143,7 +146,7 @@ Mi Recolección `/resident` · Mapa mi sector `/map?scope=sector` · Puntos de r
 1. No se modifica la navegación de **conductor** ni **residente** (§3).
 2. No se oculta ni degrada un módulo que consuma datos reales del backend sin alternativa en Dashboard/Monitoreo.
 3. No se elimina una ruta referenciada por docs o e2e sin redirect.
-4. `/simulation` permanece accesible y funcional: es la pieza central del guion de defensa, aunque viva en el grupo "Tesis y demostración".
+4. `/simulation` permanece accesible y funcional: es la pieza central del guion de defensa, aunque no se liste en el sidebar.
 
 ## Referencias
 

@@ -46,13 +46,14 @@ La ruta se centraliza en una constante para poder moverla sin tocar componentes.
 - Página de calibración con: configuración del barrido, botón de ejecución, progreso, resumen, resultados por eje, frontera de Pareto, lectura automática, export.
 - Jobs asíncronos con progreso y cancelación.
 - Endpoints de resultados en caché (lectura) y de creación de jobs.
+- **Evidencia de la evaluación (tesis)** en una **página propia** (`/evidence`, hermana de Configuración en el sidebar) con dos pestañas visibles —comparativa base vs optimizado y validación estadística—, botón de ejecución y lectura de la caché JSON compartida con las recetas `just` (2026-09-24; ver §14).
 - i18n, permisos, navegación, `data-testid`, accesibilidad básica.
 - Tests backend (pytest) y frontend (vitest).
 
 **Excluido**
 
 - Editar la configuración de Administración desde esta vista (sigue en `/settings`).
-- Escribir el markdown de evidencia desde la UI (sigue siendo server-side).
+- Escribir el **markdown** de evidencia desde la UI (lo genera el CLI; la vista escribe la caché JSON).
 - Barridos con interacciones entre parámetros (el diseño es OFAT / un factor a la vez).
 - Robustez multi-semilla/multi-instancia (se anota como trabajo futuro).
 
@@ -379,3 +380,35 @@ stateDiagram-v2
 - Exportar/reemplazar el markdown de `evidencia-aco.md` desde la UI.
 - Unificación de la partición sectorial (D3c) para calibrar cruzando esa frontera.
 - Promoción del **rebose a objetivo** (requiere alinear su reloj y añadirlo a `objective_active`).
+
+## 14. Evidencia de la evaluación (tesis) — página `/evidence` (2026-09-24)
+
+Página propia, **hermana de Configuración** en el sidebar (no cuelga de `/settings`), con dos
+pestañas **visibles** que reproducen las tablas del capítulo de resultados y evitan salir a la
+consola para regenerarlas:
+
+| Pestaña | Qué ejecuta | Caché JSON (la comparten las recetas `just`) |
+|---|---|---|
+| **Comparativa** | `phase0-baseline`: 5 escenarios, base vs optimizado | `data/cache/phase0-baseline-metrics.json` |
+| **Validación estadística** | `wilcoxon`: Wilcoxon pareada por escenario (+ Holm) | `data/cache/statistical-validations.json` |
+| ~~**Casos de estudio**~~ *(oculta)* | Fase 12.7: los 4 casos demo | `data/cache/case-study-evidence.json` |
+
+> **Casos de estudio está oculta** por decisión de defensa (D8: el caso combinatorio es solo
+> anexo, no va en la demo en vivo). El runner, el endpoint (`/benchmarks/thesis/case_study`) y
+> `CaseStudyEvidenceTable` siguen disponibles: para volver a mostrarla basta añadir
+> `'case_study'` a `VISIBLE_KINDS` en `src/features/evidence/ThesisEvidenceSection.tsx`.
+
+- API: `GET /benchmarks/thesis/{kind}` (caché, 0 CPU; `404` si no se ha generado) y
+  `POST /benchmarks/thesis/{kind}/jobs` (job con progreso). El snapshot se consulta con el visor
+  compartido `GET /simulations/jobs/{id}`.
+- Servicio: `app/services/thesis_evidence_service.py` (los tres runners + lectura/escritura de la
+  caché). El CLI de `phase0-baseline` delega en él, así que consola y vista comparten una sola
+  ruta de cálculo.
+- **Secuencial en el API** (`workers=1`): el `fork` de un pool de procesos dentro de uvicorn con
+  hilos es riesgoso. Para lotes usa `just … --workers N`.
+- Frontend: `src/features/evidence/` (página + `ThesisEvidenceSection` + tablas). Ruta
+  `EVIDENCE_ROUTE` en `permissions.ts` (roles `administrador`/`planificador`), nav primario
+  «Evidencias» justo debajo de Configuración, `pageMeta` en el Header.
+- Sin cancelación: estos tres jobs no tienen botón de cancelar (a diferencia de los barridos).
+- Pendiente: el CLI de casos de estudio (`just phase12-evidence`) aún no escribe el JSON; la
+  caché de esa pestaña la produce la vista hasta que se unifique el bucle.

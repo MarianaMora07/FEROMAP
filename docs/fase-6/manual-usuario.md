@@ -26,16 +26,17 @@ El menú lateral se organiza por frecuencia de uso:
 
 | Nivel | Ítems |
 |-------|-------|
-| **Primarios** | Dashboard · Plan semanal · Plan del día · Monitoreo en vivo · Mapa GIS · Configuración |
+| **Primarios** | Dashboard · Plan semanal · Plan del día · Monitoreo en vivo · Mapa GIS · Configuración · Evidencias |
 | ▸ Consulta y reportes | Historial unificado · Reportes · Analítica |
 | ▸ Catálogos | Vehículos · Conductores · Puntos de Recolección |
-| ▸ Tesis y demostración | Simulación ACO · Casos de estudio · Demostración ACO |
+
+> **Tesis y demostración** (Simulación ACO · Casos de estudio · Demostración ACO) está **oculta del menú lateral**: los módulos siguen vivos por URL directa (`/simulation` además enlaza desde Configuración de parámetros del Plan del día, Vehículos y Puntos de recolección), para no mezclar el andamiaje de evaluación con la operación diaria.
 
 > El administrador ve etiquetas **demo / producto** junto a cada módulo para distinguir evidencia de tesis del producto operativo.
 >
 > La **campana** del encabezado abre las **Alertas** (`/alerts`); ese módulo no está en el menú lateral a propósito (se consume desde el Dashboard y el Monitoreo). **Configuración** agrupa *Algoritmo* y *Calibración*; la calibración tiene un enlace de vuelta a Configuración.
 >
-> Los grupos colapsables (**Consulta y reportes**, **Catálogos**, **Tesis y demostración**) se abren solos cuando contienen la ruta activa y son operables por teclado.
+> Los grupos colapsables (**Consulta y reportes**, **Catálogos**) se abren solos cuando contienen la ruta activa y son operables por teclado.
 
 **¿Qué módulo usar?**
 
@@ -48,7 +49,7 @@ El menú lateral se organiza por frecuencia de uso:
 | Ver la flota en el mapa / atender incidencias | **Monitoreo en vivo** (pestañas Mapa en vivo / Incidencias y alertas) |
 | Buscar una semana, un día o una incidencia | **Historial unificado** (`/planning/history`) |
 | Exportar reportes | **Reportes** (`/reports`) |
-| Evaluar el algoritmo (tesis) | **Simulación ACO** (grupo Tesis y demostración) |
+| Evaluar el algoritmo (tesis) | **Evidencias** (`/evidence`) — comparativa base vs optimizado y validación estadística; o **Simulación ACO** para una corrida puntual |
 | Consultar mapa de contenedores/rutas | **Mapa GIS** (`/map`) |
 
 ---
@@ -66,8 +67,8 @@ El Dashboard **absorbió el antiguo "Hub de planificación"**: al entrar como pl
 
 1. Menú primario → **Plan semanal** (`/planning/weekly`).
 2. En **Configurar días**: elija las **zonas** que se cubrirán cada día (una zona añade todos sus puntos y puede repetirse en varios días) y defina la **flota de la semana por tipo** (o use **Todos (por defecto)**). Guarde el borrador.
-3. **Validar** (motor real por día) y luego **Aprobar**. Hasta aprobar, el Plan del día está bloqueado.
-4. Tras aprobar, en el paso final: **Generar plan operativo de la semana** — el sistema optimiza Lun→Vie **en secuencia** (barra de progreso) y muestra la tabla **Camión × Día** (km, duración y puntos por camión).
+3. **Aprobar** la semana. La guarda al aprobar es el **pre-flight** heurístico (demanda estimada vs capacidad de la flota); la **validación con el motor** es **opcional** y sirve para previsualizar kilometraje y asignaciones. Si validas, el plan operativo queda calculado y «Ver plan» lo reutiliza (la semana se optimiza una sola vez). Hasta aprobar, el Plan del día está bloqueado.
+4. En el paso de aprobación usa **Ver plan** para abrir el plan operativo (si aún no se optimizó, se genera Lun→Vie **en secuencia** con barra de progreso; si ya lo hizo la validación, es inmediato). Tras aprobar, el paso final muestra la tabla **Camión × Día** (km, duración y puntos por camión) y permite **Notificar** un día o toda la semana.
 5. Desde esa tabla puede **Abrir día** (ir a `/optimization` de esa fecha) y **Notificar** a los conductores **por día o toda la semana** (la acción pide confirmación; es irreversible por día).
 6. Consulte **Versiones** y **Exportar PDF** en la etapa de configuración.
 
@@ -95,7 +96,7 @@ El Dashboard **absorbió el antiguo "Hub de planificación"**: al entrar como pl
 
 ## 8. Simulación ACO (tesis)
 
-Grupo **Tesis y demostración → Simulación ACO** (`/simulation`):
+**Simulación ACO** (`/simulation`, fuera del menú lateral):
 
 - Pestaña **Baseline vs ACO**: configura escenario (condiciones, parámetros αβρ, dotación) → ejecuta → KPIs comparativos y exportaciones.
 - Pestaña **Historial**: corridas anteriores con `?simulationId=…` para abrir resultados directo.
