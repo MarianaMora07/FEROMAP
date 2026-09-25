@@ -516,7 +516,6 @@ export default function MonitoringPage() {
       <Show when={!fieldMode()}>
         <ContingencyResultBanner />
         <MonitoringDeskIntro
-          variant={isOperationalSupervisor(authUser()?.role) ? 'supervisor' : 'planner'}
           fleetInRoute={monitoringData()?.fleetCounts.inRoute ?? 0}
           operationDate={operationDate()}
           dailyPlanId={dailyPlanIdParam()}

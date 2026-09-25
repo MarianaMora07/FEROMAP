@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, onMount, type JSX } from 'solid-js';
-import { A, useSearchParams } from '@solidjs/router';
+import { useSearchParams } from '@solidjs/router';
 import {
   Chart,
   ArcElement,
@@ -14,7 +14,6 @@ import {
 import { Doughnut, Line } from 'solid-chartjs';
 import {
   ArrowDownRight,
-  ArrowRight,
   ArrowUpRight,
   Clock,
   Download,
@@ -599,12 +598,6 @@ export default function ReportsPage() {
           </table>
         </div>
         </Show>
-        <div class="mt-4 flex justify-end">
-          <A href="/reports" class="inline-flex items-center gap-1 text-sm font-medium text-fero-blue hover:underline">
-            Ver todos los reportes
-            <ArrowRight size={14} />
-          </A>
-        </div>
       </Card>
     </div>
     </Show>

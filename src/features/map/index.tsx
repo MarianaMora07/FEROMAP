@@ -14,7 +14,7 @@ import { fetchDailyRoutePlayback } from '../../core/api/routePlayback';
 import { fetchOperatorRouteSnapshot } from '../../core/api/operator';
 import { fetchResidentOverview } from '../../core/api/resident';
 import { isConductor, isResident } from '../../core/auth/permissions';
-import { authUser } from '../../core/stores/authStore';
+import { authUser, logout } from '../../core/stores/authStore';
 import { fleetForOperatorField } from '../../core/operator/operatorMonitoringUx';
 import { parseVehicleIdParam } from '../../core/operator/operatorDeepLinks';
 import {
@@ -401,6 +401,11 @@ export default function MapPage() {
     setCameraMode('free');
     setPlaybackOpen(false);
     if (getMap()?.isStyleLoaded()) syncOverlayLayers();
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login', { replace: true });
   };
 
   const setMapOperationDate = (date: string) => {
@@ -957,6 +962,7 @@ export default function MapPage() {
         notificationCount={dashboardSummary().notifications}
         onToggleSidebar={toggleSidebar}
         onToggleDarkMode={toggleDarkMode}
+        onLogout={() => void handleLogout()}
         onOpenPlayback={handleOpenPlayback}
         onToggleLayers={() => setLayersOpen((v) => !v)}
         onToggleLegend={() => setLegendOpen((v) => !v)}

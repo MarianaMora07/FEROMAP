@@ -843,9 +843,13 @@ export default function OptimizationPage() {
           />
           <p class="text-sm text-text-muted">
             ¿Terminaste con los pendientes?{' '}
-            <A href="/optimization" class="font-medium text-fero-blue hover:underline">
+            <button
+              type="button"
+              onClick={() => setPlanTab('plan')}
+              class="font-medium text-fero-blue hover:underline"
+            >
               Volver a planificar el día
-            </A>
+            </button>
             .
           </p>
         </div>

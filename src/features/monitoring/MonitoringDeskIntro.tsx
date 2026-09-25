@@ -7,7 +7,6 @@ import { optimizationHref } from '../../core/planning/operationalLinks';
 import { PlanningStatusBadge } from '../planning/PlanningStatusBadge';
 
 interface MonitoringDeskIntroProps {
-  variant: 'planner' | 'supervisor';
   fleetInRoute: number;
   operationDate: string;
   dailyPlanId?: number;
@@ -29,9 +28,7 @@ export function MonitoringDeskIntro(props: MonitoringDeskIntroProps) {
       <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div class="min-w-0 space-y-1">
           <p class="text-sm text-text-secondary">
-            {props.variant === 'supervisor'
-              ? 'Supervisión operativa — flota e incidencias del día.'
-              : 'Estado de la flota — rutas e incidencias del día.'}
+            Supervisión operativa — flota e incidencias del día.
             <span class="text-text-muted"> · {props.fleetInRoute} en ruta</span>
           </p>
           <Show when={props.dailyPlan}>
@@ -49,12 +46,10 @@ export function MonitoringDeskIntro(props: MonitoringDeskIntroProps) {
           </Show>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <Show when={props.variant === 'supervisor'}>
-            <A href={planHref()} class="inline-flex items-center gap-1 text-sm font-medium text-fero-blue hover:underline">
-              Plan del día
-              <ArrowRight size={14} aria-hidden="true" />
-            </A>
-          </Show>
+          <A href={planHref()} class="inline-flex items-center gap-1 text-sm font-medium text-fero-blue hover:underline">
+            Plan del día
+            <ArrowRight size={14} aria-hidden="true" />
+          </A>
           <A href="/vehicles" class="inline-flex items-center gap-1 text-sm font-medium text-fero-blue hover:underline">
             Vehículos
             <ArrowRight size={14} aria-hidden="true" />
@@ -63,15 +58,6 @@ export function MonitoringDeskIntro(props: MonitoringDeskIntroProps) {
             Alertas
             <ArrowRight size={14} aria-hidden="true" />
           </A>
-          <Show when={props.variant === 'planner' && props.dailyPlan}>
-            <A
-              href={planHref()}
-              class="inline-flex items-center gap-1 rounded-full border border-default bg-surface px-3 py-1 text-xs font-medium text-text-secondary transition-colors hover:border-fero-blue/40 hover:text-text-primary"
-            >
-              Abrir optimización
-              <ArrowRight size={12} aria-hidden="true" />
-            </A>
-          </Show>
         </div>
       </div>
     </div>

@@ -25,6 +25,7 @@ export interface MapToolbarProps {
   notificationCount: number;
   onToggleSidebar: () => void;
   onToggleDarkMode: () => void;
+  onLogout: () => void;
   onOpenPlayback: () => void;
   onToggleLayers: () => void;
   onToggleLegend: () => void;
@@ -102,16 +103,18 @@ export function MapToolbar(props: MapToolbarProps) {
           {props.darkMode ? <Sun size={18} /> : <Moon size={18} />}
         </button>
         <Show when={!props.isResidentUser}>
-          <button
-            type="button"
+          <A
+            href="/alerts"
             class="relative flex h-9 w-9 items-center justify-center rounded-md text-text-secondary hover:bg-app"
             aria-label="Notificaciones"
           >
             <Bell size={18} />
-            <span class="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-              {props.notificationCount}
-            </span>
-          </button>
+            <Show when={props.notificationCount > 0}>
+              <span class="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                {props.notificationCount}
+              </span>
+            </Show>
+          </A>
         </Show>
         <Show when={props.isResidentUser}>
           <A
@@ -131,11 +134,14 @@ export function MapToolbar(props: MapToolbarProps) {
           >
             <Maximize2 size={18} />
           </button>
-          <A href="/login">
-            <Button variant="gradient" size="sm" icon={<LogOut size={14} />}>
-              Salir
-            </Button>
-          </A>
+          <Button
+            variant="gradient"
+            size="sm"
+            icon={<LogOut size={14} />}
+            onClick={() => void props.onLogout()}
+          >
+            Salir
+          </Button>
         </Show>
         <Show when={props.isResidentUser}>
           <A href="/resident">
