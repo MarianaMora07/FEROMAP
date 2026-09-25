@@ -28,7 +28,6 @@ function lazyPage(loader: () => Promise<{ default: Component }>) {
 
 const DashboardPage = lazyPage(() => import('../features/dashboard'));
 const OptimizationPage = lazyPage(() => import('../features/optimization'));
-const OptimizationLevelsPage = lazyPage(() => import('../features/optimization/OptimizationLevelsPage'));
 const DaySimulationPage = lazyPage(() => import('../features/optimization/DaySimulationPage'));
 const MapPage = lazyPage(() => import('../features/map'));
 const VehiclesPage = lazyPage(() => import('../features/vehicles'));
@@ -83,7 +82,8 @@ export default function App() {
         <Route path="/" component={DashboardPage} />
         <Route path="/optimization" component={OptimizationPage} />
         <Route path="/optimization/simulation" component={DaySimulationPage} />
-        <Route path="/optimization/levels" component={OptimizationLevelsPage} />
+        {/* URL legada (andamiaje de tesis): redirige al plan semanal. */}
+        <Route path="/optimization/levels" component={() => <Navigate href="/planning/weekly" />} />
         <Route path="/operator" component={OperatorPage} />
         <Route path="/operator/plan" component={OperatorDailyPlanPage} />
         <Route path="/operator/notifications" component={OperatorNotificationsPage} />

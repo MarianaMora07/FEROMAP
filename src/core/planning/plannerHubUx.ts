@@ -59,7 +59,7 @@ export function deriveNextPlannerAction(snapshot: PlanningDashboardSnapshot): Pl
   if (!daily) {
     return {
       message: 'Hoy sin plan del día',
-      detail: 'Abre el plan del día para optimizar rutas.',
+      detail: 'Abre el plan del día para generar las rutas del día.',
       href: optimizationDateHref(today),
       label: 'Abrir plan de hoy',
       tone: 'warning',
@@ -81,7 +81,7 @@ export function deriveNextPlannerAction(snapshot: PlanningDashboardSnapshot): Pl
   if (!isDispatched && daily.status !== 'completed' && daily.status !== 'partial') {
     return {
       message: 'Hoy sin despachar',
-      detail: `${daily.pointCount} puntos en plan · optimiza y despacha cuando esté listo.`,
+      detail: `${daily.pointCount} puntos en plan · genera y despacha las rutas del día.`,
       href: optimizationHref({ date: daily.operationDate, dailyPlanId: daily.id }),
       label: 'Optimizar hoy',
       tone: 'warning',

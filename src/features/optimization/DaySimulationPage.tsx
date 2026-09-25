@@ -138,8 +138,8 @@ export default function DaySimulationPage() {
         <div class="rounded-xl border border-dashed border-default bg-surface/40 px-4 py-10 text-center">
           <p class="text-base font-semibold text-text-primary">No hay un día seleccionado</p>
           <p class="mx-auto mt-1 max-w-md text-sm text-text-muted">
-            Abre la simulación desde el plan del día (botón «Simular día») para animar su recorrido
-            y las contingencias.
+            Abre la simulación desde el plan del día (botón «Simular día (dry-run)») para animar su
+            recorrido y las contingencias.
           </p>
           <div class="mt-4 flex justify-center">
             <A href="/optimization">

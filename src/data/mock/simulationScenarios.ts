@@ -1,5 +1,5 @@
 export const simulationPageMeta = {
-  title: 'Simulación de tesis',
+  title: 'Simulación ACO (tesis)',
   subtitle: 'Compara baseline vs ACO en escenario normal — evaluación del motor, sin despacho.',
 };
 

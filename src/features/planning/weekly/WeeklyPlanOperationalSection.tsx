@@ -4,38 +4,24 @@ import { CalendarRange, ExternalLink, Radio, RefreshCw, Send, Truck, Zap } from 
 import { Button } from '../../../design-system/components';
 import { fetchAlgorithmSettings, updateAlgorithmSettings } from '../../../core/api/admin';
 import {
-  dispatchDailyPlan,
   notifyWeeklyOperationalDays,
   type WeeklyOperationalPlan,
   type WeeklyPlanDayOperational,
-  type WeeklyPlanForecast,
 } from '../../../core/api/planning';
 import { generateWeeklyOperationalPlanForWeek, selectWeeklyPlan } from '../../../core/stores/weeklyPlanStore';
 import { optimizationHref, monitoringHref } from '../../../core/planning/operationalLinks';
 import { optimizationDateHref, todayIso } from '../../../core/planning/planningUx';
 import { WEEKDAY_LABELS } from '../../../core/planning/weeklyPlanCalendar';
-import { weeklyPlanSavingPct } from '../../../core/planning/weeklyPlanUx';
 
 interface WeeklyPlanOperationalSectionProps {
   planId: number;
   operationalPlan?: WeeklyOperationalPlan | null;
-  /** Mejoras previstas de la semana (Fase 2); aporta la línea base para el ahorro. */
-  forecast?: WeeklyPlanForecast | null;
 }
 
 function formatShortDate(iso: string): string {
   const [year, month, day] = iso.split('-').map(Number);
   void year;
   return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}`;
-}
-
-function dayTotals(day: WeeklyPlanDayOperational): { km: number; min: number; stops: number } {
-  const routes = day.vehicles ?? [];
-  return {
-    km: routes.reduce((sum, route) => sum + (route.distanceKm || 0), 0),
-    min: routes.reduce((sum, route) => sum + (route.durationMin || 0), 0),
-    stops: routes.reduce((sum, route) => sum + (route.stops || 0), 0),
-  };
 }
 
 export function WeeklyPlanOperationalSection(props: WeeklyPlanOperationalSectionProps) {
@@ -47,8 +33,6 @@ export function WeeklyPlanOperationalSection(props: WeeklyPlanOperationalSection
   const [phase, setPhase] = createSignal('');
   const [error, setError] = createSignal<string | null>(null);
   const [notice, setNotice] = createSignal('');
-  const [notifiedDays, setNotifiedDays] = createSignal<Set<string>>(new Set());
-  const [notifyingDay, setNotifyingDay] = createSignal<string | null>(null);
   const [localPlan, setLocalPlan] = createSignal<WeeklyOperationalPlan | null>(null);
   /** Rotación de flota: ajuste global del motor (`algorithm_settings`), no de la corrida. */
   const [rotation, setRotation] = createSignal<boolean | null>(null);
@@ -135,13 +119,13 @@ export function WeeklyPlanOperationalSection(props: WeeklyPlanOperationalSection
       await selectWeeklyPlan(props.planId);
       if (response.count > 0) {
         setNotice(
-          `${response.count} de ${Math.max(eligible, response.count)} día(s) notificado(s) a conductores.`,
+          `${response.count} de ${Math.max(eligible, response.count)} día(s) despachado(s) a conductores.`,
         );
       } else {
-        setNotice('No quedaban días optimizados por notificar.');
+        setNotice('No quedaban días optimizados por despachar.');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo notificar la semana');
+      setError(err instanceof Error ? err.message : 'No se pudo despachar la semana');
     } finally {
       setNotifyingAll(false);
       setConfirmAll(false);
@@ -170,24 +154,6 @@ export function WeeklyPlanOperationalSection(props: WeeklyPlanOperationalSection
     }
   };
 
-  const notifyDay = async (day: WeeklyPlanDayOperational) => {
-    if (!day.dailyPlanId) return;
-    setNotifyingDay(day.operationDate);
-    setError(null);
-    setNotice('');
-    try {
-      await dispatchDailyPlan(day.dailyPlanId);
-      setNotifiedDays((current) => new Set(current).add(day.operationDate));
-      setNotice(
-        `Día ${day.operationDate}: ${day.vehicles?.length ?? 0} ruta(s) notificada(s) a conductores.`,
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo notificar el día');
-    } finally {
-      setNotifyingDay(null);
-    }
-  };
-
   return (
     <section
       class="space-y-3 rounded-xl border border-border bg-surface/40 p-4 dark:border-dark-border"
@@ -203,7 +169,7 @@ export function WeeklyPlanOperationalSection(props: WeeklyPlanOperationalSection
             <p class="mt-0.5 text-xs text-text-muted">
               Genera las rutas de todos los días (Lun–Vie) en secuencia con el motor real, usando
               las zonas y la flota por tipo configuradas, y abre la planificación operativa del
-              primer día. Luego notifica día a día.
+              primer día. Luego despacha día a día.
             </p>
           </div>
         </div>
@@ -218,7 +184,7 @@ export function WeeklyPlanOperationalSection(props: WeeklyPlanOperationalSection
               data-testid="weekly-notify-all"
               onClick={() => setConfirmAll(true)}
             >
-              Notificar toda la semana
+              Despachar semana
             </Button>
           </Show>
           <Show when={planDays().length === 0 || running()}>
@@ -266,12 +232,12 @@ export function WeeklyPlanOperationalSection(props: WeeklyPlanOperationalSection
           data-testid="weekly-notify-all-confirm"
         >
           <p class="text-sm text-amber-900 dark:text-amber-100">
-            ¿Notificar {optimizedDays().length} día(s) optimizado(s) a los conductores? Esta acción
+            ¿Despachar {optimizedDays().length} día(s) optimizado(s) a los conductores? Esta acción
             envía las rutas a campo y no se puede deshacer por día.
           </p>
           <div class="flex gap-2">
             <Button size="sm" variant="primary" loading={notifyingAll()} onClick={() => void notifyAll()}>
-              Sí, notificar todos
+              Sí, despachar todos
             </Button>
             <Button size="sm" variant="outline" disabled={notifyingAll()} onClick={() => setConfirmAll(false)}>
               Cancelar
@@ -312,8 +278,7 @@ export function WeeklyPlanOperationalSection(props: WeeklyPlanOperationalSection
                 <th class="px-2 py-2 font-semibold">Camión</th>
                 <For each={planDays()}>
                   {(day) => {
-                    const notified = notifiedDays().has(day.operationDate);
-                    const live = notified ? 'dispatched' : (day.status ?? '');
+                    const live = day.status ?? '';
                     return (
                       <th class="px-2 py-2 text-center align-top font-semibold">
                         <div>{WEEKDAY_LABELS[day.weekday] ?? day.weekday}</div>
@@ -354,8 +319,7 @@ export function WeeklyPlanOperationalSection(props: WeeklyPlanOperationalSection
                 <td class="px-2 py-1.5 text-xs text-text-muted">Estado</td>
                 <For each={planDays()}>
                   {(day) => {
-                    const notified = notifiedDays().has(day.operationDate);
-                    const statusClass = notified || day.status === 'dispatched'
+                    const statusClass = day.status === 'dispatched'
                       ? 'bg-fero-blue/15 text-fero-blue'
                       : day.status === 'closed'
                         ? 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
@@ -364,7 +328,7 @@ export function WeeklyPlanOperationalSection(props: WeeklyPlanOperationalSection
                           : day.status === 'error'
                             ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'
                             : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400';
-                    const statusLabel = notified || day.status === 'dispatched'
+                    const statusLabel = day.status === 'dispatched'
                       ? 'Notificado'
                       : day.status === 'closed'
                         ? 'Cerrado'
@@ -423,75 +387,8 @@ export function WeeklyPlanOperationalSection(props: WeeklyPlanOperationalSection
                 </For>
               </Show>
 
-              <tr class="bg-surface/60 dark:bg-dark-surface-hover/40">
-                <td class="px-2 py-2 text-xs font-semibold text-text-primary dark:text-white">
-                  Total día
-                </td>
-                <For each={planDays()}>
-                  {(day) => {
-                    const totals = dayTotals(day);
-                    const hasRoutes =
-                      day.status === 'optimized' || day.status === 'dispatched';
-                    return (
-                      <td class="px-2 py-2 text-center text-xs text-text-secondary">
-                        <Show when={hasRoutes}>
-                          <p class="font-semibold text-text-primary dark:text-white">
-                            {totals.km.toFixed(1)} km
-                          </p>
-                          <p>
-                            {Math.floor(totals.min / 60)} h {totals.min % 60} min
-                          </p>
-                          <p>{totals.stops} pts</p>
-                        </Show>
-                      </td>
-                    );
-                  }}
-                </For>
-              </tr>
-
-              <tr>
-                <td class="px-2 py-1.5 text-xs text-text-muted">Ahorro</td>
-                <For each={planDays()}>
-                  {(day) => {
-                    const baseline =
-                      props.forecast?.days?.[day.operationDate]?.baselineDistanceKm ?? null;
-                    const saving = weeklyPlanSavingPct(baseline, day.distanceKm ?? null);
-                    return (
-                      <td class="px-2 py-1.5 text-center text-xs font-semibold text-fero-green-dark">
-                        {saving != null ? `${saving.toFixed(1)}%` : '—'}
-                      </td>
-                    );
-                  }}
-                </For>
-              </tr>
             </tbody>
           </table>
-
-          <div class="mt-3 flex flex-wrap gap-2">
-            <For each={planDays()}>
-              {(day) => (
-                <Show
-                  when={
-                    day.dailyPlanId != null &&
-                    (day.status === 'optimized' || day.status === 'dispatched') &&
-                    !notifiedDays().has(day.operationDate)
-                  }
-                >
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    class="gap-1.5"
-                    icon={<Send size={13} />}
-                    disabled={notifyingDay() != null}
-                    data-testid={`weekly-notify-day-${day.operationDate}`}
-                    onClick={() => void notifyDay(day)}
-                  >
-                    Notificar {WEEKDAY_LABELS[day.weekday] ?? day.weekday} · {formatShortDate(day.operationDate)}
-                  </Button>
-                </Show>
-              )}
-            </For>
-          </div>
         </div>
       </Show>
     </section>

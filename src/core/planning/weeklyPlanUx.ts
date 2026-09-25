@@ -1,4 +1,4 @@
-import type { PlanForecast, WeeklyPlan, WeeklyPlanForecast, WeeklyPlanPreflight } from '../api/planning';
+import type { PlanForecast, WeeklyPlan, WeeklyPlanForecast } from '../api/planning';
 import { optimizationDateHref, todayIso } from './planningUx';
 
 export type WeeklyPlanPrimaryActionId = 'autofill' | 'validate' | 'approve' | 'goToDay';
@@ -14,7 +14,7 @@ export interface WeeklyPlanNextAction {
 
 export const weeklyPlanFlowSteps = [
   { id: 1, label: 'Configurar días', guide: 'asigna puntos por día y la condición de la semana' },
-  { id: 2, label: 'Validar', guide: 'valida (opcional) con una simulación rápida; también puedes aprobar con el pre-flight' },
+  { id: 2, label: 'Validar', guide: 'valida (opcional) con una simulación rápida; también puedes aprobar directamente' },
   { id: 3, label: 'Aprobar', guide: 'revisa el resultado y aprueba para habilitar el plan del día' },
   { id: 4, label: 'Ir al día', guide: 'continúa en planificación operativa para optimizar y despachar' },
 ] as const;
@@ -176,26 +176,6 @@ export function buildWeeklyPlanForecastFromValidation(
     vehicleCount,
     days: byDay,
   };
-}
-
-export interface WeeklyPlanPreflightIssue {
-  operationDate: string;
-  overloaded: boolean;
-  insufficientFleet: boolean;
-}
-
-/** Días con problemas de viabilidad (sobrecapacidad o flota insuficiente). */
-export function weeklyPlanPreflightIssues(
-  preflight: WeeklyPlanPreflight | null | undefined,
-): WeeklyPlanPreflightIssue[] {
-  if (!preflight?.rows?.length) return [];
-  return preflight.rows
-    .filter((row) => row.overloaded || row.insufficientFleet)
-    .map((row) => ({
-      operationDate: row.operationDate ?? '—',
-      overloaded: Boolean(row.overloaded),
-      insufficientFleet: Boolean(row.insufficientFleet),
-    }));
 }
 
 export interface WeeklyPlanPostApprovalStep {

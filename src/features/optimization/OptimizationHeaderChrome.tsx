@@ -1,13 +1,11 @@
 import { Show, createMemo, createSignal } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { A, useNavigate } from '@solidjs/router';
-import { ChevronLeft, ChevronRight, Loader2, Play, Radio, Send, Sparkles, AlertTriangle } from 'lucide-solid';
+import { ChevronLeft, ChevronRight, Flag, Loader2, Radio, Sparkles } from 'lucide-solid';
 import { Button, Drawer } from '../../design-system/components';
 import { canOptimize } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
 import {
-  approveCurrentWeekFromDay,
-  dispatchOptimizationResult,
   executeOptimization,
   openOptimizationPlayback,
   optimizationState,
@@ -15,8 +13,15 @@ import {
   selectOperationDate,
   cancelOptimization,
 } from '../../core/stores/optimizationStore';
-import { shiftWeek, mondayOfDate } from '../../core/planning/dailyPlanningUx';
+import { dailyPlanStatusLabel } from '../../core/map/mapPlaybackUx';
+import {
+  DAILY_CALENDAR_STATUS_STYLES,
+  mapDailyStatusToCalendar,
+  shiftWeek,
+  mondayOfDate,
+} from '../../core/planning/dailyPlanningUx';
 import { monitoringHref, optimizationHref } from '../../core/planning/operationalLinks';
+import { PLANNING_LEVELS } from '../../core/planning/planningUx';
 import { weeklyPlanWeekHref } from '../../core/planning/weeklyPlanLinks';
 import { OptimizationWeekCalendarPopover } from './OptimizationWeekCalendarPopover';
 import { OptimizationExperienceStepper } from './OptimizationExperienceStepper';
@@ -25,15 +30,18 @@ import {
   optimizationToolbarSummary,
 } from './optimizationLayoutUx';
 import { DailyScenarioBanner } from './DailyScenarioBanner';
-import { OptimizationDayActualsPanel } from './OptimizationDayActualsPanel';
-import { OptimizationContingencySimulator } from './OptimizationContingencySimulator';
 import type { ScenarioId } from '../../data/types/simulation';
 
-export function OptimizationHeaderBar(props: { onSimulateDay?: () => void } = {}) {
+export function OptimizationHeaderBar(
+  props: {
+    onCloseDay?: () => void;
+    notifiedCount?: number | null;
+    onViewResults?: () => void;
+  } = {},
+) {
   const navigate = useNavigate();
   const [stepDrawerOpen, setStepDrawerOpen] = createSignal(false);
   const [gateOpen, setGateOpen] = createSignal(false);
-  const [contingencyOpen, setContingencyOpen] = createSignal(false);
   const dailyPlan = () => optimizationState.dailyPlan;
   const selectedDate = () => optimizationState.preset.operationDate;
   const hasResults = () => optimizationState.kpis != null;
@@ -42,7 +50,49 @@ export function OptimizationHeaderBar(props: { onSimulateDay?: () => void } = {}
   const showGenerate = () => !hasResults() || optimizationState.isOptimizing;
   const isDispatched = () => dailyPlan()?.status === 'dispatched';
   const isPlanClosed = () => dailyPlan()?.status === 'closed';
-  const generateActionLabel = () => 'Generar Plan Operativo';
+  const generateActionLabel = () => 'Generar rutas del día';
+  // Nivel de planificación de esta pantalla (D5): administrativo/día.
+  const levelChip = () => PLANNING_LEVELS.administrativo;
+  // Estado del día (D9): texto crudo (Parcial/Cerrado…) con el tono del calendario.
+  const dayStatus = () => dailyPlan()?.status;
+  const statusChip = () => {
+    const status = dayStatus();
+    if (!status) return null;
+    return {
+      label: dailyPlanStatusLabel(status),
+      cell: DAILY_CALENDAR_STATUS_STYLES[mapDailyStatusToCalendar(status)].cell,
+    };
+  };
+  // D3: el despacho es automático; la barra solo informa su resultado.
+  const notifyIndicator = () => {
+    if (isDispatched()) {
+      const count = props.notifiedCount ?? null;
+      return {
+        toneClass: 'border-fero-green/30 bg-fero-green/10 text-fero-green-dark dark:text-fero-green',
+        label:
+          count != null
+            ? `Conductores notificados · ${count} ruta${count === 1 ? '' : 's'}`
+            : 'Conductores notificados',
+      };
+    }
+    if (
+      hasResults() &&
+      mapDailyStatusToCalendar(dayStatus()) !== 'closed' &&
+      optimizationState.weeklyPlanApproved
+    ) {
+      return optimizationState.isDispatching
+        ? {
+            toneClass: 'border-fero-blue/30 bg-fero-blue/10 text-fero-blue',
+            label: 'Notificando a conductores…',
+          }
+        : {
+            toneClass:
+              'border-amber-300/60 bg-amber-50 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200',
+            label: 'Conductores sin notificar',
+          };
+    }
+    return null;
+  };
   const pointCount = () => dailyPlan()?.finalPointIds.length ?? optimizationState.context?.pointsToVisit ?? 0;
   const monitoringLink = () =>
     isDispatched()
@@ -55,7 +105,6 @@ export function OptimizationHeaderBar(props: { onSimulateDay?: () => void } = {}
   const summaryLabel = () =>
     optimizationToolbarSummary({
       operationDate: selectedDate(),
-      status: dailyPlan()?.status,
       pointCount: pointCount(),
     });
 
@@ -66,14 +115,6 @@ export function OptimizationHeaderBar(props: { onSimulateDay?: () => void } = {}
       playbackOpen: optimizationState.playbackOpen,
       weeklyPlanApproved: optimizationState.weeklyPlanApproved,
     });
-
-  const weekRange = createMemo(() => {
-    const start = optimizationState.weekStartDate;
-    if (!start) return null;
-    const end = new Date(`${start}T00:00:00Z`);
-    end.setUTCDate(end.getUTCDate() + 6);
-    return { start, end: end.toISOString().slice(0, 10) };
-  });
 
   const nextWeek = createMemo(() => {
     const start = optimizationState.weekStartDate;
@@ -101,7 +142,7 @@ export function OptimizationHeaderBar(props: { onSimulateDay?: () => void } = {}
   return (
     <>
       <div
-        class="flex w-full min-w-0 items-center justify-between gap-x-2"
+        class="flex w-full min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1.5"
         data-testid="optimization-sticky-toolbar"
       >
         <div class="flex min-w-0 items-center gap-1">
@@ -128,6 +169,22 @@ export function OptimizationHeaderBar(props: { onSimulateDay?: () => void } = {}
             summaryLabel={summaryLabel()}
             onDateSelect={navigateToDate}
           />
+          <Show when={statusChip()}>
+            {(chip) => (
+              <span
+                class={`hidden shrink-0 items-center rounded-full border px-2.5 py-1 text-xs font-semibold sm:inline-flex ${chip().cell}`}
+                data-testid="optimization-status-chip"
+              >
+                {chip().label}
+              </span>
+            )}
+          </Show>
+          <span
+            class={`hidden shrink-0 items-center rounded-full border px-2.5 py-1 text-xs font-semibold sm:inline-flex ${levelChip().toneClass} ${levelChip().titleClass}`}
+            data-testid="optimization-level-chip"
+          >
+            {levelChip().shortLabel}
+          </span>
         </div>
         <span class="hidden text-text-muted lg:inline" aria-hidden="true">
           |
@@ -140,7 +197,18 @@ export function OptimizationHeaderBar(props: { onSimulateDay?: () => void } = {}
         >
           {stepChipLabel()}
         </button>
-        <div class="flex items-center gap-1.5">
+        <div class="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+          <Show when={notifyIndicator()}>
+            {(indicator) => (
+              <span
+                class={`inline-flex min-w-0 max-w-full items-center truncate rounded-full border px-2.5 py-1 text-xs font-semibold ${indicator().toneClass}`}
+                role="status"
+                data-testid="optimization-notify-indicator"
+              >
+                {indicator().label}
+              </span>
+            )}
+          </Show>
           <Show when={optimizationState.isOptimizing}>
             <Button
               variant="outline"
@@ -178,54 +246,23 @@ export function OptimizationHeaderBar(props: { onSimulateDay?: () => void } = {}
               {optimizationState.isOptimizing ? `${optimizationState.optimizationProgress}%` : generateActionLabel()}
             </Button>
           </Show>
-          <Show when={hasResults() && !isPlanClosed() && optimizationState.weeklyPlanApproved}>
-            <Button
-              variant="outline"
-              size="sm"
-              class="gap-2"
-              icon={<AlertTriangle size={14} />}
-              data-testid="optimization-contingency-open"
-              onClick={() => setContingencyOpen(true)}
-            >
-              Simular contingencia
-            </Button>
-          </Show>
-          <Show when={hasResults()}>
-            <Button
-              variant="outline"
-              size="sm"
-              class="gap-2"
-              icon={<Play size={14} />}
-              data-testid="optimization-day-simulation-open"
-              onClick={() => props.onSimulateDay?.()}
-            >
-              Simular día
-            </Button>
-          </Show>
           <Show
-            when={isDispatched() && monitoringLink()}
-            fallback={
-              <Show
-                when={hasResults() && !isPlanClosed() && optimizationState.weeklyPlanApproved}
-              >
-                <Button
-                  variant="primary"
-                  size="sm"
-                  icon={<Send size={14} />}
-                  disabled={
-                    optimizationState.isDispatching ||
-                    optimizationState.lastSimulationId == null ||
-                    !canOptimize(authUser()?.role)
-                  }
-                  aria-label="Notificar a conductores"
-                  data-testid="optimization-dispatch-route"
-                  onClick={() => void dispatchOptimizationResult()}
-                >
-                  {optimizationState.isDispatching ? '…' : 'Notificar a conductores'}
-                </Button>
-              </Show>
+            when={
+              !showGenerate() &&
+              !isDispatched() &&
+              mapDailyStatusToCalendar(dayStatus()) === 'closed'
             }
           >
+            <Button
+              variant="primary"
+              size="sm"
+              data-testid="optimization-view-results"
+              onClick={() => props.onViewResults?.()}
+            >
+              Ver resultados
+            </Button>
+          </Show>
+          <Show when={isDispatched() && monitoringLink()}>
             {(href) => (
               <A href={href()}>
                 <Button
@@ -240,37 +277,20 @@ export function OptimizationHeaderBar(props: { onSimulateDay?: () => void } = {}
               </A>
             )}
           </Show>
+          <Show when={isDispatched() && props.onCloseDay}>
+            <Button
+              variant="outline"
+              size="sm"
+              class="gap-2"
+              icon={<Flag size={14} />}
+              data-testid="optimization-close-day-action"
+              onClick={() => props.onCloseDay?.()}
+            >
+              Cerrar día
+            </Button>
+          </Show>
         </div>
       </div>
-
-      <Show when={weekRange()}>
-        {(range) => (
-          <div class="flex w-full flex-wrap items-center gap-2 pt-1.5">
-            <span class="text-xs text-text-muted" data-testid="optimization-week-context">
-              Semana {range().start} – {range().end}
-            </span>
-            <Show
-              when={optimizationState.weeklyPlanApproved}
-              fallback={
-                <span
-                  class="inline-flex items-center gap-1 rounded-full border border-amber-300/60 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300"
-                  data-testid="optimization-week-unapproved-chip"
-                >
-                  <AlertTriangle size={11} />
-                  sin plan semanal aprobado
-                </span>
-              }
-            >
-              <span
-                class="inline-flex items-center rounded-full border border-fero-green/30 bg-fero-green/10 px-2 py-0.5 text-[11px] font-semibold text-fero-green-dark dark:text-fero-green"
-                data-testid="optimization-week-approved-chip"
-              >
-                semana aprobada
-              </span>
-            </Show>
-          </div>
-        )}
-      </Show>
 
       <Show when={gateOpen() && !optimizationState.weeklyPlanApproved}>
         <Portal>
@@ -356,13 +376,6 @@ export function OptimizationHeaderBar(props: { onSimulateDay?: () => void } = {}
           />
         </Show>
       </Drawer>
-      <Drawer
-        open={contingencyOpen()}
-        onClose={() => setContingencyOpen(false)}
-        title="Simular contingencia"
-      >
-        <OptimizationContingencySimulator onApplied={() => setContingencyOpen(false)} />
-      </Drawer>
     </>
   );
 }
@@ -376,17 +389,10 @@ export function OptimizationDailyBanner() {
     scenarioId();
 
   return (
-    <div class="space-y-3">
-      <DailyScenarioBanner
-        scenarioId={scenarioId()}
-        scenarioLabel={scenarioLabel()}
-        weeklyPlanApproved={optimizationState.weeklyPlanApproved}
-        approving={optimizationState.isApprovingWeek}
-        onApprove={() => void approveCurrentWeekFromDay()}
-        pendingCount={dailyPlan()?.pendingPoints.length ?? 0}
-        weeklyHref={weeklyPlanWeekHref(mondayOfDate(optimizationState.preset.operationDate))}
-      />
-      <OptimizationDayActualsPanel />
-    </div>
+    <DailyScenarioBanner
+      scenarioId={scenarioId()}
+      scenarioLabel={scenarioLabel()}
+      pendingCount={dailyPlan()?.pendingPoints.length ?? 0}
+    />
   );
 }

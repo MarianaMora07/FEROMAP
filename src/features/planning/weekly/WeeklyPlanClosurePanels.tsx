@@ -5,7 +5,6 @@ import { Button } from '../../../design-system/components';
 import {
   weeklyPlanValidationWorkdayWarning,
   type WeeklyPlanPostApprovalStep,
-  type WeeklyPlanPreflightIssue,
   type WeeklyPlanValidationDay,
   type WeeklyPlanValidationSummary,
 } from '../../../core/planning/weeklyPlanUx';
@@ -210,9 +209,9 @@ interface WeeklyPlanOptionalValidationPanelProps {
 }
 
 /**
- * La validación con el motor es **opcional**: la guarda real al aprobar es el
- * pre-flight heurístico. Este panel ofrece el motor como acción voluntaria (más
- * lenta) para quien quiera revisar las mejoras previstas antes de aprobar.
+ * La validación con el motor es **opcional**: la guarda de viabilidad del backend actúa al
+ * aprobar. Este panel ofrece el motor como acción voluntaria (más lenta) para quien
+ * quiera revisar las mejoras previstas antes de aprobar.
  */
 export function WeeklyPlanOptionalValidationPanel(props: WeeklyPlanOptionalValidationPanelProps) {
   return (
@@ -225,8 +224,8 @@ export function WeeklyPlanOptionalValidationPanel(props: WeeklyPlanOptionalValid
         Validación opcional
       </p>
       <p class="mt-1 text-sm text-text-secondary">
-        Puedes aprobar la semana con el pre-flight heurístico. Validar con el motor es opcional:
-        tarda más y sirve para revisar el kilometraje y las asignaciones previstas.
+        Puedes aprobar la semana directamente. Validar con el motor es opcional: tarda más y sirve
+        para revisar el kilometraje y las asignaciones previstas.
       </p>
       <Button
         variant="outline"
@@ -238,52 +237,6 @@ export function WeeklyPlanOptionalValidationPanel(props: WeeklyPlanOptionalValid
         Validar con motor
       </Button>
     </div>
-  );
-}
-
-interface WeeklyPlanPreflightWarningPanelProps {
-  issues: WeeklyPlanPreflightIssue[];
-}
-
-/**
- * Avisa de problemas de viabilidad (sobrecapacidad o flota insuficiente) detectados
- * por el pre-flight, antes de validar o aprobar.
- */
-export function WeeklyPlanPreflightWarningPanel(props: WeeklyPlanPreflightWarningPanelProps) {
-  return (
-    <Show when={props.issues.length > 0}>
-      <div
-        class="flex items-start gap-2 rounded-xl border border-amber-300/70 bg-amber-50/90 px-4 py-3 dark:border-amber-900/40 dark:bg-amber-950/25"
-        role="alert"
-        data-testid="weekly-plan-preflight-warning"
-      >
-        <AlertTriangle size={18} class="mt-0.5 shrink-0 text-amber-700 dark:text-amber-200" aria-hidden="true" />
-        <div>
-          <p class="text-sm font-semibold text-amber-900 dark:text-amber-100">
-            Pre-flight: {props.issues.length} día(s) con problemas de viabilidad
-          </p>
-          <ul class="mt-1 space-y-0.5 text-sm text-amber-800 dark:text-amber-200">
-            <For each={props.issues}>
-              {(issue) => (
-                <li>
-                  {issue.operationDate}:{' '}
-                  {[
-                    issue.overloaded ? 'sobrecapacidad estimada' : null,
-                    issue.insufficientFleet ? 'flota insuficiente' : null,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </li>
-              )}
-            </For>
-          </ul>
-          <p class="mt-1 text-sm text-amber-800 dark:text-amber-200">
-            Ajusta la flota por tipo o la cobertura de esos días en «Configurar días» antes de
-            aprobar.
-          </p>
-        </div>
-      </div>
-    </Show>
   );
 }
 
@@ -300,7 +253,12 @@ const statusClass = {
 export function WeeklyPlanPostApprovalChecklist(props: WeeklyPlanPostApprovalChecklistProps) {
   return (
     <div class="space-y-2" data-testid="weekly-plan-post-approval-checklist">
-      <p class="text-sm font-semibold text-text-primary dark:text-white">Siguientes pasos en operación</p>
+      <div>
+        <p class="text-sm font-semibold text-text-primary dark:text-white">Siguientes pasos en operación</p>
+        <p class="mt-0.5 text-xs text-text-muted">
+          La semana aprobada es de solo lectura: validar y aprobar quedan bloqueados.
+        </p>
+      </div>
       <ol class="space-y-2">
         <For each={props.steps}>
           {(step, index) => (

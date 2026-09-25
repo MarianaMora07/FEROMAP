@@ -286,44 +286,60 @@ export function buildRouteResults(
   });
 }
 
-export interface ScenarioInfoRowsInput {
+export interface DaySummaryRowsInput {
   /** Puntos programados del día (no del catálogo). */
   pointsToVisit: number;
   kpis: KpiMetrics | null;
-  /** Contenedores críticos (>90 % llenado) entre los puntos del día. */
+  /** Contenedores críticos (≥ 80 % llenado) entre los puntos del día. */
   criticalCount: number;
   /** Duración de la jornada más larga entre los camiones (horas). */
   maxVehicleHours?: number | null;
 }
 
-export function buildScenarioInfoRows(input: ScenarioInfoRowsInput) {
+export type DaySummaryIcon =
+  | 'map-pin'
+  | 'alert'
+  | 'route'
+  | 'clock'
+  | 'truck'
+  | 'weight'
+  | 'savings';
+
+export interface DaySummaryRow {
+  label: string;
+  value: string;
+  icon: DaySummaryIcon;
+}
+
+/**
+ * Filas del «Resumen del día»: cada métrica aparece **una sola vez**.
+ * Consolida el antiguo «Resumen operativo del día» (puntos y críticos del plan, jornada
+ * máxima por camión) con los tiles del sub-tab Resumen (distancia, duración, toneladas y
+ * ahorro vs. línea base) sin repetir distancia ni duración.
+ */
+export function buildDaySummaryRows(input: DaySummaryRowsInput): DaySummaryRow[] {
   const { pointsToVisit, kpis, criticalCount } = input;
-  const fleetTotalHours = kpis ? kpis.durationHours.optimized : null;
+  const totals = kpis ? buildResultsTotals(kpis) : null;
+  const saving = kpis ? savingsPct(kpis.distanceKm.current, kpis.distanceKm.optimized) : null;
   return [
-    {
-      label: 'Puntos programados hoy',
-      value: String(pointsToVisit),
-      icon: 'map-pin' as const,
-    },
+    { label: 'Puntos programados hoy', value: String(pointsToVisit), icon: 'map-pin' },
+    { label: 'Contenedores críticos', value: String(criticalCount), icon: 'alert' },
     {
       label: 'Distancia total (flota)',
-      value: kpis ? `${kpis.distanceKm.optimized.toFixed(1)} km` : '—',
-      icon: 'route' as const,
+      value: totals ? `${totals.distanceKm.toFixed(1)} km` : '—',
+      icon: 'route',
     },
-    {
-      label: 'Tiempo total de flota',
-      value: fleetTotalHours != null ? formatDurationHours(fleetTotalHours) : '—',
-      icon: 'clock' as const,
-    },
+    { label: 'Tiempo total de flota', value: totals?.duration ?? '—', icon: 'clock' },
     {
       label: 'Jornada por camión (máx.)',
       value: input.maxVehicleHours != null ? formatDurationHours(input.maxVehicleHours) : '—',
-      icon: 'truck' as const,
+      icon: 'truck',
     },
     {
-      label: 'Contenedores críticos del día',
-      value: String(criticalCount),
-      icon: 'weight' as const,
+      label: 'Toneladas estimadas',
+      value: totals ? `${totals.tons.toFixed(1)} t` : '—',
+      icon: 'weight',
     },
+    { label: 'Ahorro vs. línea base', value: saving != null ? `${saving}%` : '—', icon: 'savings' },
   ];
 }

@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { WeeklyPlan, WeeklyPlanPreflight } from '../api/planning';
+import type { WeeklyPlan } from '../api/planning';
 import {
   buildWeeklyPlanForecastFromValidation,
   canReachWeeklyPlanStep,
   deriveWeeklyPlanFlowStep,
   deriveWeeklyPlanNextAction,
   weeklyPlanHasScheduledPoints,
-  weeklyPlanPreflightIssues,
   weeklyPlanSavingPct,
   weeklyPlanScheduledPointCount,
   weeklyPlanStepGuideText,
@@ -86,7 +85,7 @@ describe('weeklyPlanUx', () => {
   });
 
   it('does not block approve on missing validation', () => {
-    // La validación es opcional: el gate real al aprobar es el pre-flight heurístico.
+    // La validación es opcional: la guarda al aprobar es la verificación de viabilidad del servidor.
     expect(canReachWeeklyPlanStep(3, 2)).toBe(true);
   });
 
@@ -155,22 +154,6 @@ describe('weeklyPlanUx', () => {
         '2026-08-17',
       ),
     ).toBeNull();
-  });
-
-  it('lists only infeasible days from the pre-flight', () => {
-    const preflight: WeeklyPlanPreflight = {
-      feasible: false,
-      rows: [
-        { operationDate: '2026-08-17', overloaded: true, insufficientFleet: false },
-        { operationDate: '2026-08-18', overloaded: false, insufficientFleet: true },
-        { operationDate: '2026-08-19' },
-      ],
-    };
-    expect(weeklyPlanPreflightIssues(preflight)).toEqual([
-      { operationDate: '2026-08-17', overloaded: true, insufficientFleet: false },
-      { operationDate: '2026-08-18', overloaded: false, insufficientFleet: true },
-    ]);
-    expect(weeklyPlanPreflightIssues(null)).toEqual([]);
   });
 
   it('computes saving percent against a baseline', () => {

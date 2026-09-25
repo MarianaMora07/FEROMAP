@@ -41,11 +41,7 @@ import { WeeklyPlanHistoryExportPanel } from './WeeklyPlanHistoryExportPanel';
 import { WeeklyPlanListPanel } from './WeeklyPlanListPanel';
 import { WeeklyPlanStepPanels } from './WeeklyPlanStepPanels';
 
-interface WeeklyPlanTabProps {
-  embedded?: boolean;
-}
-
-export function WeeklyPlanTab(props: WeeklyPlanTabProps) {
+export function WeeklyPlanTab() {
   const [searchParams] = useSearchParams();
   const [scenarios, setScenarios] = createSignal<Array<{ id: ScenarioId; label: string }>>([]);
   const [compareA, setCompareA] = createSignal('');
@@ -125,11 +121,7 @@ export function WeeklyPlanTab(props: WeeklyPlanTabProps) {
 
   return (
     <div class="space-y-4" data-testid="weekly-plan-tab">
-      <Show when={!props.embedded}>
-        <PlanningLevelBanner level="directivo" title="Planificación semanal">
-          <p>Define qué puntos visitar cada día antes de optimizar rutas.</p>
-        </PlanningLevelBanner>
-      </Show>
+      <PlanningLevelBanner level="directivo" />
 
       <div class="grid gap-4 lg:grid-cols-12">
         <div class="order-2 space-y-4 lg:order-1 lg:col-span-8">
@@ -160,16 +152,15 @@ export function WeeklyPlanTab(props: WeeklyPlanTabProps) {
                   <PlanningStatusBadge status={plan()?.status ?? 'draft'} />
                 </div>
 
-                <Show when={readOnly()}>
+                <Show when={plan()?.status === 'archived'}>
                   <div
                     class="flex items-start gap-2 rounded-lg border border-fero-blue/40 bg-fero-blue/10 px-3 py-2 text-sm text-fero-blue"
                     data-testid="weekly-plan-read-only"
                   >
                     <Lock size={16} class="mt-0.5 shrink-0" aria-hidden="true" />
                     <span>
-                      Semana {plan()?.status === 'archived' ? 'archivada' : 'aprobada'} — modo solo
-                      lectura. Validar y aprobar quedan bloqueados; crea una semana nueva desde la
-                      lista si necesitas planificar de nuevo.
+                      Semana archivada — modo solo lectura. Validar y aprobar quedan bloqueados; crea
+                      una semana nueva desde la lista si necesitas planificar de nuevo.
                     </span>
                   </div>
                 </Show>

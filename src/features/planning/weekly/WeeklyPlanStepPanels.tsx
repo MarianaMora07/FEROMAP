@@ -1,11 +1,10 @@
 import { useNavigate } from '@solidjs/router';
-import { ArrowRight, CheckCircle2, Eye } from 'lucide-solid';
-import { Show } from 'solid-js';
-import { Button, LoadingPanel } from '../../../design-system/components';
+import { ArrowRight, Eye } from 'lucide-solid';
+import { Show, createSignal } from 'solid-js';
+import { Button, LoadingPanel, TabList, tabButtonId } from '../../../design-system/components';
 import {
   buildWeeklyPlanForecastFromValidation,
   buildWeeklyPlanPostApprovalChecklist,
-  weeklyPlanPreflightIssues,
   weeklyPlanScheduledPointCount,
 } from '../../../core/planning/weeklyPlanUx';
 import type { WeeklyPlan } from '../../../core/api/planning';
@@ -16,7 +15,6 @@ import { WeeklyPlanConfigurePanel } from './WeeklyPlanConfigurePanel';
 import {
   WeeklyPlanOptionalValidationPanel,
   WeeklyPlanPostApprovalChecklist,
-  WeeklyPlanPreflightWarningPanel,
 } from './WeeklyPlanClosurePanels';
 import { WeeklyPlanForecastPanel } from './WeeklyPlanForecastPanel';
 import { WeeklyPlanOperationalSection } from './WeeklyPlanOperationalSection';
@@ -37,11 +35,10 @@ interface WeeklyPlanStepPanelsProps {
 
 export function WeeklyPlanStepPanels(props: WeeklyPlanStepPanelsProps) {
   const navigate = useNavigate();
+  const [step4Tab, setStep4Tab] = createSignal<'resumen' | 'dias' | 'operacion'>('resumen');
   const totalPoints = () => weeklyPlanScheduledPointCount(props.plan);
   const validationSummary = () => weeklyPlanState.validationSummary;
   const postApprovalSteps = () => buildWeeklyPlanPostApprovalChecklist();
-  // Aviso de viabilidad (pre-flight) antes de validar; ya se recomputó al configurar.
-  const preflightIssues = () => weeklyPlanPreflightIssues(weeklyPlanState.preflight);
   // Mejoras previstas a partir del resumen de la validación de esta sesión.
   const liveForecast = () =>
     buildWeeklyPlanForecastFromValidation(validationSummary()?.days ?? [], props.plan.weekStartDate);
@@ -99,8 +96,6 @@ export function WeeklyPlanStepPanels(props: WeeklyPlanStepPanelsProps) {
 
           <WeeklyPlanDaySectorsPanel days={props.plan.days ?? []} />
 
-          <WeeklyPlanPreflightWarningPanel issues={preflightIssues()} />
-
           <Show when={weeklyPlanState.isValidating}>
             <LoadingPanel label="Validando con simulación ACO…" progress={weeklyPlanState.validationProgress} />
           </Show>
@@ -113,8 +108,8 @@ export function WeeklyPlanStepPanels(props: WeeklyPlanStepPanelsProps) {
 
           <Show when={props.editable && totalPoints() > 0 && !validationSummary()}>
             <p class="text-sm text-text-secondary">
-              La validación con el motor es opcional: puedes aprobar la semana en el paso
-              «Aprobar» con el pre-flight.
+              La validación con el motor es opcional: puedes aprobar la semana directamente en el paso
+              «Aprobar».
             </p>
           </Show>
 
@@ -145,7 +140,7 @@ export function WeeklyPlanStepPanels(props: WeeklyPlanStepPanelsProps) {
             when={liveForecast()}
             fallback={
               <p class="text-sm text-text-secondary">
-                Aún no has validado la semana. Puedes aprobar con el pre-flight o validar con el motor
+                Aún no has validado la semana. Puedes aprobar directamente o validar con el motor
                 si quieres revisar las mejoras previstas.
               </p>
             }
@@ -203,7 +198,7 @@ export function WeeklyPlanStepPanels(props: WeeklyPlanStepPanelsProps) {
                 onClick={() => void handleViewPlan()}
                 data-testid="weekly-plan-review-cta"
               >
-                {planGenerated() ? 'Abrir plan operativo' : 'Ver plan'}
+                {planGenerated() ? 'Abrir plan operativo de la semana' : 'Ver plan'}
               </Button>
             </div>
           </Show>
@@ -212,31 +207,69 @@ export function WeeklyPlanStepPanels(props: WeeklyPlanStepPanelsProps) {
 
       <Show when={props.step === 4}>
         <div class="space-y-4" data-testid="weekly-plan-step-4">
-          <div class="flex items-start gap-3 rounded-lg border border-fero-green/40 bg-fero-green/10 px-4 py-3">
-            <CheckCircle2 size={22} class="mt-0.5 shrink-0 text-fero-green-dark" aria-hidden="true" />
-            <div>
-              <p class="font-semibold text-fero-green-dark">
-                {props.plan.status === 'archived' ? 'Plan archivado' : 'Semana lista para operación'}
-              </p>
-              <p class="mt-1 text-sm text-text-secondary">
-                {props.plan.status === 'archived'
-                  ? 'Solo consulta. Crea un borrador en una semana futura si necesitas planificar de nuevo.'
-                  : 'El equipo administrativo ya puede optimizar rutas y despachar el plan del día.'}
-              </p>
-            </div>
-          </div>
-
-          <WeeklyPlanForecastPanel forecast={props.plan.expectedKpis} source="Plan aprobado" />
-
-          <WeeklyPlanApprovedDayTable plan={props.plan} />
-
-          <Show when={props.plan.status === 'approved'}>
-            <WeeklyPlanPostApprovalChecklist steps={postApprovalSteps()} />
-            <WeeklyPlanOperationalSection
-              planId={props.plan.id}
-              operationalPlan={props.plan.operationalPlan ?? null}
-              forecast={props.plan.expectedKpis}
+          <Show
+            when={props.plan.status === 'approved'}
+            fallback={
+              <>
+                <WeeklyPlanForecastPanel
+                  forecast={props.plan.expectedKpis}
+                  source="Plan aprobado"
+                  showDayTable={false}
+                />
+                <WeeklyPlanApprovedDayTable plan={props.plan} />
+              </>
+            }
+          >
+            <TabList
+              idPrefix="weekly-plan-step4"
+              panelId="weekly-plan-step4-panel"
+              tabs={[
+                { id: 'resumen', label: 'Resumen' },
+                { id: 'dias', label: 'Días' },
+                { id: 'operacion', label: 'Operación' },
+              ]}
+              active={step4Tab()}
+              onChange={(id) => setStep4Tab(id as 'resumen' | 'dias' | 'operacion')}
+              ariaLabel="Detalle de la semana aprobada"
+              containerClass="flex gap-1 overflow-x-auto border-b border-default"
+              testId="weekly-plan-step4-tabs"
+              testIdFor={(id) => `weekly-plan-step4-tab-${id}`}
+              tabClass={(active) =>
+                `shrink-0 border-b-2 px-3.5 py-2 text-sm font-medium transition-colors ${
+                  active
+                    ? 'border-fero-green-mid text-fero-green-dark'
+                    : 'border-transparent text-text-muted hover:text-text-secondary'
+                }`
+              }
             />
+
+            <div
+              role="tabpanel"
+              id="weekly-plan-step4-panel"
+              aria-labelledby={tabButtonId('weekly-plan-step4', step4Tab())}
+            >
+              <Show when={step4Tab() === 'resumen'}>
+                <div class="space-y-4">
+                  <WeeklyPlanForecastPanel
+                    forecast={props.plan.expectedKpis}
+                    source="Plan aprobado"
+                    showDayTable={false}
+                  />
+                  <WeeklyPlanPostApprovalChecklist steps={postApprovalSteps()} />
+                </div>
+              </Show>
+
+              <Show when={step4Tab() === 'dias'}>
+                <WeeklyPlanApprovedDayTable plan={props.plan} />
+              </Show>
+
+              <Show when={step4Tab() === 'operacion'}>
+                <WeeklyPlanOperationalSection
+                  planId={props.plan.id}
+                  operationalPlan={props.plan.operationalPlan ?? null}
+                />
+              </Show>
+            </div>
           </Show>
         </div>
       </Show>

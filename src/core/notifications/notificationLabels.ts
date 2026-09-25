@@ -12,42 +12,9 @@ const EVENT_LABELS: Record<string, string> = {
   critical_recalc: 'Recálculo de contenedores críticos',
 };
 
-const CHANNEL_LABELS: Record<string, string> = {
-  webhook_mock: 'canal local (sin integración)',
-  webhook: 'webhook',
-  smtp: 'correo',
-  whatsapp: 'WhatsApp',
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  sent: 'Entregada',
-  acked: 'Acusada',
-  queued: 'En cola',
-  pending: 'En cola',
-  failed: 'Fallida',
-};
-
 /** Etiqueta legible del tipo de evento; si no hay traducción, se limpia el snake_case. */
 export function notificationEventLabel(eventType: string): string {
   return EVENT_LABELS[eventType] ?? eventType.replace(/_/g, ' ');
-}
-
-/** Etiqueta legible del canal de entrega. */
-export function notificationChannelLabel(channel: string): string {
-  return CHANNEL_LABELS[channel] ?? channel;
-}
-
-/** Estado de entrega en lenguaje del planificador. */
-export function notificationStatusLabel(status: string): string {
-  return STATUS_LABELS[status] ?? status;
-}
-
-/** Tono del badge para el estado de entrega. */
-export function notificationStatusTone(status: string): 'success' | 'warning' | 'danger' | 'info' {
-  if (status === 'sent' || status === 'acked') return 'success';
-  if (status === 'failed') return 'danger';
-  if (status === 'queued' || status === 'pending') return 'warning';
-  return 'info';
 }
 
 /**

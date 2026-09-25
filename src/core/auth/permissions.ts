@@ -205,7 +205,7 @@ export const MAIN_NAV_ITEMS: NavItemDef[] = [
   },
   {
     href: '/simulation',
-    label: 'Simulación ACO',
+    label: 'Simulación ACO (tesis)',
     labelKey: 'nav.simulation',
     description: 'Baseline vs ACO — escenario normal',
     descriptionKey: 'nav.simulation.description',

@@ -2,7 +2,6 @@ import {
   buildOptimizationExperienceSteps,
   deriveOptimizationExperienceStep,
 } from '../../core/planning/operationalFlowUx';
-import { planningStatusLabel } from '../../core/planning/planningUx';
 
 export function formatOptimizationToolbarDate(isoDate: string): string {
   const date = new Date(`${isoDate}T12:00:00`);
@@ -13,12 +12,10 @@ export function formatOptimizationToolbarDate(isoDate: string): string {
 
 export function optimizationToolbarSummary(params: {
   operationDate: string;
-  status?: string | null;
   pointCount: number;
 }): string {
   const date = formatOptimizationToolbarDate(params.operationDate);
-  const status = planningStatusLabel(params.status);
-  return `${date} · ${status} · ${params.pointCount} pts`;
+  return `${date} · ${params.pointCount} pts`;
 }
 
 export function optimizationActiveStepChipLabel(input: {
@@ -56,6 +53,26 @@ export function resolveOptimizationContextualMessage(input: {
       tone: 'info',
     };
   }
+  return null;
+}
+
+/**
+ * Banda de estado contextual (BDC, Fase E). Determina **una sola** banda visible por
+ * prioridad: error > semana sin aprobar > despacho > cierre. Devuelve `null` cuando no hay
+ * nada que avisar (el caso normal de una jornada en curso sin incidencias).
+ */
+export type OptimizationContextBandKind = 'error' | 'week-pending' | 'dispatched' | 'closed';
+
+export function resolveOptimizationContextBand(input: {
+  error?: string | null;
+  weeklyPlanApproved: boolean;
+  dispatchVisible: boolean;
+  closeNotice?: string | null;
+}): OptimizationContextBandKind | null {
+  if (input.error) return 'error';
+  if (!input.weeklyPlanApproved) return 'week-pending';
+  if (input.dispatchVisible) return 'dispatched';
+  if (input.closeNotice) return 'closed';
   return null;
 }
 

@@ -31,8 +31,8 @@ export function OptimizationComparisonPanel(props: OptimizationComparisonPanelPr
   return (
     <Card data-testid="optimization-comparison-panel">
       <CardHeader
-        title="Baseline vs ACO"
-        subtitle={`Comparación explícita — métrica destacada: ${
+        title="Línea base del turno vs. plan propuesto"
+        subtitle={`Mejora estimada frente a la operación actual — métrica destacada: ${
           view() === 'distance' ? 'distancia' : view() === 'time' ? 'tiempo' : 'CO₂'
         }`}
       />
@@ -44,8 +44,8 @@ export function OptimizationComparisonPanel(props: OptimizationComparisonPanelPr
           <thead>
             <tr class="border-b border-default text-left text-[10px] uppercase tracking-wide text-text-muted">
               <th class="pb-2 pr-3 font-semibold">Métrica</th>
-              <th class="pb-2 pr-3 font-semibold">Baseline</th>
-              <th class="pb-2 pr-3 font-semibold">ACO</th>
+              <th class="pb-2 pr-3 font-semibold">Línea base</th>
+              <th class="pb-2 pr-3 font-semibold">Plan</th>
               <th class="pb-2 font-semibold">Ahorro</th>
             </tr>
           </thead>

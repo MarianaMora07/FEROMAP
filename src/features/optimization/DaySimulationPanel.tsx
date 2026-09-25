@@ -101,11 +101,11 @@ export function DaySimulationPanel(props: DaySimulationPanelProps) {
       class="absolute inset-y-0 right-0 z-20 flex w-full max-w-sm flex-col border-l border-default bg-elevated shadow-xl sm:max-w-md"
       data-testid="day-simulation-panel"
       role="dialog"
-      aria-label="Simular día"
+      aria-label="Simular día (dry-run)"
     >
       <div class="flex items-start justify-between gap-3 border-b border-default px-4 py-3">
         <div>
-          <h3 class="font-heading text-base font-semibold text-text-primary">Simular día</h3>
+          <h3 class="font-heading text-base font-semibold text-text-primary">Simular día (dry-run)</h3>
           <p class="text-xs text-text-muted">{props.operationDate}</p>
         </div>
         <button

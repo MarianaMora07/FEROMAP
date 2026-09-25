@@ -90,7 +90,10 @@ export function OptimizationWeekCalendar(props: OptimizationWeekCalendarProps) {
             }}
           </For>
         </div>
-        <ul class="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-text-muted">
+        <ul
+          class="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-text-muted"
+          data-testid="optimization-status-legend"
+        >
           <For each={Object.entries(DAILY_CALENDAR_STATUS_STYLES)}>
             {([status, meta]) => (
               <li class="inline-flex items-center gap-1">

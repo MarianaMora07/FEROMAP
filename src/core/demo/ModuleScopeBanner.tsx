@@ -13,7 +13,7 @@ const DEFINITIONS: Record<
     toneClass: 'border-fero-blue/30 bg-fero-blue/5 dark:border-fero-blue/40 dark:bg-fero-blue/10',
   },
   'thesis-simulation': {
-    title: 'Simulación de tesis',
+    title: 'Simulación ACO (tesis)',
     body: 'Compara baseline vs ACO en escenario normal. No despacha rutas ni sustituye la operación diaria.',
     testId: 'module-banner-thesis-simulation',
     toneClass: 'border-fero-green/30 bg-fero-green/5 dark:border-fero-green/30 dark:bg-fero-green/10',

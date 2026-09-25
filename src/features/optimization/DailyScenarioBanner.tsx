@@ -1,20 +1,11 @@
 import { Show } from 'solid-js';
-import { A } from '@solidjs/router';
 import { CloudRain } from 'lucide-solid';
-import { Button } from '../../design-system/components';
 import type { ScenarioId } from '../../data/types/simulation';
 
 interface DailyScenarioBannerProps {
   scenarioId: ScenarioId;
   scenarioLabel: string;
-  weeklyPlanApproved: boolean;
   pendingCount: number;
-  /** Aprueba el plan semanal en sitio; si se define, el CTA es una acción. */
-  onApprove?: () => void;
-  /** Estado de carga mientras se aprueba el plan semanal. */
-  approving?: boolean;
-  /** Deep link a la semana del día para revisarla antes de aprobar. */
-  weeklyHref?: string;
 }
 
 export function DailyScenarioBanner(props: DailyScenarioBannerProps) {
@@ -41,7 +32,7 @@ export function DailyScenarioBanner(props: DailyScenarioBannerProps) {
             </p>
             <p class="mt-1 text-xs text-text-muted">
               Ajustable en «Condición operativa del día» antes de generar la ruta; no afecta la
-              simulación de tesis.
+              Simulación ACO (tesis).
             </p>
           </div>
         </div>
@@ -51,34 +42,6 @@ export function DailyScenarioBanner(props: DailyScenarioBannerProps) {
           </span>
         </Show>
       </div>
-      <Show when={!props.weeklyPlanApproved}>
-        <div class="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-violet-200/70 pt-3 dark:border-violet-900/30">
-          <p class="text-xs font-medium text-amber-700 dark:text-amber-200">
-            Aprueba el plan semanal para habilitar optimización y simulación de recorrido.
-          </p>
-          <div class="flex flex-wrap items-center gap-3">
-            <Show when={props.weeklyHref}>
-              <A
-                href={props.weeklyHref!}
-                class="text-xs font-medium text-fero-blue hover:underline"
-                data-testid="daily-banner-review-week"
-              >
-                Revisar semana
-              </A>
-            </Show>
-            <Button
-              variant="primary"
-              size="sm"
-              loading={props.approving}
-              disabled={props.approving || !props.onApprove}
-              onClick={() => props.onApprove?.()}
-              data-testid="daily-banner-approve-week"
-            >
-              {props.approving ? 'Aprobando…' : 'Aprobar plan semanal'}
-            </Button>
-          </div>
-        </div>
-      </Show>
     </div>
   );
 }

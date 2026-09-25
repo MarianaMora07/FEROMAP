@@ -102,7 +102,7 @@ describe('permissions — arquitectura de navegación (IA)', () => {
 
   it('labels thesis simulation module distinctly', () => {
     const simulation = MAIN_NAV_ITEMS.find((item) => item.href === '/simulation');
-    expect(simulation?.label).toBe('Simulación ACO');
+    expect(simulation?.label).toBe('Simulación ACO (tesis)');
     const demo = MAIN_NAV_ITEMS.find((item) => item.href === '/demostracion');
     expect(demo?.label).toBe('Demostración ACO');
   });

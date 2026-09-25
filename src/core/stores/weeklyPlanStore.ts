@@ -11,7 +11,6 @@ import {
   dispatchDailyPlan,
   fetchCurrentWeeklyPlan,
   fetchWeeklyPlanById,
-  fetchWeeklyPlanPreflight,
   fetchWeeklyPlans,
   fetchWeeklyPlanVersions,
   downloadWeeklyPlanPdf,
@@ -26,7 +25,6 @@ import {
   type WeeklyPlan,
   type WeeklyPlanDay,
   type WeeklyPlanDayOperational,
-  type WeeklyPlanPreflight,
 } from '../api/planning';
 import type { ScenarioId } from '../../data/types/simulation';
 import {
@@ -69,8 +67,6 @@ interface WeeklyPlanState {
   validationCompleted: boolean;
   validationProgress: number;
   validationSummary: WeeklyPlanValidationSummary | null;
-  preflight: WeeklyPlanPreflight | null;
-  isLoadingPreflight: boolean;
   visitSchedules: VisitSchedule[];
   draftCaseStudy: CaseStudyDetail | null;
   error: string | null;
@@ -98,8 +94,6 @@ const [state, setState] = createStore<WeeklyPlanState>({
   validationCompleted: false,
   validationProgress: 0,
   validationSummary: null,
-  preflight: null,
-  isLoadingPreflight: false,
   visitSchedules: [],
   draftCaseStudy: null,
   error: null,
@@ -177,7 +171,6 @@ export async function initWeeklyPlanTab(): Promise<void> {
     if (plan?.weekStartDate) {
       await refreshVisitSchedules(plan.weekStartDate);
     }
-    await refreshWeeklyPlanPreflight();
   } catch (error) {
     setState({
       error: error instanceof Error ? error.message : 'No se pudo cargar el plan semanal',
@@ -257,26 +250,6 @@ export function isWeeklyPlanEditable(): boolean {
   return state.plan?.status === 'draft';
 }
 
-/**
- * Recalcula el pre-flight (demanda vs. flota) del borrador seleccionado para mostrar
- * viabilidad en el paso de configuración, antes de validar.
- */
-export async function refreshWeeklyPlanPreflight(): Promise<void> {
-  const planId = state.plan?.id;
-  if (!planId || !isWeeklyPlanEditable()) {
-    setState({ preflight: null });
-    return;
-  }
-  setState({ isLoadingPreflight: true });
-  try {
-    setState({ preflight: await fetchWeeklyPlanPreflight(planId) });
-  } catch {
-    setState({ preflight: null });
-  } finally {
-    setState({ isLoadingPreflight: false });
-  }
-}
-
 export async function selectWeeklyPlan(
   planId: number,
   options?: { compareLatestVersions?: boolean },
@@ -298,7 +271,6 @@ export async function selectWeeklyPlan(
     if (plan?.weekStartDate) {
       await refreshVisitSchedules(plan.weekStartDate);
     }
-    await refreshWeeklyPlanPreflight();
     if (options?.compareLatestVersions) {
       await loadWeeklyPlanVersions();
       await compareLatestWeeklyVersions();
@@ -529,7 +501,6 @@ export async function saveWeeklyPlanDraft(scenarioId: ScenarioId, days: WeeklyPl
       validationCompleted: false,
       validationSummary: null,
     });
-    await refreshWeeklyPlanPreflight();
   } catch (error) {
     setState({
       error: error instanceof Error ? error.message : 'No se pudo guardar el plan semanal',
@@ -855,7 +826,6 @@ export async function autofillWeeklyFromCaseStudy(caseStudyId?: number | null): 
       validationSummary: null,
       notice: `Días laborables configurados desde el caso ${plan?.caseStudyCode ?? ''}.`.trim(),
     });
-    await refreshWeeklyPlanPreflight();
   } catch (error) {
     setState({
       error: error instanceof Error ? error.message : 'No se pudo autocompletar desde el caso',
@@ -884,7 +854,6 @@ export async function autofillWeeklyFromSchedules(): Promise<void> {
       validationSummary: null,
       notice: `Se asignaron ${after.pointCount} puntos en ${after.activeDays} días (antes: ${before.pointCount} puntos en ${before.activeDays} días).`,
     });
-    await refreshWeeklyPlanPreflight();
   } catch (error) {
     setState({
       error: error instanceof Error ? error.message : 'No se pudo autocompletar la semana',

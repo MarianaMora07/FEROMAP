@@ -15,21 +15,10 @@ export interface DriverNotification {
   createdAt: string | null;
 }
 
-export interface OutboxProcessResult {
-  processed: number;
-  sent: number;
-  retried: number;
-  failed: number;
-}
-
 export function fetchRecentDriverNotifications(limit = 10): Promise<DriverNotification[]> {
   return apiGet(`/api/v1/notifications/drivers/recent?limit=${limit}`);
 }
 
 export function ackDriverNotification(notificationId: number): Promise<DriverNotification> {
   return apiPost(`/api/v1/notifications/${notificationId}/ack`, {});
-}
-
-export function processNotificationOutbox(): Promise<OutboxProcessResult> {
-  return apiPost('/api/v1/notifications/outbox/process', {});
 }

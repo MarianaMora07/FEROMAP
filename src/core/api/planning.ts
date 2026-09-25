@@ -599,15 +599,6 @@ export function validateWeeklyPlan(planId: number): Promise<{ jobId: string; wee
   return apiPost(`/api/v1/planning/weekly/${planId}/validate`, {});
 }
 
-/**
- * Recalcula el pre-flight (demanda vs. flota) de un plan en borrador. Se usa en el
- * paso de configuración para mostrar viabilidad antes de validar.
- */
-export function fetchWeeklyPlanPreflight(planId: number): Promise<WeeklyPlanPreflight> {
-  if (useMocks) return Promise.resolve({ feasible: true, rows: [] });
-  return apiPost(`/api/v1/planning/weekly/${planId}/preflight`, {});
-}
-
 export function generateWeeklyOperationalPlan(
   planId: number,
 ): Promise<{ jobId: string; weeklyPlanId: number }> {

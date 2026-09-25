@@ -22,7 +22,6 @@ import {
   type OptimizeResponse,
 } from '../api/optimization';
 import {
-  approveWeeklyPlan,
   fetchCurrentWeeklyPlan,
   fetchDailyPlansInRange,
   fetchPendingVisits,
@@ -77,7 +76,6 @@ interface OptimizationState {
   weekCalendar: WeekCalendarDay[];
   weekStartDate: string;
   weeklyPlanApproved: boolean;
-  isApprovingWeek: boolean;
   isLoadingDailyPlan: boolean;
   isLoadingCalendar: boolean;
   kpis: KpiMetrics | null;
@@ -110,7 +108,6 @@ const [optimizationState, setState] = createStore<OptimizationState>({
   weekCalendar: [],
   weekStartDate: mondayOfDate(loadOptimizationPreset().operationDate),
   weeklyPlanApproved: true,
-  isApprovingWeek: false,
   isLoadingDailyPlan: false,
   isLoadingCalendar: false,
   kpis: null,
@@ -381,37 +378,6 @@ export async function refreshDailyPlan(): Promise<void> {
     });
   } finally {
     setState({ isLoadingDailyPlan: false });
-  }
-}
-
-/**
- * Aprueba en sitio el plan semanal al que pertenece el día abierto, sin salir de
- * `/optimization`. Se usa cuando el plan operativo ya se generó desde el flujo
- * semanal y falta la aprobación directiva que habilita operar el día.
- */
-export async function approveCurrentWeekFromDay(): Promise<void> {
-  const weeklyPlanId = optimizationState.dailyPlan?.weeklyPlanId;
-  if (weeklyPlanId == null) {
-    setState({ error: 'Este día no está vinculado a un plan semanal que se pueda aprobar.' });
-    return;
-  }
-  if (optimizationState.isApprovingWeek) return;
-  setState({ isApprovingWeek: true, error: null });
-  try {
-    await approveWeeklyPlan(weeklyPlanId);
-    setState({ weeklyPlanApproved: true });
-    globalToast.addToast(
-      'Plan semanal aprobado. Ya puedes continuar con la operación del día.',
-      'success',
-    );
-    // Con la semana aprobada, un día ya optimizado puede notificarse automáticamente.
-    void autoDispatchOptimizedDay();
-  } catch (error) {
-    setState({
-      error: error instanceof Error ? error.message : 'No se pudo aprobar el plan semanal',
-    });
-  } finally {
-    setState({ isApprovingWeek: false });
   }
 }
 
@@ -720,7 +686,7 @@ export async function autoDispatchOptimizedDay(): Promise<void> {
   try {
     await dispatchOptimizationResult();
   } catch {
-    // Permite reintento manual con el botón "Notificar a conductores".
+    // Permite reintento manual desde ⋯ → "Reenviar notificación".
     autoDispatchDate = null;
   }
 }

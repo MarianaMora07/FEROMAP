@@ -17,12 +17,18 @@ export function OptimizationParametersSheet(props: OptimizationParametersSheetPr
 
   return (
     <Show when={props.open}>
-      <div class="fixed inset-0 z-50 xl:hidden" data-testid="optimization-parameters-sheet">
+      <div
+        class="fixed inset-0 z-50 xl:hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Parámetros de optimización"
+        data-testid="optimization-parameters-sheet"
+      >
         <div
           class="absolute inset-0 bg-black/50 backdrop-blur-sm"
           onClick={() => props.onOpenChange(false)}
         />
-        <div class="absolute bottom-0 left-0 right-0 max-h-[88vh] overflow-y-auto rounded-t-2xl border-t border-default bg-surface p-4 shadow-xl dark:bg-dark-surface">
+        <div class="absolute bottom-0 left-0 right-0 max-h-[88vh] w-full overflow-y-auto overscroll-contain rounded-t-2xl border-t border-default bg-surface p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-xl dark:bg-dark-surface">
           <div class="mb-3 flex items-center justify-between gap-2">
             <p class="text-sm font-semibold text-text-primary">Parámetros</p>
             <button

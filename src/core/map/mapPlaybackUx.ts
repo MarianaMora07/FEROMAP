@@ -74,6 +74,8 @@ export function resolveFollowTruckPosition(
 
 export function dailyPlanStatusLabel(status: string): string {
   switch (status) {
+    case 'draft':
+      return 'Borrador';
     case 'optimized':
       return 'Optimizado';
     case 'dispatched':
@@ -81,6 +83,7 @@ export function dailyPlanStatusLabel(status: string): string {
     case 'partial':
       return 'Parcial';
     case 'closed':
+    case 'completed':
       return 'Cerrado';
     case 'open':
       return 'Abierto';

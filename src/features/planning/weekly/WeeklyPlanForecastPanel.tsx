@@ -8,6 +8,8 @@ interface WeeklyPlanForecastPanelProps {
   forecast: WeeklyPlanForecast | null | undefined;
   /** Etiqueta del origen del dato (p. ej. "validación en curso" vs "plan aprobado"). */
   source?: string;
+  /** Oculta el desglose por día cuando otra tabla ya lo muestra (p. ej. paso Aprobar). */
+  showDayTable?: boolean;
 }
 
 function formatHours(hours: number | null | undefined): string {
@@ -92,7 +94,7 @@ export function WeeklyPlanForecastPanel(props: WeeklyPlanForecastPanelProps) {
             </div>
           </dl>
 
-          <Show when={dayRows().length > 0}>
+          <Show when={props.showDayTable !== false && dayRows().length > 0}>
             <div class="overflow-x-auto rounded-xl border border-border dark:border-dark-border">
               <table class="w-full min-w-130 text-sm" data-testid="weekly-plan-forecast-table">
                 <thead>

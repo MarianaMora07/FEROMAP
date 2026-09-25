@@ -1,22 +1,18 @@
-import { AlertTriangle, CheckCircle2, Gauge, RefreshCw, Truck } from 'lucide-solid';
+import { Gauge, Truck } from 'lucide-solid';
 import { For, Show, createMemo } from 'solid-js';
-import { Button } from '../../../design-system/components';
-import type { WeeklyPlan, WeeklyPlanPreflight } from '../../../core/api/planning';
+import type { WeeklyPlan } from '../../../core/api/planning';
 import { mergeWeekCalendarDays } from '../../../core/planning/weeklyPlanCalendar';
-import { weeklyPlanPreflightIssues, weeklyPlanScheduledPointCount } from '../../../core/planning/weeklyPlanUx';
+import { weeklyPlanScheduledPointCount } from '../../../core/planning/weeklyPlanUx';
 import type { ScenarioId } from '../../../data/types/simulation';
 
 interface WeeklyPlanConditionsPanelProps {
   plan: WeeklyPlan;
   scenarios: Array<{ id: ScenarioId; label: string }>;
-  preflight: WeeklyPlanPreflight | null;
-  loading: boolean;
-  onRefresh: () => void;
 }
 
 /**
- * Resumen de las condiciones iniciales con las que se ejecutará el algoritmo y su
- * viabilidad (pre-flight). Permite detectar problemas antes de validar/aprobar.
+ * Resumen de las condiciones iniciales con las que se ejecutará el algoritmo:
+ * escenario, caso, flota y cobertura.
  */
 export function WeeklyPlanConditionsPanel(props: WeeklyPlanConditionsPanelProps) {
   const workdays = createMemo(() =>
@@ -36,7 +32,6 @@ export function WeeklyPlanConditionsPanel(props: WeeklyPlanConditionsPanelProps)
     return ids.size;
   });
   const fleetEntries = createMemo(() => Object.entries(props.plan.fleetByType ?? {}));
-  const issues = createMemo(() => weeklyPlanPreflightIssues(props.preflight));
   const scenarioLabel = createMemo(
     () =>
       props.scenarios.find((row) => row.id === props.plan.scenarioId)?.label ??
@@ -63,17 +58,6 @@ export function WeeklyPlanConditionsPanel(props: WeeklyPlanConditionsPanelProps)
             </p>
           </div>
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          class="gap-2"
-          icon={<RefreshCw size={13} class={props.loading ? 'animate-spin' : undefined} />}
-          disabled={props.loading}
-          data-testid="weekly-plan-conditions-refresh"
-          onClick={() => props.onRefresh()}
-        >
-          Revisar viabilidad
-        </Button>
       </div>
 
       <dl class="grid gap-3 sm:grid-cols-2">
@@ -118,70 +102,6 @@ export function WeeklyPlanConditionsPanel(props: WeeklyPlanConditionsPanelProps)
           </dd>
         </div>
       </dl>
-
-      <Show
-        when={!props.loading && props.preflight}
-        fallback={
-          <p class="text-xs text-text-muted" data-testid="weekly-plan-preflight-pending">
-            {props.loading ? 'Calculando viabilidad…' : 'Revisa la viabilidad para ver el pre-flight.'}
-          </p>
-        }
-      >
-        {(preflight) => (
-          <div
-            class={`rounded-lg border px-3 py-2 ${
-              preflight().feasible
-                ? 'border-fero-green/40 bg-fero-green/10'
-                : 'border-amber-300/70 bg-amber-50/90 dark:border-amber-900/40 dark:bg-amber-950/25'
-            }`}
-            data-testid="weekly-plan-preflight-result"
-          >
-            <div class="flex items-start gap-2">
-              <Show
-                when={!preflight().feasible}
-                fallback={
-                  <CheckCircle2 size={16} class="mt-0.5 shrink-0 text-fero-green-dark" aria-hidden="true" />
-                }
-              >
-                <AlertTriangle size={16} class="mt-0.5 shrink-0 text-amber-700 dark:text-amber-200" aria-hidden="true" />
-              </Show>
-              <div class="min-w-0">
-                <p
-                  class={`text-sm font-semibold ${
-                    preflight().feasible
-                      ? 'text-fero-green-dark'
-                      : 'text-amber-900 dark:text-amber-100'
-                  }`}
-                >
-                  {preflight().feasible
-                    ? 'Pre-flight: semana viable'
-                    : `Pre-flight: ${issues().length} día(s) con problemas`}
-                </p>
-                <Show when={issues().length > 0}>
-                  <ul class="mt-1 space-y-0.5 text-xs text-amber-800 dark:text-amber-200">
-                    <For each={issues()}>
-                      {(issue) => (
-                        <li data-testid={`weekly-plan-preflight-issue-${issue.operationDate}`}>
-                          {issue.operationDate}:{' '}
-                          {[
-                            issue.overloaded ? 'sobrecapacidad estimada' : null,
-                            issue.insufficientFleet ? 'flota insuficiente' : null,
-                          ]
-                            .filter(Boolean)
-                            .join(' · ')}
-                        </li>
-                      )}
-                    </For>
-                  </ul>
-                  <p class="mt-1 text-xs text-amber-800 dark:text-amber-200">
-                    Ajusta la flota por tipo o la cobertura de esos días antes de validar.
-                  </p>
-                </Show>
-              </div>
-            </div>
-          </div>
-        )}
-      </Show>
     </section>
   );
 }

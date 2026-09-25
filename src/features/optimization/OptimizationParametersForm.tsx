@@ -96,7 +96,7 @@ export function OptimizationParametersForm(props: OptimizationParametersFormProp
   const hasResults = () => optimizationState.kpis != null;
   // Sin resultados: "Generar". Con el día ya optimizado no se regenera desde aquí.
   const showGenerate = () => !hasResults() || optimizationState.isOptimizing;
-  const generateLabel = () => 'Generar Plan Operativo';
+  const generateLabel = () => 'Generar rutas del día';
 
   return (
     <div ref={props.generateAnchorRef}>
@@ -153,7 +153,7 @@ export function OptimizationParametersForm(props: OptimizationParametersFormProp
           <p class="text-xs text-text-muted">
             Para comparar condiciones (lluvia, saturación, impacto en KPIs), usa{' '}
             <A href="/simulation" class="font-medium text-fero-blue hover:underline">
-              Simulación de tesis
+              Simulación ACO (tesis)
             </A>
             .
           </p>

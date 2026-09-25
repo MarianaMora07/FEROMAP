@@ -1,8 +1,5 @@
-import { A } from '@solidjs/router';
-import { ExternalLink } from 'lucide-solid';
 import { For, Show, createMemo } from 'solid-js';
 import type { WeeklyPlan, WeeklyPlanDay } from '../../../core/api/planning';
-import { optimizationHref } from '../../../core/planning/operationalLinks';
 import { formatWeekdayLabel } from '../../../core/planning/weeklyPlanCalendar';
 import { buildWeeklyPlanSectorRows } from '../../../core/planning/weeklyPlanSectors';
 import { weeklyPlanSavingPct } from '../../../core/planning/weeklyPlanUx';
@@ -48,14 +45,14 @@ export function WeeklyPlanApprovedDayTable(props: WeeklyPlanApprovedDayTableProp
               <th class="px-2 py-2 font-semibold">Día</th>
               <th class="px-2 py-2 font-semibold">Fecha</th>
               <th class="px-2 py-2 text-center font-semibold">Puntos</th>
-              <th class="px-2 py-2 text-right font-semibold">Ahorro</th>
               <Show when={hasVehicleColumn()}>
                 <th class="px-2 py-2 text-center font-semibold">Camiones prev.</th>
               </Show>
-              <th class="px-2 py-2 font-semibold">Sectores</th>
-              <th class="px-2 py-2 font-semibold">
-                <span class="sr-only">Acciones</span>
-              </th>
+              <th class="px-2 py-2 text-right font-semibold">Km</th>
+              <th class="px-2 py-2 text-right font-semibold">Duración</th>
+              <th class="px-2 py-2 text-right font-semibold">Cobertura</th>
+              <th class="px-2 py-2 text-right font-semibold">Ahorro</th>
+              <th class="px-2 py-2 font-semibold">Zonas</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-border dark:divide-dark-border">
@@ -78,41 +75,48 @@ export function WeeklyPlanApprovedDayTable(props: WeeklyPlanApprovedDayTableProp
                     <td class="px-2 py-2 text-center font-semibold text-text-primary dark:text-white">
                       {day.collectionPointIds.length}
                     </td>
-                    <td class="px-2 py-2 text-right font-semibold text-fero-green-dark">
-                      {saving() != null ? `${saving()!.toFixed(1)}%` : '—'}
-                    </td>
                     <Show when={hasVehicleColumn()}>
                       <td class="px-2 py-2 text-center text-text-secondary">
                         {day.expectedVehicleCount ?? '—'}
                       </td>
                     </Show>
-                    <td class="px-2 py-2">
+                    <td class="px-2 py-2 text-right text-text-secondary">
+                      {forecastDay() ? forecastDay()!.distanceKm.toFixed(1) : '—'}
+                    </td>
+                    <td class="px-2 py-2 text-right text-text-secondary">
+                      {forecastDay() ? `${forecastDay()!.durationHours.toFixed(1)} h` : '—'}
+                    </td>
+                    <td class="px-2 py-2 text-right text-text-secondary">
+                      {forecastDay()?.coveragePct != null
+                        ? `${forecastDay()!.coveragePct!.toFixed(1)}%`
+                        : '—'}
+                    </td>
+                    <td class="px-2 py-2 text-right font-semibold text-fero-green-dark">
+                      {saving() != null ? `${saving()!.toFixed(1)}%` : '—'}
+                    </td>
+                    <td class="px-2 py-2 align-top">
                       <Show
                         when={rows().length > 0}
                         fallback={<span class="text-xs text-text-muted">Sin puntos asignados.</span>}
                       >
-                        <div class="flex flex-wrap gap-1.5">
-                          <For each={rows()}>
-                            {(row) => (
-                              <span class="inline-flex items-center gap-1 rounded-full border border-border bg-elevated px-2 py-0.5 text-[11px] text-text-secondary dark:border-dark-border dark:bg-dark-surface">
-                                {row.name}
-                                <span class="font-semibold text-text-primary dark:text-white">
-                                  {row.count}
+                        <details class="group">
+                          <summary class="cursor-pointer list-none text-xs font-medium text-fero-blue marker:content-none">
+                            {rows().length} zona(s)
+                          </summary>
+                          <div class="mt-1.5 flex flex-wrap gap-1.5">
+                            <For each={rows()}>
+                              {(row) => (
+                                <span class="inline-flex items-center gap-1 rounded-full border border-border bg-elevated px-2 py-0.5 text-[11px] text-text-secondary dark:border-dark-border dark:bg-dark-surface">
+                                  {row.name}
+                                  <span class="font-semibold text-text-primary dark:text-white">
+                                    {row.count}
+                                  </span>
                                 </span>
-                              </span>
-                            )}
-                          </For>
-                        </div>
+                              )}
+                            </For>
+                          </div>
+                        </details>
                       </Show>
-                    </td>
-                    <td class="px-2 py-2 text-right">
-                      <A
-                        href={optimizationHref({ date: day.operationDate })}
-                        class="inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[11px] font-medium text-fero-blue hover:bg-surface-hover dark:border-dark-border"
-                        data-testid={`weekly-plan-approved-open-day-${day.operationDate}`}
-                      >
-                        <ExternalLink size={11} /> Abrir día
-                      </A>
                     </td>
                   </tr>
                 );
