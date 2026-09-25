@@ -57,6 +57,14 @@ const pageMeta: Record<string, PageMeta> = {
     title: 'Historial unificado',
     subtitle: 'Busca por semana, día o incidencia en un solo lugar.',
   },
+  '/planning/weeks': {
+    title: 'Planes semanales',
+    subtitle: 'Estado, flota y exportación de cada semana.',
+  },
+  '/planning/weekly': {
+    title: 'Editar semana',
+    subtitle: 'Configura, valida y aprueba la semana antes de optimizar el día.',
+  },
   [CALIBRATION_ROUTE]: {
     title: 'Calibración del motor',
     subtitle: 'Barridos de sensibilidad y pesos del objetivo.',

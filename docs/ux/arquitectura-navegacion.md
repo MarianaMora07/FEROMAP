@@ -50,13 +50,14 @@ El orden de los primarios sigue el ciclo **planificar → operar → supervisar*
 
 | Nivel | Ítems (etiqueta · ruta) |
 |-------|-------------------------|
-| **Primarios** | Dashboard `/` · Plan semanal `/planning/weekly` · Plan del día `/optimization` · Monitoreo en vivo `/monitoring` · Mapa GIS `/map` · Configuración `/settings` · Evidencias `/evidence` |
+| **Primarios** | Dashboard `/` · Planes semanales `/planning/weeks` · Plan del día `/optimization` · Monitoreo en vivo `/monitoring` · Mapa GIS `/map` · Configuración `/settings` · Evidencias `/evidence` |
 | ▸ **Consulta y reportes** | Historial unificado `/planning/history` · Reportes `/reports` · Analítica `/analytics` |
 | ▸ **Catálogos** | Vehículos `/vehicles` · Conductores `/drivers` · Puntos de Recolección `/collection-points` |
 | ▸ **Tesis y demostración** | *(oculta del sidebar)* Simulación ACO (tesis) `/simulation` · Casos de estudio `/case-studies` · Demostración ACO `/demostracion` |
 | **Bottom** | Administración `/admin` (solo admin) · Perfil `/profile` |
 
 Notas:
+- **Planes semanales** (`/planning/weeks`) es el listado de todas las semanas (entrada del menú). El editor de una semana concreta vive en `/planning/weekly`, **fuera del menú**, y se abre desde el listado con `?week=YYYY-MM-DD` (crea o selecciona).
 - **Alertas** no aparece en el menú del planificador/administrador: se consume desde los paneles del Dashboard y del Monitoreo. La ruta `/alerts` se conserva (enlaces directos).
 - **Evidencias** (`/evidence`) es **hermana de Configuración**, no una sección suya: reúne las tablas del capítulo de resultados (comparativa base vs optimizado y validación estadística) con la caché JSON que comparten las recetas `just`.
 - **Tesis y demostración** está **oculta del sidebar** (`DEMO_NAV_HIDDEN_HREFS` contiene `/simulation`, `/case-studies` y `/demostracion`): las rutas siguen vivas. `/simulation` conserva enlaces contextuales (`/optimization`, `/vehicles`, `/collection-points`); `/case-studies` y `/demostracion` quedan solo por URL directa. Sus ítems conservan `kind: 'demo'` (badge solo `administrador`) por si se vuelven a listar, lo que se hace vaciando ese set.
@@ -75,7 +76,8 @@ Mi Recolección `/resident` · Mapa mi sector `/map?scope=sector` · Puntos de r
 | Módulo (ruta) | Pestañas / secciones fijas |
 |---------------|-----------------------------|
 | **Dashboard** `/` | 1) KPIs del día · 2) "Qué hacer hoy" (stepper semana → día) · 3) Situación operativa (alertas activas + rutas en curso). *Absorbe el contenido del Hub de planificación.* |
-| **Plan semanal** `/planning/weekly` | Flujo directivo: Configurar días → Validar → Aprobar. Es la **configuración base**: zonas por día (añaden sus puntos; repetibles) y flota por tipo. Tras aprobar: **Generar plan operativo de la semana** (optimiza Lun→Vie en secuencia) → tabla **Camión × Día** (km/dur/puntos) → **Despachar por día o toda la semana** → cada día se abre en el Plan del día. |
+| **Planes semanales** `/planning/weeks` | Listado de todas las planificaciones por semana (una fila por semana): rango, estado, terminada, flota usada, días y acciones (Abrir, PDF, Ver qué cambió, Eliminar). Crea semanas nuevas y abre el editor en `/planning/weekly?week=`. Es la entrada del ciclo directivo en el menú. |
+| **Editar semana** `/planning/weekly` | Flujo directivo para una semana concreta: Configurar días → Validar → Aprobar. Es la **configuración base**: zonas por día (añaden sus puntos; repetibles) y flota por tipo. Tras aprobar: **Generar plan operativo de la semana** (optimiza Lun→Vie en secuencia) → tabla **Camión × Día** (km/dur/puntos) → **Despachar por día o toda la semana** → cada día se abre en el Plan del día. Fuera del menú; se abre desde el listado con `?week=`. |
 | **Plan del día** `/optimization` | Tabs **Plan** (mapa + tarjeta «Resumen del día» + sub-tabs Resumen/Desglose/Rutas) · **Resultados** (solo con el día cerrado: previsto vs. real) · **Pendientes** (carry-over: cancelar antiguos / marcar ya visitado). Cabecera: navegación de semana, chip de **estado** y chip de **nivel**, **una sola acción siguiente** (Generar → Monitoreo + Cerrar día → Ver resultados) y **una sola banda de estado** (`OptimizationContextBand`); el despacho es automático (indicador «Conductores notificados · N rutas»). Layout interno en [optimization-layout.md](./optimization-layout.md). |
 | **Monitoreo en vivo** `/monitoring` | 1) Mapa en vivo · 2) Incidencias y alertas. Sin "modo campo" (eso es `/operator`). |
 | **Mapa GIS** `/map` | Capas + leyenda + playback de recorrido (solo lectura). |
@@ -111,7 +113,8 @@ Mi Recolección `/resident` · Mapa mi sector `/map?scope=sector` · Puntos de r
 |-------------|--------|-------------------|
 | `/` Dashboard | **Fusionar** | Absorbe el Hub de planificación (KPIs + Qué hacer hoy + Situación). |
 | `/planning` Hub de planificación | **Redirigir → `/`** | Duplica el Dashboard. Redirect en `App.tsx`; actualizar e2e que visita `/planning`. |
-| `/planning/weekly` | Conservar | Sin cambios de ruta. |
+| `/planning/weekly` | **Fuera del menú** | Editor de una semana concreta (crea o selecciona vía `?week=`). Se abre desde `/planning/weeks`. Ruta conservada. |
+| `/planning/weeks` | **Nueva** | Listado de planificaciones semanales y **entrada del menú** (etiqueta «Planes semanales»): una fila por semana con estado, terminada, flota y exportación a PDF. |
 | `/optimization` | Conservar · renombrar | Etiqueta "Plan del día". Quitar tab "Historial operativo" (enlazar a `/planning/history`). |
 | `/optimization/levels` | **Eliminada** | Redirect → `/planning/weekly` en `App.tsx`; `OptimizationLevelsPage` borrada (andamiaje de tesis). |
 | `/planning/history` | Conservar | Destino único de historial. |

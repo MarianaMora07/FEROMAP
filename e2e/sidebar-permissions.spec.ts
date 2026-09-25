@@ -13,9 +13,13 @@ test.describe('Sidebar — navegación por rol', () => {
     await expect(page.getByTestId('app-sidebar')).toBeVisible({ timeout: 45_000 });
 
     // Primarios del ciclo planificar → operar → supervisar + Configuración + Evidencias.
-    for (const id of ['home', 'planning-weekly', 'optimization', 'monitoring', 'map', 'settings', 'evidence']) {
+    for (const id of ['home', 'planning-weeks', 'optimization', 'monitoring', 'map', 'settings', 'evidence']) {
       await expect(page.getByTestId(`sidebar-nav-${id}`)).toBeVisible();
     }
+
+    // El editor de una semana concreta (/planning/weekly) vive fuera del menú:
+    // se abre desde el listado con `?week=`.
+    await expect(page.getByTestId('sidebar-nav-planning-weekly')).toHaveCount(0);
 
     // Rutas fuera del menú del planificador.
     await expect(page.getByTestId('sidebar-nav-admin')).toHaveCount(0);

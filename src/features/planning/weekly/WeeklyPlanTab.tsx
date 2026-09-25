@@ -38,7 +38,6 @@ import {
 import { WeeklyPlanFlowStepper } from './WeeklyPlanFlowStepper';
 import { WeeklyPlanFleetEditor } from './WeeklyPlanFleetEditor';
 import { WeeklyPlanHistoryExportPanel } from './WeeklyPlanHistoryExportPanel';
-import { WeeklyPlanListPanel } from './WeeklyPlanListPanel';
 import { WeeklyPlanStepPanels } from './WeeklyPlanStepPanels';
 
 export function WeeklyPlanTab() {
@@ -48,6 +47,7 @@ export function WeeklyPlanTab() {
   const [compareB, setCompareB] = createSignal('');
   const [viewStep, setViewStep] = createSignal(1);
   const [confirmArchiveOpen, setConfirmArchiveOpen] = createSignal(false);
+  const [weekNotice, setWeekNotice] = createSignal<string | null>(null);
 
   const plan = () => weeklyPlanState.plan;
   const editable = () => isWeeklyPlanEditable();
@@ -93,11 +93,16 @@ export function WeeklyPlanTab() {
   onMount(async () => {
     const [scenarioRows] = await Promise.all([fetchScenarios(), initWeeklyPlanTab()]);
     setScenarios(scenarioRows.map((row) => ({ id: row.id, label: row.label })));
-    // Deep link `?week=YYYY-MM-DD`: abre esa semana (la selecciona o crea el borrador).
+    // Deep link `?week=YYYY-MM-DD`: abre esa semana (la crea o la selecciona).
     const weekParam = Array.isArray(searchParams.week) ? searchParams.week[0] : searchParams.week;
     if (weekParam) {
       try {
         await openWeekForApproval(weekParam);
+        setWeekNotice(
+          plan()?.status === 'approved'
+            ? `La semana ${weekParam} ya está aprobada; se abre en modo revisión.`
+            : null,
+        );
       } catch {
         // El store ya expone el error en `weeklyPlanState.error`.
       }
@@ -123,8 +128,8 @@ export function WeeklyPlanTab() {
     <div class="space-y-4" data-testid="weekly-plan-tab">
       <PlanningLevelBanner level="directivo" />
 
-      <div class="grid gap-4 lg:grid-cols-12">
-        <div class="order-2 space-y-4 lg:order-1 lg:col-span-8">
+      <div>
+        <div class="space-y-4">
           <WeeklyPlanFlowStepper
             flowStep={flowStep()}
             viewStep={viewStep()}
@@ -233,6 +238,9 @@ export function WeeklyPlanTab() {
                   />
                 </Show>
 
+                <Show when={weekNotice()}>
+                  <p class="text-sm text-amber-600 dark:text-amber-400">{weekNotice()}</p>
+                </Show>
                 <Show when={weeklyPlanState.error}>
                   <p class="text-sm text-red-500">{weeklyPlanState.error}</p>
                 </Show>
@@ -242,10 +250,6 @@ export function WeeklyPlanTab() {
               </div>
             </Show>
           </Card>
-        </div>
-
-        <div class="order-1 lg:order-2 lg:col-span-4">
-          <WeeklyPlanListPanel />
         </div>
       </div>
 

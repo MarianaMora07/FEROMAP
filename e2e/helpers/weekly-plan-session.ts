@@ -98,20 +98,35 @@ export async function ensureWeeklyDraftPlan(request: APIRequestContext): Promise
   throw new Error(`No se pudo crear borrador semanal: ${await createRes.text()}`);
 }
 
-export async function selectDraftWeeklyPlan(page: Page, request: APIRequestContext) {
-  await expect(page.getByTestId('weekly-plan-list')).toBeVisible({ timeout: 15_000 });
+/**
+ * Abre en el editor (`/planning/weekly`) la primera semana con el estado dado,
+ * pasando por el listado (`/planning/weeks`). Si no existe un borrador, lo crea
+ * vía API. La semana se abre con `?week=`, que el editor resuelve solo.
+ */
+export async function openWeeklyPlanByStatus(
+  page: Page,
+  request: APIRequestContext,
+  status: 'draft' | 'approved',
+) {
+  await page.goto('/planning/weeks', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByTestId('weekly-plans-page')).toBeVisible({ timeout: 45_000 });
 
-  const draftRow = page.locator('[data-weekly-plan-status="draft"]').first();
-  if (!(await draftRow.isVisible())) {
+  let row = page.locator(`[data-weekly-plan-status="${status}"]`).first();
+  if (status === 'draft' && !(await row.isVisible())) {
     const planId = await ensureWeeklyDraftPlan(request);
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await expect(page.getByTestId('planning-weekly-page')).toBeVisible({ timeout: 45_000 });
-    await expect(page.getByTestId('weekly-plan-list')).toBeVisible({ timeout: 15_000 });
-    await page.locator(`[data-testid="weekly-plan-row-${planId}"] [role="button"]`).click();
-    return;
+    await expect(page.getByTestId('weekly-plans-page')).toBeVisible({ timeout: 45_000 });
+    row = page.getByTestId(`weekly-plans-row-${planId}`);
   }
 
-  await draftRow.locator('[role="button"]').click();
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await row.getByRole('link', { name: 'Abrir' }).click();
+  await expect(page.getByTestId('planning-weekly-page')).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByTestId('weekly-plan-tab')).toBeVisible({ timeout: 45_000 });
+}
+
+export async function selectDraftWeeklyPlan(page: Page, request: APIRequestContext) {
+  await openWeeklyPlanByStatus(page, request, 'draft');
 }
 
 export async function autofillIfNeeded(page: Page) {

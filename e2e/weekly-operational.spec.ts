@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { ensurePlannerSession, expectNoPageErrors } from './helpers/planner-session';
 import {
   autofillIfNeeded,
+  openWeeklyPlanByStatus,
   selectDraftWeeklyPlan,
 } from './helpers/weekly-plan-session';
 
@@ -63,24 +64,15 @@ test.describe('Plan operativo semanal — generar, abrir y estado', () => {
     await firstDayLink.click();
     await expect(page).toHaveURL(/\/optimization/, { timeout: 60_000 });
 
-    // Volver al plan semanal y ver el estado persistido de los días
-    await page.goto('/planning/weekly', { waitUntil: 'domcontentloaded' });
-    await expect(page.getByTestId('planning-weekly-page')).toBeVisible({ timeout: 45_000 });
-
-    const approvedRow = page.locator('[data-weekly-plan-status="approved"] [role="button"]').first();
-    await expect(approvedRow).toBeVisible({ timeout: 30_000 });
-    await approvedRow.click();
+    // Volver al editor (vía el listado de semanas) y ver el estado persistido de los días.
+    await openWeeklyPlanByStatus(page, request, 'approved');
     await page.getByTestId('weekly-plan-step4-tab-operacion').click();
     await expect(page.getByTestId('weekly-operational-table')).toBeVisible({ timeout: 60_000 });
 
     // Recargar: el estado del día debe persistir (payload deriva estado vivo).
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('planning-weekly-page')).toBeVisible({ timeout: 45_000 });
-    const approvedAfterReload = page
-      .locator('[data-weekly-plan-status="approved"] [role="button"]')
-      .first();
-    await expect(approvedAfterReload).toBeVisible({ timeout: 30_000 });
-    await approvedAfterReload.click();
+    await expect(page.getByTestId('weekly-plan-tab')).toBeVisible({ timeout: 45_000 });
     await page.getByTestId('weekly-plan-step4-tab-operacion').click();
     await expect(page.getByTestId('weekly-operational-table')).toBeVisible({ timeout: 60_000 });
     await expect(page.getByText(/(Notificado|Optimizado|Cerrado)/).first()).toBeVisible({

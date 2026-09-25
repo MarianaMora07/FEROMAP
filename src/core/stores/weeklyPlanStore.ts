@@ -881,15 +881,39 @@ export async function showLatestVersionChanges(): Promise<void> {
   await compareLatestWeeklyVersions();
 }
 
-export async function exportWeeklyPlanPdf(): Promise<void> {
-  if (!state.plan?.id) throw new Error('No hay plan para exportar');
-  const blob = await downloadWeeklyPlanPdf(state.plan.id);
+function triggerPdfDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `plan-semanal-${state.plan.id}.pdf`;
+  anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+export async function exportWeeklyPlanPdf(): Promise<void> {
+  if (!state.plan?.id) throw new Error('No hay plan para exportar');
+  const blob = await downloadWeeklyPlanPdf(state.plan.id);
+  triggerPdfDownload(blob, `plan-semanal-${state.plan.id}.pdf`);
+}
+
+/** Descarga el PDF de una semana concreta sin necesidad de seleccionarla. */
+export async function exportWeeklyPlanPdfById(planId: number): Promise<void> {
+  const blob = await downloadWeeklyPlanPdf(planId);
+  triggerPdfDownload(blob, `plan-semanal-${planId}.pdf`);
+}
+
+/** Carga el listado de planes semanales para la vista de consulta (solo lectura). */
+export async function initWeeklyPlansList(): Promise<void> {
+  setState({ isLoading: true, error: null, notice: null });
+  try {
+    await refreshWeeklyPlanHistory();
+  } catch (error) {
+    setState({
+      error: error instanceof Error ? error.message : 'No se pudieron cargar los planes semanales',
+    });
+  } finally {
+    setState({ isLoading: false });
+  }
 }
 
 export { state as weeklyPlanState };

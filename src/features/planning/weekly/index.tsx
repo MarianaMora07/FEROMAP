@@ -1,24 +1,21 @@
 import { A } from '@solidjs/router';
 import { ArrowLeft } from 'lucide-solid';
-import { Button } from '../../../design-system/components';
+import { AppShellSubheader } from '../../../design-system/layout/pageChromeSlots';
 import { WeeklyPlanTab } from './WeeklyPlanTab';
 
 export default function PlanningWeeklyPage() {
   return (
     <div class="space-y-4" data-testid="planning-weekly-page">
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 id="page-title" class="font-heading text-2xl font-bold text-text-primary dark:text-white">Plan semanal</h1>
-          <p class="mt-1 text-sm text-text-secondary">
-            Configura, valida y aprueba la semana antes de optimizar el día.
-          </p>
-        </div>
-        <A href="/">
-          <Button variant="outline" size="sm" class="gap-2" icon={<ArrowLeft size={14} />}>
-            Dashboard
-          </Button>
+      <AppShellSubheader>
+        <A
+          href="/planning/weeks"
+          class="inline-flex items-center gap-1 text-sm font-medium text-fero-blue hover:underline"
+          data-testid="weekly-plan-back-to-list"
+        >
+          <ArrowLeft size={14} />
+          Volver a Planes semanales
         </A>
-      </div>
+      </AppShellSubheader>
 
       <WeeklyPlanTab />
     </div>

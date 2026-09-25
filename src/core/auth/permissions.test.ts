@@ -25,13 +25,21 @@ describe('permissions — arquitectura de navegación (IA)', () => {
     // cierran la lista.
     expect(layout.primary.map((item) => item.href)).toEqual([
       '/',
-      '/planning/weekly',
+      '/planning/weeks',
       '/optimization',
       '/monitoring',
       '/map',
       '/settings',
       '/evidence',
     ]);
+  });
+
+  it('expone el listado de semanas y deja el editor fuera del menú', () => {
+    const layout = sidebarNavLayout('planificador');
+    const hrefs = layout.primary.map((item) => item.href);
+    expect(hrefs).toContain('/planning/weeks');
+    // El editor de una semana concreta se abre desde el listado (`?week=`).
+    expect(hrefs).not.toContain('/planning/weekly');
   });
 
   it('expone Configuración al planificador y al admin, no al conductor', () => {
@@ -111,7 +119,7 @@ describe('permissions — arquitectura de navegación (IA)', () => {
     const demoItems = MAIN_NAV_ITEMS.filter((item) => TESIS_HREFS.includes(item.href));
     expect(demoItems).toHaveLength(3);
     expect(demoItems.every((item) => item.kind === 'demo')).toBe(true);
-    const planSemanal = MAIN_NAV_ITEMS.find((item) => item.href === '/planning/weekly');
+    const planSemanal = MAIN_NAV_ITEMS.find((item) => item.href === '/planning/weeks');
     expect(planSemanal?.kind).toBeUndefined(); // 'producto' es el valor por defecto al renderizar
   });
 

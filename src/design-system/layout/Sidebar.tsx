@@ -17,6 +17,7 @@ import {
   AlertTriangle,
   ClipboardList,
   CalendarDays,
+  CalendarRange,
   Settings,
 } from 'lucide-solid';
 import { authUser } from '../../core/stores/authStore';
@@ -32,6 +33,7 @@ const NAV_ICONS: Record<string, typeof LayoutDashboard> = {
   '/operator': ClipboardList,
   '/optimization': Map,
   '/planning/weekly': CalendarDays,
+  '/planning/weeks': CalendarRange,
   '/planning/history': History,
   '/map': MapPin,
   '/vehicles': Truck,
