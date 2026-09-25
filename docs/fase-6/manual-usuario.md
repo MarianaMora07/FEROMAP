@@ -67,22 +67,23 @@ El Dashboard **absorbió el antiguo "Hub de planificación"**: al entrar como pl
 
 1. Menú primario → **Plan semanal** (`/planning/weekly`).
 2. En **Configurar días**: elija las **zonas** que se cubrirán cada día (una zona añade todos sus puntos y puede repetirse en varios días) y defina la **flota de la semana por tipo** (o use **Todos (por defecto)**). Guarde el borrador.
-3. **Aprobar** la semana. La guarda al aprobar es el **pre-flight** heurístico (demanda estimada vs capacidad de la flota); la **validación con el motor** es **opcional** y sirve para previsualizar kilometraje y asignaciones. Si validas, el plan operativo queda calculado y «Ver plan» lo reutiliza (la semana se optimiza una sola vez). Hasta aprobar, el Plan del día está bloqueado.
-4. En el paso de aprobación usa **Ver plan** para abrir el plan operativo (si aún no se optimizó, se genera Lun→Vie **en secuencia** con barra de progreso; si ya lo hizo la validación, es inmediato). Tras aprobar, el paso final muestra la tabla **Camión × Día** (km, duración y puntos por camión) y permite **Notificar** un día o toda la semana.
-5. Desde esa tabla puede **Abrir día** (ir a `/optimization` de esa fecha) y **Notificar** a los conductores **por día o toda la semana** (la acción pide confirmación; es irreversible por día).
+3. **Aprobar** la semana. Al aprobar, el servidor comprueba que la demanda estimada quepa en la flota; la **validación con el motor** es **opcional** y sirve para previsualizar kilometraje y asignaciones. Si validas, el plan operativo queda calculado y «Ver plan» lo reutiliza (la semana se optimiza una sola vez). Hasta aprobar, el Plan del día está bloqueado.
+4. En el paso de aprobación usa **Ver plan** para abrir el plan operativo (si aún no se optimizó, se genera Lun→Vie **en secuencia** con barra de progreso; si ya lo hizo la validación, es inmediato). Tras aprobar, el paso final muestra la tabla **Camión × Día** (km, duración y puntos por camión) y permite **Despachar** un día o toda la semana.
+5. Desde esa tabla puede **Abrir día** (ir a `/optimization` de esa fecha) y **Despachar** a los conductores **por día o toda la semana** (la acción pide confirmación; es irreversible por día).
 6. Consulte **Versiones** y **Exportar PDF** en la etapa de configuración.
 
 ## 5. Plan del día (uso diario)
 
 1. Menú primario → **Plan del día** (`/optimization`).
-2. Pestaña **Optimizar y despachar**:
+2. Pestaña **Plan**:
    1. Seleccione la **fecha de operación** (calendario superior).
-   2. Pulse **Generar Plan Operativo** (optimización ACO real, sin envío a campo); si el día ya tiene corrida el botón dice **Regenerar Plan Operativo**.
-   3. Revise los resultados: **Resumen**, **Comparación (Baseline vs ACO)**, **Desglose**, **Convergencia** y **Rutas por vehículo**.
-   4. Cuando esté conforme, **Notificar a conductores** (aparece solo después de generar) — asigna las rutas y avisa a los conductores. Después el botón pasa a **Monitoreo**.
+   2. Pulse **Generar rutas del día** (optimización ACO real, sin envío a campo). Las acciones secundarias (**Simular día (dry-run)**, **Simular contingencia**, **Reenviar notificación**, **Exportar PDF**, **Ver en mapa operativo**, **Historial**) viven en el menú **⋯** (Herramientas), arriba a la derecha.
+   3. Revise el **Resumen del día** (tarjeta sobre el mapa: puntos programados, contenedores críticos, distancia, duración de flota, jornada por camión, toneladas y ahorro vs. línea base) y el **plan** en las sub-pestañas **Resumen**, **Desglose** y **Rutas por vehículo**; en Resumen verá la **línea base del turno vs. plan propuesto**.
+   4. El **despacho es automático** al generar (con la semana aprobada): la barra muestra **«Conductores notificados · N rutas»**. Si falla, el indicador queda en **«Conductores sin notificar»** y puedes reintentar con **⋯ → Reenviar notificación**. Tras despachar aparece **Monitoreo**. El estado del día (error, semana sin aprobar, despacho o cierre) se resume en **una sola banda** bajo la cabecera.
    5. Para ver el recorrido animado use el enlace/playback del mapa (`?playback=1`).
-   6. Al finalizar la jornada, use **Cerrar día** desde el menú **⋯** (arriba a la derecha).
-3. Pestaña **Pendientes**: gestiona visitas no cubiertas (carry-over) que pasan al siguiente día. Puede **Cancelar antiguos (>30 días, sin fecha)**, marcar un pendiente como **Ya visitado**, o **Cancelar** uno puntual. Los que deja abiertos se incorporan solos al regenerar.
+   6. Al finalizar la jornada, use **Cerrar día** (único punto: botón visible en la barra cuando el día está **despachado**).
+3. Pestaña **Resultados** (solo con el día **cerrado**): **previsto vs. real** del día (distancia, duración, puntos servidos y cumplimiento). Si el día está despachado pero sin cerrar muestra «Jornada en curso»; si aún no hay cierre, «Aún no hay resultados reales».
+4. Pestaña **Pendientes**: gestiona visitas no cubiertas (carry-over) que pasan al siguiente día. Puede **Cancelar antiguos (>30 días, sin fecha)**, marcar un pendiente como **Ya visitado**, o **Cancelar** uno puntual. Los que deja abiertos se incorporan solos al regenerar.
 
 ## 6. Monitoreo en vivo
 
@@ -96,7 +97,7 @@ El Dashboard **absorbió el antiguo "Hub de planificación"**: al entrar como pl
 
 ## 8. Simulación ACO (tesis)
 
-**Simulación ACO** (`/simulation`, fuera del menú lateral):
+**Simulación ACO (tesis)** (`/simulation`, fuera del menú lateral):
 
 - Pestaña **Baseline vs ACO**: configura escenario (condiciones, parámetros αβρ, dotación) → ejecuta → KPIs comparativos y exportaciones.
 - Pestaña **Historial**: corridas anteriores con `?simulationId=…` para abrir resultados directo.

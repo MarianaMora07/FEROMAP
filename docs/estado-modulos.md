@@ -12,8 +12,8 @@
 | Módulo (ruta · etiqueta) | Fase IA | Estado | Evidencia / pendiente |
 |---|---|---|---|
 | `/` Dashboard (hub integrado) | 0–2 | ✅ | e2e `planner-dashboard` + `daily-planning` (hub). KPIs agregados por rol pendientes. |
-| `/planning/weekly` Plan semanal (config base) | 1–3 | ✅ | **Config base**: zonas por día + flota por tipo. Flujo: Configurar → **Validar (opcional)** → Aprobar → **plan operativo** (tabla Camión × Día) → notificar. Aprobar lo gobierna el **pre-flight** heurístico, no la validación. La validación **persiste** el plan operativo y «Ver plan» lo reutiliza: la semana se optimiza **una sola vez** (ver deuda §7). e2e `daily-planning` + `weekly-operational` (motor real, lento). |
-| `/optimization` Plan del día (tabs Optimizar/Resultados/Pendientes) | 1–4 | ✅ | Toolbar: Generar/Regenerar Plan Operativo + **Notificar a conductores** (aparece tras generar). Pendientes: cancelar antiguos / marcar ya visitado. e2e `daily-planning` (#pendientes) + `route-playback`. Los **parámetros del algoritmo** viven en `/settings`. |
+| `/planning/weekly` Plan semanal (config base) | 1–3 | ✅ | **Config base**: zonas por día + flota por tipo. Flujo: Configurar → **Validar (opcional)** → Aprobar → **plan operativo** (tabla Camión × Día) → **despachar**. Aprobar lo gobierna el **pre-flight** heurístico del backend (sin UI propia), no la validación. La validación **persiste** el plan operativo y «Ver plan» lo reutiliza: la semana se optimiza **una sola vez** (ver deuda §7). e2e `daily-planning` + `weekly-operational` (motor real, lento). |
+| `/optimization` Plan del día (tabs Plan/Resultados/Pendientes) | 1–4 | ✅ | Toolbar: **Generar rutas del día** + indicador «Conductores notificados · N rutas» (despacho automático; «Reenviar notificación» en ⋯). **Resultados** gated al día cerrado (previsto vs. real). Pendientes: cancelar antiguos / marcar ya visitado. e2e `daily-planning` (#pendientes) + `route-playback`. Los **parámetros del algoritmo** viven en `/settings`. |
 | `/settings` Configuración (sección *Algoritmo*) | 13 | ✅ | Parámetros del motor (ACO, heurísticos, calibración) + **objetivo multiobjetivo** (equidad, makespan, mín. vehículos, jornada objetivo, rotación semanal). Vitest `optimizationObjectiveUx`. Antes era una pestaña de `/optimization`. |
 | `/settings/calibration` Calibración del motor | 13 | ✅ | Consola de ambos barridos (sensibilidad ACO 18 corridas y pesos del objetivo) como **job asíncrono** con progreso `k/total`, ETA y cancelación; resultados desde caché con frontera de Pareto, AC-1/AC-2/AC-3 y export JSON/CSV. API `POST /benchmarks/*/jobs` + `GET /benchmarks/calibration/jobs/{id}` (`backend/docs/API.md`). Vitest `calibrationRunUx`, `calibrationSensitivityUx`, `calibrationObjectiveUx`, `calibrationExport`. |
 | `/evidence` Evidencias (hermana de Configuración) | 13 | ✅ | Pestañas con las tablas del capítulo de resultados: **comparativa** base vs optimizado (5 escenarios) y **validación estadística** (Wilcoxon + Holm). Lee la caché JSON compartida con las recetas `just` y la regenera como job con progreso. La pestaña de **casos de estudio** está implementada pero **oculta** (D8: el caso combinatorio es solo anexo). API `GET|POST /benchmarks/thesis/{kind}`; snapshot por `GET /simulations/jobs/{id}`. |
@@ -39,7 +39,7 @@
 | Pieza | Estado | Nota |
 |---|---|---|
 | `contingency`, `landfill`, `route-playback`, `shared` | ✅ | Bibliotecas embebidas en monitoreo/operador/optimización/simulación. |
-| `features/planning/weekly/WeeklyPlan*` | ✅ | Migrados desde `simulation` (Fase 3); incluye `WeeklyPlanFleetEditor` (flota por tipo), `WeeklyPlanOperationalSection` (generar semana + tabla Camión × Día + notificar). |
+| `features/planning/weekly/WeeklyPlan*` | ✅ | Migrados desde `simulation` (Fase 3); incluye `WeeklyPlanFleetEditor` (flota por tipo), `WeeklyPlanOperationalSection` (generar semana + tabla Camión × Día + **despachar**). |
 | `features/vehicles/VehicleTerritoryPanel` | ✅ | Territorio sector→conductor configurable por vehículo (pestada Territorio). |
 | `features/case-studies/CaseStudySelector` | ✅ | Movido a su dominio (Fase 3). |
 
@@ -88,7 +88,7 @@ Con `VITE_USE_MOCKS=false`, `withMockFallback` **propaga** el error de API en ve
 - **Idempotencia**: tabla `idempotency_records` + helper `app/core/idempotency.py`; `dispatch_optimized_routes(..., idempotency_key=...)` reproduce la respuesta ante la misma `Idempotency-Key`. Los endpoints de despacho leen el header.
 - **Outbox**: tabla `notification_outbox` + `notification_service` reescrito; entrega con reintentos y backoff exponencial, estados `queued/sent/failed/acked`, worker en background (`outbox_worker_enabled`) y `POST /notifications/outbox/process`.
 - **Canales**: `webhook`, `smtp`, `whatsapp` y `webhook_mock` (fallback local). Configurable por env (`NOTIFICATION_CHANNELS`, `SMTP_*`, `WHATSAPP_WEBHOOK_URL`).
-- **Historial, estado y acuse**: `GET /notifications/drivers/recent` (con intentos/error/sentAt/ackAt), `POST /notifications/{id}/ack` y panel `NotificationDeliveryPanel` en `/optimization`.
+- **Historial, estado y acuse**: `GET /notifications/drivers/recent` (con intentos/error/sentAt/ackAt) y `POST /notifications/{id}/ack`. La entrega es **automática** (despacho al aprobar la semana + worker de outbox): el panel de auditoría `NotificationDeliveryPanel` **no se expone** en `/optimization`; el acuse corresponde al conductor en `/operator/notifications`.
 - **Flags de rollback**: `DISPATCH_IDEMPOTENCY_ENABLED`, `NOTIFICATIONS_OUTBOX_ENABLED` (en `false` → entrega única legacy, sin outbox).
 - **Verificado en runtime**: doble POST con la misma clave → misma respuesta (no re-despacha); clave nueva → `count 0`; `idempotency_records` con estado `completed`.
 

@@ -185,7 +185,7 @@ Con `VITE_USE_MOCKS=false` en `.env` y el stack levantado:
 3. **Simulación ACO** (`/simulation`, fuera del menú lateral) — Configurar escenario → **Ejecutar simulación** → KPIs en paso 3
 4. **Acciones post-resultado** — Reportes, mapa o Plan del día (deep links con `simulationId`)
 5. **Historial** — Pestaña Historial en `/simulation`
-6. *(Opcional)* **Plan del día** (`/optimization`) — pestaña Optimizar y despachar (generar → simular → despachar); pestaña **Pendientes** para carry-over
+6. *(Opcional)* **Plan del día** (`/optimization`) — pestaña **Plan** (generar → revisar el plan → despachar); pestaña **Resultados** (previsto vs. real, con el día cerrado); pestaña **Pendientes** para carry-over
 
 Verificación automática:
 

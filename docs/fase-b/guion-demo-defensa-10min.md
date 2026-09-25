@@ -87,7 +87,7 @@ Abrir el navegador en **pantalla completa**, zoom **100 %**, sin extensiones que
 
 **Frase de apertura (≤ 30 s):**
 
-> «FEROMAP es un prototipo sobre la red vial real de Unare: **52 sectores**, **~120 puntos** de recolección y **flota completa** de diez vehículos. No prometemos optimalidad global: usamos **ACO** para obtener rutas de alta calidad y las comparamos con un **baseline operativo**. Verán tres piezas: **demostración didáctica** del algoritmo, **simulación de tesis** con KPIs, y **operación** en vivo — plan semanal, día, despacho, conductor y residente.»
+> «FEROMAP es un prototipo sobre la red vial real de Unare: **52 sectores**, **~120 puntos** de recolección y **flota completa** de diez vehículos. No prometemos optimalidad global: usamos **ACO** para obtener rutas de alta calidad y las comparamos con un **baseline operativo**. Verán tres piezas: **demostración didáctica** del algoritmo, **Simulación ACO (tesis)** con KPIs, y **operación** en vivo — plan semanal, día, despacho, conductor y residente.»
 
 **Clic:** iniciar sesión como **Planificador** (`plan@fero.com`).
 
@@ -110,9 +110,9 @@ Abrir el navegador en **pantalla completa**, zoom **100 %**, sin extensiones que
 
 ---
 
-## Bloque 2 — Simulación de tesis (2:00–3:30) · Planificador
+## Bloque 2 — Simulación ACO (tesis) (2:00–3:30) · Planificador
 
-**Ruta:** menú **Análisis → Simulación de tesis** → `/simulation`
+**Ruta:** menú **Análisis → Simulación ACO (tesis)** → `/simulation`
 
 ### Ruta A — en vivo (preferida en defensa)
 
@@ -140,7 +140,7 @@ Abrir el navegador en **pantalla completa**, zoom **100 %**, sin extensiones que
 
 ## Bloque 3 — Plan semanal en vivo (3:30–6:00) · Planificador
 
-**Ruta:** menú **Operación → Planificación operativa** → pestaña / URL **Plan semanal** → `/planning/weekly`
+**Ruta:** menú primario → **Plan semanal** → `/planning/weekly`
 
 **Semana narrativa de referencia:** 2026-03-09 → 2026-03-13 ([alcance §3](./alcance-demo-defensa.md#3-semana-de-referencia-del-guion-d5-d16-d18)). En el prototipo se crea el borrador de la **semana actual** (lunes–viernes ISO); la narrativa al jurado usa marzo 2026.
 
@@ -168,9 +168,9 @@ Abrir el navegador en **pantalla completa**, zoom **100 %**, sin extensiones que
 | 2 | Desplegar **Gestión de pendientes** (`optimization-pending-section`) | «Hay **carry-over** de días anteriores (CNT-016, CNT-017, CNT-018 en seed).» |
 | 3 | Señalar lista en `pending-management-panel` | «Se incorporan al consolidar el día — no se pierden visitas fallidas.» |
 | 4 | Cerrar pendientes; toolbar → **Generar** (`optimization-generate-route`) | «ACO operativo sobre red real + pendientes.» *Esperar barra de progreso (~30–90 s).* |
-| 5 | Revisar mapa y panel comparativo (`optimization-comparison-panel`) | «Misma lógica que en simulación, con restricciones del turno.» |
-| 6 | **Despachar** (`optimization-dispatch-route`) | «El despacho publica rutas a campo y al residente.» |
-| 7 | Banner de despacho → opcional **Ver monitoreo** | Solo si sobra tiempo; si no, seguir al conductor. |
+| 5 | Revisar el mapa y, en **Plan → Resumen**, el panel de línea base (`optimization-comparison-panel`) | «La línea base del turno es la operación actual; el plan la mejora con las restricciones del día.» |
+| 6 | Esperar el **despacho automático**: la barra muestra «Conductores notificados · N rutas» | «El despacho publica rutas a campo y al residente sin un paso manual.» |
+| 7 | Banda de estado (BDC) de despacho → opcional **Ir a monitoreo** | «Una sola banda de estado confirma el despacho; el detalle vive en Monitoreo.» Solo si sobra tiempo. |
 
 **Ancla demo:** tras optimizar, el vehículo **TR-01** debe tener al menos una parada (garantía de seed + servicio).
 

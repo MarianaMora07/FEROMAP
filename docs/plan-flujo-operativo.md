@@ -36,7 +36,7 @@ flowchart TD
 | Fase | Etapa del ciclo | Resultado observable | Estado |
 |---|---|---|---|
 | **0** | Fundación | Contratos tipados de "previsto" y "real" + almacenamiento + migración | ✅ Implementada |
-| **1** | 1. Condiciones iniciales | Viabilidad y condiciones visibles antes de ejecutar el algoritmo | ✅ Implementada |
+| **1** | 1. Condiciones iniciales | Condiciones de la semana explícitas (viabilidad verificada en el servidor al aprobar) | ✅ Implementada |
 | **2** | 2–3. Plan + mejoras previstas | Ahorro/cobertura por día persistidos (sobreviven al recargar) | ✅ Implementada |
 | **3** | 4. Simular con contingencias | Plan alternativo **sin despachar** (dry-run) | ✅ Implementada |
 | **4** | 4–5. Ejecución y resultado real | KPI real por día al cerrar | ✅ Implementada |
@@ -48,7 +48,7 @@ flowchart TD
 
 El **producto mínimo viable** es el ciclo completo de las fases 0–5 (todas ✅):
 
-1. **Semana**: condiciones iniciales + pre-flight de viabilidad.
+1. **Semana**: condiciones iniciales (viabilidad verificada en el servidor al aprobar).
 2. **Plan ACO** de la semana.
 3. **Mejoras previstas** persistidas (sobreviven al recargar).
 4. **Simulación diaria con contingencias** (dry-run) antes de comprometer rutas.
@@ -84,12 +84,12 @@ El **producto mínimo viable** es el ciclo completo de las fases 0–5 (todas �
 **Objetivo:** que el paso 1 muestre las condiciones con las que se ejecutará el algoritmo, no solo la edición.
 
 **Implementación:**
-- Backend: endpoint `POST /api/v1/planning/weekly/{id}/preflight` que recalcula y persiste `preflight_weekly_feasibility` (demanda vs. capacidad, `overloaded`/`insufficientFleet`) sin correr el motor ACO.
-- `WeeklyPlanConditionsPanel` montado en el paso «Configurar días»: escenario, caso de estudio, flota por tipo, puntos/zonas/días activos y **resultado del pre-flight** con botón «Revisar viabilidad».
-- `WeeklyPlanPreflightWarningPanel` en el paso «Validar»: avisa de los días con problemas de viabilidad antes de validar.
-- Store: `preflight` + `isLoadingPreflight` + `refreshWeeklyPlanPreflight()`, recargado al abrir/guardar/autocompletar la semana.
+- Backend: endpoint `POST /api/v1/planning/weekly/{id}/preflight` que recalcula y persiste `preflight_weekly_feasibility` (demanda vs. capacidad, `overloaded`/`insufficientFleet`) sin correr el motor ACO. Sigue siendo la **guarda del servidor** al aprobar (rechaza con `allowWarnings=false` si la semana es infeasible).
+- `WeeklyPlanConditionsPanel` montado en el paso «Configurar días»: escenario, caso de estudio, flota por tipo y puntos/zonas/días activos.
 
-**Criterio cumplido:** el planificador ve condiciones + viabilidad y no descubre el problema al aprobar.
+> **Reconciliación (2026-09-24):** el pre-flight se **ocultó de la UI** (se quitaron el resultado de viabilidad, el botón «Revisar viabilidad» y el aviso en «Validar», junto con el estado `preflight`/`isLoadingPreflight` del store). La lógica del backend se conserva; si la semana no es viable, la aprobación falla con un error del servidor.
+
+**Criterio cumplido:** el planificador configura las condiciones de la semana y la guarda de viabilidad sigue actuando en el servidor al aprobar.
 
 ---
 
@@ -161,7 +161,8 @@ El **producto mínimo viable** es el ciclo completo de las fases 0–5 (todas �
 
 ## Transversales
 
-- **Máquina de estados del día:** formalizar `draft → optimized → dispatched → closed/partial` (`DailyPlan.status`).
+- **Máquina de estados del día:** `draft → optimized → dispatched → closed/partial` (`DailyPlan.status`), visible como **chip** en la cabecera del día y como **leyenda** en el calendario semanal. **Cerrar día** aparece en la barra al despachar (único punto de acceso, ya no en ⋯). Los **resultados reales** (previsto vs. real) se muestran solo en la pestaña **Resultados** cuando el día está cerrado (`partial`/`closed`); el previsto vive en el tab **Plan**.
+- **Banda de estado contextual (BDC):** una sola banda sobre los tabs, resuelta por `resolveOptimizationContextBand` con prioridad **error > semana sin aprobar > despacho > cierre** (`OptimizationContextBand`). La «Situación del día» (escenario heredado + pendientes) es una banda informativa aparte.
 - **Gating y permisos:** despacho y contingencias reales para planner/admin; el dry-run puede permitirse a planner.
 - **Migraciones + seeds:** cada fase con Alembic y datos demo coherentes (`just db-reset && just seed`).
 - **Testing:** unit de `PlanForecast`/`PlanVsReal` y e2e por fase (`weekly-operational.spec.ts` es lento con motor real).

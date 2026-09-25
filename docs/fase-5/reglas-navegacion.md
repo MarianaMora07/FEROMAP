@@ -2,6 +2,12 @@
 
 Documento para futuros cambios de producto y frontend (Opción A).
 
+> **Reconciliación (2026-09-24):** la IA vigente es
+> [ux/arquitectura-navegacion.md](../ux/arquitectura-navegacion.md) — la **operación** es
+> primaria y la Simulación ACO (tesis) vive oculta en el grupo «Tesis y demostración».
+> La sección «Jerarquía» de abajo refleja el ADR-001 (histórico); las **reglas al añadir
+> funcionalidad** son la fuente de verdad vigente.
+
 ## Jerarquía
 
 1. **CTA primario del Dashboard** → `/simulation` (Nueva simulación).
@@ -17,15 +23,16 @@ Optimización/Simulación usa componentes de contexto.
 
 | Pantalla | Componente real | Copy / destino |
 |----------|-----------------|----------------|
-| `/optimization` | `DailyScenarioBanner` | «Situación del día»: escenario heredado + CTA «Aprobar plan semanal» / «Revisar semana» |
-| `/optimization` | `OptimizationHeaderBar` | Chip «Experiencia del día» (Drawer) y «Simular día» → `/optimization/simulation` |
-| `/optimization` | `OptimizationDispatchBanner` | Confirmación post-despacho → «Ir a monitoreo» |
+| `/optimization` | `DailyScenarioBanner` | «Situación del día»: escenario heredado del plan semanal y pendientes (solo lectura). |
+| `/optimization` | `OptimizationHeaderBar` | Chip «Experiencia del día» (Drawer), navegación `‹ ›`/fecha + chip de estado + chip de nivel e **indicador de notificación** («Conductores notificados · N rutas»; el despacho es automático). Las herramientas secundarias (Simular día (dry-run), Contingencia, Reenviar, PDF, mapa, historial) viven en ⋯. |
+| `/optimization` | `OptimizationContextBand` (BDC) | **Una sola** banda por prioridad: error · semana sin aprobar → «Ir al Plan semanal» · despacho → «Ir a monitoreo» · cierre del día. |
 | `/simulation` | `PlanningContextualCta` (`SimulationResultsStep`) | «Plan semanal aprobado — lleva el escenario al plan operativo del día» → `/optimization` |
 | `/demostracion` | `ModuleGuidanceBanner` | «¿Quieres evaluar escenarios completos?» → `/simulation`; «Demostración didáctica — no es simulación de tesis» → `/simulation` |
 
 Implementación: `src/features/shared/ModuleGuidanceBanner.tsx` (solo
 `/demostracion`) · `src/features/planning/PlanningContextualCta.tsx` ·
-`src/features/optimization/DailyScenarioBanner.tsx`.
+`src/features/optimization/DailyScenarioBanner.tsx` ·
+`src/features/optimization/OptimizationDispatchBanner.tsx` (exporta `OptimizationContextBand`, la BDC).
 
 > **Nota de reconciliación:** los copies literales «¿Quieres evaluar escenarios?»
 > (en `/optimization`) y «¿Quieres despachar rutas de hoy?» (en `/simulation`)
@@ -52,7 +59,7 @@ No enlazar el historial operativo de `/optimization` como sustituto del historia
 2. **No duplicar formularios**: si un campo ya existe en Simulación con propósito de tesis, no copiarlo en Optimización sin justificación operativa.
 3. **Historial**: las corridas desde `/optimization` deben llamar a `recordOperationalRun(simulationId)`; Simulación usa el listado API completo.
 4. **Despacho**: solo en Planificación operativa; Simulación redirige con banner/enlace.
-5. **KPIs comparativos (actual vs optimizado)**: solo en Simulación paso 3; Optimización muestra resultados de ruta para despacho, no tabla de impacto de tesis.
+5. **Previsto vs. real y KPIs de impacto** *(regla canónica)*: el **previsto** (línea base del turno vs. plan, desglose y rutas por vehículo) vive en la pestaña **Plan**; los **resultados reales** (previsto vs. real, cumplimiento) solo aparecen en la pestaña **Resultados** cuando el día está **cerrado** (`partial`/`closed`). La comparación de tesis (baseline vs ACO entre escenarios) sigue siendo de `/simulation`; el tab `Plan` habla de «línea base del turno», no de evaluación académica.
 6. **Cambios de menú o CTA**: actualizar este documento y `docs/fase-5/matriz-responsabilidades-modulos.md`.
 
 ## Anti-patrones (evitar)

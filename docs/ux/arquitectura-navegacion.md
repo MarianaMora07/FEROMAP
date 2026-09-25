@@ -53,7 +53,7 @@ El orden de los primarios sigue el ciclo **planificar → operar → supervisar*
 | **Primarios** | Dashboard `/` · Plan semanal `/planning/weekly` · Plan del día `/optimization` · Monitoreo en vivo `/monitoring` · Mapa GIS `/map` · Configuración `/settings` · Evidencias `/evidence` |
 | ▸ **Consulta y reportes** | Historial unificado `/planning/history` · Reportes `/reports` · Analítica `/analytics` |
 | ▸ **Catálogos** | Vehículos `/vehicles` · Conductores `/drivers` · Puntos de Recolección `/collection-points` |
-| ▸ **Tesis y demostración** | *(oculta del sidebar)* Simulación ACO `/simulation` · Casos de estudio `/case-studies` · Demostración ACO `/demostracion` |
+| ▸ **Tesis y demostración** | *(oculta del sidebar)* Simulación ACO (tesis) `/simulation` · Casos de estudio `/case-studies` · Demostración ACO `/demostracion` |
 | **Bottom** | Administración `/admin` (solo admin) · Perfil `/profile` |
 
 Notas:
@@ -75,15 +75,15 @@ Mi Recolección `/resident` · Mapa mi sector `/map?scope=sector` · Puntos de r
 | Módulo (ruta) | Pestañas / secciones fijas |
 |---------------|-----------------------------|
 | **Dashboard** `/` | 1) KPIs del día · 2) "Qué hacer hoy" (stepper semana → día) · 3) Situación operativa (alertas activas + rutas en curso). *Absorbe el contenido del Hub de planificación.* |
-| **Plan semanal** `/planning/weekly` | Flujo directivo: Configurar días → Validar → Aprobar. Es la **configuración base**: zonas por día (añaden sus puntos; repetibles) y flota por tipo. Tras aprobar: **Generar plan operativo de la semana** (optimiza Lun→Vie en secuencia) → tabla **Camión × Día** (km/dur/puntos) → **Notificar por día o toda la semana** → cada día se abre en el Plan del día. |
-| **Plan del día** `/optimization` | 1) Optimizar (Generar/Regenerar Plan Operativo) → **Notificar a conductores** → Monitoreo · 2) Pendientes (carry-over: cancelar antiguos / marcar ya visitado). El historial vive en Historial unificado. |
+| **Plan semanal** `/planning/weekly` | Flujo directivo: Configurar días → Validar → Aprobar. Es la **configuración base**: zonas por día (añaden sus puntos; repetibles) y flota por tipo. Tras aprobar: **Generar plan operativo de la semana** (optimiza Lun→Vie en secuencia) → tabla **Camión × Día** (km/dur/puntos) → **Despachar por día o toda la semana** → cada día se abre en el Plan del día. |
+| **Plan del día** `/optimization` | Tabs **Plan** (mapa + tarjeta «Resumen del día» + sub-tabs Resumen/Desglose/Rutas) · **Resultados** (solo con el día cerrado: previsto vs. real) · **Pendientes** (carry-over: cancelar antiguos / marcar ya visitado). Cabecera: navegación de semana, chip de **estado** y chip de **nivel**, **una sola acción siguiente** (Generar → Monitoreo + Cerrar día → Ver resultados) y **una sola banda de estado** (`OptimizationContextBand`); el despacho es automático (indicador «Conductores notificados · N rutas»). Layout interno en [optimization-layout.md](./optimization-layout.md). |
 | **Monitoreo en vivo** `/monitoring` | 1) Mapa en vivo · 2) Incidencias y alertas. Sin "modo campo" (eso es `/operator`). |
 | **Mapa GIS** `/map` | Capas + leyenda + playback de recorrido (solo lectura). |
 | **Configuración** `/settings` | 1) Algoritmo (motor ACO y objetivo) · 2) Calibración `/settings/calibration`: barridos de sensibilidad y pesos con job asíncrono. La consola es una **sección** de Configuración, no un destino propio del sidebar. |
 | **Evidencias** `/evidence` | 1) Comparativa · 2) Validación estadística. Cada pestaña lee la caché JSON de su receta `just` (0 CPU) y puede regenerarse como job con progreso. |
 | **Historial unificado** `/planning/history` | Buscador único: Semana / Día / Incidencia. Único destino de historial. |
 | **Reportes** `/reports` | Resumen → Generar / descargar → Guardados. |
-| **Simulación ACO** `/simulation` | 1) Baseline vs ACO · 2) Historial de simulaciones. Benchmarks y sensibilidad como subvistas de resultados. Sin contenido de Plan semanal. |
+| **Simulación ACO (tesis)** `/simulation` | 1) Baseline vs ACO · 2) Historial de simulaciones. Benchmarks y sensibilidad como subvistas de resultados. Sin contenido de Plan semanal. |
 | **Casos de estudio** `/case-studies` | Lista + editor (sin cambios internos). |
 | **Demostración ACO** `/demostracion` | Cómo funciona · Laberinto · Convergencia (sin cambios internos). |
 | **Catálogos** (`/vehicles`, `/drivers`, `/collection-points`) | Tabla + formularios (sin cambios internos). |
@@ -101,7 +101,7 @@ Mi Recolección `/resident` · Mapa mi sector `/map?scope=sector` · Puntos de r
 | Hub de planificación (`/planning`) | — (fusionado en Dashboard) | Duplicaba `/`. |
 | Planificación operativa (`/optimization`) | **Plan del día** | La etiqueta anterior competía con "Plan semanal" y "Simulación". |
 | Optimización (3 niveles) (`/optimization/levels`) | — (eliminada del menú) | Reempaquetaba módulos existentes; andamiaje de tesis. |
-| Simulación de tesis (`/simulation`) | **Simulación ACO** | "de tesis" ya lo indica el grupo "Tesis y demostración". |
+| Simulación de tesis (`/simulation`) | **Simulación ACO (tesis)** | Unifica el nombre del módulo y lo desmarca de la operación diaria. |
 | Monitoreo en Tiempo Real (`/monitoring`) | **Monitoreo en vivo** | Concisión; copy ya lo usa. |
 | Analítica (`/analytics`) | Analítica (`/analytics`) | **Se conserva visible** (F6): KPIs reales del histórico operativo. §6 actualizado. |
 
@@ -113,7 +113,7 @@ Mi Recolección `/resident` · Mapa mi sector `/map?scope=sector` · Puntos de r
 | `/planning` Hub de planificación | **Redirigir → `/`** | Duplica el Dashboard. Redirect en `App.tsx`; actualizar e2e que visita `/planning`. |
 | `/planning/weekly` | Conservar | Sin cambios de ruta. |
 | `/optimization` | Conservar · renombrar | Etiqueta "Plan del día". Quitar tab "Historial operativo" (enlazar a `/planning/history`). |
-| `/optimization/levels` | **Fuera del menú** | Redirect → `/planning/weekly`. Candidata a borrado en Fase 4 si no quedan referencias. |
+| `/optimization/levels` | **Eliminada** | Redirect → `/planning/weekly` en `App.tsx`; `OptimizationLevelsPage` borrada (andamiaje de tesis). |
 | `/planning/history` | Conservar | Destino único de historial. |
 | `/monitoring` | Conservar · depurar | Quitar "modo campo" (delega en `/operator`). |
 | `/map` | Conservar | Sin cambios. |

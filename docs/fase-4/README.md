@@ -28,7 +28,7 @@ Cierre de brechas funcionales para preguntas del jurado sobre llenado y ventanas
 
 ### KPI view
 - Selector **Mostrar resultados por**: distancia | tiempo | CO₂.
-- Resalta la fila correspondiente en el panel Baseline vs ACO.
+- Resalta la fila correspondiente en el panel **«Línea base del turno vs. plan propuesto»** (tab Plan).
 - No modifica el objetivo del solver.
 
 ## API

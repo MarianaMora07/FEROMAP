@@ -83,7 +83,7 @@
 ### Mostrar en la defensa (10 min)
 
 - Hub y ciclo operativo: `/planning` → plan semanal → `/optimization` → despacho → `/operator` → `/resident`
-- Simulación de tesis (`/simulation`, escenario `normal`)
+- Simulación ACO (tesis) (`/simulation`, escenario `normal`)
 - Demostración ACO (`/demostracion`)
 - Mapa operativo con rutas despachadas
 - Pendientes incorporados al plan del día

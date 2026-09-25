@@ -28,7 +28,7 @@ No hace falta explicar “dos pantallas parecidas”: los banners y el menú ya 
 | **5:30–6:15** | Paso 3 acciones | **Ver en analítica** (deep link con `simulationId`) | «Desde el resultado sigo el análisis sin perder el contexto de esta corrida.» |
 | **6:15–6:30** | Paso 3 (opcional) | **Ver en plan del día** (si hay plan semanal aprobado) | «El escenario de tesis no se mezcla con operación; este enlace solo aparece cuando la semana está aprobada y lleva al plan administrativo.» |
 | **6:30–7:00** | `/` (Dashboard-hub) | Stepper **Recorrido operativo del día** | «El hub encadena semana → plan del día → pendientes → monitoreo sin que yo recuerde URLs.» |
-| **7:00–7:30** | `/optimization?playback=1` | Pestaña **Optimizar y despachar** — banner experiencia del día + **Simular recorrido** | «Mismo día: rutas generadas y replay animado antes de despachar.» |
+| **7:00–7:30** | `/optimization?playback=1` | Pestaña **Plan** — chip de experiencia del día + **Simular recorrido** | «Mismo día: rutas generadas y replay animado antes de despachar.» |
 | **7:30–8:00** | `/monitoring?dailyPlanId=…&playback=1` | **Reproducir ruta** en monitoreo | «Tras despachar, el replay operativo cierra la narrativa del camión en campo.» |
 | **(alternativa)** | `/demostracion` | **Modo presentación (60 s)** o Iniciar demo → pestaña Convergencia | «Antes del mapa real, el laberinto muestra cómo el ACO explora, deposita feromonas y converge — mismo α, β y ρ que el motor de producción.» |
 | **(alternativa)** | `/simulation?view=history` | Pestaña Historial — una corrida anterior | «Historial de escenarios de tesis; no es el despacho operativo del día.» |
@@ -120,7 +120,7 @@ Si el tribunal quiere ver el flujo directivo real (semana completa):
 | Pantalla | Qué hacer | Qué decir |
 |---|---|---|
 | `/planning/weekly` · Configurar días | Mostrar **zonas por día** (pills que añaden puntos, repetibles) y **flota por tipo** | «El plan semanal es la configuración base: aquí decido qué zonas se cubren cada día y con qué flota, sin tocar el algoritmo.» |
-| Validar (opcional) → Aprobar | Aprobar la semana | «La validación con el motor es opcional; la guarda al aprobar es el pre-flight. Si valido, el plan operativo ya queda calculado y «Ver plan» no repite el cálculo.» |
+| Validar (opcional) → Aprobar | Aprobar la semana | «La validación con el motor es opcional; al aprobar, el servidor verifica la viabilidad. Si valido, el plan operativo ya queda calculado y «Ver plan» no repite el cálculo.» |
 | Paso final: **Generar plan operativo de la semana** (si no lo generó la validación) | Correr la generación (Lun→Vie en secuencia) | «El sistema optimiza cada día con el motor real usando esa configuración y me deja la tabla Camión × Día.» |
 | Tabla Camión × Día | Señalar filas/columnas + **Notificar** un día | «Veo qué camión sale cada día; notifico a los conductores y el estado queda persistido para Monitoreo.» |
 
