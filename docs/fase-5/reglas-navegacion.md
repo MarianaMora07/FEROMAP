@@ -8,15 +8,31 @@ Documento para futuros cambios de producto y frontend (Opción A).
 2. **Menú lateral** → Simulación aparece antes que Planificación operativa.
 3. **Planificación operativa** → CTA secundario en Dashboard y enlace desde banner de Simulación.
 
-## Banners de orientación (obligatorios)
+## Banners de orientación (reconciliado en Fase 0 · 2026-09-24)
 
-| Pantalla | Copy |
-|----------|------|
-| `/optimization` | «¿Quieres evaluar escenarios?» → enlace a `/simulation` |
-| `/simulation` | «¿Quieres despachar rutas de hoy?» → enlace a `/optimization` |
-| `/demostracion` | «¿Quieres evaluar escenarios completos?» → enlace a `/simulation` |
+Regla: cada módulo ambiguo debe ofrecer una salida clara al módulo hermano. La
+implementación real **no** es un único componente genérico: el
+`ModuleGuidanceBanner` queda reservado a la Demostración y la orientación de
+Optimización/Simulación usa componentes de contexto.
 
-Implementación: `src/features/shared/ModuleGuidanceBanner.tsx`.
+| Pantalla | Componente real | Copy / destino |
+|----------|-----------------|----------------|
+| `/optimization` | `DailyScenarioBanner` | «Situación del día»: escenario heredado + CTA «Aprobar plan semanal» / «Revisar semana» |
+| `/optimization` | `OptimizationHeaderBar` | Chip «Experiencia del día» (Drawer) y «Simular día» → `/optimization/simulation` |
+| `/optimization` | `OptimizationDispatchBanner` | Confirmación post-despacho → «Ir a monitoreo» |
+| `/simulation` | `PlanningContextualCta` (`SimulationResultsStep`) | «Plan semanal aprobado — lleva el escenario al plan operativo del día» → `/optimization` |
+| `/demostracion` | `ModuleGuidanceBanner` | «¿Quieres evaluar escenarios completos?» → `/simulation`; «Demostración didáctica — no es simulación de tesis» → `/simulation` |
+
+Implementación: `src/features/shared/ModuleGuidanceBanner.tsx` (solo
+`/demostracion`) · `src/features/planning/PlanningContextualCta.tsx` ·
+`src/features/optimization/DailyScenarioBanner.tsx`.
+
+> **Nota de reconciliación:** los copies literales «¿Quieres evaluar escenarios?»
+> (en `/optimization`) y «¿Quieres despachar rutas de hoy?» (en `/simulation`)
+> de la versión anterior **no** existen en el código; la orientación actual es la
+> de la tabla. Recuperar esos copies exactos, si se desea, es trabajo de la Fase 6
+> (navegación fina). El patrón de tabs y los contratos de foco/radio viven en
+> [docs/design-system/contratos-ui.md](../design-system/contratos-ui.md).
 
 ## Deep links existentes (no mezclar responsabilidades)
 

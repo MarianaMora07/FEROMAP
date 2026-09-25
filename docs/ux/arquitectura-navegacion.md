@@ -2,11 +2,13 @@
 
 | Campo | Valor |
 |-------|-------|
-| **Estado** | Borrador — pendiente de aprobación |
+| **Estado** | Borrador reconciliado con el código (2026-09-24) — pendiente de aprobación |
 | **Fecha** | 2026-09-06 |
 | **Alcance** | Navegación lateral, pestañas por módulo, etiquetas y redirects del frontend |
 | **Código de referencia** | `src/core/auth/permissions.ts` · `src/app/App.tsx` · `src/features/*` |
 | **Complementa** | [ADR-001](../fase-0/adr-001-simulacion-principal.md) (actualiza la jerarquía de navegación) |
+| **Contratos de UI** | [docs/design-system/contratos-ui.md](../design-system/contratos-ui.md) — patrón de tabs ARIA, contrato de foco, radios, estados, i18n y política a11y |
+| **Mejoras UX/a11y** | [docs/design-system/checklist-cierre-fases-0-7.md](../design-system/checklist-cierre-fases-0-7.md) — implementadas y verificables (fases 0–7) |
 
 ## Propósito
 
@@ -49,7 +51,7 @@ El orden de los primarios sigue el ciclo **planificar → operar → supervisar*
 | Nivel | Ítems (etiqueta · ruta) |
 |-------|-------------------------|
 | **Primarios** | Dashboard `/` · Plan semanal `/planning/weekly` · Plan del día `/optimization` · Monitoreo en vivo `/monitoring` · Mapa GIS `/map` · Configuración `/settings` |
-| ▸ **Consulta y reportes** | Historial unificado `/planning/history` · Reportes `/reports` |
+| ▸ **Consulta y reportes** | Historial unificado `/planning/history` · Reportes `/reports` · Analítica `/analytics` |
 | ▸ **Catálogos** | Vehículos `/vehicles` · Conductores `/drivers` · Puntos de Recolección `/collection-points` |
 | ▸ **Tesis y demostración** | Simulación ACO `/simulation` · Casos de estudio `/case-studies` · Demostración ACO `/demostracion` |
 | **Bottom** | Administración `/admin` (solo admin) · Perfil `/profile` |
@@ -57,6 +59,7 @@ El orden de los primarios sigue el ciclo **planificar → operar → supervisar*
 Notas:
 - **Alertas** no aparece en el menú del planificador/administrador: se consume desde los paneles del Dashboard y del Monitoreo. La ruta `/alerts` se conserva (enlaces directos).
 - Los ítems de Tesis y demostración llevan badge **demo** para `administrador` (no para `planificador`), para no contaminar la demo operativa.
+- **Analítica** sí aparece (grupo «Consulta y reportes»). F6 reemplazó sus mocks por KPIs reales (`/api/v1/analytics/*`) y la sacó de `DEMO_NAV_HIDDEN_HREFS` (hoy vacío). Esto reconcilia §5 y §6, que aún decían «oculta».
 
 ### Conductor (sin cambios)
 
@@ -87,6 +90,8 @@ Mi Recolección `/resident` · Mapa mi sector `/map?scope=sector` · Puntos de r
 | **Conductor** (`/operator`, `/operator/plan`) | Sin cambios internos (persona de campo). |
 | **Residente** (`/resident`) | Sin cambios internos (persona ciudadana). |
 
+> Las pestañas de cada módulo siguen el patrón ARIA único de [contratos-ui.md](../design-system/contratos-ui.md) §1. Las pestañas que en realidad son rutas se implementan como enlaces con `aria-current="page"` (p. ej. `SettingsTabs`).
+
 ## 5. Etiquetas definitivas (desambiguación)
 
 | Antes | Después | Motivo |
@@ -96,7 +101,7 @@ Mi Recolección `/resident` · Mapa mi sector `/map?scope=sector` · Puntos de r
 | Optimización (3 niveles) (`/optimization/levels`) | — (eliminada del menú) | Reempaquetaba módulos existentes; andamiaje de tesis. |
 | Simulación de tesis (`/simulation`) | **Simulación ACO** | "de tesis" ya lo indica el grupo "Tesis y demostración". |
 | Monitoreo en Tiempo Real (`/monitoring`) | **Monitoreo en vivo** | Concisión; copy ya lo usa. |
-| Analítica (`/analytics`) | — (oculta, ver §6) | KPIs con mocks declarados "fuera del guion de defensa". |
+| Analítica (`/analytics`) | Analítica (`/analytics`) | **Se conserva visible** (F6): KPIs reales del histórico operativo. §6 actualizado. |
 
 ## 6. Mapa de rutas: estado actual → destino
 
@@ -115,7 +120,7 @@ Mi Recolección `/resident` · Mapa mi sector `/map?scope=sector` · Puntos de r
 | `/simulation` | Conservar · depurar | Al grupo "Tesis y demostración". Mover componentes `WeeklyPlan*` a `features/planning` (Fase 3). El redirect legacy `?view=weekly` → `/planning/weekly` ya está activo. |
 | `/case-studies` | Conservar | Al grupo "Tesis y demostración". |
 | `/demostracion` | Conservar | Al grupo "Tesis y demostración". |
-| `/analytics` | **Oculto** | Sigue en `DEMO_NAV_HIDDEN_HREFS`; ruta conservada para deep links. Los KPIs reales se integran a Dashboard/Reportes cuando existan (post-grado). |
+| `/analytics` | Conservar | **Visible** en el menú (F6). KPIs reales; `DEMO_NAV_HIDDEN_HREFS` está vacío. |
 | `/reports` | Conservar | Grupo "Consulta y reportes". |
 | `/admin` `/profile` | Conservar | Bottom nav. |
 | `/operator` `/operator/plan` `/resident` | Conservar | Personas de campo; sin cambios. |
@@ -143,5 +148,7 @@ Mi Recolección `/resident` · Mapa mi sector `/map?scope=sector` · Puntos de r
 ## Referencias
 
 - [ADR-001 — Simulación principal / Optimización secundaria](../fase-0/adr-001-simulacion-principal.md): este documento actualiza su jerarquía de navegación (el producto operativo creció en fases 8–11; la tesis queda aislada en su grupo).
+- [Contratos de UI (design-system)](../design-system/contratos-ui.md) — patrón de tabs ARIA, contrato de foco y radios.
+- [Reglas de navegación](../fase-5/reglas-navegacion.md) — banners de orientación entre módulos (reconciliado en Fase 0).
 - [Manual de usuario](../fase-6/manual-usuario.md) · [Guion de defensa](../fase-6/guion-demo-defensa.md) — se actualizarán en Fase 6.
 - Código: `src/core/auth/permissions.ts`, `src/app/App.tsx`, `src/design-system/layout/Sidebar.tsx`.

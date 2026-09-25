@@ -145,20 +145,43 @@ Capa **comparativa y opcional**; no cambia el camino ACO por defecto. → [ADR-0
 - **i18n base (ES/EN):** `src/core/i18n/` con diccionarios y `t()`; la navegación y el shell usan
   claves (`labelKey`/`descriptionKey`, `SIDEBAR_SECTION_LABEL_KEYS`). El locale se sincroniza con la
   preferencia `language` del perfil. El copy de features migra de forma incremental.
-- **a11y:** enlace **Saltar al contenido** + `main#main-content`, `aria-current="page"` en el enlace
-  activo, `aria-expanded/aria-controls` en grupos del sidebar, y toasts con `role="status"` +
-  `aria-live` y botón de cierre etiquetado.
-- **Diferido:** PWA offline (opcional), i18n completa de features, y una auditoría a11y más amplia
-  (tablas ordenables por teclado, inputs con `label`) en una pasada propia.
+- **a11y:** enlace **Saltar al contenido** + `main#main-content` (con `aria-labelledby="page-title"`),
+  `aria-current="page"` en el enlace activo, `aria-expanded/aria-controls` en grupos del sidebar, y
+  toasts con `role="status"` + `aria-live` y botón de cierre etiquetado. Ampliado en las fases de
+  mejora 2–7 (focus trap, tabs ARIA, radios, `prefers-reduced-motion`, axe).
+- **Diferido:** PWA offline (opcional) e i18n completa del copy de features.
+
+## Mejoras UX/a11y — fases 0–7 (cierran la deuda del contrato de UI)
+
+Ciclo de mejora ejecutado sobre el rol planificador. Fuente de verdad de reglas: [docs/design-system/contratos-ui.md](./design-system/contratos-ui.md).
+
+- **F0 — Contratos:** reconciliación de la doc de IA con el código; contrato de tabs/foco/radios; `pt` retirado.
+- **F1 — Confianza:** controles muertos fuera; `ConfirmDialog` en acciones destructivas; tendencias KPI por signo; campana sin destino eliminada (luego reasignada en F6); `<html lang>`.
+- **F2 — Fundaciones a11y:** `useFocusTrap` (Modal/Drawer), sidebar `inert`, tabla ordenable con `aria-sort`, `aria-busy`/iconos decorativos, `prefers-reduced-motion`, radios de control.
+- **F3 — Módulos:** tabs ARIA (`optimization`/`monitoring`), filtros con `label`, `role="img"` en gráficos, menú/overlays con Escape y clic-fuera, avisos `role="status"`.
+- **F4 — Estados y feedback:** `ErrorState` con reintento, loading/empty/error uniformes, toasts globales, confirmación de «Aplicar» en Calibración, `h1#page-title` + `main aria-labelledby`.
+- **F5 — i18n:** chrome y design-system completos en ES/EN (`ui.*`, `status.*`), `<html lang>`/`dir`.
+- **F6 — Estructura:** subpaneles extraídos de `map`/`monitoring`; copy «demo» reformulado; retorno en Calibración; grupo colapsable robusto; campana del planificador → `/alerts`.
+- **F7 — Verificación:** `e2e/a11y-planner.spec.ts` (axe) + `e2e/sidebar-permissions.spec.ts`; docs y checklist de cierre.
 
 ## Deuda conocida (no bloqueante)
+
+0. **Tamaño de archivos de feature (F6).** `features/map/index.tsx` (~1037 líneas) y
+   `features/monitoring/index.tsx` (~679) bajaron desde ~1420 y ~912 al extraer los subpaneles de UI
+   (toolbar, paneles de capas/leyenda, overlays, tarjeta de mapa, lista de flota, barra de acciones).
+   Lo que queda es **estado reactivo y ciclo de vida del mapa** (recursos, efectos, `syncOverlayLayers`),
+   que permanece junto por corrección; extraerlo es un refactor mayor con riesgo de regresión en la
+   demo. Justificación aceptada por el criterio de la fase.
 
 1. **TypeScript:** `npx tsc` reporta 81 errores en 43 archivos (incl. `src/core/api/*`, `src/core/map/*`, `src/design-system/components/Table.tsx`, `src/features/vehicles/index.tsx`). Es deuda preexistente y amplia; `npm run build` y Vitest no la tipan. Cualquier criterio de "sin regresiones" debe compararse contra 81, no contra cero.
 2. **e2e flaky:** el login vía `e2e/helpers/planner-session.ts` puede fallar con `socket hang up` bajo paralelismo, y `dark-mode-sidebar.spec.ts` (caso operador) falla al capturar el sidebar ("element is not attached to the DOM"). Pasan al reejecutarlos. `playwright.config.ts` activa `retries: 1` solo con `CI=true`.
 3. **e2e estado-dependientes:** "muestra plan del día…" y "flujo completo: borrador…" en `daily-planning.spec.ts` (403/plan semanal) requieren `just db-reset && just seed`.
 4. **e2e lentos:** `route-playback.spec.ts` (ACO <45 s) y `weekly-operational.spec.ts` (motor real, timeouts ~10 min, BD limpia).
 5. **Scoping por sector/vehículo de alertas** para conductor/residente (hoy demo curado en frontend) — backlog post-grado.
-6. **i18n parcial (F8):** solo el chrome (navegación/shell) y el panel de zonas están traducidos; el
-   resto del copy sigue en español. PWA offline queda fuera de alcance (opcional).
+6. **i18n parcial (F5):** traducidos el chrome (navegación/shell) y el **design-system**
+   completo (`shell.*`, `ui.*`, `status.*`), incluidos `aria-label` y textos de Modal, Drawer,
+   Header, Sidebar, UserMenu, AppShell, Table, ConfirmDialog, LoadingPanel, KpiCard y StatusBadge.
+   El copy de las features sigue en español y migra de forma incremental. `<html lang>`/`dir` se
+   sincronizan con el locale. PWA offline queda fuera de alcance (opcional).
 7. **Seeds/fixtures asumen Unare:** la configuración por zona ya es real, pero el seed y varios
    fixtures siguen creando un único conjunto Unare; parametrizarlos es incremental.

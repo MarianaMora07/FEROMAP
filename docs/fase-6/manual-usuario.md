@@ -26,12 +26,16 @@ El menú lateral se organiza por frecuencia de uso:
 
 | Nivel | Ítems |
 |-------|-------|
-| **Primarios** | Dashboard · Plan semanal · Plan del día · Monitoreo en vivo · Mapa GIS |
-| ▸ Consulta y reportes | Historial unificado · Reportes |
+| **Primarios** | Dashboard · Plan semanal · Plan del día · Monitoreo en vivo · Mapa GIS · Configuración |
+| ▸ Consulta y reportes | Historial unificado · Reportes · Analítica |
 | ▸ Catálogos | Vehículos · Conductores · Puntos de Recolección |
 | ▸ Tesis y demostración | Simulación ACO · Casos de estudio · Demostración ACO |
 
 > El administrador ve etiquetas **demo / producto** junto a cada módulo para distinguir evidencia de tesis del producto operativo.
+>
+> La **campana** del encabezado abre las **Alertas** (`/alerts`); ese módulo no está en el menú lateral a propósito (se consume desde el Dashboard y el Monitoreo). **Configuración** agrupa *Algoritmo* y *Calibración*; la calibración tiene un enlace de vuelta a Configuración.
+>
+> Los grupos colapsables (**Consulta y reportes**, **Catálogos**, **Tesis y demostración**) se abren solos cuando contienen la ruta activa y son operables por teclado.
 
 **¿Qué módulo usar?**
 
