@@ -719,6 +719,17 @@ export function closeDailyPlan(dailyPlanId: number): Promise<DailyCloseResult> {
   return apiPost(`/api/v1/planning/daily/${dailyPlanId}/close`, {});
 }
 
+/**
+ * Registra una **ejecución simulada** del día (demo): marca las paradas como visitadas con su
+ * llegada estimada como real y consolida el previsto vs. real. No cierra el día.
+ */
+export function simulateDailyExecution(
+  dailyPlanId: number,
+): Promise<{ dailyPlanId: number; executedWaypoints: number }> {
+  if (useMocks) return Promise.resolve({ dailyPlanId, executedWaypoints: 140 });
+  return apiPost(`/api/v1/planning/daily/${dailyPlanId}/simulate-execution`, {});
+}
+
 export function fetchPendingVisits(params?: {
   status?: string;
   targetDate?: string;

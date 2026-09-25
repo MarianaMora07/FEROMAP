@@ -101,6 +101,23 @@ def test_resolve_route_by_id():
     assert result is route
 
 
+def test_resolve_route_real_path_requires_in_progress():
+    db = MagicMock()
+    db.scalar.return_value = None
+    vehicle = _vehicle(vehicle_id=3)
+    assert _resolve_route(db, vehicle, None) is None
+
+
+def test_resolve_route_dry_run_accepts_pending_route():
+    db = MagicMock()
+    pending = OptimizedRoute(status="pending", route_kind="optimized")
+    pending.id = 12
+    pending.waypoints = []
+    db.scalar.side_effect = [None, pending]
+    vehicle = _vehicle(vehicle_id=3)
+    assert _resolve_route(db, vehicle, None, allow_inactive=True) is pending
+
+
 def test_handle_breakdown_rejects_vehicle_already_in_maintenance():
     db = MagicMock()
     vehicle = _vehicle(status="maintenance")
@@ -181,6 +198,7 @@ def test_simulate_breakdown_rolls_back_without_dispatching():
     vehicle = _vehicle(vehicle_id=1)
     route = OptimizedRoute(status="in_progress", route_kind="optimized")
     route.id = 7
+    route.total_distance_meters = 5000
     route.waypoints = [_waypoint(101), _waypoint(102)]
     backup = _vehicle(code="TR-02", vehicle_id=2, status="available")
 
@@ -212,7 +230,94 @@ def test_simulate_breakdown_rolls_back_without_dispatching():
     assert mock_engine.call_args.kwargs["auto_dispatch"] is False
     assert result["simulated"] is True
     assert result["pendingPoints"] == 2
-    assert result["comparison"]["afterDistanceKm"] == 10.2
+    # «Después» comparable con el día: 12.5 − 5 (ruta averiada) + 10.2 (recálculo).
+    assert result["comparison"]["comparable"] is True
+    assert result["comparison"]["afterDistanceKm"] == 17.7
+    assert result["comparison"]["distanceDeltaKm"] == 5.2
+    assert result["comparison"]["subsetDistanceKm"] == 10.2
+
+
+def test_simulate_breakdown_measures_day_fleet_and_distance():
+    db = MagicMock()
+    vehicle = _vehicle(vehicle_id=1)
+    route = OptimizedRoute(status="in_progress", route_kind="optimized", daily_plan_id=9)
+    route.id = 7
+    route.total_distance_meters = 4000
+    route.waypoints = [_waypoint(101), _waypoint(102)]
+    backup = _vehicle(code="TR-02", vehicle_id=2, status="available")
+
+    simulation = MagicMock()
+    simulation.id = 5
+    simulation.kpi_total_distance_optimized = 12.5
+    simulation.parameters_json = None
+
+    db.scalar.side_effect = [vehicle, route]
+
+    latest_result = MagicMock()
+    latest_result.first.return_value = simulation
+    available_result = MagicMock()
+    available_result.all.return_value = [backup]
+    # Distancia de las rutas del día (metros) y flota del día sin el averiado.
+    day_distance_result = MagicMock()
+    day_distance_result.all.return_value = [2000, 3000, 4000, 5000]
+    day_fleet_result = MagicMock()
+    day_fleet_result.all.return_value = [2, 3, 4]
+    db.scalars.side_effect = [latest_result, available_result, day_distance_result, day_fleet_result]
+
+    with patch(
+        "app.services.contingency_service.run_optimization_engine",
+        return_value={"simulationId": 99, "kpis": {"distanceKm": {"optimized": 10.2}}},
+    ):
+        result = simulate_vehicle_breakdown(db, vehicle_id="TR-01", route_id=7)
+
+    comparison = result["comparison"]
+    # Día completo: 14 km (rutas del plan) − 4 km (averiada) + 10.2 km (recálculo).
+    assert comparison["beforeDistanceKm"] == 14.0
+    assert comparison["afterDistanceKm"] == 20.2
+    assert comparison["remainingVehicles"] == 3
+    assert "resto de la flota del día" in result["message"]
+
+
+def test_simulate_breakdown_names_receiver_vehicles():
+    db = MagicMock()
+    vehicle = _vehicle(vehicle_id=1)
+    route = OptimizedRoute(status="in_progress", route_kind="optimized", daily_plan_id=9)
+    route.id = 7
+    route.total_distance_meters = 4000
+    route.waypoints = [_waypoint(101), _waypoint(102)]
+    backup = _vehicle(code="TR-02", vehicle_id=2, status="available")
+
+    simulation = MagicMock()
+    simulation.id = 5
+    simulation.kpi_total_distance_optimized = 12.5
+    simulation.parameters_json = None
+
+    db.scalar.side_effect = [vehicle, route]
+
+    latest_result = MagicMock()
+    latest_result.first.return_value = simulation
+    available_result = MagicMock()
+    available_result.all.return_value = [backup]
+    day_distance_result = MagicMock()
+    day_distance_result.all.return_value = [2000, 3000, 4000, 5000]
+    day_fleet_result = MagicMock()
+    day_fleet_result.all.return_value = [2, 3, 4]
+    db.scalars.side_effect = [latest_result, available_result, day_distance_result, day_fleet_result]
+
+    # El motor resolvió los puntos con un vehículo libre que NO está en el plan del día.
+    recalc = _recalc_with_routes()
+    recalc["routesPerVehicle"]["optimized"][0]["properties"]["vehicleCode"] = "TR-07"
+
+    with patch(
+        "app.services.contingency_service.run_optimization_engine",
+        return_value=recalc,
+    ):
+        result = simulate_vehicle_breakdown(db, vehicle_id="TR-01", route_id=7)
+
+    comparison = result["comparison"]
+    assert comparison["remainingVehicles"] == 1
+    assert "a TR-07" in result["message"]
+    assert "flota del día" not in result["message"]
 
 
 def test_simulate_breakdown_returns_alternative_routes_and_resolution():

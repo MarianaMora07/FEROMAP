@@ -28,7 +28,7 @@ Cierre de brechas funcionales para preguntas del jurado sobre llenado y ventanas
 
 ### KPI view
 - Selector **Mostrar resultados por**: distancia | tiempo | CO₂.
-- Resalta la fila correspondiente en el panel **«Línea base del turno vs. plan propuesto»** (tab Plan).
+- Resalta la fila correspondiente en el panel **«Línea base del turno vs. plan»** (tab **Resultados** → bloque **Previsto**; el título vive en el encabezado de la sección y el panel solo rotula la métrica destacada).
 - No modifica el objetivo del solver.
 
 ## API
@@ -55,4 +55,4 @@ cd backend && python -m pytest tests/test_route_constraints.py -v
 - `backend/app/services/route_constraints.py`
 - `backend/app/services/aco_parallel.py`
 - `backend/app/services/optimization_service.py`
-- `src/features/optimization/OptimizationParametersForm.tsx`
+- `src/features/optimization/DaySimulationDialog.tsx` (desde 2026-09-26: el selector de escenario vive aquí; `OptimizationParametersForm.tsx` se eliminó)

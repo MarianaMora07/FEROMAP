@@ -1,5 +1,4 @@
 import { Show } from 'solid-js';
-import { useLocale } from '../../core/i18n/solid';
 import { ProgressBar } from './ProgressBar';
 
 interface LoadingPanelProps {
@@ -11,7 +10,6 @@ interface LoadingPanelProps {
 }
 
 export function LoadingPanel(props: LoadingPanelProps) {
-  const tr = useLocale();
   const showDeterminate = () => props.progress !== undefined && !props.indeterminate;
 
   return (
@@ -33,9 +31,6 @@ export function LoadingPanel(props: LoadingPanelProps) {
       </div>
       <Show when={props.detail}>
         <p class="text-xs text-text-muted">{props.detail}</p>
-      </Show>
-      <Show when={!showDeterminate() && !props.detail}>
-        <p class="text-xs text-text-muted">{tr('ui.loadingWorking')}</p>
       </Show>
     </div>
   );

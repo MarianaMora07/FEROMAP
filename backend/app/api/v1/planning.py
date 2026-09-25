@@ -46,6 +46,7 @@ from app.services.planning_service import (
     preflight_weekly_feasibility,
     query_planning_history,
     resolve_pending_visit,
+    simulate_day_execution,
     trace_incident,
     update_daily_plan_points,
     update_weekly_plan,
@@ -467,6 +468,19 @@ def defer_uncovered_daily(
     return result
 
 
+@router.post("/daily/{daily_plan_id}/simulate-execution")
+def simulate_daily_execution(daily_plan_id: int, db: DbSession, _: PlannerOrAdmin):
+    """Registra una **ejecución simulada** del día (demo) y consolida previsto vs. real.
+
+    Marca las paradas vigentes como visitadas con su llegada estimada como real y escribe
+    `actualKpis`; **no cierra el día** (el cierre sigue siendo de planificación). Sirve para
+    mostrar el ciclo previsto → real sin capturar datos de campo.
+    """
+    result = simulate_day_execution(db, daily_plan_id)
+    db.commit()
+    return result
+
+
 @router.post("/daily/{daily_plan_id}/close")
 def close_daily(daily_plan_id: int, db: DbSession, user: CurrentUser, _: PlannerOrAdmin):
     result = close_daily_plan(db, daily_plan_id, user_id=user.id)
@@ -484,15 +498,23 @@ def daily_routes_playback(daily_plan_id: int, db: DbSession, _: OperationsStaff)
 
 
 @router.get("/daily/{daily_plan_id}/simulation")
-def daily_day_simulation(daily_plan_id: int, db: DbSession, _: PlannerOrAdmin):
+def daily_day_simulation(
+    daily_plan_id: int,
+    db: DbSession,
+    _: PlannerOrAdmin,
+    scenario_id: str | None = Query(default=None, alias="scenarioId"),
+):
     """Solo lectura: secuencia guionada de contingencias del día (dry-run encadenado).
 
     Precomputa la animación (eventos + plan alternativo) para que el frontend no
     orqueste ACO; nada de la secuencia se persiste.
+
+    Con `scenarioId` distinto al del plan, primero reoptimiza el día bajo ese escenario
+    (p. ej. `rain`) para que el plan base y la secuencia reflejen sus condiciones.
     """
     from app.services.day_simulation_service import build_day_simulation
 
-    return build_day_simulation(db, daily_plan_id)
+    return build_day_simulation(db, daily_plan_id, scenario_id=scenario_id)
 
 
 @router.get("/daily/{daily_plan_id}/export.pdf")

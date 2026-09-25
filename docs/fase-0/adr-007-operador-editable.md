@@ -37,7 +37,10 @@ Se aprueba **una confirmación de parada de alcance limitado**, como fase **F5b*
 
 - F5b incluye: permiso/rol, endpoint explícito y auditado (p. ej.
   `POST /routes/{id}/confirm-stop`), UI en `/operator`, auditoría y tests (incluye doble POST).
-- El contrato de `plan_vs_real_from_routes` (F5a) **no cambia**: ya lee esos campos.
+- El contrato de `plan_vs_real_from_routes` (F5a) **no cambia**: ya lee esos campos. Matiz
+  (2026-09-26): `collectedKg` solo suma el peso de las paradas **servidas** — el motor pre-carga
+  `collected_weight_kg` con la demanda planificada, y contarla sin filtrar mostraba toneladas
+  «recolectadas» en días sin ninguna parada confirmada.
 - Fuera de alcance: despacho, cierre de jornada y edición de secuencia de paradas.
 - **No** forma parte del alcance congelado de defensa salvo que se active el flag.
 

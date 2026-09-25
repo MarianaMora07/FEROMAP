@@ -9,6 +9,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.services.planning_service import (
+    close_daily_plan,
     consolidate_daily_points,
     create_pending_visit,
     create_weekly_plan_draft,
@@ -65,6 +66,50 @@ def test_create_pending_visit_deduplicates_open_entries():
         reason="not_visited",
     )
     assert result is existing
+
+
+def test_close_daily_plan_skips_waypoints_without_collection_point(monkeypatch):
+    """Regresión: los waypoints de vertedero/base (``collection_point_id`` NULL) no generan pendientes.
+
+    Antes, `close_daily_plan` intentaba crear una ``PendingVisit`` con `collection_point_id=None`
+    y PostgreSQL lanzaba ``NotNullViolation`` (500 al cerrar el día).
+    """
+    from types import SimpleNamespace
+
+    plan = SimpleNamespace(
+        id=1,
+        status="dispatched",
+        closed_at=None,
+        operation_date=date(2026, 9, 25),
+        final_point_ids_json=None,
+        scheduled_point_ids_json=None,
+    )
+    landfill = SimpleNamespace(
+        id=99, status="pending", collection_point_id=None, waypoint_type="landfill"
+    )
+    stop = SimpleNamespace(id=100, status="pending", collection_point_id=7, waypoint_type="collection")
+    route = SimpleNamespace(waypoints=[landfill, stop])
+
+    db = MagicMock()
+    db.get.return_value = plan
+    routes_result = MagicMock()
+    routes_result.unique.return_value.all.return_value = [route]
+    incidents_result = MagicMock()
+    incidents_result.all.return_value = []
+    db.scalars.side_effect = [routes_result, incidents_result]
+
+    create_visit = MagicMock()
+    monkeypatch.setattr("app.services.planning_service.create_pending_visit", create_visit)
+    monkeypatch.setattr("app.services.planning_service._record_version", lambda *a, **k: None)
+    monkeypatch.setattr("app.services.planning_service.dump_kpi_json", lambda payload: None)
+    monkeypatch.setattr("app.services.planning_service.plan_vs_real_from_routes", lambda *a, **k: {})
+    monkeypatch.setattr("app.services.operations_service.route_actual_distance_km", lambda r: None)
+
+    result = close_daily_plan(db, 1, user_id=2)
+
+    assert result["status"] == "partial"
+    create_visit.assert_called_once()
+    assert create_visit.call_args.kwargs["collection_point_id"] == 7
 
 
 def test_delete_weekly_plan_missing_returns_404():

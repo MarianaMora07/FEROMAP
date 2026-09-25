@@ -1,6 +1,7 @@
 import type {
   DaySimulation,
   DaySimulationResolution,
+  DaySimulationScenario,
   DaySimulationStep,
   DaySimulationTarget,
 } from '../api/daySimulation';
@@ -58,6 +59,38 @@ function collectDroppedDetails(value: unknown): DroppedPointDetail[] {
   return value.filter(isDroppedPointDetail);
 }
 
+function isOptionalNullableNumber(value: unknown): boolean {
+  return value === undefined || value === null || isFiniteNumber(value);
+}
+
+function isDaySimulationScenario(value: unknown): value is DaySimulationScenario {
+  if (!value || typeof value !== 'object') return false;
+  const scenario = value as DaySimulationScenario;
+  return (
+    typeof scenario.id === 'string' &&
+    scenario.id.length > 0 &&
+    typeof scenario.label === 'string' &&
+    isOptionalNullableNumber(scenario.trafficMultiplier) &&
+    isOptionalNullableNumber(scenario.fillLevelBoost) &&
+    isOptionalNullableNumber(scenario.distanceKm) &&
+    isOptionalNullableNumber(scenario.baselineDistanceKm) &&
+    isOptionalNullableNumber(scenario.durationHours)
+  );
+}
+
+function normalizeScenario(value: unknown): DaySimulationScenario | null {
+  if (!isDaySimulationScenario(value)) return null;
+  return {
+    id: value.id,
+    label: value.label,
+    trafficMultiplier: value.trafficMultiplier ?? null,
+    fillLevelBoost: value.fillLevelBoost ?? null,
+    distanceKm: value.distanceKm ?? null,
+    baselineDistanceKm: value.baselineDistanceKm ?? null,
+    durationHours: value.durationHours ?? null,
+  };
+}
+
 /** Campos numéricos opcionales (retrocompatibilidad con payloads previos). */
 function hasOptionalFinite(value: unknown): boolean {
   return value === undefined || isFiniteNumber(value);
@@ -107,7 +140,10 @@ export function isDaySimulation(value: unknown): value is DaySimulation {
     Array.isArray(simulation.baseRoutes) &&
     simulation.baseRoutes.every(isRoutePlaybackModel) &&
     Array.isArray(simulation.steps) &&
-    simulation.steps.every(isDaySimulationStep)
+    simulation.steps.every(isDaySimulationStep) &&
+    (simulation.scenario === undefined ||
+      simulation.scenario === null ||
+      isDaySimulationScenario(simulation.scenario))
   );
 }
 
@@ -193,5 +229,6 @@ export function normalizeDaySimulation(value: unknown): DaySimulation | null {
     playbackDurationMinutes: raw.playbackDurationMinutes,
     baseRoutes: collectRoutes(raw.baseRoutes),
     steps,
+    scenario: normalizeScenario(raw.scenario),
   };
 }

@@ -66,7 +66,9 @@ flowchart TD
    completa del día.
 3. **Dry-run seguro.** `simulate_*` corre con `auto_dispatch=False` y hace `rollback`; el flujo
    real (`handle_*`) confirma y notifica. La simulación guionada del día encadena eventos en una
-   sola transacción y revierte todo (`day_simulation_service.build_day_simulation`).
+   sola transacción y revierte todo (`day_simulation_service.build_day_simulation`). Para poder
+   validar el plan **antes** de comprometerlo, el dry-run resuelve también rutas `pending`
+   (`_resolve_route(..., allow_inactive=True)`); el flujo real exige `in_progress`.
 4. **Contrato explícito.** La resolución se expone en el resultado (`resolution`:
    `reassigned` / `pending` / `no_change`), junto con `droppedPoints` y la geometría del plan
    alternativo (`alternativeRoutes`).
@@ -77,6 +79,15 @@ flowchart TD
    `priority_fill_level=True`, de modo que el ACO favorece contenedores críticos (≥ 80 %) y en
    riesgo de calendario cuando la flota es justa (boost de la heurística en
    `aco_parallel._pick_candidate`).
+7. **KPIs comparables.** El «antes» es la distancia del **día completo** (rutas optimizadas
+   vigentes del plan); el «después» de la avería es `antes − ruta averiada + recálculo`, de modo
+   que ambas cifras describen la jornada y el delta tiene sentido. Si falta la distancia de la
+   ruta averiada no hay base comparable: `distanceDeltaKm` queda en `None` y el subconjunto
+   recalculado se expone aparte como `subsetDistanceKm`. El aviso nombra a los **vehículos
+   receptores reales** (los del plan alternativo resuelto por el motor); si no se pueden
+   identificar, cae al conteo de la flota del día (rutas optimizadas del plan menos el averiado),
+   nunca a los `available` de la BD. El contenedor crítico no tiene «antes» 1:1 porque reoptimiza
+   el resto del día.
 
 ## Limitaciones aceptadas
 
@@ -91,6 +102,10 @@ las descubra como sorpresas:
   flota**; no hay un criterio de triage “qué se sacrifica primero” a nivel de contingencia.
 - **Latencia no apta para tiempo real.** Un ACO completo tarda segundos–minutos; sirve para
   demo y reoptimización periódica, no como respuesta instantánea en campo.
+- **El solver puede elegir unidades fuera del plan del día.** En contingencia los vehículos
+  candidatos son los `available` de la BD; si la flota del día está `in_route`, el plan alternativo
+  puede recaer en un camión libre que no estaba en la jornada. El aviso nombra al receptor real
+  para no engañar, pero el conjunto receptor no se restringe al plan.
 - **Resuelto en Fase 2:** `create_pending_visit` ya **no** acepta un parámetro `priority`; la
   prioridad se deriva siempre de `compute_pending_priority` (incluye criticidad y `priority_boost`),
   eliminando el argumento muerto que ignoraban los llamadores.

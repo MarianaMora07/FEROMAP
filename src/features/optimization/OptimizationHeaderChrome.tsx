@@ -1,7 +1,7 @@
 import { Show, createMemo, createSignal } from 'solid-js';
 import { Portal } from 'solid-js/web';
-import { A, useNavigate } from '@solidjs/router';
-import { ChevronLeft, ChevronRight, Flag, Loader2, Radio, Sparkles } from 'lucide-solid';
+import { A, useNavigate, useSearchParams } from '@solidjs/router';
+import { ChevronLeft, ChevronRight, CloudRain, Compass, Flag, Loader2, Radio, Sparkles } from 'lucide-solid';
 import { Button, Drawer } from '../../design-system/components';
 import { canOptimize } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
@@ -9,7 +9,6 @@ import {
   executeOptimization,
   openOptimizationPlayback,
   optimizationState,
-  refreshWeekCalendar,
   selectOperationDate,
   cancelOptimization,
 } from '../../core/stores/optimizationStore';
@@ -17,20 +16,18 @@ import { dailyPlanStatusLabel } from '../../core/map/mapPlaybackUx';
 import {
   DAILY_CALENDAR_STATUS_STYLES,
   mapDailyStatusToCalendar,
-  shiftWeek,
   mondayOfDate,
 } from '../../core/planning/dailyPlanningUx';
-import { monitoringHref, optimizationHref } from '../../core/planning/operationalLinks';
+import { monitoringHref, optimizationHrefFrom } from '../../core/planning/operationalLinks';
 import { PLANNING_LEVELS } from '../../core/planning/planningUx';
 import { weeklyPlanWeekHref } from '../../core/planning/weeklyPlanLinks';
+import { formatWeekRangeLabel } from '../../core/planning/weekLabels';
 import { OptimizationWeekCalendarPopover } from './OptimizationWeekCalendarPopover';
 import { OptimizationExperienceStepper } from './OptimizationExperienceStepper';
 import {
   optimizationActiveStepChipLabel,
   optimizationToolbarSummary,
 } from './optimizationLayoutUx';
-import { DailyScenarioBanner } from './DailyScenarioBanner';
-import type { ScenarioId } from '../../data/types/simulation';
 
 export function OptimizationHeaderBar(
   props: {
@@ -40,14 +37,14 @@ export function OptimizationHeaderBar(
   } = {},
 ) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [stepDrawerOpen, setStepDrawerOpen] = createSignal(false);
   const [gateOpen, setGateOpen] = createSignal(false);
   const dailyPlan = () => optimizationState.dailyPlan;
   const selectedDate = () => optimizationState.preset.operationDate;
+  // Semana del día en foco, para nombrarla en el candado de aprobación.
+  const selectedWeekRange = () => formatWeekRangeLabel(mondayOfDate(selectedDate()));
   const hasResults = () => optimizationState.kpis != null;
-  // El plan del día ya generado no se regenera desde esta vista (no cambian las
-  // condiciones iniciales aquí): el botón solo se muestra mientras no hay resultados.
-  const showGenerate = () => !hasResults() || optimizationState.isOptimizing;
   const isDispatched = () => dailyPlan()?.status === 'dispatched';
   const isPlanClosed = () => dailyPlan()?.status === 'closed';
   const generateActionLabel = () => 'Generar rutas del día';
@@ -55,6 +52,20 @@ export function OptimizationHeaderBar(
   const levelChip = () => PLANNING_LEVELS.administrativo;
   // Estado del día (D9): texto crudo (Parcial/Cerrado…) con el tono del calendario.
   const dayStatus = () => dailyPlan()?.status;
+  // ¿El día ya tiene plan? Se decide por el **estado del plan**, no por `kpis`: en un día
+  // despachado/cerrado (p. ej. sembrado) los KPIs pueden no estar hidratados y la barra
+  // mostraba «Generar» y el stepper en el paso 1 aunque el día ya estuviera en marcha.
+  const dayPlanExists = () => {
+    const key = mapDailyStatusToCalendar(dayStatus());
+    return (
+      optimizationState.isOptimizing ||
+      key === 'optimized' ||
+      key === 'dispatched' ||
+      key === 'closed'
+    );
+  };
+  // «Generar» es la acción siguiente solo mientras el día sigue en borrador.
+  const showGenerate = () => optimizationState.isOptimizing || !dayPlanExists();
   const statusChip = () => {
     const status = dayStatus();
     if (!status) return null;
@@ -93,7 +104,46 @@ export function OptimizationHeaderBar(
     }
     return null;
   };
+  // Guía previa al despacho: «Experiencia del día» deja de aportar cuando el día ya está
+  // despachado o cerrado (el flujo terminó).
+  const isDayFinished = () => isDispatched() || mapDailyStatusToCalendar(dayStatus()) === 'closed';
+  const showExperienceGuide = () => !isDayFinished();
+  // El indicador «Conductores notificados · N rutas» duplicaría la banda BDC de despacho: se
+  // oculta mientras esa banda está visible (queda como único aviso).
+  const dispatchBandVisible = () => {
+    const notice = optimizationState.lastDispatch;
+    return notice != null && !notice.dismissed && dailyPlan()?.status === 'dispatched';
+  };
+  const headerNotice = () => (dispatchBandVisible() ? null : notifyIndicator());
   const pointCount = () => dailyPlan()?.finalPointIds.length ?? optimizationState.context?.pointsToVisit ?? 0;
+  // Escenario heredado del plan semanal (P1, E): chip en la cabecera en lugar de la
+  // tarjeta permanente «Situación del día».
+  const scenarioId = () => dailyPlan()?.scenarioId ?? optimizationState.preset.scenarioId;
+  const scenarioLabel = () =>
+    optimizationState.context?.scenarios.find((scenario) => scenario.id === scenarioId())?.label ??
+    scenarioId();
+
+  // Resumen compacto para móvil (P2, G/H): estado + nivel en un chip, con el escenario
+  // referido por icono/tooltip para no romper el ancho en pantallas pequeñas.
+  const compactSummary = () => {
+    const parts: string[] = [];
+    const status = statusChip();
+    if (status) parts.push(status.label);
+    parts.push(levelChip().shortLabel);
+    return parts.join(' · ');
+  };
+  const compactTone = () =>
+    statusChip()?.cell ?? `${levelChip().toneClass} ${levelChip().titleClass}`;
+  const compactTitle = () => {
+    const parts: string[] = [];
+    const status = statusChip();
+    if (status) parts.push(`Estado: ${status.label}`);
+    parts.push(`Nivel: ${levelChip().shortLabel}`);
+    if ((optimizationState.context?.scenarios.length ?? 0) > 0) {
+      parts.push(`Escenario: ${scenarioLabel()}`);
+    }
+    return parts.join(' · ');
+  };
   const monitoringLink = () =>
     isDispatched()
       ? monitoringHref({
@@ -111,7 +161,7 @@ export function OptimizationHeaderBar(
   const stepChipLabel = () =>
     optimizationActiveStepChipLabel({
       dailyStatus: dailyPlan()?.status,
-      hasResults: hasResults(),
+      hasResults: dayPlanExists(),
       playbackOpen: optimizationState.playbackOpen,
       weeklyPlanApproved: optimizationState.weeklyPlanApproved,
     });
@@ -129,14 +179,19 @@ export function OptimizationHeaderBar(
     };
   });
 
-  const shiftWeekNav = (weeks: number) => {
-    const next = shiftWeek(optimizationState.weekStartDate, weeks);
-    void refreshWeekCalendar(next);
+  const navigateToDate = (date: string) => {
+    // Preserva la pestaña activa (tab) al cambiar de día.
+    navigate(optimizationHrefFrom(searchParams, { date }), { replace: true });
+    selectOperationDate(date);
   };
 
-  const navigateToDate = (date: string) => {
-    navigate(optimizationHref({ date }), { replace: true });
-    selectOperationDate(date);
+  // Navegación temporal por día (P0): `‹ ›` mueven un día. El salto de semana vive
+  // solo dentro del calendario del popover para no duplicar semánticas.
+  const shiftDayNav = (days: number) => {
+    const base = new Date(`${selectedDate()}T00:00:00Z`);
+    if (Number.isNaN(base.getTime())) return;
+    base.setUTCDate(base.getUTCDate() + days);
+    navigateToDate(base.toISOString().slice(0, 10));
   };
 
   return (
@@ -150,8 +205,8 @@ export function OptimizationHeaderBar(
             size="sm"
             variant="outline"
             class="px-2"
-            aria-label="Semana anterior"
-            onClick={() => shiftWeekNav(-1)}
+            aria-label="Día anterior"
+            onClick={() => shiftDayNav(-1)}
           >
             <ChevronLeft size={14} />
           </Button>
@@ -159,8 +214,8 @@ export function OptimizationHeaderBar(
             size="sm"
             variant="outline"
             class="px-2"
-            aria-label="Semana siguiente"
-            onClick={() => shiftWeekNav(1)}
+            aria-label="Día siguiente"
+            onClick={() => shiftDayNav(1)}
           >
             <ChevronRight size={14} />
           </Button>
@@ -169,6 +224,16 @@ export function OptimizationHeaderBar(
             summaryLabel={summaryLabel()}
             onDateSelect={navigateToDate}
           />
+          <span
+            class={`inline-flex max-w-36 shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold sm:hidden ${compactTone()}`}
+            title={compactTitle()}
+            data-testid="optimization-compact-chip"
+          >
+            <Show when={(optimizationState.context?.scenarios.length ?? 0) > 0}>
+              <CloudRain size={12} class="shrink-0" aria-hidden="true" />
+            </Show>
+            <span class="truncate">{compactSummary()}</span>
+          </span>
           <Show when={statusChip()}>
             {(chip) => (
               <span
@@ -185,20 +250,43 @@ export function OptimizationHeaderBar(
           >
             {levelChip().shortLabel}
           </span>
+          <Show when={(optimizationState.context?.scenarios.length ?? 0) > 0}>
+            <span
+              class="hidden max-w-56 shrink-0 items-center gap-1 rounded-full border border-violet-300/50 bg-violet-50/70 px-2.5 py-1 text-xs font-semibold text-violet-800 dark:border-violet-900/40 dark:bg-violet-950/20 dark:text-violet-200 sm:inline-flex"
+              title={`Escenario heredado del plan semanal: ${scenarioLabel()}. Ajustable en «Simular día».`}
+              data-testid="optimization-scenario-chip"
+            >
+              <CloudRain size={12} class="shrink-0" aria-hidden="true" />
+              <span class="truncate">{scenarioLabel()}</span>
+            </span>
+          </Show>
+          <Show when={showExperienceGuide()}>
+            <button
+              type="button"
+              class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-fero-blue/30 bg-fero-blue/10 text-fero-blue transition-colors hover:bg-fero-blue/15 lg:hidden"
+              aria-label="Experiencia del día"
+              data-testid="optimization-experience-icon"
+              onClick={() => setStepDrawerOpen(true)}
+            >
+              <Compass size={16} />
+            </button>
+          </Show>
         </div>
-        <span class="hidden text-text-muted lg:inline" aria-hidden="true">
-          |
-        </span>
-        <button
-          type="button"
-          class="hidden shrink-0 rounded-full border border-fero-blue/30 bg-fero-blue/10 px-2.5 py-1 text-xs font-semibold text-fero-blue hover:bg-fero-blue/15 lg:inline"
-          data-testid="optimization-experience-chip"
-          onClick={() => setStepDrawerOpen(true)}
-        >
-          {stepChipLabel()}
-        </button>
+        <Show when={showExperienceGuide()}>
+          <span class="hidden text-text-muted lg:inline" aria-hidden="true">
+            |
+          </span>
+          <button
+            type="button"
+            class="hidden shrink-0 rounded-full border border-fero-blue/30 bg-fero-blue/10 px-2.5 py-1 text-xs font-semibold text-fero-blue hover:bg-fero-blue/15 lg:inline"
+            data-testid="optimization-experience-chip"
+            onClick={() => setStepDrawerOpen(true)}
+          >
+            {stepChipLabel()}
+          </button>
+        </Show>
         <div class="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
-          <Show when={notifyIndicator()}>
+          <Show when={headerNotice()}>
             {(indicator) => (
               <span
                 class={`inline-flex min-w-0 max-w-full items-center truncate rounded-full border px-2.5 py-1 text-xs font-semibold ${indicator().toneClass}`}
@@ -306,7 +394,7 @@ export function OptimizationHeaderBar(
               onClick={(event) => event.stopPropagation()}
             >
               <h3 class="font-heading text-lg font-bold text-text-primary dark:text-white">
-                La semana del {selectedDate()} no está aprobada
+                La semana {selectedWeekRange()} no está aprobada
               </h3>
               <p class="mt-1 text-sm text-text-muted">
                 Para generar rutas hace falta aprobar el plan semanal de esta semana. Puedes ir al
@@ -330,7 +418,9 @@ export function OptimizationHeaderBar(
                       data-testid="optimization-dialog-next-week"
                       onClick={() => {
                         setGateOpen(false);
-                        navigate(optimizationHref({ date: week().start }), { replace: true });
+                        navigate(optimizationHrefFrom(searchParams, { date: week().start }), {
+                          replace: true,
+                        });
                         selectOperationDate(week().start);
                       }}
                     >
@@ -364,7 +454,7 @@ export function OptimizationHeaderBar(
         <Show when={!optimizationState.isLoadingDailyPlan}>
           <OptimizationExperienceStepper
             dailyStatus={dailyPlan()?.status}
-            hasResults={hasResults()}
+            hasResults={dayPlanExists()}
             playbackOpen={optimizationState.playbackOpen}
             weeklyPlanApproved={optimizationState.weeklyPlanApproved}
             operationDate={selectedDate()}
@@ -377,22 +467,5 @@ export function OptimizationHeaderBar(
         </Show>
       </Drawer>
     </>
-  );
-}
-
-export function OptimizationDailyBanner() {
-  const dailyPlan = () => optimizationState.dailyPlan;
-  const scenarioId = (): ScenarioId =>
-    dailyPlan()?.scenarioId ?? optimizationState.preset.scenarioId;
-  const scenarioLabel = () =>
-    optimizationState.context?.scenarios.find((scenario) => scenario.id === scenarioId())?.label ??
-    scenarioId();
-
-  return (
-    <DailyScenarioBanner
-      scenarioId={scenarioId()}
-      scenarioLabel={scenarioLabel()}
-      pendingCount={dailyPlan()?.pendingPoints.length ?? 0}
-    />
   );
 }

@@ -5,6 +5,7 @@ import { Button } from '../../design-system/components';
 import { PlanningContextualCta } from '../planning/PlanningContextualCta';
 import { monitoringHref } from '../../core/planning/operationalLinks';
 import { mondayOfDate } from '../../core/planning/dailyPlanningUx';
+import { formatWeekRangeLabel } from '../../core/planning/weekLabels';
 import { optimizationDateHref, tomorrowIso } from '../../core/planning/planningUx';
 import { weeklyPlanWeekHref } from '../../core/planning/weeklyPlanLinks';
 import { dismissDispatchNotice, optimizationState } from '../../core/stores/optimizationStore';
@@ -33,6 +34,12 @@ export function OptimizationContextBand(props: { closeNotice: string | null }) {
 
   const weeklyHref = () =>
     weeklyPlanWeekHref(mondayOfDate(dailyPlan()?.operationDate ?? optimizationState.preset.operationDate));
+
+  // Semana del día en foco, para que el aviso diga exactamente qué semana falta aprobar.
+  const weekRange = () =>
+    formatWeekRangeLabel(
+      mondayOfDate(dailyPlan()?.operationDate ?? optimizationState.preset.operationDate),
+    );
 
   const kind = () =>
     resolveOptimizationContextBand({
@@ -70,8 +77,8 @@ export function OptimizationContextBand(props: { closeNotice: string | null }) {
             >
               <p class="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-200">
                 <AlertTriangle size={16} class="shrink-0" aria-hidden="true" />
-                Esta semana no tiene plan semanal aprobado: el despacho del día está bloqueado hasta
-                aprobarla (la aprobación es directiva).
+                La semana {weekRange()} no tiene plan semanal aprobado: el despacho del día está
+                bloqueado hasta aprobarla (la aprobación es directiva).
               </p>
               <A href={weeklyHref()} class="shrink-0">
                 <Button variant="outline" size="sm" data-testid="optimization-band-review-week">

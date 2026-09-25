@@ -10,8 +10,9 @@
 
 El motor ACO expone una restricción **opt-in** de ventanas horarias:
 
-- `OptimizationParametersForm.tsx` renderiza el toggle **Ventana de tiempo** y lo envía como
-  `timeWindowEnabled` ([optimization.ts](../../src/core/api/optimization.ts));
+- `OptimizationParametersForm.tsx` renderizaba el toggle **Ventana de tiempo** y lo enviaba como
+  `timeWindowEnabled` ([optimization.ts](../../src/core/api/optimization.ts)). *(Componente eliminado
+  el 2026-09-26; su único contenido restante —el selector de escenario— vive en `DaySimulationDialog.tsx`.)*
 - el preset por defecto lo deja en `false`;
 - `optimization_service.py` construye las ventanas con `build_customer_time_windows(...)` y
   `aco_parallel.build_ant_solution` valida cada visita con `is_visit_feasible_with_window`;

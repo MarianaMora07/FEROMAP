@@ -45,11 +45,15 @@ export interface IncidentPayload {
 
 export interface ContingencyComparison {
   parentSimulationId: number | null;
-  beforeDistanceKm: number;
-  afterDistanceKm: number;
-  distanceDeltaKm: number;
+  beforeDistanceKm: number | null;
+  afterDistanceKm: number | null;
+  distanceDeltaKm: number | null;
   remainingVehicles: number;
   reassignedPoints: number;
+  /** Distancia del subconjunto recalculado (informativa, no comparable). */
+  subsetDistanceKm?: number;
+  /** `false` si no hay base comparable (p. ej. sin distancia de la ruta averiada). */
+  comparable?: boolean;
 }
 
 export interface VehicleBreakdownResponse {

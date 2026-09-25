@@ -165,10 +165,10 @@ Abrir el navegador en **pantalla completa**, zoom **100 %**, sin extensiones que
 | Paso | Clic / elemento | Qué decir |
 |------|-----------------|-----------|
 | 1 | Calendario semanal: elegir **cualquier día laborable** (lun–vie) | «Cualquier día de la semana aprobada es optimizable.» |
-| 2 | Desplegar **Gestión de pendientes** (`optimization-pending-section`) | «Hay **carry-over** de días anteriores (CNT-016, CNT-017, CNT-018 en seed).» |
+| 2 | Abrir la pestaña **Pendientes** (`plan-day-tab-pending`); la gestión se muestra directa | «Hay **carry-over** de días anteriores (CNT-016, CNT-017, CNT-018 en seed).» |
 | 3 | Señalar lista en `pending-management-panel` | «Se incorporan al consolidar el día — no se pierden visitas fallidas.» |
 | 4 | Cerrar pendientes; toolbar → **Generar** (`optimization-generate-route`) | «ACO operativo sobre red real + pendientes.» *Esperar barra de progreso (~30–90 s).* |
-| 5 | Revisar el mapa y, en **Plan → Resumen**, el panel de línea base (`optimization-comparison-panel`) | «La línea base del turno es la operación actual; el plan la mejora con las restricciones del día.» |
+| 5 | Revisar el mapa y, en **Resultados → Previsto**, el panel de línea base (`optimization-comparison-panel`) | «La línea base del turno es la operación actual; el plan la mejora con las restricciones del día.» |
 | 6 | Esperar el **despacho automático**: la barra muestra «Conductores notificados · N rutas» | «El despacho publica rutas a campo y al residente sin un paso manual.» |
 | 7 | Banda de estado (BDC) de despacho → opcional **Ir a monitoreo** | «Una sola banda de estado confirma el despacho; el detalle vive en Monitoreo.» Solo si sobra tiempo. |
 

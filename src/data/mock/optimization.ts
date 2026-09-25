@@ -1,6 +1,6 @@
 export const optimizationPageMeta = {
-  title: 'Planificación operativa',
-  subtitle: 'Uso diario de rutas — genere y despache rutas para la operación del día.',
+  title: 'Plan del día',
+  subtitle: 'Optimiza, simula y despacha la jornada.',
 };
 
 export const algorithms = [

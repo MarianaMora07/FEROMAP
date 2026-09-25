@@ -11,12 +11,14 @@ El frontend solo anima la secuencia devuelta; no orquesta ACO.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastapi import HTTPException, status
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from app.db.models import DailyPlan
+from app.db.models import DailyPlan, OptimizedRoute
 from app.services.contingency_service import (
     _pick_critical_point_code,
     run_vehicle_breakdown_dry_run,
@@ -56,6 +58,87 @@ def _pick_breakdown_vehicle(base_routes: list[dict[str, Any]]) -> str | None:
 
 def _routes_stop_count(routes: list[dict[str, Any]]) -> int:
     return sum(len(route.get("stops") or []) for route in routes)
+
+
+def _plan_point_ids(plan: DailyPlan) -> list[int]:
+    """Puntos que el día debe servir (los finales de la jornada, o los programados)."""
+    ids = json.loads(plan.final_point_ids_json or "[]") or json.loads(
+        plan.scheduled_point_ids_json or "[]"
+    )
+    return [int(value) for value in ids]
+
+
+def _supersede_plan_routes(db: Session, daily_plan_id: int) -> None:
+    """Aparta (en la sesión) todo lo optimizado vigente del día.
+
+    Así las métricas del día (`_day_optimized_distance_km`, `_day_fleet_vehicle_ids`) miden
+    solo el plan recalculado bajo el escenario. Nunca se confirma: `build_day_simulation`
+    revierte la sesión al terminar.
+    """
+    db.execute(
+        update(OptimizedRoute)
+        .where(
+            OptimizedRoute.daily_plan_id == daily_plan_id,
+            OptimizedRoute.route_kind == "optimized",
+            OptimizedRoute.status != "superseded",
+        )
+        .values(status="superseded")
+    )
+    db.flush()
+
+
+def _reoptimize_for_scenario(
+    db: Session,
+    plan: DailyPlan,
+    scenario_id: str,
+) -> dict[str, Any] | None:
+    """Reoptimiza el día bajo `scenario_id` **en la sesión** y resume el resultado.
+
+    Permite simular un día lluvioso/saturado: el motor recalcula rutas y KPIs con el
+    multiplicador de tráfico y el boost de llenado del escenario. Devuelve ``None`` cuando no
+    hay nada que recalcular (mismo escenario o día sin puntos), y todo se revierte con el
+    rollback final de `build_day_simulation`.
+    """
+    from app.services.optimization_service import run_optimization_engine
+    from app.services.planning_service import get_daily_plan_execution_context
+    from app.services.scenario_utils import normalize_scenario_id
+
+    if normalize_scenario_id(scenario_id) == normalize_scenario_id(plan.scenario_id):
+        return None
+
+    point_ids = _plan_point_ids(plan)
+    if not point_ids:
+        return None
+
+    exec_ctx = get_daily_plan_execution_context(db, plan.id)
+    _supersede_plan_routes(db, plan.id)
+    result = run_optimization_engine(
+        db,
+        scenario_id,
+        collection_point_ids=point_ids,
+        fleet_limit=exec_ctx.get("fleetLimit"),
+        fleet_by_type=exec_ctx.get("fleetByType"),
+        sector_partition=exec_ctx.get("sectorPartition"),
+        operation_date=plan.operation_date,
+        daily_plan_id=plan.id,
+        weekly_plan_id=plan.weekly_plan_id,
+        planning_level="administrative",
+        auto_dispatch=False,
+        auto_commit=False,
+    )
+    kpis = result.get("kpis") or {}
+    scenario = result.get("scenario") or {}
+    distance = kpis.get("distanceKm") or {}
+    duration = kpis.get("durationHours") or {}
+    return {
+        "id": result.get("scenarioId") or scenario_id,
+        "label": scenario.get("label") or scenario_id,
+        "trafficMultiplier": scenario.get("trafficMultiplier"),
+        "fillLevelBoost": scenario.get("fillLevelBoost"),
+        "distanceKm": distance.get("optimized"),
+        "baselineDistanceKm": distance.get("current"),
+        "durationHours": duration.get("optimized"),
+    }
 
 
 def _step_metrics(
@@ -122,11 +205,19 @@ def _step_payload(
     }
 
 
-def build_day_simulation(db: Session, daily_plan_id: int) -> dict[str, Any]:
+def build_day_simulation(
+    db: Session,
+    daily_plan_id: int,
+    scenario_id: str | None = None,
+) -> dict[str, Any]:
     """Secuencia guionada y precomputada para animar el día (solo lectura).
 
     Los eventos se ejecutan en la misma sesión para que el segundo parta del plan
     alternativo del primero; al final se revierte la sesión completa.
+
+    Con `scenario_id` distinto al del plan, primero **reoptimiza el día bajo ese escenario**
+    (p. ej. lluvia o saturación) para que la secuencia y el plan base reflejen sus condiciones;
+    el resumen del escenario queda en `scenario`.
     """
     plan = db.get(DailyPlan, daily_plan_id)
     if plan is None:
@@ -135,18 +226,25 @@ def build_day_simulation(db: Session, daily_plan_id: int) -> dict[str, Any]:
             detail="Plan del día no encontrado",
         )
 
-    base_routes = build_daily_route_playback(db, daily_plan_id).get("routes") or []
-    operation_minutes = _estimate_operation_minutes(base_routes)
-
+    scenario_summary: dict[str, Any] | None = None
     steps: list[dict[str, Any]] = []
-    current_routes = base_routes
+    base_routes: list[dict[str, Any]] = []
+    operation_minutes = DEFAULT_OPERATION_MINUTES
     try:
+        if scenario_id:
+            scenario_summary = _reoptimize_for_scenario(db, plan, scenario_id)
+
+        base_routes = build_daily_route_playback(db, daily_plan_id).get("routes") or []
+        operation_minutes = _estimate_operation_minutes(base_routes)
+
+        current_routes = base_routes
         breakdown_vehicle = _pick_breakdown_vehicle(base_routes)
         if breakdown_vehicle:
             breakdown_raw = run_vehicle_breakdown_dry_run(
                 db,
                 vehicle_id=breakdown_vehicle,
                 description="Simulación guionada de avería (dry-run)",
+                daily_plan_id=daily_plan_id,
             )
             if (breakdown_raw.get("resolution") or "no_change") != "no_change":
                 steps.append(
@@ -181,8 +279,8 @@ def build_day_simulation(db: Session, daily_plan_id: int) -> dict[str, Any]:
                     )
                 )
     finally:
-        # Toda la secuencia (incidentes, waypoints, rutas alternativas) vive solo
-        # en la sesión: nada de esto debe persistir.
+        # Toda la secuencia (reoptimización por escenario, incidentes, waypoints, rutas
+        # alternativas) vive solo en la sesión: nada de esto debe persistir.
         db.rollback()
 
     return {
@@ -192,4 +290,5 @@ def build_day_simulation(db: Session, daily_plan_id: int) -> dict[str, Any]:
         "playbackDurationMinutes": PLAYBACK_DURATION_MINUTES,
         "baseRoutes": base_routes,
         "steps": steps,
+        "scenario": scenario_summary,
     }

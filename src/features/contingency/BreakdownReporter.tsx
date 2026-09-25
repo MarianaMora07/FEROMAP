@@ -224,10 +224,20 @@ export function ContingencyResultBanner() {
               <Show when={comparison()}>
                 {(cmp) => (
                   <p class="mt-2 text-xs font-medium text-text-secondary">
-                    KPI comparativo: {cmp().beforeDistanceKm} km → {cmp().afterDistanceKm} km (
-                    {cmp().distanceDeltaKm >= 0 ? '+' : ''}
-                    {cmp().distanceDeltaKm} km) · {cmp().remainingVehicles} vehículos · simulación #
-                    {result().recalculation?.simulationId ?? '—'}
+                    <Show
+                      when={cmp().comparable !== false && cmp().afterDistanceKm != null}
+                      fallback={
+                        <>
+                          KPI comparativo: {cmp().remainingVehicles} vehículos · simulación #
+                          {result().recalculation?.simulationId ?? '—'}
+                        </>
+                      }
+                    >
+                      KPI comparativo: {cmp().beforeDistanceKm} km → {cmp().afterDistanceKm} km (
+                      {(cmp().distanceDeltaKm ?? 0) >= 0 ? '+' : ''}
+                      {cmp().distanceDeltaKm} km) · {cmp().remainingVehicles} vehículos · simulación #
+                      {result().recalculation?.simulationId ?? '—'}
+                    </Show>
                   </p>
                 )}
               </Show>

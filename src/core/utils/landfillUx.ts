@@ -34,7 +34,9 @@ export function formatNextStopLabel(code?: string | null, stopType?: string | nu
 
 export function formatShiftUsage(kpis: KpiMetrics): string | null {
   const breakdown = kpis.durationBreakdown?.optimized;
-  const used = breakdown?.shiftUsedHours ?? kpis.durationHours.optimized;
+  // La jornada es **por vehículo**: se reporta la ruta más cargada (`maxRouteHours`), no la suma
+  // de la flota. El fallback cubre payloads antiguos que ya traían `shiftUsedHours` consolidado.
+  const used = kpis.maxRouteHours ?? breakdown?.shiftUsedHours ?? kpis.durationHours.optimized;
   const budget = breakdown?.shiftBudgetHours ?? kpis.workdayHours ?? 12;
   if (used == null || budget == null) return null;
   return `Jornada utilizada: ${used.toFixed(1)} h / ${budget.toFixed(0)} h`;

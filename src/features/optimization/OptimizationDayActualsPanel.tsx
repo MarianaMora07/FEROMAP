@@ -72,6 +72,17 @@ export function OptimizationDayActualsPanel() {
                   </dd>
                 </div>
               </dl>
+              {/* Día cerrado sin ejecución en campo: el «real» no tiene datos que mostrar. */}
+              <Show when={real().servedPoints === 0}>
+                <p
+                  class="mt-3 text-xs text-text-muted"
+                  data-testid="optimization-day-actuals-no-execution"
+                >
+                  Sin ejecución registrada: ninguna parada se confirmó en campo, así que no hay
+                  distancia, duración ni peso reales. El plan previsto es la referencia de arriba y
+                  las paradas no visitadas pasaron a pendientes.
+                </p>
+              </Show>
             </div>
           </div>
         </section>

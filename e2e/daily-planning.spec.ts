@@ -17,57 +17,87 @@ test.describe('Planificación operativa — plan del día', () => {
   test('muestra plan del día y acciones administrativas', async ({ page }) => {
     await expect(page.getByTestId('optimization-sticky-toolbar')).toBeVisible();
 
-    // Tres destinos de primer nivel: Plan · Resultados · Pendientes.
+    // Cuatro destinos de primer nivel: Plan · Rutas por vehículo · Resultados · Pendientes.
     await expect(page.getByTestId('plan-day-tab-plan')).toBeVisible();
+    await expect(page.getByTestId('plan-day-tab-routes')).toBeVisible();
     await expect(page.getByTestId('plan-day-tab-results')).toBeVisible();
     await expect(page.getByTestId('plan-day-tab-pending')).toBeVisible();
     await expect(page.getByTestId('plan-day-tab-plan')).toHaveText('Plan');
     // El id legado `optimize` ya no existe (Fase D).
     await expect(page.getByTestId('plan-day-tab-optimize')).toHaveCount(0);
 
-    await page.getByTestId('optimization-experience-chip').click();
-    await expect(page.getByTestId('optimization-experience-stepper')).toBeVisible();
+    // «Experiencia del día» (guía previa al despacho) se oculta en un día despachado/cerrado.
+    const experienceChip = page.getByTestId('optimization-experience-chip');
+    if (await experienceChip.isVisible()) {
+      await experienceChip.click();
+      await expect(page.getByTestId('optimization-experience-stepper')).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(page.getByTestId('optimization-experience-stepper')).toBeHidden();
+    }
 
-    // Herramientas en el menú "⋯".
+    // Herramientas en el menú "⋯", agrupadas por secciones (P1, I).
     await page.getByTestId('optimization-page-menu').click();
     await expect(page.getByTestId('optimization-menu-export-pdf')).toBeVisible();
     await expect(page.getByTestId('optimization-menu-simulate-day')).toBeVisible();
-    await expect(page.getByText('Historial de planificación')).toBeVisible();
+    await expect(page.getByTestId('optimization-menu-contingency')).toBeVisible();
+    // El Historial ya no se duplica en el menú (vive en el sidebar como «Historial unificado»).
+    await expect(page.getByText('Historial de planificación')).toHaveCount(0);
     await page.getByTestId('optimization-page-menu').click();
 
     await page.getByTestId('plan-day-tab-pending').click();
     await expect(page.getByTestId('optimization-pending-section')).toBeVisible();
-    await page.getByTestId('optimization-pending-section').locator('summary').click();
+    // J: el panel gestionable se muestra directo (sin <details> intermedio).
     await expect(page.getByTestId('pending-management-panel')).toBeVisible();
 
-    // El día puede llegar sin rutas (muestra "Generar"), optimizado (indicador de
-    // notificación) o ya notificado automáticamente ("Monitoreo").
+    // El día puede llegar sin rutas ("Generar"), despachado ("Monitoreo"/"Cerrar día" o
+    // indicador de notificación) o cerrado ("Ver resultados").
     const showsCta =
       (await page.getByTestId('optimization-generate-route').isVisible()) ||
       (await page.getByTestId('optimization-notify-indicator').isVisible()) ||
-      (await page.getByTestId('optimization-monitoring-route').isVisible());
+      (await page.getByTestId('optimization-monitoring-route').isVisible()) ||
+      (await page.getByTestId('optimization-view-results').isVisible()) ||
+      (await page.getByTestId('optimization-close-day-action').isVisible());
     expect(showsCta).toBeTruthy();
   });
 
   test('abre gestión de pendientes con hash #pendientes', async ({ page }) => {
     await page.goto('/optimization#pendientes');
-    await expect(page.getByTestId('optimization-pending-section')).toHaveAttribute('open');
+    // J: el hash activa la pestaña Pendientes y el panel se muestra directo.
+    await expect(page.getByTestId('plan-day-tab-pending')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByTestId('optimization-pending-section')).toBeVisible();
     await expect(page.getByTestId('pending-management-panel')).toBeVisible();
+  });
+
+  test('limpia el parámetro obsoleto `view` de la URL', async ({ page }) => {
+    await page.goto('/optimization?view=desglose', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByTestId('optimization-sticky-toolbar')).toBeVisible({ timeout: 45_000 });
+    await expect.poll(() => new URL(page.url()).searchParams.has('view')).toBe(false);
   });
 
   test('en móvil el mapa va antes que el resumen y no hay scroll horizontal', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await ensurePlannerSession(page, '/optimization');
     await expect(page.getByTestId('optimization-sticky-toolbar')).toBeVisible({ timeout: 45_000 });
-    await expect(page.getByTestId('operational-map-container')).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByTestId('optimization-day-summary')).toBeVisible();
+    // P2 (G/H): en móvil la cabecera conserva el contexto (chip-resumen) y el stepper accesible.
+    await expect(page.getByTestId('optimization-compact-chip')).toBeVisible();
+    await expect(page.getByTestId('optimization-experience-icon')).toBeVisible();
 
-    // Jerarquía móvil (Fase F): el mapa por encima de «Resumen del día».
-    const mapBox = await page.getByTestId('operational-map-container').boundingBox();
-    const summaryBox = await page.getByTestId('optimization-day-summary').boundingBox();
-    expect(mapBox).not.toBeNull();
-    expect(summaryBox).not.toBeNull();
-    expect(mapBox!.y).toBeLessThan(summaryBox!.y);
+    // P3: un día sin rutas muestra el bloque «Siguiente paso» en vez del mapa/resumen.
+    await expect(
+      page
+        .locator('[data-testid="optimization-next-step"], [data-testid="operational-map-container"]')
+        .first(),
+    ).toBeVisible({ timeout: 30_000 });
+
+    if (!(await page.getByTestId('optimization-next-step').isVisible())) {
+      // Jerarquía móvil (Fase F): el mapa por encima de «Resumen del día».
+      await expect(page.getByTestId('optimization-day-summary')).toBeVisible();
+      const mapBox = await page.getByTestId('operational-map-container').boundingBox();
+      const summaryBox = await page.getByTestId('optimization-day-summary').boundingBox();
+      expect(mapBox).not.toBeNull();
+      expect(summaryBox).not.toBeNull();
+      expect(mapBox!.y).toBeLessThan(summaryBox!.y);
+    }
 
     // sin scroll horizontal en el contenedor principal
     const overflow = await page.evaluate(() => {
@@ -226,7 +256,19 @@ test.describe('Separación de módulos — nivel y resultados', () => {
 
   test('cada métrica del día aparece una sola vez', async ({ page }) => {
     await ensurePlannerSession(page, '/optimization');
-    await expect(page.getByTestId('optimization-day-summary')).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByTestId('optimization-sticky-toolbar')).toBeVisible({ timeout: 45_000 });
+
+    // P3: en un día borrador el tab Plan muestra solo «Siguiente paso» (sin resumen).
+    await expect(
+      page
+        .locator('[data-testid="optimization-next-step"], [data-testid="optimization-day-summary"]')
+        .first(),
+    ).toBeVisible({ timeout: 45_000 });
+    if (await page.getByTestId('optimization-next-step').isVisible()) {
+      await expect(page.getByTestId('optimization-day-summary')).toHaveCount(0);
+      return;
+    }
+
     // Una sola tarjeta de resumen y una sola fila de distancia del día (Fase C).
     await expect(page.getByTestId('optimization-day-summary')).toHaveCount(1);
     await expect(page.getByText('Distancia total (flota)')).toHaveCount(1);

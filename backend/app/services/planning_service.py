@@ -1460,6 +1460,80 @@ def create_pending_visit(
     return visit
 
 
+def simulate_day_execution(db: Session, daily_plan_id: int) -> dict[str, Any]:
+    """Registra una **ejecución simulada** del día y consolida el previsto vs. real.
+
+    Marca las paradas de las rutas vigentes como visitadas (``completed``) usando su llegada
+    estimada como real, deja trazabilidad (``confirmation_source='simulated'``) y escribe
+    ``actual_kpis_json``, de modo que el ciclo previsto → real se pueda mostrar sin capturar
+    campo. **No cierra el día**: el cierre real sigue siendo de planificación.
+    """
+    from app.services.operations_service import route_actual_distance_km
+
+    plan = db.get(DailyPlan, daily_plan_id)
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan del día no encontrado")
+    if plan.status in {"completed", "partial"} and plan.closed_at is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El plan del día ya fue cerrado")
+
+    route_filter = [
+        OptimizedRoute.daily_plan_id == daily_plan_id,
+        OptimizedRoute.route_kind == "optimized",
+        OptimizedRoute.status != "superseded",
+    ]
+    if plan.simulation_id is not None:
+        route_filter.append(OptimizedRoute.simulation_id == plan.simulation_id)
+    routes = db.scalars(
+        select(OptimizedRoute)
+        .where(*route_filter)
+        .options(
+            joinedload(OptimizedRoute.waypoints).joinedload(RouteWaypoint.collection_point),
+        )
+        .order_by(OptimizedRoute.id)
+    ).unique().all()
+
+    day_start = datetime(plan.operation_date.year, plan.operation_date.month, plan.operation_date.day, 6, 0, tzinfo=timezone.utc)
+    executed = 0
+    for route in routes:
+        cursor: datetime | None = None
+        for waypoint in sorted(route.waypoints, key=lambda row: row.sequence_order):
+            if waypoint.status in {"completed", "collected", "skipped"}:
+                cursor = waypoint.actual_arrival_at or cursor
+                continue
+            if waypoint.estimated_arrival_at is not None:
+                arrival = waypoint.estimated_arrival_at
+            elif cursor is not None:
+                arrival = cursor + timedelta(minutes=5)
+            else:
+                arrival = day_start
+            waypoint.status = "completed"
+            waypoint.actual_arrival_at = arrival
+            waypoint.confirmation_source = "simulated"
+            cursor = arrival
+            executed += 1
+    db.flush()
+
+    scheduled_ids = _json_list(plan.final_point_ids_json) or _json_list(plan.scheduled_point_ids_json)
+    actual_km_values = [
+        km for route in routes if (km := route_actual_distance_km(route)) is not None
+    ]
+    plan.actual_kpis_json = dump_kpi_json(
+        plan_vs_real_from_routes(
+            routes,
+            scheduled_points=len(scheduled_ids),
+            actual_distance_km=sum(actual_km_values) if actual_km_values else None,
+            pending_visits={},
+            close_status=plan.status,
+        )
+    )
+    db.flush()
+    return {
+        "dailyPlanId": plan.id,
+        "executedWaypoints": executed,
+        "actualKpis": parse_kpi_json(plan.actual_kpis_json),
+    }
+
+
 def close_daily_plan(db: Session, daily_plan_id: int, *, user_id: int | None = None) -> dict[str, Any]:
     plan = db.get(DailyPlan, daily_plan_id)
     if plan is None:
@@ -1478,6 +1552,11 @@ def close_daily_plan(db: Session, daily_plan_id: int, *, user_id: int | None = N
     for route in routes:
         for waypoint in route.waypoints:
             if waypoint.status not in {"pending", "skipped"}:
+                continue
+            # Solo las paradas de contenedor generan pendientes: los waypoints de
+            # vertedero/base no tienen `collection_point_id` (NULL) y no son visitas a
+            # recuperar (`pending_visits.collection_point_id` es NOT NULL).
+            if waypoint.collection_point_id is None or waypoint.waypoint_type == "landfill":
                 continue
             reason = "skipped_breakdown" if waypoint.status == "skipped" else "not_visited"
             create_pending_visit(

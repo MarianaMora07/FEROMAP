@@ -1074,6 +1074,7 @@ def _solution_operational_metrics(
     fleet_slots = max(1, len(vehicles))
     vehicle_workload_hours = [0.0] * len(vehicles)
     route_hours: list[float] = []
+    route_seconds: list[float] = []
 
     for v_idx, route in enumerate(solution.vehicle_routes):
         if len(route) <= 2:
@@ -1101,6 +1102,7 @@ def _solution_operational_metrics(
         if stops > 0:
             # Solo las rutas con recolección cuentan como vehículo activo.
             route_hours.append(route_total / 3600)
+            route_seconds.append(route_total)
             vehicle_workload_hours[min(vehicle_idx, fleet_slots - 1)] = round(route_total / 3600, 2)
         assigned_effective = resolve_effective_assigned(
             vehicle.assigned_operators,
@@ -1111,7 +1113,14 @@ def _solution_operational_metrics(
 
     crew_assignment, crew_label = _fleet_crew_summary(crew_assignments)
     total_s = int(round(travel_s)) + service_s + unload_s
-    shift_utilization = min(100.0, total_s / shift_budget_seconds * 100.0) if shift_budget_seconds > 0 else 0.0
+    # La jornada es **por vehículo**: la referencia de turno se compara con la ruta más cargada,
+    # no con la suma de la flota (un día de 6 camiones no "dura" 64 h). Ver ADR-004.
+    busiest_route_s = max(route_seconds) if route_seconds else 0.0
+    shift_utilization = (
+        min(100.0, busiest_route_s / shift_budget_seconds * 100.0)
+        if shift_budget_seconds > 0
+        else 0.0
+    )
     mean_hours, std_hours, fairness = workload_statistics(route_hours)
     return {
         "travel_s": travel_s,
@@ -1128,7 +1137,7 @@ def _solution_operational_metrics(
         "active_vehicles": len(route_hours),
         "route_hours": route_hours,
         "vehicle_workload_hours": vehicle_workload_hours,
-        "max_route_hours": round(max(route_hours), 2) if route_hours else 0.0,
+        "max_route_hours": round(busiest_route_s / 3600, 2),
         "workload_mean_hours": round(mean_hours, 2),
         "workload_std_hours": round(std_hours, 2),
         "fairness_index": round(fairness, 2),
@@ -1874,7 +1883,8 @@ def _compute_kpis(
             "unloadHours": round(metrics["unload_s"] / 3600, 2),
             "landfillTrips": metrics["landfill_trips"],
             "shiftBudgetHours": round(metrics["shift_budget_seconds"] / 3600, 1),
-            "shiftUsedHours": round(metrics["total_s"] / 3600, 2),
+            # La jornada se mide por la ruta más cargada (por vehículo), no por la suma de la flota.
+            "shiftUsedHours": round(metrics["max_route_hours"], 2),
             "shiftUtilizationPct": metrics["shift_utilization_pct"],
             "uncoveredPoints": len(uncovered),
             "crewLabel": metrics["crew_label"],
@@ -1912,8 +1922,9 @@ def _compute_kpis(
             "optimized": _breakdown(opt_metrics),
         },
         "exceedsWorkday": {
-            "current": cur_h > workday_h,
-            "optimized": opt_h > workday_h,
+            # Por vehículo: que un camión no quepa en el turno, no que la flota sume más horas.
+            "current": float(cur_metrics["max_route_hours"]) > workday_h,
+            "optimized": max_route_hours > workday_h,
         },
         "workdayHours": workday_h,
         "fuelLiters": {"current": round(cur_fuel, 1), "optimized": round(opt_fuel, 1)},

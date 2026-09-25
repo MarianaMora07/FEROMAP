@@ -178,14 +178,16 @@ def plan_vs_real_from_routes(
 
             if status in {"completed", "collected"}:
                 served += 1
+                # El peso solo cuenta si la parada se sirvió: `collected_weight_kg` se pre-carga
+                # con la demanda planificada, y sumarla sin filtrar inflaba «Recolectado» en días
+                # sin ejecución (0 puntos servidos y, aun así, toneladas contadas).
+                weight = _as_float(getattr(waypoint, "collected_weight_kg", None))
+                if weight:
+                    collected_kg += weight
             elif status == "skipped":
                 skipped += 1
             elif status == "pending":
                 pending += 1
-
-            weight = _as_float(getattr(waypoint, "collected_weight_kg", None))
-            if weight:
-                collected_kg += weight
 
     actual_duration_min = None
     if len(arrivals) >= 2:

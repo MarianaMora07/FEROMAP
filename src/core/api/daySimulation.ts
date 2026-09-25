@@ -42,6 +42,18 @@ export interface DaySimulationStep {
   message: string;
 }
 
+/** Escenario bajo el que se recalculó la simulación (p. ej. lluvia o saturación). */
+export interface DaySimulationScenario {
+  id: string;
+  label: string;
+  trafficMultiplier?: number | null;
+  fillLevelBoost?: number | null;
+  /** KPIs del día recalculado bajo el escenario. */
+  distanceKm?: number | null;
+  baselineDistanceKm?: number | null;
+  durationHours?: number | null;
+}
+
 /** Secuencia guionada y precomputada para animar un día del plan. */
 export interface DaySimulation {
   dailyPlanId: number;
@@ -52,18 +64,27 @@ export interface DaySimulation {
   playbackDurationMinutes: number;
   baseRoutes: RoutePlaybackModel[];
   steps: DaySimulationStep[];
+  /** Resumen del escenario reoptimizado; `null`/ausente si se usó el plan vigente. */
+  scenario?: DaySimulationScenario | null;
 }
 
 /**
  * Trae la secuencia guionada del día (`GET /planning/daily/{id}/simulation`).
  * Solo lectura: el backend precomputa los eventos con dry-run y no persiste nada.
+ *
+ * Con `scenarioId` distinto al del plan, el backend reoptimiza el día bajo ese escenario
+ * (p. ej. `rain`) antes de guionar la secuencia.
  */
-export function fetchDaySimulation(dailyPlanId: number): Promise<DaySimulation> {
+export function fetchDaySimulation(
+  dailyPlanId: number,
+  scenarioId?: string | null,
+): Promise<DaySimulation> {
+  const query = scenarioId ? `?scenarioId=${encodeURIComponent(scenarioId)}` : '';
   return withMockFallback(
-    `day-simulation-${dailyPlanId}`,
+    `day-simulation-${dailyPlanId}${scenarioId ? `-${scenarioId}` : ''}`,
     async () => {
       const payload = await apiGet<unknown>(
-        `/api/v1/planning/daily/${dailyPlanId}/simulation`,
+        `/api/v1/planning/daily/${dailyPlanId}/simulation${query}`,
       );
       if (!isDaySimulation(payload)) {
         throw new Error('Respuesta inválida de la simulación del día.');

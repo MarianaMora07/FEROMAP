@@ -228,6 +228,15 @@ export function canCreateCurrentWeekDraft(): boolean {
   return !state.history.some((row) => row.weekStartDate === currentMonday);
 }
 
+/**
+ * Semana objetivo del botón primario de creación: la **semana en curso** mientras no
+ * tenga plan (para no bloquear la operación de hoy creando la próxima sin avisar), y en
+ * caso contrario la primera semana libre posterior a la última planificada.
+ */
+export function primaryWeekToCreate(): string {
+  return canCreateCurrentWeekDraft() ? mondayIso() : nextWeekToCreate();
+}
+
 export function canArchivePlan(plan: WeeklyPlan | null | undefined): boolean {
   if (!plan) return false;
   return plan.status === 'approved' && isPastWeek(plan.weekStartDate);

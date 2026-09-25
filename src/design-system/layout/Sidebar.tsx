@@ -98,7 +98,7 @@ export function Sidebar(props: SidebarProps) {
                 icon={<Icon size={18} class="shrink-0" />}
                 label={navLabel(item)}
                 description={navDescription(item)}
-                kind={showKinds() ? (item.kind ?? 'producto') : undefined}
+                kind={showKinds() && item.kind === 'demo' ? 'demo' : undefined}
               />
             );
           }}

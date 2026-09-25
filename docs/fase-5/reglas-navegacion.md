@@ -23,15 +23,14 @@ Optimización/Simulación usa componentes de contexto.
 
 | Pantalla | Componente real | Copy / destino |
 |----------|-----------------|----------------|
-| `/optimization` | `DailyScenarioBanner` | «Situación del día»: escenario heredado del plan semanal y pendientes (solo lectura). |
-| `/optimization` | `OptimizationHeaderBar` | Chip «Experiencia del día» (Drawer), navegación `‹ ›`/fecha + chip de estado + chip de nivel e **indicador de notificación** («Conductores notificados · N rutas»; el despacho es automático). Las herramientas secundarias (Simular día (dry-run), Contingencia, Reenviar, PDF, mapa, historial) viven en ⋯. |
+| `/optimization` | `OptimizationHeaderBar` (chip) | Escenario heredado del plan semanal como **chip** `optimization-scenario-chip` en la cabecera (solo lectura; ajustable en el diálogo **Simular día**). El conteo de pendientes pasa a la pestaña **Pendientes** (P1, E). |
+| `/optimization` | `OptimizationHeaderBar` | Chip «Experiencia del día» (Drawer), navegación **por día** `‹ ›`/fecha + chip de estado + chip de nivel e **indicador de notificación** («Conductores notificados · N rutas»; el despacho es automático). Las herramientas secundarias (Simular día —diálogo con **escenario del día** (si difiere, recalcula la jornada bajo ese escenario), condiciones y modo ver animación / 2º plano—, Contingencia, Reenviar, PDF, mapa) viven en ⋯; «Simular día» también queda visible en la pestaña **Rutas por vehículo**. |
 | `/optimization` | `OptimizationContextBand` (BDC) | **Una sola** banda por prioridad: error · semana sin aprobar → «Ir al Plan semanal» · despacho → «Ir a monitoreo» · cierre del día. |
 | `/simulation` | `PlanningContextualCta` (`SimulationResultsStep`) | «Plan semanal aprobado — lleva el escenario al plan operativo del día» → `/optimization` |
 | `/demostracion` | `ModuleGuidanceBanner` | «¿Quieres evaluar escenarios completos?» → `/simulation`; «Demostración didáctica — no es simulación de tesis» → `/simulation` |
 
 Implementación: `src/features/shared/ModuleGuidanceBanner.tsx` (solo
 `/demostracion`) · `src/features/planning/PlanningContextualCta.tsx` ·
-`src/features/optimization/DailyScenarioBanner.tsx` ·
 `src/features/optimization/OptimizationDispatchBanner.tsx` (exporta `OptimizationContextBand`, la BDC).
 
 > **Nota de reconciliación:** los copies literales «¿Quieres evaluar escenarios?»
@@ -59,7 +58,7 @@ No enlazar el historial operativo de `/optimization` como sustituto del historia
 2. **No duplicar formularios**: si un campo ya existe en Simulación con propósito de tesis, no copiarlo en Optimización sin justificación operativa.
 3. **Historial**: las corridas desde `/optimization` deben llamar a `recordOperationalRun(simulationId)`; Simulación usa el listado API completo.
 4. **Despacho**: solo en Planificación operativa; Simulación redirige con banner/enlace.
-5. **Previsto vs. real y KPIs de impacto** *(regla canónica)*: el **previsto** (línea base del turno vs. plan, desglose y rutas por vehículo) vive en la pestaña **Plan**; los **resultados reales** (previsto vs. real, cumplimiento) solo aparecen en la pestaña **Resultados** cuando el día está **cerrado** (`partial`/`closed`). La comparación de tesis (baseline vs ACO entre escenarios) sigue siendo de `/simulation`; el tab `Plan` habla de «línea base del turno», no de evaluación académica.
+5. **Previsto vs. real y KPIs de impacto** *(regla canónica)*: la pestaña **Resultados** concentra las comparaciones — bloque **Previsto** (línea base del turno vs. plan: `optimization-comparison-panel` + `DurationBreakdownPanel`) que aparece tras ejecutar **Simular día** para esa fecha (antes se mostraba al generar y se leía como resultados anticipados), y bloque **Real** (previsto vs. real, cumplimiento) solo cuando el día está **cerrado** (`partial`/`closed`). La pestaña **Plan** queda para lo accionable (mapa, tarjeta «Resumen del día», alerta de cobertura); el detalle por camión vive en la pestaña **Rutas por vehículo** (junto al disparador **Simular día**). Los estados vacíos de Resultados se unifican: cuando no hay previsto simulado ni reales, una sola tarjeta lo explica. La comparación de tesis (baseline vs ACO entre escenarios) sigue siendo de `/simulation`. **Matiz:** «Simular día» puede recalcular el día bajo otro escenario (what-if operativo de la jornada, en sesión y sin persistir); no reemplaza la evaluación de escenarios de `/simulation`, que es la evidencia de tesis.
 6. **Cambios de menú o CTA**: actualizar este documento y `docs/fase-5/matriz-responsabilidades-modulos.md`.
 
 ## Anti-patrones (evitar)
@@ -67,7 +66,7 @@ No enlazar el historial operativo de `/optimization` como sustituto del historia
 - Fusionar ambos módulos en una sola pantalla sin ADR nuevo.
 - Mostrar el mismo historial en Simulación y Optimización sin filtrar origen.
 - Añadir «despachar» en Simulación como acción primaria.
-- Renombrar `/optimization` en la URL (mantener por compatibilidad; copy = «Planificación operativa»).
+- Renombrar `/optimization` en la URL (mantener por compatibilidad; copy = «Plan del día»).
 - Mezclar el laberinto didáctico en Simulación o Optimización (usar `/demostracion`).
 
 ## Referencias

@@ -30,10 +30,6 @@ export function optimizationActiveStepChipLabel(input: {
   return `Paso ${index + 1}: ${step?.label ?? current}`;
 }
 
-export function shouldFleetAccordionStartOpen(assignableVehicleCount: number): boolean {
-  return assignableVehicleCount === 0;
-}
-
 export type OptimizationContextualMessage = {
   message: string;
   href: string;

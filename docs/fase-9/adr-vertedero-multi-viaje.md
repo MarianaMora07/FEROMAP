@@ -138,6 +138,10 @@ Default: `06:00` → `18:00` = **12 h** = **43 200 s**.
 shiftUtilizationPct = min(100, elapsedSec / shiftBudgetSec × 100)
 ```
 
+`elapsedSec` es **el de una ruta** (la jornada es por vehículo). En una solución con varias rutas
+se reporta la **más cargada**: `shiftUsedHours`/`shiftUtilizationPct` y la bandera `exceedsWorkday`
+no se calculan sobre la suma de la flota — un día de 6 camiones no «dura» 64 h.
+
 ### Parada asequible dentro de jornada
 
 ```

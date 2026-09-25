@@ -83,6 +83,15 @@ function BreakdownColumn(props: {
 export function DurationBreakdownPanel(props: DurationBreakdownPanelProps) {
   const breakdown = () => buildDurationBreakdownDisplay(props.kpis);
   const shiftUsage = () => formatShiftUsage(props.kpis);
+  // El límite es **por vehículo**: avisa si la ruta más cargada no cabe en el turno. Se prefiere
+  // `maxRouteHours` para tolerar payloads antiguos con `exceedsWorkday` calculado sobre la flota.
+  const exceedsWorkday = () => {
+    const kpis = props.kpis;
+    if (kpis.maxRouteHours != null && kpis.workdayHours != null) {
+      return kpis.maxRouteHours > kpis.workdayHours;
+    }
+    return kpis.exceedsWorkday?.optimized ?? false;
+  };
 
   return (
     <Card>
@@ -102,10 +111,11 @@ export function DurationBreakdownPanel(props: DurationBreakdownPanelProps) {
         <BreakdownColumn title="Ruta actual" shiftUsage={shiftUsage()} {...breakdown().current} />
         <BreakdownColumn title="Ruta optimizada" highlight shiftUsage={shiftUsage()} {...breakdown().optimized} />
       </div>
-      <Show when={props.kpis.exceedsWorkday?.optimized}>
+      <Show when={exceedsWorkday()}>
         <p class="mt-3 text-xs text-amber-800 dark:text-amber-200">
-          La duración optimizada supera la jornada de referencia ({props.kpis.workdayHours ?? 12} h): puede implicar
-          contenedores sin cubrir aunque la distancia siga siendo la óptima.
+          La ruta más cargada ({props.kpis.maxRouteHours?.toFixed(1) ?? '—'} h) supera la jornada de
+          referencia ({props.kpis.workdayHours ?? 12} h): puede implicar contenedores sin cubrir
+          aunque la distancia siga siendo la óptima.
         </p>
       </Show>
     </Card>

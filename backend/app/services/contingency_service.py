@@ -93,6 +93,8 @@ def _resolve_route(
     db: Session,
     vehicle: Vehicle,
     route_id: int | None,
+    *,
+    allow_inactive: bool = False,
 ) -> OptimizedRoute | None:
     if route_id is not None:
         route = db.scalar(
@@ -107,7 +109,7 @@ def _resolve_route(
             )
         return route
 
-    return db.scalar(
+    route = db.scalar(
         select(OptimizedRoute)
         .where(
             OptimizedRoute.vehicle_id == vehicle.id,
@@ -118,6 +120,89 @@ def _resolve_route(
         .order_by(OptimizedRoute.id.desc())
         .limit(1)
     )
+    if route is not None or not allow_inactive:
+        return route
+
+    # En simulación (dry-run) la avería debe guionarse aunque el día todavía no se
+    # haya despachado (rutas ``pending``): el objetivo es validar el plan *antes*
+    # de comprometerlo. El camino real (``handle_vehicle_breakdown``) sigue exigiendo
+    # una ruta ``in_progress``, porque una avería real solo ocurre en ruta.
+    return db.scalar(
+        select(OptimizedRoute)
+        .where(
+            OptimizedRoute.vehicle_id == vehicle.id,
+            OptimizedRoute.status.in_(("pending", "in_progress")),
+            OptimizedRoute.route_kind == "optimized",
+        )
+        .options(joinedload(OptimizedRoute.waypoints))
+        .order_by(OptimizedRoute.id.desc())
+        .limit(1)
+    )
+
+
+def _receiver_vehicle_codes(recalc: dict[str, Any]) -> list[str]:
+    """Códigos de los vehículos que el motor usó para cubrir los puntos reasignados.
+
+    El motor puede elegir unidades libres de la BD (no comprometidas en el día), así
+    que el aviso debe nombrar a quien de hecho recibe los puntos en vez de asumir
+    «la flota del día».
+    """
+    features = (recalc.get("routesPerVehicle") or {}).get("optimized") or []
+    codes: list[str] = []
+    for feature in features:
+        properties = feature.get("properties") or {}
+        code = properties.get("vehicleCode")
+        if code and str(code) not in codes:
+            codes.append(str(code))
+    return codes
+
+
+def _route_distance_km(route: OptimizedRoute | None) -> float | None:
+    """Distancia planificada de una ruta en km (``None`` si no está calculada)."""
+    if route is None or route.total_distance_meters is None:
+        return None
+    return float(route.total_distance_meters) / 1000.0
+
+
+def _day_optimized_distance_km(db: Session, daily_plan_id: int | None) -> float | None:
+    """Distancia total (km) de las rutas optimizadas vigentes del plan del día."""
+    if daily_plan_id is None:
+        return None
+    distances = db.scalars(
+        select(OptimizedRoute.total_distance_meters).where(
+            OptimizedRoute.daily_plan_id == daily_plan_id,
+            OptimizedRoute.route_kind == "optimized",
+            OptimizedRoute.status != "superseded",
+        )
+    ).all()
+    values = [float(value) / 1000.0 for value in distances if value is not None]
+    return sum(values) if values else None
+
+
+def _day_fleet_vehicle_ids(
+    db: Session,
+    daily_plan_id: int | None,
+    *,
+    exclude_vehicle_id: int,
+) -> list[int]:
+    """Vehículos con ruta optimizada vigente en el plan del día (sin el averiado).
+
+    Es la flota realmente comprometida en la jornada, a diferencia de los vehículos
+    ``available`` de la BD (toda la flota), que confundían el aviso de reasignación.
+    """
+    if daily_plan_id is None:
+        return []
+    rows = db.scalars(
+        select(OptimizedRoute.vehicle_id)
+        .where(
+            OptimizedRoute.daily_plan_id == daily_plan_id,
+            OptimizedRoute.route_kind == "optimized",
+            OptimizedRoute.status != "superseded",
+            OptimizedRoute.vehicle_id != exclude_vehicle_id,
+        )
+        .distinct()
+    ).all()
+    return [int(vehicle_id) for vehicle_id in rows]
 
 
 def _latest_simulation(db: Session) -> Simulation | None:
@@ -155,10 +240,16 @@ def handle_vehicle_breakdown(
     vehicle_id: str,
     route_id: int | None = None,
     description: str | None = None,
+    daily_plan_id: int | None = None,
 ) -> dict[str, Any]:
     """Reporta avería (real): interrumpe ruta, recalcula y **persiste** los cambios."""
     outcome = _run_vehicle_breakdown(
-        db, vehicle_id=vehicle_id, route_id=route_id, description=description, dry_run=False
+        db,
+        vehicle_id=vehicle_id,
+        route_id=route_id,
+        description=description,
+        dry_run=False,
+        daily_plan_id=daily_plan_id,
     )
     db.commit()
     return outcome
@@ -170,11 +261,17 @@ def simulate_vehicle_breakdown(
     vehicle_id: str,
     route_id: int | None = None,
     description: str | None = None,
+    daily_plan_id: int | None = None,
 ) -> dict[str, Any]:
     """Simula la avería **sin persistir**: calcula el plan alternativo y revierte la sesión."""
     try:
         return _run_vehicle_breakdown(
-            db, vehicle_id=vehicle_id, route_id=route_id, description=description, dry_run=True
+            db,
+            vehicle_id=vehicle_id,
+            route_id=route_id,
+            description=description,
+            dry_run=True,
+            daily_plan_id=daily_plan_id,
         )
     finally:
         db.rollback()
@@ -186,6 +283,7 @@ def run_vehicle_breakdown_dry_run(
     vehicle_id: str,
     route_id: int | None = None,
     description: str | None = None,
+    daily_plan_id: int | None = None,
 ) -> dict[str, Any]:
     """Avería dry-run **sin revertir**: muta la sesión para encadenar simulaciones.
 
@@ -193,7 +291,12 @@ def run_vehicle_breakdown_dry_run(
     (la secuencia de simulación del día) es responsable de revertir al terminar.
     """
     return _run_vehicle_breakdown(
-        db, vehicle_id=vehicle_id, route_id=route_id, description=description, dry_run=True
+        db,
+        vehicle_id=vehicle_id,
+        route_id=route_id,
+        description=description,
+        dry_run=True,
+        daily_plan_id=daily_plan_id,
     )
 
 
@@ -204,6 +307,7 @@ def _run_vehicle_breakdown(
     route_id: int | None,
     description: str | None,
     dry_run: bool,
+    daily_plan_id: int | None = None,
 ) -> dict[str, Any]:
     """Núcleo compartido: muta la sesión (incidente, waypoints, recálculo) sin commitear.
 
@@ -211,7 +315,9 @@ def _run_vehicle_breakdown(
     (``simulate_vehicle_breakdown``) revierte para no tocar las rutas reales.
     """
     vehicle = _resolve_vehicle(db, vehicle_id)
-    route = _resolve_route(db, vehicle, route_id)
+    route = _resolve_route(db, vehicle, route_id, allow_inactive=dry_run)
+    # Plan del día al que pertenece la ruta averiada (para medir contra la jornada).
+    day_plan_id = daily_plan_id or (route.daily_plan_id if route is not None else None)
 
     if vehicle.status == "maintenance":
         raise HTTPException(
@@ -305,7 +411,12 @@ def _run_vehicle_breakdown(
             ),
         }
 
-    before_km = float(parent_simulation.kpi_total_distance_optimized or 0) if parent_simulation else 0
+    before_km = _day_optimized_distance_km(db, day_plan_id)
+    if before_km is None:
+        # Sin rutas del día se usa la simulación padre como línea base.
+        before_km = float(parent_simulation.kpi_total_distance_optimized or 0) if parent_simulation else 0.0
+    day_fleet_vehicle_ids = _day_fleet_vehicle_ids(db, day_plan_id, exclude_vehicle_id=vehicle.id)
+    reassign_target_count = len(day_fleet_vehicle_ids) if day_fleet_vehicle_ids else len(available_vehicles)
 
     recalc = run_optimization_engine(
         db,
@@ -331,14 +442,45 @@ def _run_vehicle_breakdown(
         priority_fill_level=True,
     )
 
-    after_km = recalc["kpis"]["distanceKm"]["optimized"]
+    receiver_codes = _receiver_vehicle_codes(recalc)
+    if receiver_codes:
+        # Nombrar a los receptores reales evita el aviso engañoso «resto de la flota
+        # del día» cuando el motor asignó los puntos a un vehículo libre de la BD.
+        target_label = f"a {', '.join(receiver_codes)}"
+        remaining_vehicles = len(receiver_codes)
+    elif day_fleet_vehicle_ids:
+        target_label = f"al resto de la flota del día ({reassign_target_count} vehículo(s))"
+        remaining_vehicles = reassign_target_count
+    else:
+        target_label = f"a {reassign_target_count} vehículo(s) disponible(s)"
+        remaining_vehicles = reassign_target_count
+
+    after_subset_km = float(recalc["kpis"]["distanceKm"]["optimized"])
+    broken_route_km = _route_distance_km(route)
+    after_km: float | None
+    distance_delta_km: float | None
+    if broken_route_km is not None and before_km > 0:
+        # «Después» comparable con el día completo: a las rutas intactas
+        # (before − ruta averiada) se les suma el plan alternativo que cubre los
+        # puntos reasignados. El recálculo solo optimiza esos puntos, así que sin
+        # esta suma la cifra no sería comparable con la línea base de la jornada.
+        after_km = round(before_km - broken_route_km + after_subset_km, 2)
+        distance_delta_km = round(after_km - before_km, 2)
+    else:
+        # Sin distancia de la ruta averiada no hay base comparable: se expone el
+        # subconjunto recalculado solo como dato informativo.
+        after_km = None
+        distance_delta_km = None
     recalc["comparison"] = {
         "parentSimulationId": parent_simulation.id if parent_simulation else None,
-        "beforeDistanceKm": before_km,
+        "beforeDistanceKm": round(before_km, 2),
         "afterDistanceKm": after_km,
-        "distanceDeltaKm": round(after_km - before_km, 2),
-        "remainingVehicles": len(available_vehicles),
+        "distanceDeltaKm": distance_delta_km,
+        # Distancia del subconjunto recalculado (solo informativa, no comparable).
+        "subsetDistanceKm": round(after_subset_km, 2),
+        "remainingVehicles": remaining_vehicles,
         "reassignedPoints": len(pending_point_ids),
+        "comparable": distance_delta_km is not None,
     }
 
     return {
@@ -354,10 +496,10 @@ def _run_vehicle_breakdown(
         "simulated": dry_run,
         "message": (
             f"Avería en {vehicle.code}: {len(pending_point_ids)} puntos reasignados "
-            f"a {len(available_vehicles)} vehículo(s) disponible(s)."
+            f"{target_label}."
             if not dry_run
             else f"Simulación de avería en {vehicle.code}: {len(pending_point_ids)} puntos "
-            f"se reasignarían a {len(available_vehicles)} vehículo(s)."
+            f"se reasignarían {target_label}."
         ),
     }
 
@@ -439,6 +581,8 @@ def simulate_daily_contingency(
             "dailyPlanId": plan.id,
             "vehicleId": None,
             "pointCode": point_code,
+            # El recálculo reoptimiza el resto del día (no una ruta concreta), así que
+            # no hay una línea base 1:1 comparable: se deja `before`/`delta` en ``None``.
             "beforeDistanceKm": None,
             "afterDistanceKm": round(float(after_km), 1) if after_km is not None else None,
             "distanceDeltaKm": None,
@@ -468,6 +612,7 @@ def simulate_daily_contingency(
         db,
         vehicle_id=vehicle_code,
         description="Simulación de avería (dry-run)",
+        daily_plan_id=daily_plan_id,
     )
     comparison = raw.get("comparison") or {}
     return {

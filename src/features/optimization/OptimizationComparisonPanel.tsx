@@ -1,5 +1,5 @@
 import { For } from 'solid-js';
-import { Card, CardHeader } from '../../design-system/components';
+import { Card } from '../../design-system/components';
 import {
   buildBaselineAcoComparisonRows,
   formatSavingPct,
@@ -30,12 +30,12 @@ export function OptimizationComparisonPanel(props: OptimizationComparisonPanelPr
 
   return (
     <Card data-testid="optimization-comparison-panel">
-      <CardHeader
-        title="Línea base del turno vs. plan propuesto"
-        subtitle={`Mejora estimada frente a la operación actual — métrica destacada: ${
-          view() === 'distance' ? 'distancia' : view() === 'time' ? 'tiempo' : 'CO₂'
-        }`}
-      />
+      {/* Sin título propio: el encabezado «Previsto» del tab Resultados ya lo rotula, y el panel
+          repetía «Línea base del turno vs. plan». Aquí solo se indica la métrica destacada. */}
+      <p class="mb-3 text-sm text-text-muted">
+        Mejora estimada frente a la operación actual — métrica destacada:{' '}
+        {view() === 'distance' ? 'distancia' : view() === 'time' ? 'tiempo' : 'CO₂'}
+      </p>
       <div class="pb-3">
         <OptimizationServiceBadges kpis={props.kpis} />
       </div>

@@ -25,6 +25,7 @@ import {
   fetchCurrentWeeklyPlan,
   fetchDailyPlansInRange,
   fetchPendingVisits,
+  simulateDailyExecution,
 } from '../api/planning';
 import {
   mapDailyStatusToCalendar,
@@ -69,6 +70,28 @@ interface OptimizationDispatchNotice {
   dismissed: boolean;
 }
 
+//: Clave de `sessionStorage` del último día simulado (P1: «Simular día» gatea el Previsto).
+//: Se persiste para que un recargo no vuelva a ocultar el bloque ni muestre «simula el día»
+//: después de haber simulado.
+const SIMULATED_DAY_KEY = 'feromap:optimization:simulatedDay';
+
+function loadSimulatedDayDate(): string | null {
+  try {
+    return sessionStorage.getItem(SIMULATED_DAY_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function saveSimulatedDayDate(value: string | null): void {
+  try {
+    if (value) sessionStorage.setItem(SIMULATED_DAY_KEY, value);
+    else sessionStorage.removeItem(SIMULATED_DAY_KEY);
+  } catch {
+    // sessionStorage no disponible: el gate queda solo en memoria.
+  }
+}
+
 interface OptimizationState {
   context: OptimizationPageContext | null;
   preset: OptimizationPreset;
@@ -93,6 +116,8 @@ interface OptimizationState {
   history: Awaited<ReturnType<typeof fetchOptimizationHistory>>;
   lastDispatch: OptimizationDispatchNotice | null;
   playbackOpen: boolean;
+  /** Fecha (ISO) del día para el que se ejecutó «Simular día»; gatea el bloque Previsto. */
+  simulatedDayDate: string | null;
   /** Plan alternativo de una contingencia simulada (dry-run), pendiente de aplicar. */
   contingencySimulation: ContingencySimulationResult | null;
   isSimulatingContingency: boolean;
@@ -125,6 +150,7 @@ const [optimizationState, setState] = createStore<OptimizationState>({
   history: [],
   lastDispatch: null,
   playbackOpen: false,
+  simulatedDayDate: loadSimulatedDayDate(),
   contingencySimulation: null,
   isSimulatingContingency: false,
   isApplyingContingency: false,
@@ -239,7 +265,10 @@ export async function refreshWeekCalendar(weekStart?: string): Promise<void> {
 }
 
 function canHydrateDailySimulation(dailyPlan: DailyPlan, detail: Awaited<ReturnType<typeof fetchSimulationDetail>>): boolean {
-  if (dailyPlan.status !== 'optimized' && dailyPlan.status !== 'dispatched') {
+  // Se hidrata también el día **cerrado** (`partial`/`completed`): su plan ya existe y el
+  // previsto (mapa, desglose y bloque «Previsto» de Resultados) debe seguir disponible al
+  // recargar, no solo mientras el día está `optimized`/`dispatched`.
+  if (!['optimized', 'dispatched', 'partial', 'completed'].includes(dailyPlan.status)) {
     return false;
   }
   const context = detail.planningContext;
@@ -354,11 +383,25 @@ export function selectOperationDate(operationDate: string): void {
     contingencySimulation: null,
     contingencyError: null,
   });
+  // Cambiar de día olvida la simulación (el marcador es por fecha).
+  clearSimulatedDay();
   updateOptimizationPreset({ operationDate });
 }
 
 export function openOptimizationPlayback(): void {
   setState({ playbackOpen: true });
+}
+
+/** Marca que el día se simuló (gatea el bloque Previsto del tab Resultados). */
+export function markDaySimulated(operationDate: string): void {
+  saveSimulatedDayDate(operationDate);
+  setState({ simulatedDayDate: operationDate });
+}
+
+/** Invalida la simulación del día (p. ej. al regenerar el plan). */
+function clearSimulatedDay(): void {
+  saveSimulatedDayDate(null);
+  setState({ simulatedDayDate: null });
 }
 
 export function closeOptimizationPlayback(): void {
@@ -414,6 +457,8 @@ export async function executeOptimization(): Promise<void> {
     lastDispatch: null,
     playbackOpen: false,
   });
+  // Un plan nuevo invalida la simulación previa: hay que volver a simular para ver el previsto.
+  clearSimulatedDay();
 
   const isCancelled = isOptimizationRunCancelled;
 
@@ -697,6 +742,19 @@ export async function refreshOptimizationHistory(): Promise<void> {
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Registra una **ejecución simulada** del día (demo) y recarga el plan para traer el
+ * previsto vs. real consolidado. No cierra el día.
+ */
+export async function simulateDayExecution(): Promise<number> {
+  const planId = optimizationState.dailyPlan?.id;
+  if (!planId) throw new Error('No hay plan del día para simular la ejecución');
+  const result = await simulateDailyExecution(planId);
+  // Recarga el plan: `actualKpis` ya viene consolidado por el backend.
+  await refreshDailyPlan();
+  return result.executedWaypoints;
 }
 
 export async function closeOptimizationDay(): Promise<void> {

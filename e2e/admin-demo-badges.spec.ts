@@ -17,8 +17,8 @@ async function ensureAdminSession(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
 }
 
-test.describe('Badges demo/producto en el sidebar (Fase 5)', () => {
-  test('los módulos de tesis no se listan (sin chips demo) pero el chip producto sigue', async ({
+test.describe('Badges demo en el sidebar (Fase 5)', () => {
+  test('los módulos de tesis no se listan y no quedan chips de clasificación', async ({
     page,
   }) => {
     await ensureAdminSession(page);
@@ -28,8 +28,8 @@ test.describe('Badges demo/producto en el sidebar (Fase 5)', () => {
     // así que no hay grupo que expandir ni chips demo que mostrar.
     await expect(page.getByRole('button', { name: 'Tesis y demostración' })).toHaveCount(0);
     await expect(page.getByTestId('sidebar-kind-demo')).toHaveCount(0);
-    // Los módulos de producto siguen mostrando su chip para el admin.
-    await expect(page.getByTestId('sidebar-kind-producto')).not.toHaveCount(0);
+    // Los módulos de producto ya no se etiquetan con chip.
+    await expect(page.getByTestId('sidebar-kind-producto')).toHaveCount(0);
   });
 
   test('planificador no ve badges (solo admin)', async ({ page }) => {

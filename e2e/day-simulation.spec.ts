@@ -22,7 +22,7 @@ test.describe('Simulación guionada del día — optimización', () => {
     await expect(page.getByTestId('optimization-sticky-toolbar')).toBeVisible({
       timeout: 45_000,
     });
-    // Un solo destino de planificación (≤ 3 tabs) antes de abrir herramientas.
+    // Un solo destino de planificación (tabs de primer nivel) antes de abrir herramientas.
     await expect(page.getByTestId('plan-day-tab-plan')).toBeVisible();
 
     // El día puede llegar ya optimizado (botón "Generar" oculto) o requerir generación.
@@ -41,7 +41,12 @@ test.describe('Simulación guionada del día — optimización', () => {
     // A partir de aquí nada debe mutar el plan: la simulación es de solo lectura.
     mutatingRequests.length = 0;
 
+    // «Simular día» abre un diálogo con condiciones y modos antes de animar.
     await openButton.click();
+    await expect(page.getByTestId('day-simulation-dialog')).toBeVisible();
+    await expect(page.getByTestId('day-sim-mode-background')).toBeVisible();
+    // Por defecto: «Con incidencias extraordinarias» + «Ver la animación».
+    await page.getByTestId('day-sim-run').click();
     await page.waitForURL(/\/optimization\/simulation/);
     await expect(page.getByTestId('day-simulation-page')).toBeVisible();
     await expect(page.getByTestId('operational-map-container')).toBeVisible();

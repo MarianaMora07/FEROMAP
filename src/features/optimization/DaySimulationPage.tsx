@@ -33,12 +33,23 @@ export default function DaySimulationPage() {
   };
   const operationDate = () => firstParam(searchParams.date) ?? '';
 
-  const [simulation] = createResource(dailyPlanId, async (id) => {
-    if (!id) return null;
-    return fetchDaySimulation(id);
+  // `condition=none` reproduce solo el plan base, sin las contingencias guionadas.
+  const condition = () => (firstParam(searchParams.condition) === 'none' ? 'none' : 'all');
+  // `scenario` reoptimiza el día bajo ese escenario antes de guionar la secuencia.
+  const scenarioId = () => firstParam(searchParams.scenario) ?? null;
+
+  const [simulation] = createResource(
+    () => ({ id: dailyPlanId(), scenario: scenarioId() }),
+    (source) => (source.id ? fetchDaySimulation(source.id, source.scenario) : Promise.resolve(null)),
+  );
+
+  const filteredSimulation = createMemo(() => {
+    const sim = simulation();
+    if (!sim) return null;
+    return condition() === 'none' ? { ...sim, steps: [] } : sim;
   });
 
-  const controller = useDaySimulation(() => simulation() ?? null);
+  const controller = useDaySimulation(() => filteredSimulation());
 
   const [mapInstance, setMapInstance] = createSignal<MapLibreMap | undefined>();
   let fitted = false;
@@ -49,7 +60,7 @@ export default function DaySimulationPage() {
     filterPlaybackRoutesByLabels(controller.routes(), hiddenLabels()),
   );
   const fleet = createMemo(() => {
-    const sim = simulation();
+    const sim = filteredSimulation();
     if (!sim) return [];
     // Unión de todo el día (base + alternativos), marcando el origen: la lista sigue
     // siendo estable aunque el tramo actual fusione o quite rutas entre pasos.
@@ -70,7 +81,7 @@ export default function DaySimulationPage() {
 
   // Al cambiar de día, reinicia la selección (todos visibles).
   createEffect(() => {
-    simulation();
+    filteredSimulation();
     untrack(() => setHiddenLabels(new Set<string>()));
   });
 
@@ -111,8 +122,30 @@ export default function DaySimulationPage() {
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 id="page-title" class="font-heading text-xl font-bold text-text-primary">Simulación de recorrido</h1>
-          <p class="text-sm text-text-muted">
-            {operationDate() || 'Plan del día'} · animación comprimida (~5 min)
+          <p class="flex flex-wrap items-center gap-2 text-sm text-text-muted">
+            <span>{operationDate() || 'Plan del día'} · animación comprimida (~5 min)</span>
+            <span
+              class={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                condition() === 'none'
+                  ? 'border-default bg-app text-text-secondary'
+                  : 'border-amber-300/60 bg-amber-50 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200'
+              }`}
+              data-testid="day-simulation-condition-chip"
+            >
+              {condition() === 'none'
+                ? 'Sin incidencias extraordinarias'
+                : 'Con incidencias extraordinarias'}
+            </span>
+            <Show when={simulation()?.scenario}>
+              {(scenario) => (
+                <span
+                  class="rounded-full border border-fero-blue/40 bg-fero-blue/10 px-2.5 py-0.5 text-xs font-semibold text-fero-blue"
+                  data-testid="day-simulation-scenario-chip"
+                >
+                  Escenario · {scenario().label}
+                </span>
+              )}
+            </Show>
           </p>
         </div>
         <div class="flex items-center gap-2">
@@ -138,8 +171,8 @@ export default function DaySimulationPage() {
         <div class="rounded-xl border border-dashed border-default bg-surface/40 px-4 py-10 text-center">
           <p class="text-base font-semibold text-text-primary">No hay un día seleccionado</p>
           <p class="mx-auto mt-1 max-w-md text-sm text-text-muted">
-            Abre la simulación desde el plan del día (botón «Simular día (dry-run)») para animar su
-            recorrido y las contingencias.
+            Abre la simulación desde el plan del día (botón «Simular día») para animar su recorrido y
+            las contingencias.
           </p>
           <div class="mt-4 flex justify-center">
             <A href="/optimization">
@@ -166,7 +199,7 @@ export default function DaySimulationPage() {
 
           <DaySimulationPanel
             controller={controller}
-            simulation={simulation() ?? null}
+            simulation={filteredSimulation()}
             operationDate={operationDate()}
             loading={simulation.loading}
             error={errorMessage()}

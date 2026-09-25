@@ -68,7 +68,7 @@ export function SidebarCollapsibleGroup(props: SidebarCollapsibleGroupProps) {
                           : item.description
                         : undefined
                     }
-                    kind={props.showKinds ? (item.kind ?? 'producto') : undefined}
+                    kind={props.showKinds && item.kind === 'demo' ? 'demo' : undefined}
                   />
                 );
               }}

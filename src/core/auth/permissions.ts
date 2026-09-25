@@ -80,7 +80,7 @@ export interface NavItemDef {
   descriptionKey?: string;
   /** Enlace visible siempre en la parte superior del sidebar */
   sidebarPrimary?: boolean;
-  /** Clasificación demo/producto mostrada como badge solo para admin (docs/ux §3) */
+  /** Clasificación mostrada como badge solo para admin (docs/ux §3). Solo `demo` pinta chip. */
   kind?: 'demo' | 'producto';
 }
 

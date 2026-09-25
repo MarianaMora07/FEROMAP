@@ -15,7 +15,7 @@ import {
   type VersionDiffChange,
   type WeeklyPlan,
 } from '../../../core/api/planning';
-import { mondayIso } from '../../../core/planning/isoDate';
+import { formatWeekRangeLabel } from '../../../core/planning/weekLabels';
 import { weeklyPlanWeekHref } from '../../../core/planning/weeklyPlanLinks';
 import { PLANNING_EMPTY_PRESETS } from '../../../core/planning/planningEmptyStates';
 import { globalToast } from '../../../core/stores/toastStore';
@@ -25,7 +25,7 @@ import {
   deleteWeeklyPlanRow,
   exportWeeklyPlanPdfById,
   initWeeklyPlansList,
-  nextWeekToCreate,
+  primaryWeekToCreate,
   weeklyPlanState,
 } from '../../../core/stores/weeklyPlanStore';
 import { PlanningEmptyState } from '../PlanningEmptyState';
@@ -73,6 +73,11 @@ export default function WeeklyPlansListPage() {
 
   const rows = () =>
     [...weeklyPlanState.history].sort((a, b) => b.weekStartDate.localeCompare(a.weekStartDate));
+
+  // El botón primario apunta a la semana en curso si aún no tiene plan (para no crear la
+  // próxima y dejar bloqueada la operación de hoy) y, si ya la tiene, a la siguiente libre.
+  const needsCurrentWeek = () => canCreateCurrentWeekDraft();
+  const createTarget = () => primaryWeekToCreate();
 
   const pendingDeleteRow = () => rows().find((row) => row.id === pendingDeleteId()) ?? null;
 
@@ -137,23 +142,12 @@ export default function WeeklyPlansListPage() {
             size="sm"
             class="gap-2"
             icon={<Plus size={14} />}
-            data-testid="weekly-plans-create-next"
-            onClick={() => navigate(weeklyPlanWeekHref(nextWeekToCreate()))}
+            data-testid="weekly-plans-create-primary"
+            onClick={() => navigate(weeklyPlanWeekHref(createTarget()))}
           >
-            Nueva semana · {nextWeekToCreate()}
+            {needsCurrentWeek() ? 'Borrador semana actual' : 'Nueva semana'} ·{' '}
+            {formatWeekRangeLabel(createTarget())}
           </Button>
-          <Show when={canCreateCurrentWeekDraft()}>
-            <Button
-              size="sm"
-              variant="outline"
-              class="gap-2"
-              icon={<Plus size={14} />}
-              data-testid="weekly-plans-create-current"
-              onClick={() => navigate(weeklyPlanWeekHref(mondayIso()))}
-            >
-              Borrador semana actual
-            </Button>
-          </Show>
         </div>
 
         <Show when={weeklyPlanState.isLoading}>
