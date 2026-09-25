@@ -41,7 +41,8 @@ class DailyOptimizeRequest(CamelModel):
         le=10,
         description=(
             "Peso de equidad de carga (Fase 13): penaliza el desbalance de horas de servicio "
-            "entre camiones (σ/μ). 0 = solo distancia."
+            "entre camiones (σ/μ). 0 = solo distancia; si se omite, se usa el valor de "
+            "Administración (0,5 por defecto)."
         ),
     )
     makespan_weight: float | None = Field(
@@ -50,7 +51,7 @@ class DailyOptimizeRequest(CamelModel):
         le=10,
         description=(
             "Peso del makespan (Fase 13): penaliza la ruta más larga (T_max / jornada). "
-            "0 = solo distancia."
+            "0 = solo distancia; si se omite, se usa el valor de Administración (1 por defecto)."
         ),
     )
     min_active_vehicles: int | None = Field(

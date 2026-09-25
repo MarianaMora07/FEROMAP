@@ -572,8 +572,8 @@ Encola una optimización ACO y devuelve de inmediato un `jobId`. El cliente debe
 | `operatorsShortage` | 0–5 | Operarios de **campo** ausentes en el turno. Se persiste en `simulationParameters`; afecta **KPIs de duración** (ACO sigue minimizando distancia). |
 | `acoAnts` | 4–30 | Hormigas por iteración del ACO. Si se omite, usa `ACO_ANTS` del servidor (default según `APP_ENV`: local 6, staging/prod 12). |
 | `acoIterations` | 5–60 | Iteraciones del ACO. Si se omite, usa `ACO_ITERATIONS` del servidor (default según `APP_ENV`: local 10, staging/prod 20). |
-| `workloadBalanceWeight` | 0–10 | **Fase 13 — equidad de carga.** Peso de `σ_horas/μ_horas` en el objetivo; reparte las horas de servicio entre camiones. `0` = solo distancia (comportamiento previo, RNF-2). |
-| `makespanWeight` | 0–10 | **Fase 13 — makespan.** Peso de `T_max/H_jornada`; acorta la ruta más larga. `0` = solo distancia. |
+| `workloadBalanceWeight` | 0–10 | **Fase 13 — equidad de carga.** Peso de `σ_horas/μ_horas` en el objetivo; reparte las horas de servicio entre camiones. Si se omite, se toma el valor de Administración (**0,5** por defecto); `0` = solo distancia (comportamiento previo, RNF-2). |
+| `makespanWeight` | 0–10 | **Fase 13 — makespan.** Peso de `T_max/H_jornada`; acorta la ruta más larga. Si se omite, se toma el valor de Administración (**1** por defecto); `0` = solo distancia. |
 | `minActiveVehicles` | 1–100 | **Fase 13 — uso de flota.** Restricción de vehículos activos por día. Si es infactible (más vehículos que puntos programados) se **degrada con warning** en vez de fallar. |
 | `maxRouteHoursTarget` | 1–18 | **Fase 13.** Jornada objetivo (h) del KPI `finishUnderTargetPct` (default `8`). |
 
@@ -591,7 +591,7 @@ Encola una optimización ACO y devuelve de inmediato un `jobId`. El cliente debe
 
 `engineMetrics.acoParallelWorkers` indica cuántos procesos usó el ACO. `graphLoadSource` puede ser `memory`, `disk`, `graphml` u `osmnx`. La matriz incremental reutiliza una corrida anterior como submatriz (contingencia) o parchea filas/columnas nuevas. El grafo se pre-calienta con `just seed` o `just warm-graph` en `data/cache/unare_graph.pkl`.
 
-**Matriz objetivo vs reporte (ADR-003, Fase 13):** el ACO minimiza un objetivo **combinado configurable** (por defecto **distancia**); los KPIs y `estimatedDurationSeconds` de rutas incluyen **viaje + tiempo en paradas** según dotación. La Fase 13 añade los pesos de equidad y makespan (arriba) y la restricción de flota mínima.
+**Matriz objetivo vs reporte (ADR-003, Fase 13):** el ACO minimiza un objetivo **combinado configurable** (por defecto, equidad `0,5` + makespan `1`; con ambos en `0` = solo distancia); los KPIs y `estimatedDurationSeconds` de rutas incluyen **viaje + tiempo en paradas** según dotación. La Fase 13 añade los pesos de equidad y makespan (arriba) y la restricción de flota mínima.
 
 **KPIs de duración (`result.kpis`):**
 
@@ -1182,8 +1182,8 @@ Parámetros del motor de optimización, **editables por planificador/admin** (p�
   "overflowPenaltyWeight": 0.0,
   "calibrationDefaultAlpha": 0.4,
   "calibrationWindowDays": 30,
-  "workloadBalanceWeight": 0.0,
-  "makespanWeight": 0.0,
+  "workloadBalanceWeight": 0.5,
+  "makespanWeight": 1.0,
   "minActiveVehicles": null,
   "maxRouteHoursTarget": 8.0,
   "defaultShiftHours": null,
@@ -1196,7 +1196,7 @@ Parámetros del motor de optimización, **editables por planificador/admin** (p�
   Fórmulas: `P(c) = τ^α · (1/d)^β · b(c) / Σ_k τ^α · (1/d)^β · b(k)` y `τ ← (1−ρ)·τ + Q / C`.
 - **Heurístico de prioridad por llenado:** `heuristicAtRiskMultiplier` (riesgo de calendario), `heuristicCriticalMultiplier` (≥ 80 %), `heuristicHighMultiplier` (≥ 60 %) sesgan la elección de hormiga; `matrixCriticalFactor` / `matrixHighFactor` reducen el costo en la matriz heurística.
 - **Generación:** `overflowPenaltyWeight` (m/kg rebosado; 0 = desactivada), `calibrationDefaultAlpha` / `calibrationWindowDays` (defaults de la calibración).
-- **Multiobjetivo (Fase 13):** `workloadBalanceWeight` (equidad de carga), `makespanWeight` (duración máxima), `minActiveVehicles` (mínimo de vehículos activos por día, `null` = sin restricción), `maxRouteHoursTarget` (jornada objetivo del KPI de cumplimiento), `defaultShiftHours` (jornada de turno por defecto en horas, `null` = jornada de la instalación; recorta el turno de todas las optimizaciones —incluido el plan semanal— y es el mando que reparte la carga entre más vehículos) y `weeklyFleetRotation` (rotación de flota en el plan operativo semanal). Objetivo: `w_d·D/D_ref + w_b·σ_horas/μ_horas + w_t·T_max/H_jornada`. Por defecto los pesos son `0` → solo distancia.
+- **Multiobjetivo (Fase 13):** `workloadBalanceWeight` (equidad de carga), `makespanWeight` (duración máxima), `minActiveVehicles` (mínimo de vehículos activos por día, `null` = sin restricción), `maxRouteHoursTarget` (jornada objetivo del KPI de cumplimiento), `defaultShiftHours` (jornada de turno por defecto en horas, `null` = jornada de la instalación; recorta el turno de todas las optimizaciones —incluido el plan semanal— y es el mando que reparte la carga entre más vehículos) y `weeklyFleetRotation` (rotación de flota en el plan operativo semanal). Objetivo: `w_d·D/D_ref + w_b·σ_horas/μ_horas + w_t·T_max/H_jornada`. Por defecto los pesos son `workloadBalanceWeight=0,5` y `makespanWeight=1` (punto recomendado por el barrido de pesos de la Fase 13, medido en el escenario `normal`); con ambos en `0` el motor optimiza solo distancia.
 - Actúan como **valores por defecto** de la corrida: si la petición de optimización especifica `acoAnts`/`acoIterations`, esos mandan; el resto siempre se toma de aquí.
 - Persistidos en `system_settings` (sección `algorithm`) con auditoría; por defecto toman los valores del entorno / constantes del motor.
 

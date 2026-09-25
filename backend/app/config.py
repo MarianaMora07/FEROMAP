@@ -113,10 +113,11 @@ class Settings(BaseSettings):
     overflow_penalty_weight: float = 0.0
 
     # Fase 13 — optimización multiobjetivo (distancia · uso de flota · tiempo de
-    # servicio). Pesos normalizados del objetivo combinado; 0 = solo distancia
-    # (comportamiento previo, ver RNF-2).
-    workload_balance_weight: float = 0.0
-    makespan_weight: float = 0.0
+    # servicio). Pesos normalizados del objetivo combinado. Valor sembrado por
+    # ``DEFAULT_ALGORITHM``: 0.5 · 1.0 = punto recomendado por el barrido (equidad
+    # fuerte y fiable); 0 = solo distancia (comportamiento previo, ver RNF-2).
+    workload_balance_weight: float = 0.5
+    makespan_weight: float = 1.0
     # Restricción opcional de flota activa por día (None = sin restricción).
     min_active_vehicles: int | None = None
     # Jornada objetivo (h) para el KPI finishUnderTargetPct.

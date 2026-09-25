@@ -132,8 +132,10 @@ class AlgorithmSettings(CamelModel):
     calibration_default_alpha: float = 0.4
     calibration_window_days: int = 30
     # Fase 13 — objetivo multiobjetivo (distancia · flota · tiempo de servicio).
-    workload_balance_weight: float = 0.0
-    makespan_weight: float = 0.0
+    # Valores sembrados por ``DEFAULT_ALGORITHM`` (config.py): 0.5 · 1.0 es el punto
+    # recomendado por el barrido de pesos; 0 en ambos = solo distancia.
+    workload_balance_weight: float = 0.5
+    makespan_weight: float = 1.0
     min_active_vehicles: int | None = None
     max_route_hours_target: float = 8.0
     # Jornada de turno por defecto (h) cuando la corrida no la especifica.
