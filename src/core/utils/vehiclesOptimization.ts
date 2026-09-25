@@ -6,10 +6,10 @@ export interface VehicleOptimizationContext {
   lastOptimizedAt: string | null;
 }
 
-export function enrichVehiclesWithOptimization(
-  vehicles: Vehicle[],
+export function enrichVehiclesWithOptimization<T extends Vehicle>(
+  vehicles: T[],
   context: VehicleOptimizationContext,
-): Vehicle[] {
+): T[] {
   const lastOptimized = new Set(context.lastOptimizedCodes);
   return vehicles.map((vehicle) => ({
     ...vehicle,

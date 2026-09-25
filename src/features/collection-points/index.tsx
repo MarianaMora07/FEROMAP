@@ -1087,7 +1087,7 @@ export default function CollectionPointsPage() {
                   </dl>
 
                   <Show when={canManage()}>
-                    <VisitScheduleEditor pointCode={p().code} />
+                    <VisitScheduleEditor pointCode={p().id} />
                   </Show>
 
                   <Show

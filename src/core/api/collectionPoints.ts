@@ -206,14 +206,6 @@ export interface CollectionPointUpdatePayload {
   servedPopulation?: number | null;
 }
 
-export interface CollectionPointOptimizationContext {
-  lastOptimizedCodes: string[];
-  lastOptimizedAt: string | null;
-  priorityBoostCodes: string[];
-  criticalCount: number;
-  overloadedCodes: string[];
-}
-
 const MOCK_SECTOR_OPTIONS: SectorOption[] = [
   { id: 1, name: 'Terrazas del caroni A-B-C' },
   { id: 2, name: 'Terrazas del aluminio' },
@@ -495,7 +487,6 @@ export {
   type CollectionPointDetail,
   type CollectionPointFillHistory,
   type CollectionPointKpi,
-  type CollectionPointOptimizationContext,
   type CollectionPointsSummary,
   type FillDistribution,
   type FillDistributionItem,

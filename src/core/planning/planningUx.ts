@@ -111,7 +111,7 @@ export function todayIso(): string {
   return toLocalIsoDate(new Date());
 }
 
-export function tomorrowIso(from = new Date()): string {
+export function tomorrowIso(from: Date | string = new Date()): string {
   const date = new Date(from);
   date.setDate(date.getDate() + 1);
   return toLocalIsoDate(date);
