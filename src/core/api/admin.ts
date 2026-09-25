@@ -164,7 +164,8 @@ export interface SeedResult {
 }
 
 export function runAdminSeed(): Promise<SeedResult> {
-  return apiPost<SeedResult>('/api/v1/admin/seed', {});
+  // Re-siembra completa: operación síncrona larga, sin límite de tiempo.
+  return apiPost<SeedResult>('/api/v1/admin/seed', {}, { timeoutMs: 0 });
 }
 
 /**
@@ -172,5 +173,6 @@ export function runAdminSeed(): Promise<SeedResult> {
  * datos operativos y los repuebla desde `data/seeds`.
  */
 export function resetDatabase(): Promise<SeedResult> {
-  return apiPost<SeedResult>('/api/v1/admin/reset-database', {});
+  // Reset + re-siembra: operación síncrona larga, sin límite de tiempo.
+  return apiPost<SeedResult>('/api/v1/admin/reset-database', {}, { timeoutMs: 0 });
 }

@@ -37,7 +37,8 @@ export function fetchAcoBenchmark(): Promise<AcoBenchmarkPayload> {
 
 export function runAcoBenchmark(): Promise<AcoBenchmarkPayload> {
   if (useMocks) return Promise.resolve(mockAcoBenchmark);
-  return apiPost<AcoBenchmarkPayload>('/api/v1/benchmarks/aco', {});
+  // Barrido síncrono pesado: sin límite de tiempo.
+  return apiPost<AcoBenchmarkPayload>('/api/v1/benchmarks/aco', {}, { timeoutMs: 0 });
 }
 
 export type CalibrationAxis = 'ants' | 'iterations' | 'alpha' | 'beta' | 'rho' | 'q';
@@ -125,7 +126,8 @@ export function fetchAcoSensitivity(): Promise<AcoSensitivityPayload> {
 
 export function runAcoSensitivity(): Promise<AcoSensitivityPayload> {
   if (useMocks) return fetchAcoSensitivity();
-  return apiPost<AcoSensitivityPayload>('/api/v1/benchmarks/aco/sensitivity', {});
+  // Barrido síncrono pesado: sin límite de tiempo.
+  return apiPost<AcoSensitivityPayload>('/api/v1/benchmarks/aco/sensitivity', {}, { timeoutMs: 0 });
 }
 
 // --- Calibración del motor: jobs asíncronos y barrido de pesos (Fase 13) -----
@@ -626,6 +628,7 @@ function mockCalibrationMethodEvidence(): CalibrationMethodEvidence {
       nocut: { runId: 6, seeds: 10, generatedAt: '2026-09-18T01:52:00+00:00', scenarioId: 'normal' },
       identify: { runId: 7, seeds: 10, generatedAt: '2026-09-18T02:03:00+00:00', scenarioId: 'normal' },
       validate: { runId: null, seeds: 0, generatedAt: null, scenarioId: null },
+      objective: { runId: null, seeds: 0, generatedAt: null, scenarioId: null },
       rsm: { runId: null, seeds: 0, generatedAt: null, scenarioId: null },
     },
     analyses: {
@@ -635,6 +638,7 @@ function mockCalibrationMethodEvidence(): CalibrationMethodEvidence {
       nocut: { phase: 'nocut', limitations: [] },
       ratio: { phase: 'ratio', limitations: [] },
       validation: null,
+      objective: null,
       rsm: null,
     },
     recommendation: {
@@ -758,7 +762,8 @@ export function fetchAlgorithmsBenchmark(): Promise<AlgorithmsBenchmarkPayload> 
 
 export function runAlgorithmsBenchmark(): Promise<AlgorithmsBenchmarkPayload> {
   if (useMocks) return Promise.resolve(mockAlgorithmsBenchmark());
-  return apiPost<AlgorithmsBenchmarkPayload>('/api/v1/benchmarks/algorithms', {});
+  // Barrido síncrono pesado: sin límite de tiempo.
+  return apiPost<AlgorithmsBenchmarkPayload>('/api/v1/benchmarks/algorithms', {}, { timeoutMs: 0 });
 }
 
 function mockAlgorithmsBenchmark(): AlgorithmsBenchmarkPayload {
