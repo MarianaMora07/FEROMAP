@@ -17,9 +17,9 @@ test.describe('Route playback — optimización', () => {
     if (await generateButton.isVisible()) {
       await generateButton.click();
     }
-    // Los resultados viven en la pestaña de primer nivel "Resultados".
-    await page.getByTestId('plan-day-tab-results').click();
-    await page.getByTestId('optimization-results-tab-rutas').click();
+    // El detalle del plan (rutas por vehículo) vive en la sub-pestaña Rutas, dentro del tab "Plan".
+    await page.getByTestId('plan-day-tab-plan').click();
+    await page.getByTestId('optimization-plan-tab-rutas').click();
     await expect(page.getByText('Mejor ruta encontrada (ACO)')).toBeVisible({ timeout: 90_000 });
 
     // El botón "Simular" salió del toolbar; el playback se abre con el deep link ?playback=1.
@@ -45,9 +45,9 @@ test.describe('Route playback — optimización', () => {
     if (await generateButton.isVisible()) {
       await generateButton.click();
     }
-    // Los resultados viven en la pestaña de primer nivel "Resultados".
-    await page.getByTestId('plan-day-tab-results').click();
-    await page.getByTestId('optimization-results-tab-rutas').click();
+    // El detalle del plan (rutas por vehículo) vive en la sub-pestaña Rutas, dentro del tab "Plan".
+    await page.getByTestId('plan-day-tab-plan').click();
+    await page.getByTestId('optimization-plan-tab-rutas').click();
     await expect(page.getByText('Mejor ruta encontrada (ACO)')).toBeVisible({ timeout: 90_000 });
 
     await page.goto('/optimization?playback=1', { waitUntil: 'domcontentloaded' });

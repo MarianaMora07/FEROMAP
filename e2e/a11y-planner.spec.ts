@@ -43,27 +43,44 @@ async function waitForAnchor(page: Page, anchor: PlanRoute['anchor']) {
   }
 }
 
+async function assertNoBlockingViolations(page: Page, context: string) {
+  const results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .exclude('.maplibregl-control-container')
+    .exclude('canvas')
+    .analyze();
+
+  const blocking = results.violations.filter((violation) =>
+    BLOCKING_IMPACTS.has(violation.impact ?? ''),
+  );
+
+  if (blocking.length > 0) {
+    const summary = blocking
+      .map((v) => `· [${v.impact}] ${v.id} (${v.nodes.length}) — ${v.help}`)
+      .join('\n');
+    throw new Error(`Violaciones axe critical/serious en ${context}:\n${summary}`);
+  }
+}
+
 for (const route of ROUTES) {
   test(`axe · sin violaciones bloqueantes en ${route.path}`, async ({ page }) => {
     expectNoPageErrors(page);
     await ensurePlannerSession(page, route.path);
     await waitForAnchor(page, route.anchor);
-
-    const results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .exclude('.maplibregl-control-container')
-      .exclude('canvas')
-      .analyze();
-
-    const blocking = results.violations.filter((violation) =>
-      BLOCKING_IMPACTS.has(violation.impact ?? ''),
-    );
-
-    if (blocking.length > 0) {
-      const summary = blocking
-        .map((v) => `· [${v.impact}] ${v.id} (${v.nodes.length}) — ${v.help}`)
-        .join('\n');
-      throw new Error(`Violaciones axe critical/serious en ${route.path}:\n${summary}`);
-    }
+    await assertNoBlockingViolations(page, route.path);
   });
 }
+
+test('axe · /optimization con el calendario y su leyenda abiertos', async ({ page }) => {
+  expectNoPageErrors(page);
+  await ensurePlannerSession(page, '/optimization');
+  await waitForAnchor(page, { kind: 'testid', value: 'optimization-sticky-toolbar' });
+
+  // Los chips de estado/nivel ya se auditan en la ruta base; aquí se cubre la leyenda
+  // de estados, que solo existe dentro del popover del calendario del día.
+  await page.getByTestId('optimization-date-trigger').click();
+  await expect(page.getByTestId('optimization-week-calendar-popover')).toBeVisible();
+  await expect(page.getByTestId('optimization-status-legend')).toBeVisible();
+
+  await assertNoBlockingViolations(page, '/optimization (calendario abierto)');
+});

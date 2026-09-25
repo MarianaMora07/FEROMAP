@@ -38,9 +38,9 @@ test.describe('Operador en campo — flujo completo', () => {
   });
 
   test('sin acciones administrativas de planificación', async ({ page }) => {
+    await expect(page.getByTestId('optimization-notify-indicator')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Cerrar día' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Notificar a conductores' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /(Generar|Regenerar) Plan Operativo/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Generar rutas del día/ })).toHaveCount(0);
   });
 });
 

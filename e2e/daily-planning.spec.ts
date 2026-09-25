@@ -17,13 +17,21 @@ test.describe('Planificación operativa — plan del día', () => {
   test('muestra plan del día y acciones administrativas', async ({ page }) => {
     await expect(page.getByTestId('optimization-sticky-toolbar')).toBeVisible();
 
+    // Tres destinos de primer nivel: Plan · Resultados · Pendientes.
+    await expect(page.getByTestId('plan-day-tab-plan')).toBeVisible();
+    await expect(page.getByTestId('plan-day-tab-results')).toBeVisible();
+    await expect(page.getByTestId('plan-day-tab-pending')).toBeVisible();
+    await expect(page.getByTestId('plan-day-tab-plan')).toHaveText('Plan');
+    // El id legado `optimize` ya no existe (Fase D).
+    await expect(page.getByTestId('plan-day-tab-optimize')).toHaveCount(0);
+
     await page.getByTestId('optimization-experience-chip').click();
     await expect(page.getByTestId('optimization-experience-stepper')).toBeVisible();
 
-    // Acciones administrativas en el menú "⋯".
+    // Herramientas en el menú "⋯".
     await page.getByTestId('optimization-page-menu').click();
     await expect(page.getByTestId('optimization-menu-export-pdf')).toBeVisible();
-    await expect(page.getByTestId('optimization-menu-close-day')).toBeVisible();
+    await expect(page.getByTestId('optimization-menu-simulate-day')).toBeVisible();
     await expect(page.getByText('Historial de planificación')).toBeVisible();
     await page.getByTestId('optimization-page-menu').click();
 
@@ -32,11 +40,11 @@ test.describe('Planificación operativa — plan del día', () => {
     await page.getByTestId('optimization-pending-section').locator('summary').click();
     await expect(page.getByTestId('pending-management-panel')).toBeVisible();
 
-    // El día puede llegar sin rutas (muestra "Generar"), optimizado ("Notificar") o ya
-    // notificado automáticamente ("Monitoreo").
+    // El día puede llegar sin rutas (muestra "Generar"), optimizado (indicador de
+    // notificación) o ya notificado automáticamente ("Monitoreo").
     const showsCta =
       (await page.getByTestId('optimization-generate-route').isVisible()) ||
-      (await page.getByTestId('optimization-dispatch-route').isVisible()) ||
+      (await page.getByTestId('optimization-notify-indicator').isVisible()) ||
       (await page.getByTestId('optimization-monitoring-route').isVisible());
     expect(showsCta).toBeTruthy();
   });
@@ -45,6 +53,28 @@ test.describe('Planificación operativa — plan del día', () => {
     await page.goto('/optimization#pendientes');
     await expect(page.getByTestId('optimization-pending-section')).toHaveAttribute('open');
     await expect(page.getByTestId('pending-management-panel')).toBeVisible();
+  });
+
+  test('en móvil el mapa va antes que el resumen y no hay scroll horizontal', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await ensurePlannerSession(page, '/optimization');
+    await expect(page.getByTestId('optimization-sticky-toolbar')).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByTestId('operational-map-container')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId('optimization-day-summary')).toBeVisible();
+
+    // Jerarquía móvil (Fase F): el mapa por encima de «Resumen del día».
+    const mapBox = await page.getByTestId('operational-map-container').boundingBox();
+    const summaryBox = await page.getByTestId('optimization-day-summary').boundingBox();
+    expect(mapBox).not.toBeNull();
+    expect(summaryBox).not.toBeNull();
+    expect(mapBox!.y).toBeLessThan(summaryBox!.y);
+
+    // sin scroll horizontal en el contenedor principal
+    const overflow = await page.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? main.scrollWidth - main.clientWidth : 0;
+    });
+    expect(overflow).toBeLessThanOrEqual(1);
   });
 });
 
@@ -72,7 +102,7 @@ test.describe('Planificación operativa — flujo semanal', () => {
 
     await page.getByTestId('weekly-plan-stepper').getByRole('button', { name: 'Aprobar' }).click();
     // Ya no hay bloqueo por falta de validación: se ofrece validar como acción opcional
-    // y el gate real al aprobar es el pre-flight heurístico.
+    // y la guarda al aprobar es la verificación de viabilidad del servidor.
     await expect(page.getByTestId('weekly-plan-optional-validation')).toBeVisible();
     await expect(page.getByTestId('weekly-plan-primary-cta')).toBeVisible();
     await expect(page.getByText('Falta validar', { exact: true })).toHaveCount(0);
@@ -110,6 +140,12 @@ test.describe('Planificación operativa — flujo semanal', () => {
     await expect(page).toHaveURL(/\/planning\/weekly/, { timeout: 45_000 });
     await expect(page.getByTestId('planning-weekly-page')).toBeVisible();
   });
+
+  test('redirige la URL legada de optimización 3 niveles al plan semanal', async ({ page }) => {
+    await ensurePlannerSession(page, '/optimization/levels');
+    await expect(page).toHaveURL(/\/planning\/weekly/, { timeout: 45_000 });
+    await expect(page.getByTestId('planning-weekly-page')).toBeVisible();
+  });
 });
 
 test.describe('Planificación operativa — ciclo hub a historial', () => {
@@ -140,5 +176,74 @@ test.describe('Planificación operativa — ciclo hub a historial', () => {
       timeout: 30_000,
     });
     await expect(page.getByText('Días de la semana')).toBeVisible({ timeout: 30_000 });
+  });
+});
+
+test.describe('Separación de módulos — nivel y resultados', () => {
+  test.beforeEach(({ page }) => {
+    expectNoPageErrors(page);
+  });
+
+  test('cada módulo muestra su nivel de planificación', async ({ page }) => {
+    await ensurePlannerSession(page, '/optimization');
+    await expect(page.getByTestId('optimization-level-chip')).toBeVisible({ timeout: 45_000 });
+
+    await ensurePlannerSession(page, '/planning/weekly');
+    await expect(page.getByTestId('planning-level-banner')).toBeVisible({ timeout: 45_000 });
+  });
+
+  test('la cabecera del día y el calendario muestran estado y leyenda', async ({ page }) => {
+    await ensurePlannerSession(page, '/optimization');
+    await expect(page.getByTestId('optimization-sticky-toolbar')).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByTestId('optimization-level-chip')).toBeVisible();
+    // Chip de estado del día (Fase 3): presente cuando el día tiene plan.
+    const statusChip = page.getByTestId('optimization-status-chip');
+    if ((await statusChip.count()) > 0) {
+      await expect(statusChip).toBeVisible();
+    }
+
+    // Leyenda de estados (Fase 3) dentro del calendario del día.
+    await page.getByTestId('optimization-date-trigger').click();
+    await expect(page.getByTestId('optimization-week-calendar-popover')).toBeVisible();
+    const legend = page.getByTestId('optimization-status-legend');
+    await expect(legend).toBeVisible();
+    await expect(legend).toContainText('Carry-over pendientes');
+  });
+
+  test('como máximo una banda de estado contextual a la vez', async ({ page }) => {
+    await ensurePlannerSession(page, '/optimization');
+    await expect(page.getByTestId('optimization-sticky-toolbar')).toBeVisible({ timeout: 45_000 });
+    const bandTestIds = [
+      'optimization-context-error',
+      'optimization-week-pending-band',
+      'optimization-dispatch-banner',
+      'optimization-contextual-cta',
+    ];
+    let bands = 0;
+    for (const id of bandTestIds) bands += await page.getByTestId(id).count();
+    expect(bands).toBeLessThanOrEqual(1);
+  });
+
+  test('cada métrica del día aparece una sola vez', async ({ page }) => {
+    await ensurePlannerSession(page, '/optimization');
+    await expect(page.getByTestId('optimization-day-summary')).toBeVisible({ timeout: 45_000 });
+    // Una sola tarjeta de resumen y una sola fila de distancia del día (Fase C).
+    await expect(page.getByTestId('optimization-day-summary')).toHaveCount(1);
+    await expect(page.getByText('Distancia total (flota)')).toHaveCount(1);
+  });
+
+  test('Resultados no muestra datos reales sin el día cerrado', async ({ page }) => {
+    await ensurePlannerSession(page, '/optimization');
+    await expect(page.getByTestId('optimization-sticky-toolbar')).toBeVisible({ timeout: 45_000 });
+    await page.getByTestId('plan-day-tab-results').click();
+
+    // Con el día cerrado, la vista principal es el previsto vs. real; si no, estado vacío.
+    const closed = await page.getByTestId('optimization-day-actuals').isVisible();
+    if (closed) {
+      await expect(page.getByTestId('optimization-results-empty')).toHaveCount(0);
+    } else {
+      await expect(page.getByTestId('optimization-results-empty')).toBeVisible();
+      await expect(page.getByTestId('optimization-day-actuals')).toHaveCount(0);
+    }
   });
 });

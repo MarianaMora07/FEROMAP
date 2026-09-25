@@ -7,14 +7,14 @@ import {
 
 // Flujo nuevo (Fase A opcional): plan semanal = config base → generar plan
 // operativo de la semana (motor real, secuencial) → tabla Camión × Día →
-// abrir un día → notificar un día → estado persistido al recargar.
+// abrir un día → estado persistido al recargar (el despacho es automático).
 // El motor ACO es lento: timeouts amplios.
-test.describe('Plan operativo semanal — generar, abrir y notificar', () => {
+test.describe('Plan operativo semanal — generar, abrir y estado', () => {
   test.beforeEach(({ page }) => {
     expectNoPageErrors(page);
   });
 
-  test('aprobar → generar → abrir día → notificar → estado persiste', async ({
+  test('aprobar → generar → abrir día → estado persiste', async ({
     page,
     request,
   }) => {
@@ -53,7 +53,8 @@ test.describe('Plan operativo semanal — generar, abrir y notificar', () => {
       timeout: 60_000,
     });
 
-    // El plan operativo ya fue generado por "Ver plan"; la tabla camión × día debe estar.
+    // El plan operativo ya fue generado por "Ver plan"; la tabla camión × día vive en «Operación».
+    await page.getByTestId('weekly-plan-step4-tab-operacion').click();
     await expect(page.getByTestId('weekly-operational-table')).toBeVisible({ timeout: 60_000 });
 
     // Abrir un día desde la tabla
@@ -62,22 +63,17 @@ test.describe('Plan operativo semanal — generar, abrir y notificar', () => {
     await firstDayLink.click();
     await expect(page).toHaveURL(/\/optimization/, { timeout: 60_000 });
 
-    // Volver al plan semanal y notificar un día
+    // Volver al plan semanal y ver el estado persistido de los días
     await page.goto('/planning/weekly', { waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('planning-weekly-page')).toBeVisible({ timeout: 45_000 });
 
     const approvedRow = page.locator('[data-weekly-plan-status="approved"] [role="button"]').first();
     await expect(approvedRow).toBeVisible({ timeout: 30_000 });
     await approvedRow.click();
+    await page.getByTestId('weekly-plan-step4-tab-operacion').click();
     await expect(page.getByTestId('weekly-operational-table')).toBeVisible({ timeout: 60_000 });
 
-    const firstNotify = page.locator('[data-testid^="weekly-notify-day-"]').first();
-    if (await firstNotify.isVisible()) {
-      await firstNotify.click();
-      await expect(page.getByText(/notificada/i)).toBeVisible({ timeout: 60_000 });
-    }
-
-    // Recargar: el estado notificado debe persistir (payload deriva estado vivo)
+    // Recargar: el estado del día debe persistir (payload deriva estado vivo).
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('planning-weekly-page')).toBeVisible({ timeout: 45_000 });
     const approvedAfterReload = page
@@ -85,8 +81,9 @@ test.describe('Plan operativo semanal — generar, abrir y notificar', () => {
       .first();
     await expect(approvedAfterReload).toBeVisible({ timeout: 30_000 });
     await approvedAfterReload.click();
+    await page.getByTestId('weekly-plan-step4-tab-operacion').click();
     await expect(page.getByTestId('weekly-operational-table')).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByText('Notificado', { exact: true }).first()).toBeVisible({
+    await expect(page.getByText(/(Notificado|Optimizado|Cerrado)/).first()).toBeVisible({
       timeout: 30_000,
     });
   });
