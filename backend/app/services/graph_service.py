@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import pickle
 from functools import lru_cache
 from pathlib import Path
@@ -39,6 +40,67 @@ def _merge_graphs(base: nx.MultiDiGraph, extra: nx.MultiDiGraph) -> nx.MultiDiGr
     merged = base.copy()
     merged.update(extra)
     return merged
+
+
+def _haversine_m(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
+    radius = 6_371_000.0
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    return 2 * radius * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _connect_components(graph: nx.MultiDiGraph) -> nx.MultiDiGraph:
+    """Cose las islas del grafo con una arista sintética.
+
+    El GraphML base y la extensión oriental se descargan en bboxes que no se tocan, así que
+    el grafo queda partido en dos (o más) componentes. Sin conexión, ``shortest_path`` falla
+    entre puntos de islas distintas, los tramos se descartan y el GeoJSON une los extremos
+    con una recta de kilómetros (las diagonales que cruzan el mapa). Cada isla se cose a la
+    principal por el par de nodos más cercano.
+    """
+    components = list(nx.weakly_connected_components(graph))
+    if len(components) <= 1:
+        return graph
+
+    components.sort(key=len, reverse=True)
+    coords = {
+        node: (float(data["x"]), float(data["y"]))
+        for node, data in graph.nodes(data=True)
+    }
+    main = set(components[0])
+    for component in components[1:]:
+        best: tuple[float, int, int] | None = None
+        for u in main:
+            xu, yu = coords[u]
+            for v in component:
+                xv, yv = coords[v]
+                dist = (xu - xv) ** 2 + (yu - yv) ** 2
+                if best is None or dist < best[0]:
+                    best = (dist, u, v)
+        if best is None:
+            continue
+        _, u, v = best
+        length_m = _haversine_m(*coords[u], *coords[v])
+        travel_time_s = length_m / 1000.0 / 20.0 * 3600.0
+        for a, b in ((u, v), (v, u)):
+            graph.add_edge(
+                a,
+                b,
+                length=length_m,
+                travel_time=travel_time_s,
+                weight=travel_time_s,
+                highway="unclassified",
+                name="Enlace FEROMAP (cose de islas)",
+            )
+        logger.info(
+            "Grafo: isla de %d nodos cosida a la principal (%.0f m)",
+            len(component),
+            length_m,
+        )
+        main |= component
+    return graph
 
 
 def _extend_graph_coverage(graph: nx.MultiDiGraph) -> nx.MultiDiGraph:
@@ -130,6 +192,7 @@ def load_road_graph(*, force_reload: bool = False) -> nx.MultiDiGraph:
             try:
                 with pkl.open("rb") as fh:
                     graph = pickle.load(fh)
+                graph = _connect_components(graph)
                 _graph_cache["graph"] = graph
                 _last_graph_load_source = "disk"
                 logger.info("Grafo cargado desde cache %s", pkl)
@@ -155,6 +218,7 @@ def load_road_graph(*, force_reload: bool = False) -> nx.MultiDiGraph:
     graph = ox.add_edge_speeds(graph)
     graph = ox.add_edge_travel_times(graph)
     graph = _extend_graph_coverage(graph)
+    graph = _connect_components(graph)
 
     try:
         with pkl.open("wb") as fh:

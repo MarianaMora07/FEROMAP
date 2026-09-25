@@ -206,11 +206,11 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
 
   return (
     <Card padding={false} class="overflow-hidden">
-      <div class="flex items-center justify-between gap-3 border-b border-default px-4 py-3">
-        <h3 class="font-heading font-semibold text-text-primary">
+      <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-default px-4 py-3">
+        <h3 class="min-w-0 font-heading font-semibold text-text-primary">
           {props.playbackActive ? 'Simulación de recorrido' : 'Vista de la mejor ruta (ACO)'}
         </h3>
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           <Show when={props.playbackActive}>
             <span class="rounded-full bg-fero-blue/10 px-2.5 py-0.5 text-xs font-semibold text-fero-blue">
               En reproducción
@@ -239,10 +239,11 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
         </div>
       </div>
 
-      <div class="relative h-[min(55vh,420px)] min-h-[320px] bg-app lg:min-h-[380px]">
+      <div class="relative h-[min(55vh,420px)] min-h-80 bg-app lg:min-h-95">
         <OperationalMap
           onMapReady={handleMapReady}
           onStyleRestored={() => syncRoutes()}
+          onResized={() => syncRoutes()}
         >
           <Show when={!props.hasResults}>
             <div class="absolute bottom-3 left-3 z-10 rounded-md border border-default bg-elevated/95 px-2.5 py-1.5 text-xs text-text-secondary shadow-sm">
@@ -251,7 +252,7 @@ export function OptimizationRouteMap(props: OptimizationRouteMapProps) {
           </Show>
 
           <Show when={props.playbackActive && props.playback && props.playbackRoutes}>
-            <RoutePlaybackLegend class="absolute bottom-3 left-3 z-10 max-w-[220px]" />
+            <RoutePlaybackLegend class="absolute bottom-3 left-3 z-10 max-w-55" />
             <RoutePlaybackLayer
               map={mapInstance}
               routes={() => props.playbackRoutes ?? []}

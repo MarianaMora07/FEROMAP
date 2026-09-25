@@ -15,6 +15,8 @@ export interface OperationalMapProps {
   maxBounds?: maplibregl.LngLatBoundsLike;
   onMapReady?: (map: MapLibreMap) => void;
   onStyleRestored?: (map: MapLibreMap) => void;
+  /** Se dispara cuando cambia el tamaño del contenedor (tras `map.resize()`). */
+  onResized?: (map: MapLibreMap) => void;
   children?: JSX.Element;
 }
 
@@ -58,7 +60,12 @@ export function OperationalMap(props: OperationalMapProps) {
         props.onMapReady?.(map);
       });
 
-      ro = new ResizeObserver(() => mapRef.current?.resize());
+      ro = new ResizeObserver(() => {
+        const current = mapRef.current;
+        if (!current) return;
+        current.resize();
+        props.onResized?.(current);
+      });
       ro.observe(mapContainer);
     });
 

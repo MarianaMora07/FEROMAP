@@ -9,13 +9,17 @@ Guía del mapa operativo acotado a la **Parroquia Unare** (FEROMAP). Complementa
 | `UNARE_BBOX` | `-62.81, 8.24, -62.69, 8.31` | Filtro API, tiles MBTiles |
 | `UNARE_CENTER` | `-62.715, 8.295` | Centro por defecto (depósito) |
 | `UNARE_ZOOM` | `13.5` | Zoom inicial |
-| `minZoom` / `maxZoom` | `12` / `17` | MapLibre operativo |
+| `minZoom` / `maxZoom` | `9` / `17` | MapLibre operativo |
 
-Todos los mapas operativos comparten `maxBounds` = bbox Unare. No se puede hacer zoom out más allá de `minZoom: 12`.
+Los mapas operativos comparten `maxBounds = OPERATIONAL_PAN_BOUNDS` (bbox de Unare **con margen**),
+de modo que se puede **alejar** para ver contexto. El límite real de contenido lo pone el fondo:
+los MBTiles locales cubren `z12–14`; por debajo de `z12` el estilo `unare-local` muestra una capa
+OSM regional (`wide-tiles-layer`) para no dejar el fondo vacío.
 
 ## Fondo cartográfico
 
-- **Producción / demo offline:** tiles locales MBTiles (`GET /api/v1/map/tiles/{z}/{x}/{y}.png`)
+- **Producción / demo offline:** tiles locales MBTiles (`GET /api/v1/map/tiles/{z}/{x}/{y}.png`, z12–14). Es el fondo de la operación diaria.
+- **Zoom-out (z<12):** capa OSM regional (`wide-tiles-layer`) del estilo `unare-local`; necesita internet. Para offline total al alejarse, regenerar los MBTiles con `minzoom` menor y bbox mayor (`generate_unare_mbtiles.sh`).
 - **Desarrollo:** estilos OSM/Carto como fallback manual en selector de capas
 
 Generación: `./backend/scripts/generate_unare_mbtiles.sh` (ver INTEGRATION.md).
@@ -28,6 +32,12 @@ Las rutas visibles provienen del **plan diario activo** (`get_active_daily_plan`
 Optimizar → status=pending (línea punteada)
 Despachar → status=in_progress (línea sólida)
 ```
+
+> **Geometría vial y grafo cosido.** La línea sigue el grafo OSMnx. El GraphML base y la extensión
+> oriental se descargan en bboxes que no se tocan, así que `load_road_graph()` las **cose**
+> (`_connect_components`) antes de enrutar: sin eso, `shortest_path` falla entre puntos de islas
+> distintas, el tramo se descarta y el GeoJSON unía los extremos con una recta de kilómetros
+> (las diagonales que cruzaban el mapa).
 
 | Propiedad GeoJSON | Tipo | Descripción |
 |-------------------|------|-------------|

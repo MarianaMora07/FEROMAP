@@ -4,11 +4,20 @@ import maplibregl, {
   type MapOptions,
 } from 'maplibre-gl';
 import type { RouteCollection, SectorCollection } from '../types/geo';
-import { UNARE_BBOX_QUERY, UNARE_BOUNDS, UNARE_CENTER, UNARE_ZOOM } from '../types/geo';
+import { UNARE_BBOX, UNARE_BBOX_QUERY, UNARE_BOUNDS, UNARE_CENTER, UNARE_ZOOM } from '../types/geo';
 import type { MapContextFilters } from '../types/mapContext';
 
-export const OPERATIONAL_MAP_MIN_ZOOM = 12;
+export const OPERATIONAL_MAP_MIN_ZOOM = 9;
 export const OPERATIONAL_MAP_MAX_ZOOM = 17;
+/**
+ * Límites de paneo por defecto: bbox de Unare con margen.
+ * El bbox exacto bloqueaba el zoom-out (MapLibre no deja alejar más de lo que cabe dentro de
+ * `maxBounds`); con margen se puede alejar para ver contexto alrededor del área de estudio.
+ */
+export const OPERATIONAL_PAN_BOUNDS: LngLatBoundsLike = [
+  [UNARE_BBOX.minLng - 0.35, UNARE_BBOX.minLat - 0.25],
+  [UNARE_BBOX.maxLng + 0.35, UNARE_BBOX.maxLat + 0.25],
+];
 export const OPERATIONAL_MAP_FIT_PADDING = 48;
 export const OPERATIONAL_MAP_FIT_MAX_ZOOM = 15;
 /** Zoom máximo al encuadrar el área de estudio (debe quedar ≥ minzoom tiles Unare = 12). */
@@ -51,7 +60,7 @@ export function createOperationalMapOptions(config: CreateOperationalMapConfig):
     minZoom: config.minZoom ?? OPERATIONAL_MAP_MIN_ZOOM,
     maxZoom: config.maxZoom ?? OPERATIONAL_MAP_MAX_ZOOM,
     maxBounds:
-      config.maxBounds === null ? undefined : (config.maxBounds ?? UNARE_BOUNDS),
+      config.maxBounds === null ? undefined : (config.maxBounds ?? OPERATIONAL_PAN_BOUNDS),
     attributionControl: config.attributionControl ?? false,
     interactive: config.interactive ?? true,
   };
@@ -132,6 +141,9 @@ export function fitMapToStudyArea(
     sectors?: SectorCollection;
   } = {},
 ): void {
+  // `map.resize()` sincroniza el transform con el tamaño real del contenedor: si el layout
+  // aún no se ha asentado, `fitBounds` calcularía el zoom con un tamaño obsoleto.
+  map.resize();
   const sectorBounds = options.sectors ? boundsFromSectorCollection(options.sectors) : null;
   const bounds = sectorBounds ?? new maplibregl.LngLatBounds(UNARE_BOUNDS[0], UNARE_BOUNDS[1]);
 
@@ -143,6 +155,7 @@ export function fitMapToStudyArea(
 }
 
 export function fitMapToOperationalData(map: MapLibreMap, input: OperationalMapFitInput = {}): void {
+  map.resize();
   const padding = input.padding ?? OPERATIONAL_MAP_FIT_PADDING;
   const maxZoom = input.maxZoom ?? OPERATIONAL_MAP_FIT_MAX_ZOOM;
   const duration = input.duration ?? 800;

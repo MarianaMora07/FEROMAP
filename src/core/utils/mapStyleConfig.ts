@@ -33,16 +33,42 @@ const osmRaster = (
   ],
 });
 
-export const unareLocalStyle: StyleSpecification = osmRaster(
-  [localMapTileUrl()],
-  { minzoom: 12, maxzoom: 16 },
-);
-
-export const osmMapStyle: StyleSpecification = osmRaster([
+const OSM_RASTER_TILES = [
   'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
   'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
   'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png',
-]);
+];
+
+/**
+ * Estilo operativo local (`unare-local`).
+ *
+ * Los MBTiles locales solo cubren z12–14 del bbox de Unare; por eso se apoya en una capa OSM
+ * regional por debajo (z<12), de modo que al alejarse se ve contexto en vez de un fondo vacío.
+ * La operación diaria (z≥12) sigue sirviéndose 100% del backend local (offline-safe).
+ */
+export const unareLocalStyle: StyleSpecification = {
+  version: 8,
+  sources: {
+    'wide-tiles': {
+      type: 'raster',
+      tiles: OSM_RASTER_TILES,
+      tileSize: 256,
+      attribution: '© OpenStreetMap contributors',
+    },
+    'base-tiles': {
+      type: 'raster',
+      tiles: [localMapTileUrl()],
+      tileSize: 256,
+      attribution: '© OpenStreetMap contributors',
+    },
+  },
+  layers: [
+    { id: 'wide-tiles-layer', type: 'raster', source: 'wide-tiles', minzoom: 0, maxzoom: 12 },
+    { id: 'base-tiles-layer', type: 'raster', source: 'base-tiles', minzoom: 12, maxzoom: 19 },
+  ],
+};
+
+export const osmMapStyle: StyleSpecification = osmRaster(OSM_RASTER_TILES);
 
 export const mapStylesById: Record<MapBaseStyleId, StyleSpecification> = {
   'unare-local': unareLocalStyle,

@@ -21,6 +21,7 @@ import {
   OPERATIONAL_MAP_FIT_PADDING,
   OPERATIONAL_MAP_MAX_ZOOM,
   OPERATIONAL_MAP_MIN_ZOOM,
+  OPERATIONAL_PAN_BOUNDS,
   createOperationalMapOptions,
   fitMapToOperationalData,
   fitMapToStudyArea,
@@ -28,7 +29,7 @@ import {
   STUDY_AREA_FIT_MAX_ZOOM,
   boundsFromSectorCollection,
 } from './operationalMapConfig';
-import { UNARE_BBOX_QUERY, UNARE_BOUNDS, UNARE_CENTER, UNARE_ZOOM } from '../types/geo';
+import { UNARE_BBOX_QUERY, UNARE_CENTER, UNARE_ZOOM } from '../types/geo';
 import type { RouteCollection, SectorCollection } from '../types/geo';
 
 function createMockMap(initialZoom = 13): MapLibreMap {
@@ -78,7 +79,7 @@ describe('operationalMapConfig', () => {
     expect(options.zoom).toBe(UNARE_ZOOM);
     expect(options.minZoom).toBe(OPERATIONAL_MAP_MIN_ZOOM);
     expect(options.maxZoom).toBe(OPERATIONAL_MAP_MAX_ZOOM);
-    expect(options.maxBounds).toEqual(UNARE_BOUNDS);
+    expect(options.maxBounds).toEqual(OPERATIONAL_PAN_BOUNDS);
   });
 
   it('allows unrestricted panning when maxBounds is null', () => {
