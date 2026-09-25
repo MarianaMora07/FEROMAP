@@ -2,37 +2,12 @@ import { For, Show, createResource, createSignal } from 'solid-js';
 import { A } from '@solidjs/router';
 import { Bell, Check, Inbox } from 'lucide-solid';
 import { Badge, Button, Card, CardHeader, LoadingPanel } from '../../design-system/components';
+import { ackDriverNotification, fetchRecentDriverNotifications } from '../../core/api/notifications';
 import {
-  ackDriverNotification,
-  fetchRecentDriverNotifications,
-  type DriverNotification,
-} from '../../core/api/notifications';
+  driverNotificationHeadline,
+  formatNotificationTime,
+} from '../../core/notifications/notificationLabels';
 import { globalToast } from '../../core/stores/toastStore';
-
-function formatTime(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleString('es-VE', {
-    day: '2-digit',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function eventLabel(n: DriverNotification): string {
-  const payload = (n.payload ?? {}) as { message?: string };
-  if (payload.message) return payload.message;
-  switch (n.eventType) {
-    case 'route_dispatched':
-      return 'Ruta asignada';
-    case 'critical_recalc':
-      return 'Recalculo de contenedores críticos';
-    default:
-      return n.eventType;
-  }
-}
 
 export default function OperatorNotificationsPage() {
   const [version, setVersion] = createSignal(0);
@@ -109,7 +84,7 @@ export default function OperatorNotificationsPage() {
                   <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-2">
                       <Bell size={14} class="shrink-0 text-fero-blue" aria-hidden="true" />
-                      <p class="font-semibold text-text-primary dark:text-white">{eventLabel(n)}</p>
+                      <p class="font-semibold text-text-primary dark:text-white">{driverNotificationHeadline(n)}</p>
                       <Badge
                         variant={n.ackAt ? 'success' : n.status === 'failed' ? 'danger' : 'info'}
                         class="shrink-0"
@@ -118,7 +93,7 @@ export default function OperatorNotificationsPage() {
                       </Badge>
                     </div>
                     <p class="mt-0.5 text-xs text-text-muted">
-                      {formatTime(n.sentAt ?? n.createdAt)}
+                      {formatNotificationTime(n.sentAt ?? n.createdAt)}
                       <Show when={n.vehicleId != null}> · vehículo #{n.vehicleId}</Show>
                     </p>
                   </div>

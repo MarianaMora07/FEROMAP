@@ -6,16 +6,22 @@ import {
   fetchRecentDriverNotifications,
   processNotificationOutbox,
 } from '../../core/api/notifications';
+import {
+  formatNotificationTime,
+  notificationChannelLabel,
+  notificationEventLabel,
+  notificationStatusLabel,
+  notificationStatusTone,
+} from '../../core/notifications/notificationLabels';
 
-const toneByStatus: Record<string, 'success' | 'warning' | 'danger' | 'info'> = {
-  sent: 'success',
-  acked: 'success',
-  queued: 'warning',
-  pending: 'warning',
-  failed: 'danger',
-};
-
-/** Historial y estado de entrega de notificaciones a conductores (F4). */
+/**
+ * Historial y estado de entrega de notificaciones a conductores (F4).
+ *
+ * No está montado en `/optimization`: el envío es automático (despacho al aprobar la
+ * semana + worker de outbox del backend) y el acuse corresponde al conductor en
+ * `/operator/notifications`. Se conserva por si se quiere volver a exponer como vista
+ * de auditoría de entregas (p. ej. en Historial unificado).
+ */
 export function NotificationDeliveryPanel() {
   const [refreshToken, setRefreshToken] = createSignal(0);
   const [notifications] = createResource(refreshToken, () =>
@@ -47,8 +53,8 @@ export function NotificationDeliveryPanel() {
     <div data-testid="notification-delivery-panel">
       <Card>
         <CardHeader
-          title="Historial de notificaciones"
-          subtitle="Estado de entrega a conductores"
+          title="Estado de entrega a conductores"
+          subtitle="Últimos avisos enviados y su acuse"
           action={
             <Button
               type="button"
@@ -58,7 +64,7 @@ export function NotificationDeliveryPanel() {
               icon={<RefreshCw size={14} />}
               onClick={() => void retryPending()}
             >
-              Reintentar
+              Reintentar envíos pendientes
             </Button>
           }
         />
@@ -68,33 +74,39 @@ export function NotificationDeliveryPanel() {
             <p class="text-sm text-text-muted">
               {notifications.error
                 ? 'No se pudo cargar el historial de notificaciones.'
-                : 'Sin notificaciones recientes.'}
+                : 'Todavía no se han enviado avisos a conductores.'}
             </p>
           }
         >
-          <ul class="space-y-2">
+          <ul class="divide-y divide-default">
             <For each={notifications()}>
               {(notification) => (
-                <li class="flex items-start justify-between gap-3 rounded-lg border border-default px-3 py-2">
+                <li class="flex flex-wrap items-start justify-between gap-x-3 gap-y-2 px-1 py-3">
                   <div class="min-w-0">
                     <p class="text-sm font-medium text-text-primary dark:text-white">
-                      {notification.eventType}
+                      {notificationEventLabel(notification.eventType)}
+                    </p>
+                    <p class="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-text-muted">
+                      <span>{formatNotificationTime(notification.sentAt ?? notification.createdAt)}</span>
                       <Show when={notification.payload?.routeId != null}>
-                        {' '}
-                        · Ruta {String(notification.payload.routeId)}
+                        <span>Ruta #{String(notification.payload.routeId)}</span>
+                      </Show>
+                      <span>Canal: {notificationChannelLabel(notification.channel)}</span>
+                      <Show when={(notification.attempts ?? 0) > 0}>
+                        <span>
+                          {notification.attempts} {notification.attempts === 1 ? 'intento' : 'intentos'}
+                        </span>
                       </Show>
                     </p>
-                    <p class="truncate text-xs text-text-muted">
-                      Canal {notification.channel} · intentos {notification.attempts}
-                      <Show when={notification.lastError}>
-                        {' '}
-                        · {notification.lastError}
-                      </Show>
-                    </p>
+                    <Show when={notification.lastError}>
+                      <p class="mt-0.5 text-xs text-red-600 dark:text-red-400">
+                        {notification.lastError}
+                      </p>
+                    </Show>
                   </div>
                   <div class="flex shrink-0 items-center gap-2">
-                    <Badge variant={toneByStatus[notification.status] ?? 'info'}>
-                      {notification.status}
+                    <Badge variant={notificationStatusTone(notification.status)}>
+                      {notificationStatusLabel(notification.status)}
                     </Badge>
                     <Show when={notification.status !== 'acked' && notification.status !== 'failed'}>
                       <Button
@@ -103,6 +115,7 @@ export function NotificationDeliveryPanel() {
                         variant="ghost"
                         disabled={busy()}
                         icon={<Check size={14} />}
+                        aria-label="Registrar acuse de recibo"
                         onClick={() => void acknowledge(notification.id)}
                       >
                         Acuse
