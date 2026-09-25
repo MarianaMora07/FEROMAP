@@ -4,7 +4,7 @@
     "parishName": "Unare",
     "population": 2105,
     "avgWasteKg": 120,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.975,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -90,7 +90,7 @@
     "parishName": "Unare",
     "population": 1048,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -144,7 +144,7 @@
     "parishName": "Unare",
     "population": 5974,
     "avgWasteKg": 220,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 1.2,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -198,7 +198,7 @@
     "parishName": "Unare",
     "population": 4600,
     "avgWasteKg": 215,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 1.12,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -288,7 +288,7 @@
     "parishName": "Unare",
     "population": 1597,
     "avgWasteKg": 115,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.945,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -354,7 +354,7 @@
     "parishName": "Unare",
     "population": 1048,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -416,7 +416,7 @@
     "parishName": "Unare",
     "population": 1049,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -454,7 +454,7 @@
     "parishName": "Unare",
     "population": 1049,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -504,7 +504,7 @@
     "parishName": "Unare",
     "population": 1049,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -550,7 +550,7 @@
     "parishName": "Unare",
     "population": 1049,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -592,7 +592,7 @@
     "parishName": "Unare",
     "population": 1261,
     "avgWasteKg": 112,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.925,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -662,7 +662,7 @@
     "parishName": "Unare",
     "population": 1560,
     "avgWasteKg": 115,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.943,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -704,7 +704,7 @@
     "parishName": "Unare",
     "population": 1049,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -758,7 +758,7 @@
     "parishName": "Unare",
     "population": 1758,
     "avgWasteKg": 117,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.954,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -804,7 +804,7 @@
     "parishName": "Unare",
     "population": 1088,
     "avgWasteKg": 110,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.915,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -870,7 +870,7 @@
     "parishName": "Unare",
     "population": 2626,
     "avgWasteKg": 125,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 1.005,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -912,7 +912,7 @@
     "parishName": "Unare",
     "population": 850,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.901,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -946,7 +946,7 @@
     "parishName": "Unare",
     "population": 3812,
     "avgWasteKg": 137,
-    "perCapitaKgPerDay": 0.78,
+    "perCapitaKgPerDay": 1.074,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1028,7 +1028,7 @@
     "parishName": "Unare",
     "population": 1048,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1062,7 +1062,7 @@
     "parishName": "Unare",
     "population": 1049,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1112,7 +1112,7 @@
     "parishName": "Unare",
     "population": 1049,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1186,7 +1186,7 @@
     "parishName": "Unare",
     "population": 1049,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1236,7 +1236,7 @@
     "parishName": "Unare",
     "population": 1049,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1286,7 +1286,7 @@
     "parishName": "Unare",
     "population": 1048,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1324,7 +1324,7 @@
     "parishName": "Unare",
     "population": 2293,
     "avgWasteKg": 122,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.985,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1410,7 +1410,7 @@
     "parishName": "Unare",
     "population": 826,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.9,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1448,7 +1448,7 @@
     "parishName": "Unare",
     "population": 991,
     "avgWasteKg": 109,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.91,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1506,7 +1506,7 @@
     "parishName": "Unare",
     "population": 1652,
     "avgWasteKg": 116,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.948,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1584,7 +1584,7 @@
     "parishName": "Unare",
     "population": 1049,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1622,7 +1622,7 @@
     "parishName": "Unare",
     "population": 3013,
     "avgWasteKg": 129,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 1.027,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1676,7 +1676,7 @@
     "parishName": "Unare",
     "population": 1049,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1714,7 +1714,7 @@
     "parishName": "Unare",
     "population": 1048,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1760,7 +1760,7 @@
     "parishName": "Unare",
     "population": 1049,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1794,7 +1794,7 @@
     "parishName": "Unare",
     "population": 1379,
     "avgWasteKg": 113,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.932,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1840,7 +1840,7 @@
     "parishName": "Unare",
     "population": 2744,
     "avgWasteKg": 126,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 1.012,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1914,7 +1914,7 @@
     "parishName": "Unare",
     "population": 3590,
     "avgWasteKg": 135,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 1.061,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1956,7 +1956,7 @@
     "parishName": "Unare",
     "population": 2925,
     "avgWasteKg": 128,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 1.022,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -1998,7 +1998,7 @@
     "parishName": "Unare",
     "population": 1049,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2032,7 +2032,7 @@
     "parishName": "Unare",
     "population": 1048,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2098,7 +2098,7 @@
     "parishName": "Unare",
     "population": 1935,
     "avgWasteKg": 119,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.965,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2148,7 +2148,7 @@
     "parishName": "Unare",
     "population": 1048,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2194,7 +2194,7 @@
     "parishName": "Unare",
     "population": 1688,
     "avgWasteKg": 116,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.95,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2232,7 +2232,7 @@
     "parishName": "Unare",
     "population": 1048,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2270,7 +2270,7 @@
     "parishName": "Unare",
     "population": 1049,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2312,7 +2312,7 @@
     "parishName": "Unare",
     "population": 1049,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2378,7 +2378,7 @@
     "parishName": "Unare",
     "population": 1430,
     "avgWasteKg": 114,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.935,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2420,7 +2420,7 @@
     "parishName": "Unare",
     "population": 1049,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2462,7 +2462,7 @@
     "parishName": "Unare",
     "population": 1048,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2504,7 +2504,7 @@
     "parishName": "Unare",
     "population": 1049,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2550,7 +2550,7 @@
     "parishName": "Unare",
     "population": 1049,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2588,7 +2588,7 @@
     "parishName": "Unare",
     "population": 1049,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2634,7 +2634,7 @@
     "parishName": "Unare",
     "population": 1048,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2672,7 +2672,7 @@
     "parishName": "Unare",
     "population": 1758,
     "avgWasteKg": 117,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.954,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2718,7 +2718,7 @@
     "parishName": "Unare",
     "population": 1758,
     "avgWasteKg": 117,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.954,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2764,7 +2764,7 @@
     "parishName": "Unare",
     "population": 1758,
     "avgWasteKg": 117,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.954,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2810,7 +2810,7 @@
     "parishName": "Unare",
     "population": 1935,
     "avgWasteKg": 119,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.965,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2860,7 +2860,7 @@
     "parishName": "Unare",
     "population": 1688,
     "avgWasteKg": 116,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.95,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2898,7 +2898,7 @@
     "parishName": "Unare",
     "population": 1652,
     "avgWasteKg": 116,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.948,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -2976,7 +2976,7 @@
     "parishName": "Unare",
     "population": 1049,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -3014,7 +3014,7 @@
     "parishName": "Unare",
     "population": 1049,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -3048,7 +3048,7 @@
     "parishName": "Unare",
     "population": 1049,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -3082,7 +3082,7 @@
     "parishName": "Unare",
     "population": 1049,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -3116,7 +3116,7 @@
     "parishName": "Unare",
     "population": 1049,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -3154,7 +3154,7 @@
     "parishName": "Unare",
     "population": 1049,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
@@ -3192,7 +3192,7 @@
     "parishName": "Unare",
     "population": 1049,
     "avgWasteKg": 108,
-    "perCapitaKgPerDay": 0.65,
+    "perCapitaKgPerDay": 0.913,
     "geometry": {
       "type": "Polygon",
       "coordinates": [
