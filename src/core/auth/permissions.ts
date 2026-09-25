@@ -7,6 +7,13 @@ import type { UserRole } from '../types/auth';
  */
 export const CALIBRATION_ROUTE = '/settings/calibration';
 
+/**
+ * Página de evidencias de la evaluación (`/evidence`): comparativa, validación
+ * estadística y casos de estudio del capítulo de resultados. Es hermana de
+ * Configuración en el sidebar (no cuelga de `/settings`).
+ */
+export const EVIDENCE_ROUTE = '/evidence';
+
 export const ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
   '/': ['administrador', 'planificador', 'conductor', 'residente'],
   '/operator': ['administrador', 'planificador', 'conductor'],
@@ -32,6 +39,7 @@ export const ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
   '/admin': ['administrador'],
   '/settings': ['administrador', 'planificador'],
   [CALIBRATION_ROUTE]: ['administrador', 'planificador'],
+  [EVIDENCE_ROUTE]: ['administrador', 'planificador'],
   '/profile': ['administrador', 'planificador', 'conductor', 'residente'],
 };
 
@@ -75,7 +83,18 @@ export interface NavItemDef {
   kind?: 'demo' | 'producto';
 }
 
-export const DEMO_NAV_HIDDEN_HREFS = new Set<string>();
+/**
+ * Destinos ocultos del menú lateral (admin/planificador).
+ *
+ * Los módulos de tesis/demostración siguen definidos y accesibles por URL directa, pero no
+ * se listan en el sidebar para no mezclar el andamiaje de evaluación con la operación
+ * diaria. Vaciar el set los vuelve a mostrar.
+ */
+export const DEMO_NAV_HIDDEN_HREFS = new Set<string>([
+  '/simulation',
+  '/case-studies',
+  '/demostracion',
+]);
 
 /**
  * Grupos colapsables del sidebar (admin/planificador).
@@ -219,6 +238,15 @@ export const MAIN_NAV_ITEMS: NavItemDef[] = [
     // destino propio: el ítem queda activo en todo `/settings/*`.
     description: 'Parámetros del motor, calibración y preferencias',
     descriptionKey: 'nav.settings.description',
+    sidebarPrimary: true,
+    roles: ['administrador', 'planificador'],
+  },
+  {
+    href: EVIDENCE_ROUTE,
+    label: 'Evidencias',
+    labelKey: 'nav.evidence',
+    description: 'Comparativa, validación y casos del capítulo',
+    descriptionKey: 'nav.evidence.description',
     sidebarPrimary: true,
     roles: ['administrador', 'planificador'],
   },

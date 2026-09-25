@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   CALIBRATION_ROUTE,
   DEMO_NAV_HIDDEN_HREFS,
+  MAIN_NAV_ITEMS,
   RESIDENT_BOTTOM_NAV_ITEMS,
   canEnsureDailyPlan,
   sidebarNavLayout,
 } from './permissions';
+
+const TESIS_HREFS = ['/simulation', '/case-studies', '/demostracion'];
 
 describe('permissions — arquitectura de navegación (IA)', () => {
   it('exposes analytics in the planner sidebar (F6)', () => {
@@ -17,8 +20,9 @@ describe('permissions — arquitectura de navegación (IA)', () => {
 
   it('orders planner primaries as planificar → operar → supervisar', () => {
     const layout = sidebarNavLayout('planificador');
-    // El ciclo operativo (planificar → operar → supervisar) y «Configuración»
-    // (que agrupa Algoritmo y Calibración) cierran la lista.
+    // El ciclo operativo (planificar → operar → supervisar), «Configuración»
+    // (que agrupa Algoritmo y Calibración) y «Evidencias» (tablas del capítulo)
+    // cierran la lista.
     expect(layout.primary.map((item) => item.href)).toEqual([
       '/',
       '/planning/weekly',
@@ -26,6 +30,7 @@ describe('permissions — arquitectura de navegación (IA)', () => {
       '/monitoring',
       '/map',
       '/settings',
+      '/evidence',
     ]);
   });
 
@@ -49,15 +54,14 @@ describe('permissions — arquitectura de navegación (IA)', () => {
     expect(primary).not.toContain(CALIBRATION_ROUTE);
   });
 
-  it('groups sections as Consulta y reportes, Catálogos, Tesis y demostración', () => {
+  it('groups sections as Consulta y reportes y Catálogos (tesis oculta)', () => {
     const layout = sidebarNavLayout('planificador');
     expect(layout.sections.map((section) => section.label)).toEqual([
       'Consulta y reportes',
       'Catálogos',
-      'Tesis y demostración',
     ]);
 
-    const [reportes, catalogos, tesis] = layout.sections;
+    const [reportes, catalogos] = layout.sections;
     expect(reportes.items.map((item) => item.href)).toEqual([
       '/planning/history',
       '/reports',
@@ -67,11 +71,6 @@ describe('permissions — arquitectura de navegación (IA)', () => {
       '/vehicles',
       '/drivers',
       '/collection-points',
-    ]);
-    expect(tesis.items.map((item) => item.href)).toEqual([
-      '/simulation',
-      '/case-studies',
-      '/demostracion',
     ]);
   });
 
@@ -86,20 +85,33 @@ describe('permissions — arquitectura de navegación (IA)', () => {
     expect(hrefs).not.toContain('/alerts');
   });
 
-  it('labels thesis simulation module distinctly', () => {
+  it('oculta los módulos de tesis del sidebar sin retirar sus rutas', () => {
     const layout = sidebarNavLayout('planificador');
-    const tesisItems = layout.sections.find((section) => section.label === 'Tesis y demostración')?.items ?? [];
-    const simulation = tesisItems.find((item) => item.href === '/simulation');
+    const hrefs = [
+      ...layout.primary.map((item) => item.href),
+      ...layout.sections.flatMap((section) => section.items.map((item) => item.href)),
+    ];
+    expect(layout.sections.some((section) => section.label === 'Tesis y demostración')).toBe(false);
+    for (const href of TESIS_HREFS) {
+      expect(DEMO_NAV_HIDDEN_HREFS.has(href)).toBe(true);
+      expect(hrefs).not.toContain(href);
+      // Siguen definidos como destinos del rol (accesibles por URL, solo no listados).
+      expect(MAIN_NAV_ITEMS.some((item) => item.href === href)).toBe(true);
+    }
+  });
+
+  it('labels thesis simulation module distinctly', () => {
+    const simulation = MAIN_NAV_ITEMS.find((item) => item.href === '/simulation');
     expect(simulation?.label).toBe('Simulación ACO');
-    const demo = tesisItems.find((item) => item.href === '/demostracion');
+    const demo = MAIN_NAV_ITEMS.find((item) => item.href === '/demostracion');
     expect(demo?.label).toBe('Demostración ACO');
   });
 
   it('marca los módulos de tesis con kind demo (badge solo admin)', () => {
-    const layout = sidebarNavLayout('planificador');
-    const tesisItems = layout.sections.find((section) => section.label === 'Tesis y demostración')?.items ?? [];
-    expect(tesisItems.every((item) => item.kind === 'demo')).toBe(true);
-    const planSemanal = layout.primary.find((item) => item.href === '/planning/weekly');
+    const demoItems = MAIN_NAV_ITEMS.filter((item) => TESIS_HREFS.includes(item.href));
+    expect(demoItems).toHaveLength(3);
+    expect(demoItems.every((item) => item.kind === 'demo')).toBe(true);
+    const planSemanal = MAIN_NAV_ITEMS.find((item) => item.href === '/planning/weekly');
     expect(planSemanal?.kind).toBeUndefined(); // 'producto' es el valor por defecto al renderizar
   });
 

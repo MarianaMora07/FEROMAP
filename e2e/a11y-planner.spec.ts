@@ -32,6 +32,7 @@ const ROUTES: PlanRoute[] = [
     path: '/planning/history',
     anchor: { kind: 'text', value: 'Historial unificado de planificación' },
   },
+  { path: '/evidence', anchor: { kind: 'testid', value: 'evidence-page' } },
 ];
 
 async function waitForAnchor(page: Page, anchor: PlanRoute['anchor']) {

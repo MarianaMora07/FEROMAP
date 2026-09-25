@@ -18,17 +18,18 @@ async function ensureAdminSession(page: Page) {
 }
 
 test.describe('Badges demo/producto en el sidebar (Fase 5)', () => {
-  test('admin ve badges demo en módulos de tesis', async ({ page }) => {
+  test('los módulos de tesis no se listan (sin chips demo) pero el chip producto sigue', async ({
+    page,
+  }) => {
     await ensureAdminSession(page);
     await expect(page.getByTestId('app-sidebar')).toBeVisible({ timeout: 45_000 });
 
-    // Existen 3 chips demo (Simulación, Casos de estudio, Demostración) aunque el grupo esté colapsado.
-    await expect(page.getByTestId('sidebar-kind-demo')).toHaveCount(3);
+    // El grupo Tesis y demostración está oculto del sidebar (`DEMO_NAV_HIDDEN_HREFS`),
+    // así que no hay grupo que expandir ni chips demo que mostrar.
+    await expect(page.getByRole('button', { name: 'Tesis y demostración' })).toHaveCount(0);
+    await expect(page.getByTestId('sidebar-kind-demo')).toHaveCount(0);
+    // Los módulos de producto siguen mostrando su chip para el admin.
     await expect(page.getByTestId('sidebar-kind-producto')).not.toHaveCount(0);
-
-    // Al expandir el grupo Tesis, el chip demo queda visible.
-    await page.getByRole('button', { name: 'Tesis y demostración' }).click();
-    await expect(page.getByTestId('sidebar-kind-demo').first()).toBeVisible();
   });
 
   test('planificador no ve badges (solo admin)', async ({ page }) => {

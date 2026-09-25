@@ -13,6 +13,7 @@ from app.schemas.calibration import (
     CalibrationMethodJobRequest,
     ObjectiveSweepJobRequest,
 )
+from app.schemas.thesis_evidence import ThesisEvidenceJobRequest
 from app.services.aco_sensitivity_service import load_aco_sensitivity, run_aco_sensitivity
 from app.services.aco_validation_service import load_aco_validation
 from app.services.algorithm_benchmark_service import (
@@ -31,6 +32,12 @@ from app.services.optimization_job_service import (
     cancel_optimization_job,
     create_calibration_job,
     get_calibration_job_view,
+    run_contingency_background,
+)
+from app.services.thesis_evidence_service import (
+    THESIS_KINDS,
+    load_thesis_evidence,
+    thesis_evidence_runner,
 )
 from app.services.sweep_progress import (
     DEFAULT_SWEEP_SCENARIO,
@@ -283,6 +290,65 @@ def get_calibration_job(job_id: str, _: PlannerOrAdmin):
         return get_calibration_job_view(job_id)
     except LookupError:
         raise HTTPException(status_code=404, detail="Job no encontrado") from None
+
+
+# --------------------------------------------------------------------------- #
+# Evidencia de la evaluación (tesis): comparativa, validación estadística y casos
+# de estudio. Reutiliza el mismo visor de jobs que las simulaciones y contingencias
+# (`GET /simulations/jobs/{id}`), así que la interfaz solo necesita un poller.
+# --------------------------------------------------------------------------- #
+
+
+@router.get("/benchmarks/thesis/{kind}")
+def get_thesis_evidence(kind: str, _: PlannerOrAdmin):
+    """Evidencia guardada en caché (0 CPU); ``404`` si aún no se ha generado.
+
+    La caché la comparten la vista y las recetas `just` (`data/cache/*.json`).
+    """
+    if kind not in THESIS_KINDS:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Evidencia desconocida: '{kind}'. Válidas: {', '.join(THESIS_KINDS)}.",
+        )
+    payload = load_thesis_evidence(kind)
+    if payload is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Evidencia sin generar. Ejecútala desde la vista de calibración.",
+        )
+    return payload
+
+
+@router.post(
+    "/benchmarks/thesis/{kind}/jobs",
+    response_model=CalibrationJobCreated,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def start_thesis_evidence_job(
+    kind: str, body: ThesisEvidenceJobRequest, db: DbSession, _: PlannerOrAdmin
+):
+    """Lanza la (re)generación de la evidencia como job con progreso.
+
+    Corre secuencial en el API (el ``fork`` de un pool dentro de uvicorn con hilos es
+    riesgoso); para lotes con ``--workers`` están las recetas `just`.
+    """
+    if kind not in THESIS_KINDS:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Evidencia desconocida: '{kind}'. Válidas: {', '.join(THESIS_KINDS)}.",
+        )
+    runner = thesis_evidence_runner(kind)
+    options = body.model_dump(exclude_none=True)
+    job = run_contingency_background(
+        job_type=f"thesis_{kind}",
+        scenario_id=DEFAULT_SWEEP_SCENARIO,
+        params={"kind": kind, **options},
+        runner=lambda session, on_progress=None: runner(
+            session, on_progress=on_progress, **options
+        ),
+        with_progress=True,
+    )
+    return {"jobId": job.id}
 
 
 @router.post("/benchmarks/calibration/jobs/{job_id}/cancel", response_model=CalibrationJobCancelResponse)

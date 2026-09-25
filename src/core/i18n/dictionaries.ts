@@ -47,6 +47,8 @@ export const es = {
   'nav.admin': 'Administración',
   'nav.settings': 'Configuración',
   'nav.settings.description': 'Parámetros del motor, calibración y preferencias',
+  'nav.evidence': 'Evidencias',
+  'nav.evidence.description': 'Comparativa, validación y casos del capítulo',
   'nav.calibration': 'Calibración',
   'nav.profile': 'Perfil',
   // Secciones del sidebar
@@ -392,6 +394,8 @@ export const en: Record<MessageKey, string> = {
   'nav.admin': 'Administration',
   'nav.settings': 'Settings',
   'nav.settings.description': 'Engine parameters, calibration and preferences',
+  'nav.evidence': 'Evidence',
+  'nav.evidence.description': 'Benchmark, validation and chapter cases',
   'nav.calibration': 'Calibration',
   'nav.profile': 'Profile',
   'sections.consulta': 'Insights and reports',

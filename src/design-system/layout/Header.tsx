@@ -4,7 +4,7 @@ import { Menu, Bell, RefreshCw, CalendarDays } from 'lucide-solid';
 import { useLocale } from '../../core/i18n/solid';
 import { toggleSidebar } from '../../core/stores/appStore';
 import { dashboardSummary, loadDashboardData } from '../../core/stores/dashboardStore';
-import { canOptimize, isConductor, isResident, isOperationalSupervisor, CALIBRATION_ROUTE } from '../../core/auth/permissions';
+import { canOptimize, isConductor, isResident, isOperationalSupervisor, CALIBRATION_ROUTE, EVIDENCE_ROUTE } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
 import { fetchPlanningDashboardSnapshot } from '../../core/api/planningAnalytics';
 import { fetchRecentDriverNotifications } from '../../core/api/notifications';
@@ -60,6 +60,10 @@ const pageMeta: Record<string, PageMeta> = {
   [CALIBRATION_ROUTE]: {
     title: 'Calibración del motor',
     subtitle: 'Barridos de sensibilidad y pesos del objetivo.',
+  },
+  [EVIDENCE_ROUTE]: {
+    title: 'Evidencias',
+    subtitle: 'Comparativa base vs optimizado y validación estadística del capítulo de resultados.',
   },
   '/profile': profilePageMeta,
 };

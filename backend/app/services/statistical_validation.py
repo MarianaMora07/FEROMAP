@@ -312,6 +312,7 @@ def run_statistical_validations(
     scenario_ids: Sequence[str] = SCENARIO_ORDER,
     n_runs: int = DEFAULT_N_RUNS,
     workers: int = 1,
+    on_step: Callable[[int, int, str], None] | None = None,
 ) -> dict[str, Any]:
     """Valida la línea base vs la optimización en varios escenarios (familia + Holm).
 
@@ -321,6 +322,9 @@ def run_statistical_validations(
     familia. Con ``workers > 1`` las corridas (escenario × semilla) se reparten en un pool de
     procesos; el resultado es idéntico porque cada semilla es determinista.
 
+    ``on_step(index, total, label)`` avisa **antes** de cada escenario en la ruta secuencial
+    (permite progreso en el job de la vista de calibración).
+
     Dentro del API (uvicorn con hilos) conviene dejar ``workers=1`` por el ``fork``; para
     lotes usa el CLI ``just wilcoxon --workers N``.
     """
@@ -329,11 +333,16 @@ def run_statistical_validations(
     effective_workers = max(1, min(workers, task_count)) if workers else 1
     if effective_workers > 1 and task_count > 1:
         validations = _run_parallel(db, targets, n_runs, effective_workers)
+        if on_step is not None:
+            on_step(len(targets), len(targets), "familia completa")
     else:
-        validations = [
-            run_statistical_validation(db, scenario_id=scenario, n_runs=n_runs)
-            for scenario in targets
-        ]
+        validations = []
+        for index, scenario in enumerate(targets, start=1):
+            if on_step is not None:
+                on_step(index, len(targets), f"Validando {scenario}")
+            validations.append(
+                run_statistical_validation(db, scenario_id=scenario, n_runs=n_runs)
+            )
     adjusted = holm_adjust([result.wilcoxon_p_value for result in validations])
 
     rows: list[dict[str, Any]] = []

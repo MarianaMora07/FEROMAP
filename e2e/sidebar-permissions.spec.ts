@@ -12,8 +12,8 @@ test.describe('Sidebar — navegación por rol', () => {
     await ensurePlannerSession(page, '/');
     await expect(page.getByTestId('app-sidebar')).toBeVisible({ timeout: 45_000 });
 
-    // Primarios del ciclo planificar → operar → supervisar + Configuración.
-    for (const id of ['home', 'planning-weekly', 'optimization', 'monitoring', 'map', 'settings']) {
+    // Primarios del ciclo planificar → operar → supervisar + Configuración + Evidencias.
+    for (const id of ['home', 'planning-weekly', 'optimization', 'monitoring', 'map', 'settings', 'evidence']) {
       await expect(page.getByTestId(`sidebar-nav-${id}`)).toBeVisible();
     }
 
@@ -21,9 +21,14 @@ test.describe('Sidebar — navegación por rol', () => {
     await expect(page.getByTestId('sidebar-nav-admin')).toHaveCount(0);
     await expect(page.getByTestId('sidebar-nav-alerts')).toHaveCount(0);
 
-    // Grupos colapsables de la IA.
-    for (const label of ['Consulta y reportes', 'Catálogos', 'Tesis y demostración']) {
+    // Grupos colapsables de la IA. «Tesis y demostración» está oculta del sidebar
+    // (`DEMO_NAV_HIDDEN_HREFS`): los módulos siguen accesibles por URL.
+    for (const label of ['Consulta y reportes', 'Catálogos']) {
       await expect(page.getByRole('button', { name: label })).toBeVisible();
+    }
+    await expect(page.getByRole('button', { name: 'Tesis y demostración' })).toHaveCount(0);
+    for (const id of ['simulation', 'case-studies', 'demostracion']) {
+      await expect(page.getByTestId(`sidebar-nav-${id}`)).toHaveCount(0);
     }
   });
 
