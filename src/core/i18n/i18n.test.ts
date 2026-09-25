@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { en, es } from './dictionaries';
 import {
   DEFAULT_LOCALE,
+  SUPPORTED_LOCALES,
   getLocale,
   onLocaleChange,
   setLocale,
@@ -19,8 +20,10 @@ describe('i18n — diccionarios y traducción (F8)', () => {
     expect(translate('en', 'nav.weekly')).toBe('Weekly plan');
   });
 
-  it('cae a ES cuando el locale no tiene el mensaje (pt)', () => {
-    expect(translate('pt', 'nav.vehicles')).toBe('Vehículos');
+  it('solo soporta es/en; una preferencia pt guardada cae a ES (Fase 0)', () => {
+    expect(SUPPORTED_LOCALES).toEqual(['es', 'en']);
+    setLocale('pt');
+    expect(getLocale()).toBe(DEFAULT_LOCALE);
   });
 
   it('devuelve el fallback y luego la clave si no existe traducción', () => {

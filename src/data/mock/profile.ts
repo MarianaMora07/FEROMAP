@@ -3,10 +3,10 @@ export const profilePageMeta = {
   subtitle: 'Gestiona tu información personal y preferencias de cuenta.',
 };
 
+// `pt` retirado en Fase 0 (D-0.1): sin diccionario, la opción engañaba.
 export const profileLanguageOptions = [
   { value: 'es', label: 'Español' },
   { value: 'en', label: 'English' },
-  { value: 'pt', label: 'Português' },
 ];
 
 export const profileThemeOptions = [

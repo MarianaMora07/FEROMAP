@@ -87,10 +87,10 @@ export const adminCategories: AdminCategory[] = [
   { id: 'limits', label: 'Límites y cuotas', icon: 'sliders', tab: 'api' },
 ];
 
+// `pt` retirado en Fase 0 (D-0.1): sin diccionario, la opción engañaba.
 export const languageOptions = [
   { value: 'es', label: 'Español' },
   { value: 'en', label: 'English' },
-  { value: 'pt', label: 'Português' },
 ];
 
 export const timezoneOptions = [

@@ -1,4 +1,6 @@
-import { type JSX, Show, createEffect, onCleanup, onMount } from 'solid-js';
+import { type JSX, Show } from 'solid-js';
+import { useLocale } from '../../core/i18n/solid';
+import { useFocusTrap } from './focusTrap';
 
 interface ModalProps {
   open: boolean;
@@ -17,30 +19,13 @@ const sizeClasses = {
 
 export function Modal(props: ModalProps) {
   const titleId = () => `modal-title-${props.title?.replace(/\s+/g, '-').toLowerCase() ?? 'dialog'}`;
+  const tr = useLocale();
   let dialogRef: HTMLDivElement | undefined;
 
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') props.onClose();
-  };
-
-  onMount(() => {
-    document.addEventListener('keydown', handleKeyDown);
-  });
-
-  onCleanup(() => {
-    document.removeEventListener('keydown', handleKeyDown);
-  });
-
-  createEffect(() => {
-    if (!props.open) return;
-    queueMicrotask(() => {
-      const focusTarget =
-        dialogRef?.querySelector<HTMLElement>('[data-modal-autofocus]') ??
-        dialogRef?.querySelector<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-        );
-      focusTarget?.focus();
-    });
+  useFocusTrap({
+    open: () => props.open,
+    container: () => dialogRef,
+    onEscape: () => props.onClose(),
   });
 
   return (
@@ -52,6 +37,7 @@ export function Modal(props: ModalProps) {
           role="dialog"
           aria-modal="true"
           aria-labelledby={props.title ? titleId() : undefined}
+          tabindex="-1"
           class={`relative bg-surface rounded-[var(--radius-xl)] shadow-xl border border-border p-6 ${sizeClasses[props.size ?? 'md']} w-full mx-4 dark:bg-dark-surface dark:border-dark-border animate-scale-in`}
         >
           <Show when={props.title}>
@@ -66,7 +52,7 @@ export function Modal(props: ModalProps) {
                 type="button"
                 onClick={props.onClose}
                 class="text-text-muted hover:text-text-primary text-xl leading-none p-1"
-                aria-label="Cerrar diálogo"
+                aria-label={tr('ui.closeDialog')}
               >
                 ×
               </button>

@@ -1,4 +1,5 @@
 import { Show } from 'solid-js';
+import { useLocale } from '../../core/i18n/solid';
 import { Button } from './Button';
 import { Modal } from './Modal';
 
@@ -20,6 +21,7 @@ interface ConfirmDialogProps {
 
 /** Diálogo de confirmación del sistema (Modal + Button), para reemplazar `window.confirm`. */
 export function ConfirmDialog(props: ConfirmDialogProps) {
+  const tr = useLocale();
   return (
     <Modal open={props.open} onClose={props.onCancel} title={props.title} size="sm">
       <p class="text-sm text-text-secondary">{props.message}</p>
@@ -28,7 +30,7 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
       </Show>
       <div class="mt-5 flex flex-wrap justify-end gap-2">
         <Button variant="outline" onClick={props.onCancel} disabled={props.loading}>
-          {props.cancelLabel ?? 'Cancelar'}
+          {props.cancelLabel ?? tr('ui.cancel')}
         </Button>
         <Button
           variant={props.tone === 'danger' ? 'danger' : 'primary'}
@@ -36,7 +38,7 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
           onClick={props.onConfirm}
           data-testid={props.testId ?? 'confirm-dialog-confirm'}
         >
-          {props.confirmLabel ?? 'Confirmar'}
+          {props.confirmLabel ?? tr('ui.confirm')}
         </Button>
       </div>
     </Modal>

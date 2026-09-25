@@ -1,9 +1,10 @@
 import { Show, createResource } from 'solid-js';
 import { A, useLocation } from '@solidjs/router';
 import { Menu, Bell, RefreshCw, CalendarDays } from 'lucide-solid';
+import { useLocale } from '../../core/i18n/solid';
 import { toggleSidebar } from '../../core/stores/appStore';
 import { dashboardSummary, loadDashboardData } from '../../core/stores/dashboardStore';
-import { canOptimize, isConductor, isResident } from '../../core/auth/permissions';
+import { canOptimize, isConductor, isResident, isOperationalSupervisor, CALIBRATION_ROUTE } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
 import { fetchPlanningDashboardSnapshot } from '../../core/api/planningAnalytics';
 import { fetchRecentDriverNotifications } from '../../core/api/notifications';
@@ -52,11 +53,20 @@ const pageMeta: Record<string, PageMeta> = {
   '/alerts': alertsPageMeta,
   '/admin': adminPageMeta,
   '/settings': settingsPageMeta,
+  '/planning/history': {
+    title: 'Historial unificado',
+    subtitle: 'Busca por semana, día o incidencia en un solo lugar.',
+  },
+  [CALIBRATION_ROUTE]: {
+    title: 'Calibración del motor',
+    subtitle: 'Barridos de sensibilidad y pesos del objetivo.',
+  },
   '/profile': profilePageMeta,
 };
 
 export function Header(props: HeaderProps) {
   const location = useLocation();
+  const tr = useLocale();
   const chrome = useHeaderChrome();
   const meta = () => pageMeta[location.pathname];
   const isOptimization = () => location.pathname === '/optimization';
@@ -101,6 +111,9 @@ export function Header(props: HeaderProps) {
   const notifHref = () => {
     if (isConductor(authUser()?.role)) return '/operator/notifications';
     if (isResident(authUser()?.role)) return residentAlertsHref();
+    // Planificador/admin: la campana enlaza a la vista de alertas. Es un deep link;
+    // el módulo no está en el menú lateral a propósito (docs/ux/arquitectura-navegacion.md §3).
+    if (isOperationalSupervisor(authUser()?.role)) return '/alerts';
     return null;
   };
 
@@ -122,8 +135,8 @@ export function Header(props: HeaderProps) {
       return plannerHomeHeaderSubtitle(planningSnapshot());
     }
     if (location.pathname === '/') {
-      if (isConductor(authUser()?.role)) return 'Tu turno en campo';
-      if (isResident(authUser()?.role)) return 'Estado de recolección en tu sector';
+      if (isConductor(authUser()?.role)) return tr('shell.subtitle.operator');
+      if (isResident(authUser()?.role)) return tr('shell.subtitle.resident');
       return dashboardSummary().subtitle;
     }
     return meta()?.subtitle;
@@ -142,14 +155,14 @@ export function Header(props: HeaderProps) {
           type="button"
           onClick={toggleSidebar}
           class="flex h-9 w-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
-          aria-label="Alternar menú"
+          aria-label={tr('shell.toggleMenu')}
         >
           <Menu size={20} />
         </button>
 
         <div class="min-w-0 flex-1">
           <Show when={title()}>
-            <h1 class="truncate font-heading text-lg font-bold text-text-primary">
+            <h1 id="page-title" class="truncate font-heading text-lg font-bold text-text-primary">
               {title()}
             </h1>
           </Show>
@@ -175,7 +188,7 @@ export function Header(props: HeaderProps) {
               <A
                 href={href()}
                 class="relative flex h-9 w-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
-                aria-label="Notificaciones"
+                aria-label={tr('shell.notifications')}
                 data-testid="header-notifications"
               >
                 <Bell size={18} />
@@ -187,25 +200,11 @@ export function Header(props: HeaderProps) {
               </A>
             )}
           </Show>
-          <Show when={!notifHref()}>
-            <button
-              type="button"
-              class="relative flex h-9 w-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
-              aria-label="Notificaciones"
-            >
-              <Bell size={18} />
-              <Show when={notifCount() > 0}>
-                <span class="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-                  {notifCount()}
-                </span>
-              </Show>
-            </button>
-          </Show>
 
           <button
             type="button"
             class="flex h-9 w-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
-            aria-label="Actualizar"
+            aria-label={tr('shell.refresh')}
             onClick={handleRefresh}
           >
             <RefreshCw size={18} />

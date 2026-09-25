@@ -44,34 +44,36 @@ export function SidebarCollapsibleGroup(props: SidebarCollapsibleGroupProps) {
       </button>
       <div
         id={panelId()}
-        class="overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out"
+        class="grid transition-[grid-template-rows,opacity] duration-300 ease-in-out"
         style={{
-          'max-height': open() ? `${props.items.length * 52}px` : '0px',
+          'grid-template-rows': open() ? '1fr' : '0fr',
           opacity: open() ? '1' : '0',
         }}
       >
-        <div class="ml-2 space-y-0.5 border-l border-sidebar-divider pl-1 pt-1">
-          <For each={props.items}>
-            {(item) => {
-              const Icon = props.iconMap[item.href];
-              return (
-                <SidebarNavLink
-                  href={item.href}
-                  active={isNavItemActive(item.href, location.pathname)}
-                  icon={Icon ? <Icon size={18} class="shrink-0" /> : null}
-                  label={item.labelKey ? tr(item.labelKey, item.label) : item.label}
-                  description={
-                    item.description
-                      ? item.descriptionKey
-                        ? tr(item.descriptionKey, item.description)
-                        : item.description
-                      : undefined
-                  }
-                  kind={props.showKinds ? (item.kind ?? 'producto') : undefined}
-                />
-              );
-            }}
-          </For>
+        <div class="overflow-hidden">
+          <div class="ml-2 space-y-0.5 border-l border-sidebar-divider pl-1 pt-1">
+            <For each={props.items}>
+              {(item) => {
+                const Icon = props.iconMap[item.href];
+                return (
+                  <SidebarNavLink
+                    href={item.href}
+                    active={isNavItemActive(item.href, location.pathname)}
+                    icon={Icon ? <Icon size={18} class="shrink-0" /> : null}
+                    label={item.labelKey ? tr(item.labelKey, item.label) : item.label}
+                    description={
+                      item.description
+                        ? item.descriptionKey
+                          ? tr(item.descriptionKey, item.description)
+                          : item.description
+                        : undefined
+                    }
+                    kind={props.showKinds ? (item.kind ?? 'producto') : undefined}
+                  />
+                );
+              }}
+            </For>
+          </div>
         </div>
       </div>
     </div>

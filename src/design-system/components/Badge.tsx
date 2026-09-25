@@ -1,4 +1,5 @@
 import { type JSX, splitProps } from 'solid-js';
+import { useLocale } from '../../core/i18n/solid';
 
 type BadgeVariant = 'success' | 'warning' | 'danger' | 'info' | 'default' | 'outline';
 type BadgeSize = 'sm' | 'md';
@@ -55,30 +56,32 @@ export function Badge(props: BadgeProps) {
 
 // Predefined status badges
 export function StatusBadge(props: { status: string; class?: string }) {
-  const statusMap: Record<string, { variant: BadgeVariant; label: string }> = {
-    activo: { variant: 'success', label: 'Activo' },
-    'en-ruta': { variant: 'success', label: 'En ruta' },
-    mantenimiento: { variant: 'warning', label: 'Mantenimiento' },
-    'fuera-de-servicio': { variant: 'danger', label: 'Fuera de servicio' },
-    lleno: { variant: 'warning', label: 'Lleno' },
-    critico: { variant: 'danger', label: 'Crítico' },
-    normal: { variant: 'success', label: 'Normal' },
-    parcial: { variant: 'default', label: 'Parcial' },
-    inactivo: { variant: 'default', label: 'Inactivo' },
-    disponible: { variant: 'success', label: 'Disponible' },
-    ocupado: { variant: 'warning', label: 'Ocupado' },
-    detenido: { variant: 'danger', label: 'Detenido' },
-    nueva: { variant: 'danger', label: 'Nueva' },
-    'en-progreso': { variant: 'warning', label: 'En progreso' },
-    informativa: { variant: 'info', label: 'Informativa' },
-    resuelta: { variant: 'success', label: 'Resuelta' },
+  const tr = useLocale();
+  const statusMap: Record<string, { variant: BadgeVariant; key: string; label: string }> = {
+    activo: { variant: 'success', key: 'status.activo', label: 'Activo' },
+    'en-ruta': { variant: 'success', key: 'status.enRuta', label: 'En ruta' },
+    mantenimiento: { variant: 'warning', key: 'status.mantenimiento', label: 'Mantenimiento' },
+    'fuera-de-servicio': { variant: 'danger', key: 'status.fueraDeServicio', label: 'Fuera de servicio' },
+    lleno: { variant: 'warning', key: 'status.lleno', label: 'Lleno' },
+    critico: { variant: 'danger', key: 'status.critico', label: 'Crítico' },
+    normal: { variant: 'success', key: 'status.normal', label: 'Normal' },
+    parcial: { variant: 'default', key: 'status.parcial', label: 'Parcial' },
+    inactivo: { variant: 'default', key: 'status.inactivo', label: 'Inactivo' },
+    disponible: { variant: 'success', key: 'status.disponible', label: 'Disponible' },
+    ocupado: { variant: 'warning', key: 'status.ocupado', label: 'Ocupado' },
+    detenido: { variant: 'danger', key: 'status.detenido', label: 'Detenido' },
+    nueva: { variant: 'danger', key: 'status.nueva', label: 'Nueva' },
+    'en-progreso': { variant: 'warning', key: 'status.enProgreso', label: 'En progreso' },
+    informativa: { variant: 'info', key: 'status.informativa', label: 'Informativa' },
+    resuelta: { variant: 'success', key: 'status.resuelta', label: 'Resuelta' },
   };
 
-  const config = () => statusMap[props.status] ?? { variant: 'default' as BadgeVariant, label: props.status };
+  const config = () =>
+    statusMap[props.status] ?? { variant: 'default' as BadgeVariant, key: '', label: props.status };
 
   return (
     <Badge variant={config().variant} dot class={props.class}>
-      {config().label}
+      {config().key ? tr(config().key, config().label) : config().label}
     </Badge>
   );
 }

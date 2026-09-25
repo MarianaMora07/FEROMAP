@@ -8,9 +8,17 @@
 
 import { DICTIONARIES, es, type MessageKey } from './dictionaries';
 
-export type Locale = 'es' | 'en' | 'pt';
+/**
+ * Locales soportados.
+ *
+ * `pt` se retiró en Fase 0 (decisión D-0.1, ver
+ * `docs/design-system/contratos-ui.md`): se ofrecía en el selector de idioma
+ * pero no existía diccionario, por lo que la opción caía silenciosamente a ES.
+ * Una preferencia `pt` ya guardada en el perfil/localStorage se normaliza a ES.
+ */
+export type Locale = 'es' | 'en';
 
-export const SUPPORTED_LOCALES: readonly Locale[] = ['es', 'en', 'pt'];
+export const SUPPORTED_LOCALES: readonly Locale[] = ['es', 'en'];
 export const DEFAULT_LOCALE: Locale = 'es';
 
 const STORAGE_KEY = 'feromap.locale';
@@ -33,6 +41,18 @@ function readInitialLocale(): Locale {
 
 let currentLocale: Locale = readInitialLocale();
 
+/** Dirección de escritura por locale (ES/EN son LTR; el mapa queda listo para futuros RTL). */
+const LOCALE_DIR: Record<Locale, 'ltr' | 'rtl'> = { es: 'ltr', en: 'ltr' };
+
+/** Refleja el locale activo en `<html lang>` y `<html dir>` (lectores de pantalla, SEO). */
+function applyDocumentLocale(locale: Locale): void {
+  if (typeof document === 'undefined') return;
+  document.documentElement.lang = locale;
+  document.documentElement.dir = LOCALE_DIR[locale];
+}
+
+applyDocumentLocale(currentLocale);
+
 export function getLocale(): Locale {
   return currentLocale;
 }
@@ -40,6 +60,8 @@ export function getLocale(): Locale {
 /** Cambia el locale activo y notifica a los suscriptores. Valores inválidos → ES. */
 export function setLocale(value: string | null | undefined): void {
   const next = normalizeLocale(value) ?? DEFAULT_LOCALE;
+  // `<html lang>`/`dir` reflejan el idioma activo aunque no cambie (sincronización con el perfil).
+  applyDocumentLocale(next);
   if (next === currentLocale) return;
   currentLocale = next;
   if (typeof localStorage !== 'undefined') {

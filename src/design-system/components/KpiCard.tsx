@@ -1,4 +1,5 @@
 import { type JSX, Show, splitProps } from 'solid-js';
+import { useLocale } from '../../core/i18n/solid';
 
 type IconTone = 'green' | 'blue' | 'purple' | 'amber' | 'red' | 'slate';
 
@@ -9,8 +10,13 @@ interface KpiCardProps {
   icon?: JSX.Element;
   iconTone?: IconTone;
   trend?: {
+    /** Variación en % (puede ser negativa). El signo define la dirección mostrada. */
     value: number;
-    direction: 'up' | 'down';
+    /**
+     * Fuerza la dirección cuando el signo no expresa «mejor/peor» (p. ej. una
+     * métrica donde subir es malo). Si se omite, se deriva del signo de `value`.
+     */
+    direction?: 'up' | 'down';
   };
   trendLabel?: string;
   footer?: JSX.Element;
@@ -27,6 +33,7 @@ const iconToneClasses: Record<IconTone, string> = {
 };
 
 export function KpiCard(props: KpiCardProps) {
+  const tr = useLocale();
   const [local, others] = splitProps(props, [
     'title',
     'value',
@@ -66,20 +73,23 @@ export function KpiCard(props: KpiCardProps) {
         </Show>
       </div>
 
-      <Show when={local.trend}>
-        {(trend) => (
-          <div class="mt-3 flex items-center gap-1">
-            <span
-              class={`text-sm font-medium ${
-                trend().direction === 'up' ? 'text-fero-green-dark' : 'text-red-500'
-              }`}
-            >
-              {trend().direction === 'up' ? '+' : '-'}
-              {Math.abs(trend().value)}%
-            </span>
-            <span class="text-xs text-text-muted">{local.trendLabel ?? 'vs anterior'}</span>
-          </div>
-        )}
+      <Show when={local.trend?.value ? local.trend : undefined}>
+        {(trend) => {
+          const direction = () => trend().direction ?? (trend().value < 0 ? 'down' : 'up');
+          return (
+            <div class="mt-3 flex items-center gap-1">
+              <span
+                class={`text-sm font-medium ${
+                  direction() === 'up' ? 'text-fero-green-dark' : 'text-red-500'
+                }`}
+              >
+                {direction() === 'up' ? '+' : '-'}
+                {Math.abs(trend().value)}%
+              </span>
+              <span class="text-xs text-text-muted">{local.trendLabel ?? tr('ui.vsPrevious')}</span>
+            </div>
+          );
+        }}
       </Show>
 
       <Show when={local.footer}>

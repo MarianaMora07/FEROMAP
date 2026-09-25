@@ -60,7 +60,7 @@ export function AppShell(props: AppShellProps) {
         <button
           type="button"
           class="fixed inset-0 z-30 bg-black/60 lg:hidden"
-          aria-label="Cerrar menú"
+          aria-label={tr('ui.closeMenu')}
           onClick={() => setSidebarOpen(false)}
         />
       </Show>
@@ -76,6 +76,7 @@ export function AppShell(props: AppShellProps) {
 
         <main
           id="main-content"
+          aria-labelledby="page-title"
           class={`min-h-0 flex-1 ${
             isMapView()
               ? 'overflow-hidden p-0'
@@ -92,7 +93,7 @@ export function AppShell(props: AppShellProps) {
         <nav
           class="fixed inset-x-0 bottom-0 z-40 border-t border-default bg-elevated/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden"
           data-testid="role-bottom-nav"
-          aria-label="Navegación rápida"
+          aria-label={tr('ui.quickNav')}
         >
           <ul class="mx-auto flex max-w-lg items-stretch justify-between">
             <For each={bottomNavItems()}>
@@ -118,7 +119,7 @@ export function AppShell(props: AppShellProps) {
                           active() ? 'bg-fero-blue/10 font-semibold' : ''
                         }`}
                       >
-                        {item.label}
+                        {tr(item.labelKey ?? '', item.label)}
                       </span>
                     </A>
                   </li>

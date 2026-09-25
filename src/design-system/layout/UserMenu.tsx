@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { A, useNavigate } from '@solidjs/router';
 import { ChevronDown, LogOut, Moon, Settings, Sun, User } from 'lucide-solid';
+import { useLocale } from '../../core/i18n/solid';
 import { appState, toggleDarkMode } from '../../core/stores/appStore';
 import {
   authUser,
@@ -16,6 +17,7 @@ const menuItemClass =
 
 export function UserMenu() {
   const navigate = useNavigate();
+  const tr = useLocale();
   const [open, setOpen] = createSignal(false);
   let rootRef: HTMLDivElement | undefined;
 
@@ -66,7 +68,7 @@ export function UserMenu() {
       <button
         type="button"
         class="flex max-w-56 items-center gap-2.5 rounded-md border border-default bg-elevated px-2 py-1.5 text-left text-text-primary transition-colors hover:bg-surface-hover sm:max-w-64"
-        aria-label="Menú de cuenta"
+        aria-label={tr('ui.accountMenu')}
         aria-haspopup="menu"
         aria-expanded={open()}
         data-testid="user-menu-trigger"
@@ -88,7 +90,7 @@ export function UserMenu() {
       <Show when={open()}>
         <div
           role="menu"
-          aria-label="Opciones de cuenta"
+          aria-label={tr('ui.accountOptions')}
           data-testid="user-menu-panel"
           class="absolute right-0 top-full z-40 mt-1.5 w-56 overflow-hidden rounded-md border border-default bg-elevated py-1 shadow-lg"
         >
@@ -109,7 +111,7 @@ export function UserMenu() {
                   onClick={() => setOpen(false)}
                 >
                   <Icon size={16} class="shrink-0" />
-                  {item.label}
+                  {tr(item.labelKey ?? '', item.label)}
                 </A>
               );
             }}
@@ -119,12 +121,12 @@ export function UserMenu() {
             type="button"
             role="menuitem"
             class={menuItemClass}
-            aria-label={appState.darkMode ? 'Activar modo claro' : 'Activar modo oscuro'}
+            aria-label={appState.darkMode ? tr('ui.enableLight') : tr('ui.enableDark')}
             data-testid="user-menu-theme-toggle"
             onClick={() => void toggleDarkMode()}
           >
             {appState.darkMode ? <Sun size={16} /> : <Moon size={16} />}
-            {appState.darkMode ? 'Modo claro' : 'Modo oscuro'}
+            {appState.darkMode ? tr('ui.themeLight') : tr('ui.themeDark')}
           </button>
 
           <div class="my-1 border-t border-default" />
@@ -137,7 +139,7 @@ export function UserMenu() {
             onClick={() => void handleLogout()}
           >
             <LogOut size={16} />
-            Cerrar sesión
+            {tr('ui.logout')}
           </button>
         </div>
       </Show>

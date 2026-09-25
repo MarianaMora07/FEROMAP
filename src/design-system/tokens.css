@@ -130,7 +130,9 @@ html.dark {
   --color-text-secondary: var(--fero-text-secondary);
   --color-text-muted: var(--fero-text-muted);
 
-  /* @deprecated — alias a tokens semánticos; evitar en código nuevo */
+  /* @deprecated — alias a tokens semánticos; evitar en código nuevo.
+   * Decisión Fase 2: se conservan para no romper consumidores existentes y se
+   * migran de forma incremental (ver docs/design-system/contratos-ui.md §3). */
   --color-dark-surface: var(--fero-bg-app);
   --color-dark-surface-hover: var(--fero-bg-elevated);
   --color-dark-border: var(--fero-border-default);
@@ -441,4 +443,19 @@ html.dark .route-playback-stop-marker--next .route-playback-stop-marker__dot {
   font-size: 11px;
   font-weight: 700;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+/*
+ * Accesibilidad (Fase 2): respeta la preferencia de movimiento reducido del SO.
+ * Neutraliza animaciones/transiciones decorativas sin ocultar contenido.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -11,3 +11,6 @@ export { Drawer } from './Drawer';
 export { Table } from './Table';
 export { TextField } from './TextField';
 export { SelectField } from './SelectField';
+export { TabList, tabButtonId, tabPanelId, type TabItem } from './Tabs';
+export { useDismissable } from './dismissable';
+export { ErrorState } from './ErrorState';

@@ -1,4 +1,4 @@
-import { For, Show, createMemo } from 'solid-js';
+import { For, Show, createEffect, createMemo } from 'solid-js';
 import { useLocation } from '@solidjs/router';
 import {
   History,
@@ -61,6 +61,13 @@ export function Sidebar(props: SidebarProps) {
   });
   const showKinds = () => authUser()?.role === 'administrador';
 
+  let asideRef: HTMLElement | undefined;
+  // Sidebar cerrado (off-canvas): sale del orden de tabulación y del árbol de
+  // accesibilidad. Ver docs/design-system/contratos-ui.md §2.
+  createEffect(() => {
+    asideRef?.toggleAttribute('inert', !props.open);
+  });
+
   const navLabel = (item: { label: string; labelKey?: string }) =>
     tr(item.labelKey ?? '', item.label);
   const navDescription = (item: { description?: string; descriptionKey?: string }) =>
@@ -68,15 +75,16 @@ export function Sidebar(props: SidebarProps) {
 
   return (
     <aside
+      ref={asideRef}
       data-testid="app-sidebar"
-      aria-label="Navegación principal"
+      aria-label={tr('ui.mainNav')}
       class={`fixed top-0 left-0 z-40 flex h-full w-[var(--sidebar-width)] flex-col border-r border-sidebar bg-sidebar transition-transform duration-300 ${
         props.open ? 'translate-x-0' : '-translate-x-full'
       }`}
     >
       <SidebarHeader />
 
-      <nav class="sidebar-nav-scroll flex-1 space-y-1 overflow-y-auto px-3 py-3" aria-label="Módulos">
+      <nav class="sidebar-nav-scroll flex-1 space-y-1 overflow-y-auto px-3 py-3" aria-label={tr('ui.modulesNav')}>
         <For each={layout().primary}>
           {(item) => {
             const Icon = NAV_ICONS[navHrefPath(item.href)] ?? LayoutDashboard;
