@@ -1,28 +1,6 @@
-import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
-import { A, useNavigate, useSearchParams } from '@solidjs/router';
+import { Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from 'solid-js';
+import { useNavigate, useSearchParams } from '@solidjs/router';
 import { type Map as MapLibreMap, type Marker } from 'maplibre-gl';
-import {
-  Menu,
-  Layers,
-  BookOpen,
-  Bell,
-  Maximize2,
-  LogOut,
-  Sun,
-  Moon,
-  Plus,
-  Minus,
-  Crosshair,
-  Trash2,
-  Truck,
-  Route,
-  X,
-  Fuel,
-  Landmark,
-  ChevronDown,
-  Play,
-} from 'lucide-solid';
-import { Button } from '../../design-system/components';
 import {
   appState,
   toggleSidebar,
@@ -103,25 +81,21 @@ import { useRoutePlayback } from '../../core/route-playback/useRoutePlayback';
 import { RoutePlaybackLayer } from '../route-playback/RoutePlaybackLayer';
 import { RoutePlaybackLegend } from '../route-playback/RoutePlaybackLegend';
 import { MapPlaybackPanel } from './MapPlaybackPanel';
+import { MapToolbar } from './MapToolbar';
+import { MapLayersPanel } from './MapLayersPanel';
+import { MapLegendPanel } from './MapLegendPanel';
+import { MapOperatorBanner } from './MapOperatorBanner';
+import { MapResidentOverlays } from './MapResidentOverlays';
+import { MapViewControls } from './MapViewControls';
+import { MapBottomControls } from './MapBottomControls';
 import { UNARE_CENTER, UNARE_ZOOM } from '../../data/types/geo';
-import { residentHubHref, residentPointsHref } from '../../core/resident/residentDeepLinks';
-import { ResidentBreadcrumbs } from '../resident/ResidentBreadcrumbs';
 import { buildContainerPopupHtml } from '../../core/utils/popupHtml';
 import { mapStylesById, mapStyleForTheme, themeBaseStyleId } from '../../core/utils/mapStyle';
 import {
-  mapBaseStyles,
   mapLayers,
-  mapLegend,
   initialLayerState,
   type MapBaseStyleId,
 } from '../../data/mock/mapGis';
-
-const toneIconBg = {
-  green: 'bg-fero-green/15 text-fero-green-dark',
-  red: 'bg-red-50 text-red-500',
-  amber: 'bg-amber-50 text-amber-500',
-  blue: 'bg-fero-blue/10 text-fero-blue',
-};
 
 function trashSvg(color: string) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>`;
@@ -237,6 +211,9 @@ export default function MapPage() {
 
   const [layersOpen, setLayersOpen] = createSignal(true);
   const [legendOpen, setLegendOpen] = createSignal(true);
+  let toolbarRef: HTMLElement | undefined;
+  let layersPanelRef: HTMLElement | undefined;
+  let legendPanelRef: HTMLElement | undefined;
   const [baseStyle, setBaseStyle] = createSignal<MapBaseStyleId>(
     themeBaseStyleId(appState.darkMode),
   );
@@ -465,6 +442,44 @@ export default function MapPage() {
     cameraMode();
     playbackRoutes();
     if (getMap()?.isStyleLoaded()) syncOverlayLayers();
+  });
+
+  createEffect(() => {
+    if (!playbackOpen() && !layersOpen() && !legendOpen()) return;
+
+    const isInteractiveTarget = (target: Node) =>
+      Boolean(
+        toolbarRef?.contains(target) ||
+          layersPanelRef?.contains(target) ||
+          legendPanelRef?.contains(target),
+      );
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (playbackOpen()) {
+        handleClosePlayback();
+      } else if (layersOpen()) {
+        setLayersOpen(false);
+      } else if (legendOpen()) {
+        setLegendOpen(false);
+      }
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target || isInteractiveTarget(target)) return;
+      if (layersOpen()) setLayersOpen(false);
+      if (legendOpen()) setLegendOpen(false);
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    if (layersOpen() || legendOpen()) {
+      document.addEventListener('pointerdown', handlePointerDown, true);
+    }
+    onCleanup(() => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+    });
   });
 
   const zoomIn = () => getMap()?.zoomIn({ duration: 300 });
@@ -930,339 +945,50 @@ export default function MapPage() {
       </OperationalMap>
 
       {/* Toolbar overlay */}
-      <header class="absolute inset-x-0 top-0 z-20 flex flex-wrap items-center gap-2 border-b border-default/60 bg-elevated/90 px-3 py-2 shadow-sm backdrop-blur-md">
-        <button
-          type="button"
-          onClick={toggleSidebar}
-          class="flex h-9 w-9 items-center justify-center rounded-md text-text-secondary hover:bg-app"
-          aria-label="Menú"
-        >
-          <Menu size={20} />
-        </button>
+      <MapToolbar
+        residentMode={residentMode()}
+        isResidentUser={isResident(authUser()?.role)}
+        residentSectorName={residentSectorName()}
+        canOpenPlayback={canOpenPlayback()}
+        playbackOpen={playbackOpen()}
+        layersOpen={layersOpen()}
+        legendOpen={legendOpen()}
+        darkMode={appState.darkMode}
+        notificationCount={dashboardSummary().notifications}
+        onToggleSidebar={toggleSidebar}
+        onToggleDarkMode={toggleDarkMode}
+        onOpenPlayback={handleOpenPlayback}
+        onToggleLayers={() => setLayersOpen((v) => !v)}
+        onToggleLegend={() => setLegendOpen((v) => !v)}
+        onRef={(el) => (toolbarRef = el)}
+      />
 
-        <div class="relative min-w-0 flex-1 md:max-w-sm">
-          <Show
-            when={!residentMode()}
-            fallback={
-              <p
-                role="status"
-                class="truncate py-2 pl-1 text-sm font-semibold text-fero-green-dark dark:text-fero-green"
-              >
-                Mi sector — {residentSectorName()}
-              </p>
-            }
-          >
-            <p class="truncate py-2 pl-1 text-sm font-medium text-text-secondary">
-              Mapa operativo — Unare
-            </p>
-          </Show>
-        </div>
+      <MapOperatorBanner operatorMode={operatorMode()} snapshot={routeSnapshot()} />
 
-        <div class="flex flex-wrap items-center gap-1.5">
-          <Show when={!residentMode()}>
-            <Show when={canOpenPlayback() && !playbackOpen()}>
-              <ToolBtn
-                icon={<Play size={16} />}
-                label="Ver recorrido"
-                onClick={handleOpenPlayback}
-              />
-            </Show>
-          </Show>
-          <ToolBtn
-            icon={<Layers size={16} />}
-            label="Capas"
-            active={layersOpen()}
-            onClick={() => setLayersOpen((v) => !v)}
-          />
-          <ToolBtn
-            icon={<BookOpen size={16} />}
-            label="Leyenda"
-            active={legendOpen()}
-            onClick={() => setLegendOpen((v) => !v)}
-          />
-        </div>
+      <MapResidentOverlays residentMode={residentMode()} overview={residentOverview()} />
 
-        <div class="ml-auto flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => void toggleDarkMode()}
-            class="flex h-9 w-9 items-center justify-center rounded-md text-text-secondary hover:bg-app"
-            aria-label="Tema"
-          >
-            {appState.darkMode ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
-          <Show when={!isResident(authUser()?.role)}>
-            <button
-              type="button"
-              class="relative flex h-9 w-9 items-center justify-center rounded-md text-text-secondary hover:bg-app"
-              aria-label="Notificaciones"
-            >
-              <Bell size={18} />
-              <span class="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-                {dashboardSummary().notifications}
-              </span>
-            </button>
-          </Show>
-          <Show when={isResident(authUser()?.role)}>
-            <A
-              href="/alerts?scope=sector"
-              class="flex h-9 w-9 items-center justify-center rounded-md text-text-secondary hover:bg-app"
-              aria-label="Alertas de mi sector"
-            >
-              <Bell size={18} />
-            </A>
-          </Show>
-          <Show when={!isResident(authUser()?.role)}>
-            <button
-              type="button"
-              class="flex h-9 w-9 items-center justify-center rounded-md text-text-secondary hover:bg-app"
-              aria-label="Pantalla completa"
-              onClick={() => document.documentElement.requestFullscreen?.()}
-            >
-              <Maximize2 size={18} />
-            </button>
-            <A href="/login">
-              <Button variant="gradient" size="sm" icon={<LogOut size={14} />}>
-                Salir
-              </Button>
-            </A>
-          </Show>
-          <Show when={isResident(authUser()?.role)}>
-            <A href="/resident">
-              <Button variant="outline" size="sm" icon={<LogOut size={14} />}>
-                Salir
-              </Button>
-            </A>
-          </Show>
-        </div>
-      </header>
+      <MapLayersPanel
+        open={layersOpen()}
+        residentMode={residentMode()}
+        operationDate={operationDate()}
+        dailyPlan={dailyPlan()}
+        canOpenPlayback={canOpenPlayback()}
+        playbackOpen={playbackOpen()}
+        playbackLoading={playbackPayload.loading}
+        layers={displayMapLayers()}
+        layerState={layerState()}
+        onOperationDateChange={setMapOperationDate}
+        onOpenPlayback={handleOpenPlayback}
+        onToggleLayer={toggleLayerItem}
+        onClose={() => setLayersOpen(false)}
+        onRef={(el) => (layersPanelRef = el)}
+      />
 
-      <Show when={operatorMode() && (routeSnapshot()?.stops.length ?? 0) > 0}>
-        <div class="absolute inset-x-0 top-14 z-20 mx-3 rounded-lg border border-fero-blue/30 bg-elevated/95 px-3 py-2 text-sm shadow-sm backdrop-blur-sm">
-          <p class="font-semibold text-fero-blue">Mi ruta hoy</p>
-          <p class="text-xs text-text-secondary">
-            {routeSnapshot()?.vehicleId} · {routeSnapshot()?.stopsDone}/{routeSnapshot()?.stopsTotal}{' '}
-            paradas
-            <Show when={routeSnapshot()?.nextStop}>
-              {(stop) => (
-                <span>
-                  {' '}
-                  · Próxima: <strong class="text-text-primary">{stop().code}</strong>
-                </span>
-              )}
-            </Show>
-          </p>
-        </div>
-      </Show>
-
-      <Show when={residentMode()}>
-        <div class="absolute inset-x-0 top-14 z-20 mx-3">
-          <ResidentBreadcrumbs
-            items={[
-              { label: 'Mi Recolección', href: residentHubHref() },
-              { label: 'Mapa mi sector' },
-            ]}
-          />
-        </div>
-      </Show>
-
-      <Show when={residentMode() && residentOverview()}>
-        {(overview) => (
-          <div
-            role="status"
-            class="absolute inset-x-0 top-[4.25rem] z-20 mx-3 rounded-lg border border-fero-green/30 bg-elevated/95 px-3 py-2 text-sm shadow-sm backdrop-blur-sm"
-          >
-            <p class="font-semibold text-fero-green-dark dark:text-fero-green">
-              Mi sector — {overview().sectorName}
-            </p>
-            <p class="text-xs text-text-secondary">
-              {overview().stats.totalPoints} contenedores
-              <Show when={overview().proximity.vehicleCode}>
-                {(code) => (
-                  <span>
-                    {' '}
-                    · Camión <strong class="text-text-primary">{code()}</strong>
-                  </span>
-                )}
-              </Show>
-              <Show when={overview().proximity.nextStopInSector}>
-                {(stop) => (
-                  <span>
-                    {' '}
-                    · Próxima parada: <strong class="text-text-primary">{stop()}</strong>
-                  </span>
-                )}
-              </Show>
-            </p>
-            <A
-              href={residentPointsHref()}
-              class="mt-1 inline-flex items-center gap-1 text-xs font-medium text-fero-blue hover:underline"
-            >
-              Ver puntos de recolección
-            </A>
-          </div>
-        )}
-      </Show>
-
-      <Show when={layersOpen()}>
-        <aside
-          class="absolute top-16 left-3 z-20 w-64 rounded-lg border border-default bg-elevated/95 p-3 shadow-lg backdrop-blur-md"
-          data-testid="map-layers-panel"
-        >
-          <div class="mb-2 flex items-center justify-between">
-            <h3 class="font-heading text-sm font-semibold text-text-primary">Capas</h3>
-            <button type="button" class="text-text-muted hover:text-text-secondary" onClick={() => setLayersOpen(false)}>
-              <X size={16} />
-            </button>
-          </div>
-          <Show when={!residentMode()}>
-            <div class="mb-3 space-y-2 border-b border-default pb-3">
-              <label class="block text-[11px] font-semibold uppercase tracking-wide text-text-muted">
-                Plan del día
-              </label>
-              <input
-                type="date"
-                class="w-full rounded-md border border-default bg-app px-2 py-1.5 text-sm text-text-primary"
-                value={operationDate()}
-                data-testid="map-operation-date"
-                onChange={(event) => setMapOperationDate(event.currentTarget.value)}
-              />
-              <Show when={dailyPlan()}>
-                {(plan) => (
-                  <p class="text-xs text-text-muted">
-                    Plan #{plan().id} · {plan().status}
-                  </p>
-                )}
-              </Show>
-              <Show when={canOpenPlayback() && !playbackOpen()}>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  class="w-full gap-1.5"
-                  icon={<Play size={14} />}
-                  loading={playbackPayload.loading}
-                  onClick={handleOpenPlayback}
-                  data-testid="map-open-playback-btn"
-                >
-                  Ver recorrido
-                </Button>
-              </Show>
-            </div>
-          </Show>
-          <ul class="space-y-1">
-            <For each={displayMapLayers()}>
-              {(layer) => (
-                <li>
-                  <label class="flex cursor-pointer items-center gap-2 py-0.5 text-sm text-text-secondary">
-                    <input
-                      type="checkbox"
-                      class="size-4 rounded border-default accent-fero-green-dark"
-                      checked={layerState()[layer.id]}
-                      data-testid={layer.id === 'routes' ? 'map-layer-routes' : undefined}
-                      onChange={() => toggleLayerItem(layer.id)}
-                    />
-                    {layer.label}
-                  </label>
-                  <Show when={layer.children && layerState()[layer.id]}>
-                    <ul class="mt-1 mb-1.5 ml-6 space-y-1 border-l border-default pl-2.5">
-                      <For each={layer.children}>
-                        {(child) => (
-                          <li>
-                            <label class="flex cursor-pointer items-center gap-2 text-xs text-text-secondary">
-                              <input
-                                type="checkbox"
-                                class="size-3.5 rounded border-default accent-fero-green-dark"
-                                checked={layerState()[child.id] ?? true}
-                                onChange={() => toggleLayerItem(child.id)}
-                              />
-                              <Show when={child.kind === 'line'}>
-                                <span
-                                  class={`h-1 w-4 shrink-0 rounded-full ${child.class ?? ''}`}
-                                  style={{
-                                    background:
-                                      'color' in child && child.color
-                                        ? String(child.color)
-                                        : undefined,
-                                  }}
-                                />
-                              </Show>
-                              <Show when={child.kind === 'trash'}>
-                                <Trash2 size={12} class={child.class} />
-                              </Show>
-                              <Show when={child.kind === 'truck'}>
-                                <Truck size={12} class={child.class} />
-                              </Show>
-                              {child.label}
-                            </label>
-                          </li>
-                        )}
-                      </For>
-                    </ul>
-                  </Show>
-                </li>
-              )}
-            </For>
-          </ul>
-        </aside>
-      </Show>
-
-      <Show when={legendOpen()}>
-        <aside class="absolute top-16 right-3 z-20 w-52 rounded-lg border border-default bg-elevated/95 p-3 shadow-lg backdrop-blur-md">
-          <div class="mb-2 flex items-center justify-between">
-            <h3 class="font-heading text-sm font-semibold text-text-primary">Leyenda</h3>
-            <button type="button" class="text-text-muted hover:text-text-secondary" onClick={() => setLegendOpen(false)}>
-              <X size={16} />
-            </button>
-          </div>
-          <p class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-text-muted">Contenedores</p>
-          <ul class="mb-2 space-y-1">
-            <For each={mapLegend.containers}>
-              {(item) => (
-                <li class={`flex items-center gap-2 text-xs ${item.class}`}>
-                  <Trash2 size={13} />
-                  <span class="text-text-secondary">{item.label}</span>
-                </li>
-              )}
-            </For>
-          </ul>
-          <p class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-text-muted">Vehículos</p>
-          <ul class="mb-2 space-y-1">
-            <For each={mapLegend.vehicles}>
-              {(item) => (
-                <li class={`flex items-center gap-2 text-xs ${item.class}`}>
-                  <Truck size={13} />
-                  <span class="text-text-secondary">{item.label}</span>
-                </li>
-              )}
-            </For>
-          </ul>
-          <p class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-text-muted">Rutas</p>
-          <ul class="mb-2 space-y-1">
-            <For each={mapLegend.routes}>
-              {(item) => (
-                <li class="flex items-center gap-2 text-xs text-text-secondary">
-                  <span class={`h-1 w-5 rounded-full ${item.class}`} />
-                  {item.label}
-                </li>
-              )}
-            </For>
-          </ul>
-          <p class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-text-muted">Otros</p>
-          <ul class="space-y-1">
-            <For each={mapLegend.others}>
-              {(item) => (
-                <li class="flex items-center gap-2 text-xs text-text-secondary">
-                  <Show when={item.icon === 'fuel'} fallback={<Landmark size={13} class="text-slate-500" />}>
-                    <Fuel size={13} class="text-fero-blue" />
-                  </Show>
-                  {item.label}
-                </li>
-              )}
-            </For>
-          </ul>
-        </aside>
-      </Show>
+      <MapLegendPanel
+        open={legendOpen()}
+        onClose={() => setLegendOpen(false)}
+        onRef={(el) => (legendPanelRef = el)}
+      />
 
       <Show when={playbackOpen() && !residentMode()}>
         <MapPlaybackPanel
@@ -1293,89 +1019,19 @@ export default function MapPage() {
         </div>
       </Show>
 
-      <div class="absolute right-3 bottom-36 z-20 flex flex-col gap-2 sm:bottom-32">
-        <div class="flex flex-col overflow-hidden rounded-lg border border-default bg-elevated/95 shadow-md backdrop-blur-md">
-          <button type="button" class="flex h-9 w-9 items-center justify-center text-text-secondary transition-colors hover:bg-app disabled:opacity-40" onClick={zoomIn} disabled={!mapReady()} aria-label="Acercar">
-            <Plus size={16} />
-          </button>
-          <button type="button" class="flex h-9 w-9 items-center justify-center border-t border-default text-text-secondary transition-colors hover:bg-app disabled:opacity-40" onClick={zoomOut} disabled={!mapReady()} aria-label="Alejar">
-            <Minus size={16} />
-          </button>
-        </div>
-        <button type="button" class="flex h-9 w-9 items-center justify-center rounded-lg border border-default bg-elevated/95 text-text-secondary shadow-md backdrop-blur-md transition-colors hover:bg-app disabled:opacity-40" onClick={locateUser} disabled={!mapReady()} aria-label="Mi ubicación" title="Centrar en mi ubicación">
-          <Crosshair size={16} />
-        </button>
-      </div>
+      <MapViewControls
+        mapReady={mapReady()}
+        coords={coords()}
+        onZoomIn={zoomIn}
+        onZoomOut={zoomOut}
+        onLocate={locateUser}
+      />
 
-      <div class="absolute bottom-44 left-3 z-20 rounded-md border border-default bg-elevated/95 px-2.5 py-1 text-[11px] font-bold text-text-secondary shadow-sm backdrop-blur-md sm:bottom-40">
-        {coords().lat}, {coords().lng} · z{coords().zoom}
-      </div>
-
-      <div class="pointer-events-none absolute inset-x-0 bottom-0 z-20 p-3">
-        <div class="pointer-events-auto flex flex-col gap-3 lg:flex-row lg:items-end">
-          <div class="w-full shrink-0 rounded-xl border border-default bg-elevated/95 p-3 shadow-lg backdrop-blur-md lg:w-auto">
-            <div class="mb-2 flex items-center gap-1">
-              <p class="text-sm font-semibold text-text-primary">Mapa base</p>
-              <ChevronDown size={14} class="text-text-muted" />
-            </div>
-            <div class="flex gap-2">
-              <For each={[...mapBaseStyles]}>
-                {(style) => (
-                  <button type="button" class="group flex w-18 flex-col items-center gap-1" onClick={() => changeBaseStyle(style.id)}>
-                    <span class={`h-14 w-18 overflow-hidden rounded-md border-2 ${baseStyle() === style.id ? 'border-red-500' : 'border-default'}`}>
-                      <img src={style.preview} alt={style.label} class="h-full w-full object-cover" loading="lazy" referrerpolicy="no-referrer" />
-                    </span>
-                    <span class="text-[10px] text-text-muted group-hover:text-text-secondary">{style.label}</span>
-                  </button>
-                )}
-              </For>
-            </div>
-          </div>
-
-          <div class="min-w-0 flex-1 rounded-xl border border-default bg-elevated/95 px-3 py-2.5 shadow-lg backdrop-blur-md">
-            <div class="grid grid-cols-2 content-center gap-3 sm:grid-cols-3 lg:grid-cols-5">
-              <For each={mapMetrics()}>
-                {(metric) => (
-                  <div class="flex items-center gap-3">
-                    <span class={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${toneIconBg[metric.tone as keyof typeof toneIconBg] ?? toneIconBg.blue}`}>
-                      <Show when={metric.icon === 'trash'}><Trash2 size={18} /></Show>
-                      <Show when={metric.icon === 'truck'}><Truck size={18} /></Show>
-                      <Show when={metric.icon === 'route'}><Route size={18} /></Show>
-                    </span>
-                    <div class="min-w-0">
-                      <p class="truncate text-[11px] text-text-muted">{metric.label}</p>
-                      <p class="font-heading text-lg font-bold leading-tight text-text-primary">{metric.value}</p>
-                    </div>
-                  </div>
-                )}
-              </For>
-            </div>
-          </div>
-        </div>
-      </div>
+      <MapBottomControls
+        baseStyle={baseStyle()}
+        metrics={mapMetrics()}
+        onChangeBaseStyle={changeBaseStyle}
+      />
     </div>
-  );
-}
-
-function ToolBtn(props: {
-  icon: JSX.Element;
-  label: string;
-  active?: boolean;
-  onClick?: () => void;
-  class?: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={props.onClick}
-      class={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
-        props.active
-          ? 'border-fero-green-dark/40 bg-fero-green/15 text-fero-green-dark'
-          : 'border-default text-text-secondary hover:bg-app'
-      } ${props.class ?? ''}`}
-    >
-      {props.icon}
-      <span class="hidden lg:inline">{props.label}</span>
-    </button>
   );
 }

@@ -13,11 +13,11 @@ import {
 } from 'chart.js';
 import { Doughnut, Line } from 'solid-chartjs';
 import {
+  ArrowDownRight,
   ArrowRight,
   ArrowUpRight,
   Clock,
   Download,
-  Eye,
   FileSpreadsheet,
   FileText,
   Leaf,
@@ -29,6 +29,7 @@ import {
   Button,
   Card,
   CardHeader,
+  ErrorState,
   KpiCard,
 } from '../../design-system/components';
 import {
@@ -42,6 +43,7 @@ import {
   wasteTypeDistribution as mockWasteTypeDistribution,
 } from '../../data/mock/reports';
 import { downloadReport, fetchReportsSummary } from '../../core/api/reports';
+import { globalToast } from '../../core/stores/toastStore';
 import type { AnalyticsGranularity } from '../../core/types/analytics';
 import {
   defaultDateRange,
@@ -102,13 +104,17 @@ export default function ReportsPage() {
       setSavedReports(summary.savedReports);
     });
 
-  createEffect(() => {
-    filters();
+  const reload = () => {
     setLoading(true);
-    void loadSummary()
+    return loadSummary()
       .then(() => setError(false))
       .catch(() => setError(true))
       .finally(() => setLoading(false));
+  };
+
+  createEffect(() => {
+    filters();
+    void reload();
   });
 
   const handlePeriodChange = (value: string) => {
@@ -185,8 +191,22 @@ export default function ReportsPage() {
     setGenerating(true);
     try {
       await downloadReport(format() === 'pdf' ? 'pdf' : 'csv', filters());
+      globalToast.addToast('Reporte generado y descargado.', 'success');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo generar el reporte';
+      globalToast.addToast(message, 'error');
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleDownloadSaved = async (rowFormat: 'pdf' | 'excel') => {
+    try {
+      await downloadReport(rowFormat === 'pdf' ? 'pdf' : 'csv', filters());
+      globalToast.addToast('Reporte descargado.', 'success');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo descargar el reporte';
+      globalToast.addToast(message, 'error');
     }
   };
 
@@ -194,20 +214,27 @@ export default function ReportsPage() {
     <Show
       when={!error()}
       fallback={
-        <div
-          role="alert"
-          data-testid="reports-error"
-          class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
-        >
-          No se pudieron cargar los reportes. Verifica la conexión con el API.
-        </div>
+        <ErrorState
+          testId="reports-error"
+          message="No se pudieron cargar los reportes. Verifica la conexión con el API."
+          onRetry={() => void reload()}
+        />
       }
     >
     <div class="space-y-5" data-testid="reports-page">
       <SimulationRunComparisonCard simulationId={focusedSimulationId()} />
       <ReportsPlanVsRealCard from={filters().from} to={filters().to} />
       <Show when={loading()}>
-        <div class="text-sm text-text-muted">Cargando reportes...</div>
+        <div role="status" aria-live="polite" class="text-sm text-text-muted">
+          Cargando reportes...
+        </div>
+      </Show>
+      <Show when={!loading() && !error() && kpis().length === 0}>
+        <Card>
+          <p role="status" data-testid="reports-empty" class="text-sm text-text-muted">
+            Sin datos para el período seleccionado.
+          </p>
+        </Card>
       </Show>
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <For each={kpis()}>
@@ -217,7 +244,7 @@ export default function ReportsPage() {
               value={kpi.value}
               iconTone={kpi.iconTone}
               icon={<KpiIcon name={kpi.icon} />}
-              trend={{ value: kpi.trend, direction: 'up' }}
+              trend={{ value: kpi.trend }}
               trendLabel="vs período anterior"
             />
           )}
@@ -230,6 +257,7 @@ export default function ReportsPage() {
             title="Resumen de rendimiento"
             action={
               <select
+                aria-label="Granularidad del resumen"
                 value={granularity()}
                 onChange={(e) => setGranularity(e.currentTarget.value as AnalyticsGranularity)}
                 class="rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-text-secondary dark:bg-dark-surface-hover dark:border-dark-border"
@@ -254,7 +282,11 @@ export default function ReportsPage() {
               <span class="h-2 w-2 rounded-full bg-violet-600" /> Eficiencia (%)
             </span>
           </div>
-          <div class="h-64 sm:h-72">
+          <div
+            class="h-64 sm:h-72"
+            role="img"
+            aria-label="Evolución temporal de recolecciones, toneladas, distancia y eficiencia"
+          >
             <Line
               data={lineData()}
               options={{
@@ -295,10 +327,14 @@ export default function ReportsPage() {
             }}
           >
             <div>
-              <label class="mb-1.5 block text-sm font-semibold text-text-primary dark:text-white">
+              <label
+                for="report-type"
+                class="mb-1.5 block text-sm font-semibold text-text-primary dark:text-white"
+              >
                 Tipo de reporte
               </label>
               <select
+                id="report-type"
                 value={reportType()}
                 onChange={(e) => setReportType(e.currentTarget.value)}
                 class="w-full rounded-md border border-border bg-surface px-3 py-2.5 text-sm dark:bg-dark-surface-hover dark:border-dark-border dark:text-white"
@@ -308,10 +344,14 @@ export default function ReportsPage() {
             </div>
 
             <div>
-              <label class="mb-1.5 block text-sm font-semibold text-text-primary dark:text-white">
+              <label
+                for="report-period"
+                class="mb-1.5 block text-sm font-semibold text-text-primary dark:text-white"
+              >
                 Período
               </label>
               <select
+                id="report-period"
                 value={period()}
                 onChange={(e) => handlePeriodChange(e.currentTarget.value)}
                 class="w-full rounded-md border border-border bg-surface px-3 py-2.5 text-sm dark:bg-dark-surface-hover dark:border-dark-border dark:text-white"
@@ -322,10 +362,14 @@ export default function ReportsPage() {
 
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="mb-1.5 block text-sm font-semibold text-text-primary dark:text-white">
+                <label
+                  for="report-start"
+                  class="mb-1.5 block text-sm font-semibold text-text-primary dark:text-white"
+                >
                   Fecha inicio
                 </label>
                 <input
+                  id="report-start"
                   type="date"
                   value={startDate()}
                   onInput={(e) => setStartDate(e.currentTarget.value)}
@@ -334,10 +378,14 @@ export default function ReportsPage() {
                 />
               </div>
               <div>
-                <label class="mb-1.5 block text-sm font-semibold text-text-primary dark:text-white">
+                <label
+                  for="report-end"
+                  class="mb-1.5 block text-sm font-semibold text-text-primary dark:text-white"
+                >
                   Fecha fin
                 </label>
                 <input
+                  id="report-end"
                   type="date"
                   value={endDate()}
                   onInput={(e) => setEndDate(e.currentTarget.value)}
@@ -394,7 +442,11 @@ export default function ReportsPage() {
         <Card>
           <CardHeader title="Recolección por tipo de residuo" />
           <div class="flex flex-col items-center gap-4 sm:flex-row">
-            <div class="relative h-36 w-36 shrink-0">
+            <div
+              class="relative h-36 w-36 shrink-0"
+              role="img"
+              aria-label={`Distribución de residuos por tipo; total ${wasteTypeDistribution().totalLabel}`}
+            >
               <Doughnut
                 data={donutData()}
                 options={{
@@ -471,9 +523,13 @@ export default function ReportsPage() {
                       <td class="py-2.5 pr-2 font-medium text-text-primary dark:text-white">{row.current}</td>
                       <td class="py-2.5 pr-2 text-text-muted">{row.previous}</td>
                       <td class="py-2.5">
-                        <span class="inline-flex items-center gap-0.5 text-xs font-semibold text-fero-green-dark">
-                          <ArrowUpRight size={12} />
-                          {row.delta}%
+                        <span
+                          class={`inline-flex items-center gap-0.5 text-xs font-semibold ${
+                            row.delta >= 0 ? 'text-fero-green-dark' : 'text-red-500'
+                          }`}
+                        >
+                          {row.delta >= 0 ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
+                          {Math.abs(row.delta)}%
                         </span>
                       </td>
                     </tr>
@@ -487,6 +543,10 @@ export default function ReportsPage() {
 
       <Card>
         <CardHeader title="Reportes guardados" />
+        <Show
+          when={savedReports().length > 0}
+          fallback={<p class="text-sm text-text-muted">No hay reportes guardados.</p>}
+        >
         <div class="overflow-x-auto">
           <table class="w-full min-w-180 text-sm">
             <thead>
@@ -522,22 +582,15 @@ export default function ReportsPage() {
                     </td>
                     <td class="py-3 pr-3 text-xs text-text-muted">{row.generatedAt}</td>
                     <td class="py-3">
-                      <div class="flex items-center gap-0.5">
-                        <button
-                          type="button"
-                          class="flex h-8 w-8 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover hover:text-fero-blue"
-                          aria-label="Descargar"
-                          onClick={() => void downloadReport('csv', filters())}
-                        >
-                          <Download size={15} />
-                        </button>
-                        <button type="button" class="flex h-8 w-8 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover" aria-label="Ver">
-                          <Eye size={15} />
-                        </button>
-                        <button type="button" class="flex h-8 w-8 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover hover:text-red-500" aria-label="Eliminar">
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        class="flex h-8 w-8 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover hover:text-fero-blue"
+                        aria-label={`Descargar ${row.name}`}
+                        data-testid={`reports-download-${row.id}`}
+                        onClick={() => void handleDownloadSaved(row.format)}
+                      >
+                        <Download size={15} />
+                      </button>
                     </td>
                   </tr>
                 )}
@@ -545,6 +598,7 @@ export default function ReportsPage() {
             </tbody>
           </table>
         </div>
+        </Show>
         <div class="mt-4 flex justify-end">
           <A href="/reports" class="inline-flex items-center gap-1 text-sm font-medium text-fero-blue hover:underline">
             Ver todos los reportes

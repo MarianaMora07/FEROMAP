@@ -1,25 +1,8 @@
-import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from 'solid-js';
+import { Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from 'solid-js';
 import { A, Navigate, useSearchParams } from '@solidjs/router';
 import maplibregl, { type Map as MapLibreMap, type Marker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import {
-  AlertTriangle,
-  BookOpen,
-  Crosshair,
-  FastForward,
-  Maximize2,
-  Minus,
-  Plus,
-  Search,
-  Trash2,
-  Truck,
-} from 'lucide-solid';
-import {
-  Button,
-  Card,
-  ProgressBar,
-  StatusBadge,
-} from '../../design-system/components';
+import { TabList, tabButtonId } from '../../design-system/components';
 import {
   advanceActiveRoutes,
   advanceRouteById,
@@ -32,19 +15,16 @@ import {
   syncContainerMarkers,
   syncFleetMarkers,
 } from '../../core/map/operationalMapLayers';
-import { OperationalMap } from '../../core/map/OperationalMap';
 import { useOperationalRoutesLayer } from '../../core/map/useOperationalRoutesLayer';
 import { appState } from '../../core/stores/appStore';
 import { canSimulateFleetAdvance, isConductor, isOperationalSupervisor } from '../../core/auth/permissions';
 import { authUser } from '../../core/stores/authStore';
 import { parsePlaybackQueryParam } from '../../core/planning/operationalFlowUx';
-import { BreakdownReporter, ContingencyResultBanner } from '../contingency/BreakdownReporter';
+import { ContingencyResultBanner } from '../contingency/BreakdownReporter';
 import { OperatorContingencyBanner } from '../contingency/OperatorContingencyBanner';
 import { OperatorMyIncidents } from '../contingency/OperatorMyIncidents';
-import { CriticalContainerRecalc } from './CriticalContainerRecalc';
 import { RecentIncidentsPanel } from '../contingency/RecentIncidentsPanel';
 import { PlanningLevelBanner } from '../planning/PlanningLevelBanner';
-import { PlanningEmptyState } from '../planning/PlanningEmptyState';
 import { PLANNING_EMPTY_PRESETS } from '../../core/planning/planningEmptyStates';
 import { OPERATOR_EMPTY_PRESETS } from '../../core/operator/operatorEmptyStates';
 import { fleetForOperatorField } from '../../core/operator/operatorMonitoringUx';
@@ -53,16 +33,14 @@ import {
   OperatorFieldBottomPanel,
   OperatorNextStopCard,
 } from './OperatorFieldPanel';
-import {
-  MonitoringPlaybackPanel,
-  MonitoringPlaybackToggle,
-} from './MonitoringPlaybackPanel';
+import { MonitoringPlaybackPanel } from './MonitoringPlaybackPanel';
 import { MonitoringContextPanel } from './MonitoringContextPanel';
 import { MonitoringDeskIntro, MonitoringStatsStrip } from './MonitoringDeskIntro';
+import { MonitoringMapCard } from './MonitoringMapCard';
+import { MonitoringFleetList } from './MonitoringFleetList';
+import { MonitoringActionBar } from './MonitoringActionBar';
 import { fetchDailyRoutePlayback } from '../../core/api/routePlayback';
 import { useRoutePlayback } from '../../core/route-playback/useRoutePlayback';
-import { RoutePlaybackLayer } from '../route-playback/RoutePlaybackLayer';
-import { RoutePlaybackLegend } from '../route-playback/RoutePlaybackLegend';
 import {
   canShowMonitoringRoutePlayback,
   filterPlaybackRoutesForMonitoring,
@@ -76,14 +54,9 @@ import {
   OPERATOR_PLAYBACK_AUTO_PLAY,
 } from '../../core/operator/operatorPlaybackUx';
 import { applyPlaybackCamera } from '../../core/route-playback/playbackCameraUx';
-import { OperatorMobilePlaybackControls } from '../operator/OperatorMobilePlaybackControls';
 import { mockDailyRoutePlayback } from '../../data/mock/routePlayback';
 import { fitMapToOperationalData } from '../../core/map/operationalMapConfig';
-import {
-  vehicleFilterOptions,
-  type FleetLiveStatus,
-  type LiveVehicle,
-} from '../../data/mock/monitoring';
+import type { LiveVehicle } from '../../data/mock/monitoring';
 
 function truckSvg(color: string) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>`;
@@ -125,10 +98,6 @@ function buildVehiclePopup(v: LiveVehicle) {
       <button type="button" data-vehicle-id="${v.id}" class="popup-ver-vehiculo" style="background:none;border:none;padding:0;color:#1143F3;font-size:12px;font-weight:600;cursor:pointer;">Ver detalles</button>
     </div>
   `;
-}
-
-function statusForBadge(status: FleetLiveStatus) {
-  return status;
 }
 
 export default function MonitoringPage() {
@@ -556,130 +525,59 @@ export default function MonitoringPage() {
         <MonitoringStatsStrip kpis={monitoringKpis()} loading={monitoringData.loading} />
       </Show>
 
-      <div
-        class="flex gap-1 overflow-x-auto border-b border-default"
-        data-testid="monitoring-tabs"
-        role="tablist"
-        aria-label="Vista del monitoreo"
-      >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={monitorTab() === 'map'}
-          data-testid="monitoring-tab-map"
-          onClick={() => setMonitorTab('map')}
-          class={`shrink-0 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-            monitorTab() === 'map'
+      <TabList
+        idPrefix="monitoring"
+        panelId="monitoring-panel"
+        tabs={[
+          { id: 'map', label: 'Mapa' },
+          { id: 'incidents', label: 'Incidencias y alertas' },
+        ]}
+        active={monitorTab()}
+        onChange={(id) => setMonitorTab(id as 'map' | 'incidents')}
+        ariaLabel="Vista del monitoreo"
+        containerClass="flex gap-1 overflow-x-auto border-b border-default"
+        testId="monitoring-tabs"
+        testIdFor={(id) => `monitoring-tab-${id}`}
+        tabClass={(active) =>
+          `shrink-0 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+            active
               ? 'border-fero-green-mid text-fero-green-dark'
               : 'border-transparent text-text-muted hover:text-text-secondary'
-          }`}
-        >
-          Mapa
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={monitorTab() === 'incidents'}
-          data-testid="monitoring-tab-incidents"
-          onClick={() => setMonitorTab('incidents')}
-          class={`shrink-0 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-            monitorTab() === 'incidents'
-              ? 'border-fero-green-mid text-fero-green-dark'
-              : 'border-transparent text-text-muted hover:text-text-secondary'
-          }`}
-        >
-          Incidencias y alertas
-        </button>
-      </div>
+          }`
+        }
+      />
 
-      <div class="flex flex-wrap items-center justify-end gap-2">
-        <Show when={fieldMode()}>
-          <p class="mr-auto text-sm text-text-secondary">
-            Tu vehículo en campo
-            <Show when={operatorVehicle()}>
-              {(vehicle) => <span class="font-semibold text-text-primary"> · {vehicle().id}</span>}
-            </Show>
-            <Show when={operationDate() !== new Date().toISOString().slice(0, 10)}>
-              <span class="ml-1 text-text-muted">· Contexto: {operationDate()}</span>
-            </Show>
-          </p>
-        </Show>
-        <div id="reportar-averia" class="flex flex-wrap items-center gap-2">
-          <Show when={monitorTab() === 'incidents'}>
-          <BreakdownReporter
-            variant={fieldMode() ? 'operator' : 'planner'}
-            compact={!fieldMode()}
-            vehicles={(fieldMode() ? operatorFleet() : liveFleet()).map((v) => ({
-              id: v.id,
-              routeId: v.routeId,
-              status: v.status,
-            }))}
-            onComplete={() => {
-              void refetch();
-              void refetchRouteSnapshot();
-              setIncidentsRefreshKey((value) => value + 1);
-            }}
-          />
-          <Show when={fieldMode() && (routeSnapshot()?.stops.length ?? 0) > 0}>
-            <CriticalContainerRecalc
-              compact
-              containers={monitoringData()?.containers}
-              dailyPlanId={dailyPlan()?.id ?? dailyPlanIdParam()}
-              routePointCodes={routeSnapshot()?.stops.map((stop) => stop.code) ?? []}
-              onComplete={() => void refetch()}
-            />
-          </Show>
-          <Show when={!fieldMode()}>
-            <CriticalContainerRecalc
-              compact
-              containers={monitoringData()?.containers}
-              dailyPlanId={dailyPlan()?.id ?? dailyPlanIdParam()}
-              onComplete={() => void refetch()}
-            />
-          </Show>
-          </Show>
-          <Show when={monitorTab() === 'map'}>
-          <MonitoringPlaybackToggle
-            visible={canOpenPlayback() && !fieldMode()}
-            open={playbackOpen()}
-            fieldMode={fieldMode()}
-            onOpen={handleOpenPlayback}
-          />
-          <Show
-            when={canSimulateFleetAdvance(authUser()?.role)}
-            fallback={
-              <Show when={isOperationalSupervisor(authUser()?.role)}>
-                <p class="max-w-xs text-xs text-text-muted">
-                  El avance operativo discreto de flota es solo para conductores en campo.
-                </p>
-              </Show>
-            }
-          >
-            <Button
-              variant="outline"
-              size={fieldMode() ? 'lg' : 'sm'}
-              class={`gap-2 ${fieldMode() ? 'min-h-12' : ''}`}
-              icon={<FastForward size={fieldMode() ? 18 : 16} />}
-              disabled={
-                advancing() ||
-                (!fieldMode() && playbackOpen()) ||
-                (fieldMode()
-                  ? operatorVehicle()?.routeId == null && routeSnapshot()?.routeId == null
-                  : !monitoringData()?.fleetCounts.inRoute)
-              }
-              onClick={() => void handleAdvance()}
-              title="Avance operativo simulado (salta parada a parada en BD)"
-            >
-              {advancing()
-                ? 'Avanzando…'
-                : fieldMode()
-                  ? 'Avance operativo (demo)'
-                  : 'Avance operativo flota'}
-            </Button>
-          </Show>
-          </Show>
-        </div>
-      </div>
+      <div
+        role="tabpanel"
+        id="monitoring-panel"
+        aria-labelledby={tabButtonId('monitoring', monitorTab())}
+        class="space-y-5"
+      >
+
+      <MonitoringActionBar
+        fieldMode={fieldMode()}
+        monitorTab={monitorTab()}
+        operationDate={operationDate()}
+        operatorVehicle={operatorVehicle()}
+        vehicles={fieldMode() ? operatorFleet() : liveFleet()}
+        routeSnapshot={routeSnapshot()}
+        containers={monitoringData()?.containers}
+        dailyPlanId={dailyPlan()?.id ?? dailyPlanIdParam()}
+        onBreakdownComplete={() => {
+          void refetch();
+          void refetchRouteSnapshot();
+          setIncidentsRefreshKey((value) => value + 1);
+        }}
+        onRecalcComplete={() => void refetch()}
+        canOpenPlayback={canOpenPlayback()}
+        playbackOpen={playbackOpen()}
+        onOpenPlayback={handleOpenPlayback}
+        canSimulateAdvance={canSimulateFleetAdvance(authUser()?.role)}
+        isSupervisor={isOperationalSupervisor(authUser()?.role)}
+        advancing={advancing()}
+        inRouteCount={monitoringData()?.fleetCounts.inRoute ?? 0}
+        onAdvance={handleAdvance}
+      />
 
       <Show when={monitorTab() === 'map' && playbackOpen() && !fieldMode()}>
       <MonitoringPlaybackPanel
@@ -712,168 +610,36 @@ export default function MonitoringPage() {
 
       <Show when={monitorTab() === 'map'}>
       <div class={`grid items-stretch gap-4 ${fieldMode() ? '' : 'xl:grid-cols-5'}`}>
-        <Card
-          padding={false}
-          class={`flex min-h-0 flex-col overflow-hidden xl:h-full ${
-            fieldMode() ? 'min-h-[50vh]' : 'xl:col-span-3'
-          }`}
-        >
-          <Show when={!fieldMode()}>
-          <div class="flex flex-wrap items-center gap-2 border-b border-default p-3 sm:gap-3 sm:px-4">
-            <div class="relative min-w-0 flex-1 basis-48">
-              <Search size={14} class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
-              <input
-                type="search"
-                placeholder="Buscar vehículo o conductor..."
-                value={search()}
-                onInput={(e) => setSearch(e.currentTarget.value)}
-                class="w-full rounded-md border border-default bg-elevated py-1.5 pl-8 pr-2 text-xs text-text-primary placeholder:text-text-muted focus:border-fero-blue focus:outline-none"
-              />
-            </div>
-            <select
-              value={statusFilter()}
-              onChange={(e) => setStatusFilter(e.currentTarget.value)}
-              class="rounded-md border border-default bg-elevated px-2.5 py-1.5 text-xs text-text-secondary"
-            >
-              <For each={vehicleFilterOptions}>{(o) => <option value={o.value}>{o.label}</option>}</For>
-            </select>
-            <button
-              type="button"
-              class={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs ${
-                legendOpen()
-                  ? 'border-fero-green-dark/40 bg-fero-green/15 text-fero-green-dark'
-                  : 'border-default text-text-secondary hover:bg-app'
-              }`}
-              onClick={() => setLegendOpen((v) => !v)}
-            >
-              <BookOpen size={14} />
-              Leyenda
-            </button>
-          </div>
-          </Show>
-
-          <div
-            class={`relative min-h-80 flex-1 bg-app ${
-              fieldMode() ? 'min-h-[50vh]' : 'lg:min-h-105'
-            }`}
-          >
-            <OperationalMap
-              onMapReady={handleMonitoringMapReady}
-              onStyleRestored={() => setupMonitoringMap(mapRef.current!)}
-            >
-            <Show when={playbackOpen()}>
-              <RoutePlaybackLegend class="absolute bottom-16 left-3 z-10 max-w-[220px]" />
-              <RoutePlaybackLayer
-                map={mapInstance}
-                routes={() => playbackRoutes()}
-                playback={playback}
-                showControls={false}
-              />
-              <Show when={fieldMode()}>
-                <OperatorMobilePlaybackControls playback={playback} />
-              </Show>
-            </Show>
-
-            <Show when={playbackOpen() && !fieldMode()}>
-              <div class="absolute top-3 left-3 z-10 rounded-md border border-fero-blue/40 bg-elevated/95 px-2.5 py-1.5 text-xs font-semibold text-fero-blue shadow-sm backdrop-blur-sm">
-                Reproducción {playbackMode() === 'visual' ? 'solo visual' : 'híbrida'}
-              </div>
-            </Show>
-
-            <Show when={legendOpen()}>
-              <div class="absolute top-3 left-3 z-10 rounded-md border border-default bg-elevated/95 p-2.5 text-xs shadow-md backdrop-blur-sm">
-                <p class="mb-1.5 font-semibold text-text-primary">Leyenda</p>
-                <ul class="space-y-1 text-text-secondary">
-                  <li class="flex items-center gap-2"><Truck size={12} class="text-fero-green-dark" /> En ruta</li>
-                  <li class="flex items-center gap-2"><Truck size={12} class="text-amber-500" /> Mantenimiento</li>
-                  <li class="flex items-center gap-2"><Truck size={12} class="text-red-500" /> Detenido</li>
-                  <li class="flex items-center gap-2"><Trash2 size={12} class="text-fero-green-dark" /> Contenedor normal</li>
-                  <li class="flex items-center gap-2"><Trash2 size={12} class="text-amber-500" /> Contenedor lleno</li>
-                  <li class="flex items-center gap-2"><Trash2 size={12} class="text-red-500" /> Contenedor crítico</li>
-                </ul>
-              </div>
-            </Show>
-
-            <div class="absolute right-3 bottom-3 z-10 flex flex-col overflow-hidden rounded-md border border-default bg-elevated/95 shadow-sm backdrop-blur-sm">
-              <button type="button" class="flex h-8 w-8 items-center justify-center text-text-secondary hover:bg-app disabled:opacity-40" disabled={!mapReady()} onClick={() => mapRef.current?.zoomIn()} aria-label="Acercar">
-                <Plus size={14} />
-              </button>
-              <button type="button" class="flex h-8 w-8 items-center justify-center border-t border-default text-text-secondary hover:bg-app disabled:opacity-40" disabled={!mapReady()} onClick={() => mapRef.current?.zoomOut()} aria-label="Alejar">
-                <Minus size={14} />
-              </button>
-              <button type="button" class="flex h-8 w-8 items-center justify-center border-t border-default text-text-secondary hover:bg-app disabled:opacity-40" disabled={!mapReady()} onClick={() => {
-                const vehicle = operatorVehicle();
-                if (vehicle) centerOnVehicle(vehicle.id);
-                else fitMapToOperationalData(mapRef.current!, {
-                  vehicles: mapFleet(),
-                  routes: operationalRoutes(),
-                });
-              }} aria-label="Centrar">
-                <Crosshair size={14} />
-              </button>
-              <button type="button" class="flex h-8 w-8 items-center justify-center border-t border-default text-text-secondary hover:bg-app" aria-label="Pantalla completa" onClick={() => document.documentElement.requestFullscreen?.()}>
-                <Maximize2 size={14} />
-              </button>
-            </div>
-            </OperationalMap>
-          </div>
-        </Card>
+        <MonitoringMapCard
+          fieldMode={fieldMode()}
+          search={search()}
+          onSearchChange={setSearch}
+          statusFilter={statusFilter()}
+          onStatusFilterChange={setStatusFilter}
+          legendOpen={legendOpen()}
+          onToggleLegend={() => setLegendOpen((v) => !v)}
+          mapRef={mapRef}
+          mapReady={mapReady()}
+          mapInstance={mapInstance()}
+          playbackOpen={playbackOpen()}
+          playbackMode={playbackMode()}
+          playback={playback}
+          playbackRoutes={playbackRoutes()}
+          operatorVehicle={operatorVehicle()}
+          onCenterVehicle={centerOnVehicle}
+          mapFleet={mapFleet()}
+          operationalRoutes={operationalRoutes()}
+          onMapReady={handleMonitoringMapReady}
+          onStyleRestored={() => setupMonitoringMap(mapRef.current!)}
+        />
 
         <Show when={!fieldMode()}>
-        <Card padding={false} class="flex max-h-125 flex-col overflow-hidden xl:col-span-2 xl:max-h-none xl:h-full">
-          <div class="flex items-center justify-between border-b border-default px-4 py-3">
-            <h3 class="font-heading font-semibold text-text-primary">Estado de la flota</h3>
-            <A href="/vehicles" class="text-xs font-medium text-fero-blue hover:underline">
-              Ver todas
-            </A>
-          </div>
-          <ul class="min-h-0 flex-1 divide-y divide-default overflow-y-auto">
-            <Show
-              when={filteredFleet().length > 0}
-              fallback={
-                <li>
-                  <PlanningEmptyState {...fleetEmptyPreset()} compact />
-                </li>
-              }
-            >
-            <For each={filteredFleet()}>
-              {(v) => (
-                <li>
-                  <button
-                    type="button"
-                    class={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-app ${
-                      selectedId() === v.id ? 'bg-fero-green/5' : ''
-                    }`}
-                    onClick={() => selectVehicle(v)}
-                  >
-                    <img
-                      src={v.image}
-                      alt={v.id}
-                      class="h-11 w-14 shrink-0 rounded-md object-cover bg-app"
-                      loading="lazy"
-                      referrerpolicy="no-referrer"
-                    />
-                    <div class="min-w-0 flex-1">
-                      <div class="mb-0.5 flex flex-wrap items-center gap-2">
-                        <span class="text-sm font-semibold text-text-primary">{v.id}</span>
-                        <StatusBadge status={statusForBadge(v.status)} />
-                      </div>
-                      <p class="truncate text-xs text-text-muted">{v.route}</p>
-                      <p class="truncate text-xs text-text-secondary">{v.driver}</p>
-                      <div class="mt-1.5 flex items-center gap-2">
-                        <ProgressBar value={v.progress} color="green" size="sm" class="min-w-0 flex-1" />
-                        <span class="shrink-0 text-[11px] font-medium text-text-secondary">
-                          {v.speedKmh == null ? '—' : `${v.speedKmh} km/h`}
-                        </span>
-                      </div>
-                    </div>
-                  </button>
-                </li>
-              )}
-            </For>
-            </Show>
-          </ul>
-        </Card>
+          <MonitoringFleetList
+            fleet={filteredFleet()}
+            selectedId={selectedId()}
+            onSelect={selectVehicle}
+            emptyPreset={fleetEmptyPreset()}
+          />
         </Show>
       </div>
       </Show>
@@ -907,6 +673,7 @@ export default function MonitoringPage() {
         />
         <RecentIncidentsPanel refreshKey={incidentsRefreshKey()} />
       </Show>
+      </div>
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { ChevronDown } from 'lucide-solid';
 import { Show, createEffect, createMemo, createSignal, onMount } from 'solid-js';
 import { useSearchParams } from '@solidjs/router';
 import { Archive, Lock } from 'lucide-solid';
-import { Button, Card, CardHeader, LoadingPanel } from '../../../design-system/components';
+import { Button, Card, CardHeader, ConfirmDialog, LoadingPanel } from '../../../design-system/components';
 import {
   canReachWeeklyPlanStep,
   weeklyPlanStepGuideText,
@@ -51,6 +51,7 @@ export function WeeklyPlanTab(props: WeeklyPlanTabProps) {
   const [compareA, setCompareA] = createSignal('');
   const [compareB, setCompareB] = createSignal('');
   const [viewStep, setViewStep] = createSignal(1);
+  const [confirmArchiveOpen, setConfirmArchiveOpen] = createSignal(false);
 
   const plan = () => weeklyPlanState.plan;
   const editable = () => isWeeklyPlanEditable();
@@ -216,7 +217,7 @@ export function WeeklyPlanTab(props: WeeklyPlanTabProps) {
                           class="gap-2"
                           icon={<Archive size={14} />}
                           loading={weeklyPlanState.isArchiving}
-                          onClick={() => void archiveSelectedWeeklyPlan()}
+                          onClick={() => setConfirmArchiveOpen(true)}
                         >
                           Archivar
                         </Button>
@@ -256,6 +257,20 @@ export function WeeklyPlanTab(props: WeeklyPlanTabProps) {
           <WeeklyPlanListPanel />
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmArchiveOpen()}
+        title="¿Archivar esta semana?"
+        message={`La semana ${weekLabel()} quedará archivada y en solo lectura.`}
+        confirmLabel="Archivar semana"
+        loading={weeklyPlanState.isArchiving}
+        onConfirm={() => {
+          setConfirmArchiveOpen(false);
+          void archiveSelectedWeeklyPlan();
+        }}
+        onCancel={() => setConfirmArchiveOpen(false)}
+        testId="weekly-plan-tab-archive-confirm"
+      />
     </div>
   );
 }

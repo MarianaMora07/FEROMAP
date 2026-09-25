@@ -110,7 +110,7 @@ export default function DaySimulationPage() {
     <div class="space-y-4" data-testid="day-simulation-page">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 class="font-heading text-xl font-bold text-text-primary">Simulación de recorrido</h1>
+          <h1 id="page-title" class="font-heading text-xl font-bold text-text-primary">Simulación de recorrido</h1>
           <p class="text-sm text-text-muted">
             {operationDate() || 'Plan del día'} · animación comprimida (~5 min)
           </p>

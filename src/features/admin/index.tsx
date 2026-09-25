@@ -17,9 +17,9 @@ export default function AdminPage() {
   return (
     <div class="space-y-5">
       <div>
-        <h1 class="font-heading text-2xl font-bold text-text-primary dark:text-white">
+        <h2 class="font-heading text-2xl font-bold text-text-primary dark:text-white">
           {adminPageMeta.title}
-        </h1>
+        </h2>
         <p class="mt-1 text-sm text-text-muted">{adminPageMeta.subtitle}</p>
       </div>
 

@@ -1,6 +1,7 @@
 import { Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
-import { RefreshCw } from 'lucide-solid';
-import { Button, Card, LoadingPanel } from '../../design-system/components';
+import { ArrowLeft, RefreshCw } from 'lucide-solid';
+import { A } from '@solidjs/router';
+import { Button, Card, ConfirmDialog, LoadingPanel } from '../../design-system/components';
 import { ApiError } from '../../core/api/client';
 import {
   cancelCalibrationJob,
@@ -24,6 +25,7 @@ import {
 import { fetchScenarios } from '../../core/api/simulation';
 import { updateAlgorithmSettings } from '../../core/api/admin';
 import { useLocale } from '../../core/i18n/solid';
+import { globalToast } from '../../core/stores/toastStore';
 import type { Scenario } from '../../data/types/simulation';
 import { SettingsShell } from './SettingsShell';
 import { AcoValidationPanel } from './AcoValidationPanel';
@@ -83,6 +85,8 @@ export default function CalibrationPage() {
   const [applying, setApplying] = createSignal(false);
   const [applied, setApplied] = createSignal<string | null>(null);
   const [applyError, setApplyError] = createSignal<string | null>(null);
+  /** Confirmación previa a escribir la combinación recomendada en el motor. */
+  const [confirmApplyOpen, setConfirmApplyOpen] = createSignal(false);
   const [tab, setTab] = createSignal<CalibrationResultTab>('sensitivity');
   const [history, setHistory] = createSignal<CalibrationHistoryPage | null>(null);
   const [historyRun, setHistoryRun] = createSignal<CalibrationHistoryRun | null>(null);
@@ -92,6 +96,8 @@ export default function CalibrationPage() {
   const [applyingMethod, setApplyingMethod] = createSignal(false);
   const [appliedMethod, setAppliedMethod] = createSignal<string | null>(null);
   const [applyMethodError, setApplyMethodError] = createSignal<string | null>(null);
+  /** Confirmación previa a escribir el perfil del protocolo en el motor. */
+  const [confirmApplyMethodOpen, setConfirmApplyMethodOpen] = createSignal(false);
   /** Corrida de validación abierta desde el historial (vive en su panel, no en las pestañas). */
   const [validationRun, setValidationRun] = createSignal<CalibrationHistoryRun | null>(null);
 
@@ -311,18 +317,20 @@ export default function CalibrationPage() {
         pheromoneQ: params.pheromoneQ,
       });
       // Se confirma con lo que el motor guardó, no con lo que se pidió.
-      setApplied(
-        `${tr('calibration.advice.applied')} ${profileLabel({
-          acoAnts: updated.acoAnts,
-          acoIterations: updated.acoIterations,
-          acoAlpha: updated.acoAlpha,
-          acoBeta: updated.acoBeta,
-          acoRho: updated.acoRho,
-          pheromoneQ: updated.pheromoneQ,
-        })}`,
-      );
+      const message = `${tr('calibration.advice.applied')} ${profileLabel({
+        acoAnts: updated.acoAnts,
+        acoIterations: updated.acoIterations,
+        acoAlpha: updated.acoAlpha,
+        acoBeta: updated.acoBeta,
+        acoRho: updated.acoRho,
+        pheromoneQ: updated.pheromoneQ,
+      })}`;
+      setApplied(message);
+      globalToast.addToast(message, 'success');
     } catch (cause) {
-      setApplyError(errorMessage(cause, tr('calibration.advice.applyError')));
+      const message = errorMessage(cause, tr('calibration.advice.applyError'));
+      setApplyError(message);
+      globalToast.addToast(message, 'error');
     } finally {
       setApplying(false);
     }
@@ -348,18 +356,20 @@ export default function CalibrationPage() {
         pheromoneQ: profile.pheromoneQ,
       });
       // Se confirma con lo que el motor guardó, no con lo que se pidió.
-      setAppliedMethod(
-        `${tr('calibration.method.applied')} ${profileLabel({
-          acoAnts: updated.acoAnts,
-          acoIterations: updated.acoIterations,
-          acoAlpha: updated.acoAlpha,
-          acoBeta: updated.acoBeta,
-          acoRho: updated.acoRho,
-          pheromoneQ: updated.pheromoneQ,
-        })}`,
-      );
+      const message = `${tr('calibration.method.applied')} ${profileLabel({
+        acoAnts: updated.acoAnts,
+        acoIterations: updated.acoIterations,
+        acoAlpha: updated.acoAlpha,
+        acoBeta: updated.acoBeta,
+        acoRho: updated.acoRho,
+        pheromoneQ: updated.pheromoneQ,
+      })}`;
+      setAppliedMethod(message);
+      globalToast.addToast(message, 'success');
     } catch (cause) {
-      setApplyMethodError(errorMessage(cause, tr('calibration.method.applyError')));
+      const message = errorMessage(cause, tr('calibration.method.applyError'));
+      setApplyMethodError(message);
+      globalToast.addToast(message, 'error');
     } finally {
       setApplyingMethod(false);
     }
@@ -387,6 +397,13 @@ export default function CalibrationPage() {
 
   return (
     <SettingsShell active="calibration" testId="calibration-page">
+      <A
+        href="/settings"
+        class="inline-flex w-fit items-center gap-1 text-sm text-text-muted hover:text-fero-green-dark"
+      >
+        <ArrowLeft size={14} />
+        {tr('nav.settings')}
+      </A>
       <div>
         <h2 class="font-heading text-lg font-semibold text-text-primary dark:text-white">
           {tr('calibration.title')}
@@ -455,7 +472,7 @@ export default function CalibrationPage() {
           error={methodError()}
           onApply={
             methodEvidence()?.recommendation.available
-              ? () => void applyMethodRecommended()
+              ? () => setConfirmApplyMethodOpen(true)
               : undefined
           }
           applying={applyingMethod()}
@@ -467,7 +484,7 @@ export default function CalibrationPage() {
           <CalibrationAdvicePanel
             sensitivity={sensitivity()}
             objective={objective()}
-            onApply={recommendedProfile() ? () => void applyRecommended() : undefined}
+            onApply={recommendedProfile() ? () => setConfirmApplyOpen(true) : undefined}
             applying={applying()}
             appliedMessage={applied()}
             applyError={applyError()}
@@ -538,6 +555,36 @@ export default function CalibrationPage() {
           }}
         />
       </Show>
+
+      <ConfirmDialog
+        open={confirmApplyOpen()}
+        title={tr('calibration.advice.apply')}
+        message={tr('calibration.advice.combination')}
+        detail={tr('calibration.advice.scope')}
+        confirmLabel={tr('calibration.advice.apply')}
+        loading={applying()}
+        onConfirm={() => {
+          setConfirmApplyOpen(false);
+          void applyRecommended();
+        }}
+        onCancel={() => setConfirmApplyOpen(false)}
+        testId="calibration-apply-confirm"
+      />
+
+      <ConfirmDialog
+        open={confirmApplyMethodOpen()}
+        title={tr('calibration.method.apply')}
+        message={tr('calibration.method.scope')}
+        detail={tr('calibration.method.subtitle')}
+        confirmLabel={tr('calibration.method.apply')}
+        loading={applyingMethod()}
+        onConfirm={() => {
+          setConfirmApplyMethodOpen(false);
+          void applyMethodRecommended();
+        }}
+        onCancel={() => setConfirmApplyMethodOpen(false)}
+        testId="calibration-apply-method-confirm"
+      />
     </SettingsShell>
   );
 }

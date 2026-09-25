@@ -62,7 +62,7 @@ export default function OperatorNotificationsPage() {
           <p class="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
             Campo
           </p>
-          <h1 class="font-heading text-xl font-bold text-text-primary dark:text-white">
+          <h1 id="page-title" class="font-heading text-xl font-bold text-text-primary dark:text-white">
             Notificaciones
           </h1>
           <p class="mt-1 text-sm text-text-secondary">

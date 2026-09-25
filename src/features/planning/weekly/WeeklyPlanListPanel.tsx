@@ -21,11 +21,13 @@ import { PlanningEmptyState } from '../PlanningEmptyState';
 export function WeeklyPlanListPanel() {
   const [pendingDeleteId, setPendingDeleteId] = createSignal<number | null>(null);
   const [deleting, setDeleting] = createSignal(false);
+  const [pendingArchiveId, setPendingArchiveId] = createSignal<number | null>(null);
 
   const sortedHistory = () =>
     [...weeklyPlanState.history].sort((a, b) => b.weekStartDate.localeCompare(a.weekStartDate));
 
   const pendingDeleteRow = () => sortedHistory().find((row) => row.id === pendingDeleteId()) ?? null;
+  const pendingArchiveRow = () => sortedHistory().find((row) => row.id === pendingArchiveId()) ?? null;
 
   const handleSelect = (planId: number) => {
     void selectWeeklyPlan(planId);
@@ -38,7 +40,20 @@ export function WeeklyPlanListPanel() {
 
   const handleArchive = (event: MouseEvent, planId: number) => {
     event.stopPropagation();
-    void selectWeeklyPlan(planId).then(() => archiveSelectedWeeklyPlan());
+    setPendingArchiveId(planId);
+  };
+
+  const confirmArchive = async () => {
+    const planId = pendingArchiveId();
+    if (planId == null) return;
+    try {
+      await selectWeeklyPlan(planId);
+      await archiveSelectedWeeklyPlan();
+    } catch {
+      // El store ya notifica el error (notice/error).
+    } finally {
+      setPendingArchiveId(null);
+    }
   };
 
   const handleDelete = (event: MouseEvent, planId: number) => {
@@ -181,6 +196,21 @@ export function WeeklyPlanListPanel() {
         onConfirm={() => void confirmDelete()}
         onCancel={() => setPendingDeleteId(null)}
         testId={`weekly-plan-delete-confirm-${pendingDeleteId() ?? 'none'}`}
+      />
+
+      <ConfirmDialog
+        open={pendingArchiveId() != null}
+        title="¿Archivar esta semana?"
+        message={
+          pendingArchiveRow()
+            ? `La semana ${pendingArchiveRow()!.weekStartDate} → ${pendingArchiveRow()!.weekEndDate} quedará archivada y en solo lectura.`
+            : 'La semana quedará archivada y en solo lectura.'
+        }
+        confirmLabel="Archivar semana"
+        loading={weeklyPlanState.isArchiving}
+        onConfirm={() => void confirmArchive()}
+        onCancel={() => setPendingArchiveId(null)}
+        testId={`weekly-plan-archive-confirm-${pendingArchiveId() ?? 'none'}`}
       />
     </Card>
   );

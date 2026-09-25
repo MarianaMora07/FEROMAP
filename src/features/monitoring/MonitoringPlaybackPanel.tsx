@@ -52,7 +52,7 @@ export function MonitoringPlaybackPanel(props: MonitoringPlaybackPanelProps) {
             onClick={() => props.onModeChange('visual')}
             aria-pressed={props.mode === 'visual'}
           >
-            Solo visual (demo)
+            Solo visual
           </button>
           <button
             type="button"

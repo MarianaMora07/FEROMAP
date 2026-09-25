@@ -30,7 +30,9 @@ import {
 import {
   Card,
   CardHeader,
+  ErrorState,
   KpiCard,
+  LoadingPanel,
   ProgressBar,
 } from '../../design-system/components';
 import { bindMapTheme, mapStyleForTheme } from '../../core/utils/mapStyle';
@@ -136,6 +138,7 @@ export default function AnalyticsPage() {
   const [hourlyMetric, setHourlyMetric] = createSignal<HourlyMetricId>('toneladas');
   const [mapReady, setMapReady] = createSignal(false);
   const [analyticsError, setAnalyticsError] = createSignal(false);
+  const [analyticsLoading, setAnalyticsLoading] = createSignal(true);
   const [kpis, setKpis] = createSignal<AnalyticsSummary['kpis']>([]);
   const [evolutionSeries, setEvolutionSeries] = createSignal<AnalyticsSummary['evolutionSeries']>({
     labels: [],
@@ -223,8 +226,9 @@ export default function AnalyticsPage() {
     () => setupAnalyticsHeatmap(mapRef.current!),
   );
 
-  createEffect(() => {
+  const loadAnalytics = () => {
     const activeFilters = filters();
+    setAnalyticsLoading(true);
     void fetchAnalyticsSummary(activeFilters)
       .then((summary) => {
         setAnalyticsError(false);
@@ -236,7 +240,8 @@ export default function AnalyticsPage() {
         setAnalyticsEfficiencyIndicators(summary.efficiencyIndicators);
         setAnalyticsInsights(summary.insights);
       })
-      .catch(() => setAnalyticsError(true));
+      .catch(() => setAnalyticsError(true))
+      .finally(() => setAnalyticsLoading(false));
     void fetchAnalyticsHeatmap(activeFilters)
       .then((geojson) => {
         if (mapReady()) {
@@ -244,6 +249,12 @@ export default function AnalyticsPage() {
         }
       })
       .catch(() => setAnalyticsError(true));
+  };
+
+  const reload = () => loadAnalytics();
+
+  createEffect(() => {
+    loadAnalytics();
   });
 
   onMount(() => {
@@ -338,13 +349,11 @@ export default function AnalyticsPage() {
   return (
     <div class="space-y-5" data-testid="analytics-page">
       <Show when={analyticsError()}>
-        <div
-          role="alert"
-          data-testid="analytics-error"
-          class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
-        >
-          No se pudo cargar la analítica desde el API. Verifica la conexión.
-        </div>
+        <ErrorState
+          testId="analytics-error"
+          message="No se pudo cargar la analítica desde el API. Verifica la conexión."
+          onRetry={() => void reload()}
+        />
       </Show>
       <SimulationRunComparisonCard simulationId={focusedSimulationId()} />
       <Show when={focusCollectionPoints()}>
@@ -362,10 +371,14 @@ export default function AnalyticsPage() {
       </Show>
       <div class="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-surface px-4 py-3 dark:border-dark-border dark:bg-dark-surface">
         <div>
-          <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+          <label
+            for="analytics-date-from"
+            class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-text-muted"
+          >
             Desde
           </label>
           <input
+            id="analytics-date-from"
             type="date"
             value={dateFrom()}
             onInput={(e) => setDateFrom(e.currentTarget.value)}
@@ -373,10 +386,14 @@ export default function AnalyticsPage() {
           />
         </div>
         <div>
-          <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+          <label
+            for="analytics-date-to"
+            class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-text-muted"
+          >
             Hasta
           </label>
           <input
+            id="analytics-date-to"
             type="date"
             value={dateTo()}
             onInput={(e) => setDateTo(e.currentTarget.value)}
@@ -384,10 +401,14 @@ export default function AnalyticsPage() {
           />
         </div>
         <div>
-          <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+          <label
+            for="analytics-granularity"
+            class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-text-muted"
+          >
             Granularidad
           </label>
           <select
+            id="analytics-granularity"
             value={granularity()}
             onChange={(e) => setGranularity(e.currentTarget.value as AnalyticsGranularity)}
             class="rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-text-secondary dark:bg-dark-surface-hover dark:border-dark-border"
@@ -398,8 +419,18 @@ export default function AnalyticsPage() {
           </select>
         </div>
       </div>
-      <Show when={!analyticsError() && kpis().length === 0}>
-        <p class="text-sm text-text-muted" data-testid="analytics-empty">
+      <Show when={analyticsLoading() && !analyticsError() && kpis().length === 0}>
+        <div data-testid="analytics-loading">
+          <LoadingPanel label="Cargando analítica…" />
+        </div>
+      </Show>
+      <Show when={!analyticsError() && !analyticsLoading() && kpis().length === 0}>
+        <p
+          role="status"
+          aria-live="polite"
+          class="text-sm text-text-muted"
+          data-testid="analytics-empty"
+        >
           Sin datos para el rango seleccionado. Ejecuta una simulación o ajusta el filtro.
         </p>
       </Show>
@@ -411,7 +442,7 @@ export default function AnalyticsPage() {
               value={kpi.value}
               iconTone={kpi.iconTone}
               icon={<KpiIcon name={kpi.icon} />}
-              trend={{ value: kpi.trend, direction: 'up' }}
+              trend={{ value: kpi.trend }}
               trendLabel="vs período anterior"
               footer={<Sparkline values={kpi.sparkline} color={sparkColor[kpi.iconTone]} />}
             />
@@ -437,7 +468,7 @@ export default function AnalyticsPage() {
               <span class="h-2 w-2 rounded-full bg-fero-blue" /> Toneladas (t)
             </span>
           </div>
-          <div class="h-64">
+          <div class="h-64" role="img" aria-label="Evolución de recolecciones y toneladas por fecha">
             <Line
               data={lineData()}
               options={{
@@ -475,7 +506,11 @@ export default function AnalyticsPage() {
             }
           />
           <div class="flex flex-col items-center gap-4 sm:flex-row">
-            <div class="relative h-36 w-36 shrink-0">
+            <div
+              class="relative h-36 w-36 shrink-0"
+              role="img"
+              aria-label={`Distribución de residuos por tipo; total ${analyticsWasteTypes().totalLabel}`}
+            >
               <Doughnut
                 data={donutData()}
                 options={{
@@ -560,7 +595,11 @@ export default function AnalyticsPage() {
               </select>
             }
           />
-          <div class="h-52">
+          <div
+            class="h-52"
+            role="img"
+            aria-label={`Distribución por horario de ${hourlyMetric() === 'toneladas' ? 'toneladas' : 'recolecciones'}`}
+          >
             <Bar
               data={hourlyData()}
               options={{

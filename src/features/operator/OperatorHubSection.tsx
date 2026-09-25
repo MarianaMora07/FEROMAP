@@ -185,7 +185,12 @@ export function OperatorHubSection(props: OperatorHubSectionProps) {
             <p class="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
               Campo
             </p>
-            <h1 class="font-heading text-xl font-bold text-text-primary dark:text-white">Mi operación</h1>
+            <h1
+              id={variant() === 'landing' ? 'page-title' : undefined}
+              class="font-heading text-xl font-bold text-text-primary dark:text-white"
+            >
+              Mi operación
+            </h1>
           </div>
         </div>
       </Show>

@@ -113,7 +113,7 @@ export default function CaseStudiesListPage() {
             <Layers size={20} />
             <span class="text-xs font-semibold uppercase tracking-wide">Planificador</span>
           </div>
-          <h1 class="font-heading text-2xl font-bold text-text-primary dark:text-white">Casos de estudio</h1>
+          <h1 id="page-title" class="font-heading text-2xl font-bold text-text-primary dark:text-white">Casos de estudio</h1>
           <p class="mt-1 max-w-2xl text-sm text-text-muted">
             Arma escenarios académicos aislados: subconjuntos de puntos y condiciones locales sin alterar el catálogo
             operativo.

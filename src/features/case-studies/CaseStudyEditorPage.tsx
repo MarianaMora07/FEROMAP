@@ -285,7 +285,7 @@ export default function CaseStudyEditorPage() {
             Casos de estudio
           </A>
           <div class="flex flex-wrap items-center gap-2">
-            <h1 class="font-heading text-2xl font-bold text-text-primary dark:text-white">
+            <h1 id="page-title" class="font-heading text-2xl font-bold text-text-primary dark:text-white">
               {detail()?.code ?? 'Caso de estudio'}
             </h1>
             <Show when={detail()}>

@@ -115,7 +115,6 @@ export function AlgorithmSettingsPanel(props: { onFlash?: (message: string) => v
   const [settings, setSettings] = createSignal<AlgorithmSettings | null>(null);
   const [saving, setSaving] = createSignal(false);
   const [error, setError] = createSignal('');
-  const [flash, setFlash] = createSignal('');
 
   onMount(() => {
     void fetchAlgorithmSettings()
@@ -130,12 +129,11 @@ export function AlgorithmSettingsPanel(props: { onFlash?: (message: string) => v
     const current = settings();
     if (!current) return;
     setError('');
-    setFlash('');
     setSaving(true);
     try {
       const updated = await updateAlgorithmSettings(current);
       setSettings(updated);
-      setFlash('Parámetros del ACO actualizados');
+      // El feedback de éxito se comunica por el toast global (via `onFlash`).
       props.onFlash?.('Parámetros del ACO actualizados');
     } catch {
       setError('No se pudieron guardar los parámetros del ACO');
@@ -152,11 +150,9 @@ export function AlgorithmSettingsPanel(props: { onFlash?: (message: string) => v
       />
 
       <Show when={error()}>
-        <p class="text-sm text-red-600">{error()}</p>
-      </Show>
-
-      <Show when={flash()}>
-        <p class="text-sm text-fero-green-dark">{flash()}</p>
+        <p role="alert" class="text-sm text-red-600">
+          {error()}
+        </p>
       </Show>
 
       <Show

@@ -38,7 +38,7 @@ export default function OperatorWeekPage() {
           <p class="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
             Campo
           </p>
-          <h1 class="font-heading text-xl font-bold text-text-primary dark:text-white">Mi semana</h1>
+          <h1 id="page-title" class="font-heading text-xl font-bold text-text-primary dark:text-white">Mi semana</h1>
           <p class="mt-1 text-sm text-text-secondary">
             Frecuencias de recolección — solo lectura. La operación planifica el calendario.
           </p>

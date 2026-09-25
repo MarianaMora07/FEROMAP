@@ -1,6 +1,6 @@
 import { Match, Show, Switch, createEffect, createSignal } from 'solid-js';
 import { useNavigate, useSearchParams } from '@solidjs/router';
-import { Card, LoadingPanel } from '../../../design-system/components';
+import { Card, ErrorState, LoadingPanel } from '../../../design-system/components';
 import { mondayIso } from '../../../core/api/planning';
 import {
   fetchPlanningHistory,
@@ -66,8 +66,10 @@ export default function PlanningHistoryPage() {
   const [result, setResult] = createSignal<PlanningHistoryResponse | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   const [loading, setLoading] = createSignal(false);
+  const [reloadKey, setReloadKey] = createSignal(0);
 
   createEffect(() => {
+    reloadKey();
     const parsed = parseFilters(searchParams);
     setFilters(parsed);
     const mode = resolveMode(parsed);
@@ -143,7 +145,11 @@ export default function PlanningHistoryPage() {
       </Show>
 
       <Show when={error()}>
-        <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error()}</div>
+        <ErrorState
+          message={error()!}
+          onRetry={() => setReloadKey((v) => v + 1)}
+          testId="history-error"
+        />
       </Show>
 
       <Show when={!loading() && result()}>

@@ -94,7 +94,7 @@ export default function DriversPage() {
     <div class="space-y-5">
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 class="font-heading text-2xl font-bold text-text-primary dark:text-white">Conductores</h1>
+          <h1 id="page-title" class="font-heading text-2xl font-bold text-text-primary dark:text-white">Conductores</h1>
           <p class="mt-1 text-sm text-text-muted">
             Gestión de conductores independiente de la flota. Asigna conductores desde aquí o en cada vehículo.
           </p>

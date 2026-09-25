@@ -44,7 +44,7 @@ export default function DashboardPage() {
 
       <Show when={showPlannerActions()}>
         <div>
-          <h1 class="font-heading text-2xl font-bold text-text-primary dark:text-white">Dashboard</h1>
+          <h2 class="font-heading text-2xl font-bold text-text-primary dark:text-white">Dashboard</h2>
           <p class="mt-1 text-sm text-text-secondary">
             Punto de entrada operativo: planifica la semana, despacha el día y supervisa el campo.
           </p>

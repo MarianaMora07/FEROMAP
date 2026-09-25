@@ -11,7 +11,7 @@ export default function PlanningWeeklyPage() {
           <p class="text-xs font-semibold uppercase tracking-wide text-violet-800 dark:text-violet-200">
             Planificación directiva
           </p>
-          <h1 class="font-heading text-2xl font-bold text-text-primary dark:text-white">Plan semanal</h1>
+          <h1 id="page-title" class="font-heading text-2xl font-bold text-text-primary dark:text-white">Plan semanal</h1>
           <p class="mt-1 text-sm text-text-secondary">
             Configura, valida y aprueba la semana antes de optimizar el día.
           </p>

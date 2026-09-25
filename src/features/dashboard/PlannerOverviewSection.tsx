@@ -58,11 +58,7 @@ export function PlannerOverviewSection() {
           unit={kpis().wasteTons.unit}
           icon={<Trash2 size={28} />}
           iconTone="green"
-          trend={
-            kpis().wasteTons.trend > 0
-              ? { value: kpis().wasteTons.trend, direction: 'up' }
-              : undefined
-          }
+          trend={{ value: kpis().wasteTons.trend }}
           trendLabel="vs ayer"
         />
         <KpiCard

@@ -62,7 +62,7 @@ export default function OperatorDailyPlanPage() {
           <ArrowLeft size={14} />
           Volver a Mi operación
         </A>
-        <h1 class="font-heading text-2xl font-bold text-text-primary dark:text-white">
+        <h1 id="page-title" class="font-heading text-2xl font-bold text-text-primary dark:text-white">
           Plan del día
         </h1>
         <p class="mt-1 text-sm text-text-secondary">

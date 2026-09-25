@@ -1,4 +1,4 @@
-import { createSignal } from 'solid-js';
+import { globalToast } from '../../core/stores/toastStore';
 import { SettingsShell } from './SettingsShell';
 import { AlgorithmSettingsPanel } from './AlgorithmSettingsPanel';
 
@@ -8,17 +8,16 @@ import { AlgorithmSettingsPanel } from './AlgorithmSettingsPanel';
  * Centraliza los parámetros del sistema (motor ACO y objetivo multiobjetivo, Fase 13);
  * antes vivía como pestaña dentro de *Plan del día*. La consola de calibración es la otra
  * sección de esta misma página (`/settings/calibration`).
+ *
+ * El feedback de guardado usa el toast global (patrón único de éxito/error, Fase 4).
  */
 export default function SettingsPage() {
-  const [flash, setFlash] = createSignal<string | null>(null);
-
   const flashMessage = (message: string) => {
-    setFlash(message);
-    window.setTimeout(() => setFlash((current) => (current === message ? null : current)), 2500);
+    globalToast.addToast(message, 'success');
   };
 
   return (
-    <SettingsShell active="algorithm" flash={flash()}>
+    <SettingsShell active="algorithm">
       <AlgorithmSettingsPanel onFlash={flashMessage} />
     </SettingsShell>
   );

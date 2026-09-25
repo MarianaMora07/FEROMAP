@@ -17,6 +17,10 @@ import {
   Button,
   Card,
   CardHeader,
+  ConfirmDialog,
+  TabList,
+  tabButtonId,
+  useDismissable,
 } from '../../design-system/components';
 import { routeDisplayKind } from '../../core/map/operationalMapLayers';
 import type { RouteCollection } from '../../core/types/geo';
@@ -41,6 +45,7 @@ import { optimizationHref, operationalMapHref, daySimulationHref } from '../../c
 import { parsePlaybackQueryParam } from '../../core/planning/operationalFlowUx';
 import { PlanningContextualCta } from '../planning/PlanningContextualCta';
 import { AppShellSubheader } from '../../design-system/layout/pageChromeSlots';
+import { globalToast } from '../../core/stores/toastStore';
 import { OptimizationHeaderBar, OptimizationDailyBanner } from './OptimizationHeaderChrome';
 import { OptimizationRouteMap } from './OptimizationRouteMap';
 import { OptimizationPlaybackPanel } from './OptimizationPlaybackPanel';
@@ -150,7 +155,6 @@ export default function OptimizationPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [paramsSheetOpen, setParamsSheetOpen] = createSignal(false);
-  const [dispatchError, setDispatchError] = createSignal<string | null>(null);
   const [closeNotice, setCloseNotice] = createSignal<string | null>(null);
   const [planTab, setPlanTab] = createSignal<'optimize' | 'results' | 'pending'>(
     'optimize',
@@ -159,7 +163,51 @@ export default function OptimizationPage() {
     'resumen' | 'comparacion' | 'desglose' | 'convergencia' | 'rutas'
   >('comparacion');
   const [pageMenuOpen, setPageMenuOpen] = createSignal(false);
+  const [confirmCloseDayOpen, setConfirmCloseDayOpen] = createSignal(false);
   const { formGenerateInView, setGenerateAnchorRef } = useGenerateButtonVisibility();
+
+  // Menú "Más acciones": foco al abrir, navegación por flechas y cierre con
+  // clic-fuera/Escape (docs/design-system/contratos-ui.md §2).
+  let menuContainerRef: HTMLDivElement | undefined;
+  const menuItems = () =>
+    Array.from(menuContainerRef?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+
+  useDismissable({
+    open: () => pageMenuOpen(),
+    inside: () => [menuContainerRef],
+    onDismiss: () => {
+      setPageMenuOpen(false);
+      menuContainerRef?.querySelector<HTMLButtonElement>('button')?.focus();
+    },
+  });
+
+  const moveMenuFocus = (delta: number) => {
+    const items = menuItems();
+    if (items.length === 0) return;
+    const current = items.indexOf(document.activeElement as HTMLElement);
+    items[(current + delta + items.length) % items.length]?.focus();
+  };
+
+  const handleMenuKeyDown = (event: KeyboardEvent) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      moveMenuFocus(1);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      moveMenuFocus(-1);
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      menuItems()[0]?.focus();
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      menuItems().at(-1)?.focus();
+    }
+  };
+
+  createEffect(() => {
+    if (!pageMenuOpen()) return;
+    queueMicrotask(() => menuItems()[0]?.focus());
+  });
 
   const dailyPlan = () => optimizationState.dailyPlan;
   const selectedDate = () => optimizationState.preset.operationDate;
@@ -333,11 +381,12 @@ export default function OptimizationPage() {
   });
 
   const handleGenerate = async () => {
-    setDispatchError(null);
     try {
       await executeOptimization();
-    } catch {
-      // error stored in optimizationState.error
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'No se pudo generar el plan operativo';
+      globalToast.addToast(message, 'error');
     }
   };
 
@@ -347,7 +396,8 @@ export default function OptimizationPage() {
       await closeOptimizationDay();
       setCloseNotice('Día cerrado. Los puntos no visitados quedaron como pendientes.');
     } catch (error) {
-      setDispatchError(error instanceof Error ? error.message : 'No se pudo cerrar el día');
+      const message = error instanceof Error ? error.message : 'No se pudo cerrar el día';
+      globalToast.addToast(message, 'error');
     }
   };
 
@@ -396,57 +446,30 @@ export default function OptimizationPage() {
       <NotificationDeliveryPanel />
 
       <div class="flex items-center justify-between gap-2 border-b border-default">
-        <div
-          class="flex gap-1 overflow-x-auto"
-          data-testid="plan-day-tabs"
-          role="tablist"
-          aria-label="Vista del plan del día"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={planTab() === 'optimize'}
-            data-testid="plan-day-tab-optimize"
-            onClick={() => setPlanTab('optimize')}
-            class={`shrink-0 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-              planTab() === 'optimize'
+        <TabList
+          idPrefix="plan-day"
+          panelId="plan-day-panel"
+          tabs={[
+            { id: 'optimize', label: 'Optimizar y despachar' },
+            { id: 'results', label: 'Resultados' },
+            { id: 'pending', label: 'Pendientes' },
+          ]}
+          active={planTab()}
+          onChange={(id) => setPlanTab(id as 'optimize' | 'results' | 'pending')}
+          ariaLabel="Vista del plan del día"
+          containerClass="flex gap-1 overflow-x-auto"
+          testId="plan-day-tabs"
+          testIdFor={(id) => `plan-day-tab-${id}`}
+          tabClass={(active) =>
+            `shrink-0 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+              active
                 ? 'border-fero-green-mid text-fero-green-dark'
                 : 'border-transparent text-text-muted hover:text-text-secondary'
-            }`}
-          >
-            Optimizar y despachar
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={planTab() === 'results'}
-            data-testid="plan-day-tab-results"
-            onClick={() => setPlanTab('results')}
-            class={`shrink-0 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-              planTab() === 'results'
-                ? 'border-fero-green-mid text-fero-green-dark'
-                : 'border-transparent text-text-muted hover:text-text-secondary'
-            }`}
-          >
-            Resultados
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={planTab() === 'pending'}
-            data-testid="plan-day-tab-pending"
-            onClick={() => setPlanTab('pending')}
-            class={`shrink-0 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-              planTab() === 'pending'
-                ? 'border-fero-green-mid text-fero-green-dark'
-                : 'border-transparent text-text-muted hover:text-text-secondary'
-            }`}
-          >
-            Pendientes
-          </button>
-        </div>
+            }`
+          }
+        />
 
-        <div class="relative shrink-0">
+        <div ref={menuContainerRef} class="relative shrink-0">
           <Button
             variant="outline"
             size="sm"
@@ -459,11 +482,15 @@ export default function OptimizationPage() {
           </Button>
           <Show when={pageMenuOpen()}>
             <div
+              role="menu"
+              aria-label="Más acciones"
+              onKeyDown={handleMenuKeyDown}
               class="absolute right-0 z-20 mt-1 w-64 overflow-hidden rounded-lg border border-default bg-surface shadow-lg"
               data-testid="optimization-page-menu-items"
             >
               <button
                 type="button"
+                role="menuitem"
                 class="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-text-primary hover:bg-app disabled:opacity-40"
                 disabled={!dailyPlan()?.id}
                 data-testid="optimization-menu-export-pdf"
@@ -477,11 +504,12 @@ export default function OptimizationPage() {
               </button>
               <button
                 type="button"
+                role="menuitem"
                 class="flex w-full items-center gap-2 border-t border-default px-3 py-2.5 text-left text-sm text-text-primary hover:bg-app"
                 data-testid="optimization-menu-close-day"
                 onClick={() => {
                   setPageMenuOpen(false);
-                  void handleCloseDay();
+                  setConfirmCloseDayOpen(true);
                 }}
               >
                 <Route size={15} class="shrink-0 text-text-muted" />
@@ -489,6 +517,7 @@ export default function OptimizationPage() {
               </button>
               <A
                 href={operationalMapHref({ focus: 'routes' })}
+                role="menuitem"
                 class="flex w-full items-center gap-2 border-t border-default px-3 py-2.5 text-sm text-text-primary hover:bg-app"
                 onClick={() => setPageMenuOpen(false)}
               >
@@ -497,6 +526,7 @@ export default function OptimizationPage() {
               </A>
               <A
                 href="/planning/history"
+                role="menuitem"
                 class="flex w-full items-center gap-2 border-t border-default px-3 py-2.5 text-sm text-text-primary hover:bg-app"
                 onClick={() => setPageMenuOpen(false)}
               >
@@ -508,10 +538,16 @@ export default function OptimizationPage() {
         </div>
       </div>
 
+      <div
+        role="tabpanel"
+        id="plan-day-panel"
+        aria-labelledby={tabButtonId('plan-day', planTab())}
+        class="space-y-4 md:space-y-5"
+      >
       <Show when={planTab() === 'optimize'}>
         <Show when={contextualMessage()}>
           {(message) => (
-            <div data-testid="optimization-contextual-cta">
+            <div data-testid="optimization-contextual-cta" role="status" aria-live="polite">
               <PlanningContextualCta
                 message={message().message}
                 href={message().href}
@@ -522,14 +558,11 @@ export default function OptimizationPage() {
           )}
         </Show>
 
-        <Show when={dispatchError()}>
-          <p class="text-sm text-red-600" role="alert">
-            {dispatchError()}
-          </p>
-        </Show>
-
         <Show when={optimizationState.error}>
-          <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div
+            role="alert"
+            class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+          >
             {optimizationState.error}
           </div>
         </Show>
@@ -662,31 +695,32 @@ export default function OptimizationPage() {
                 Resultados · {humanDateShort(selectedDate())}
                 {optimizationState.lastSimulationId ? ` · corrida #${optimizationState.lastSimulationId}` : ''}
               </p>
+              <TabList
+                idPrefix="optimization-results"
+                panelId="optimization-results-panel"
+                tabs={visibleResultTabs()}
+                active={resultsTab()}
+                onChange={(id) =>
+                  setResultsTab(id as 'resumen' | 'comparacion' | 'desglose' | 'convergencia' | 'rutas')
+                }
+                ariaLabel="Resultados del día"
+                containerClass="flex gap-1 overflow-x-auto border-b border-default"
+                testId="optimization-results-tabs"
+                testIdFor={(id) => `optimization-results-tab-${id}`}
+                tabClass={(active) =>
+                  `shrink-0 border-b-2 px-3.5 py-2 text-sm font-medium transition-colors ${
+                    active
+                      ? 'border-fero-green-mid text-fero-green-dark'
+                      : 'border-transparent text-text-muted hover:text-text-secondary'
+                  }`
+                }
+              />
+
               <div
-                class="flex gap-1 overflow-x-auto border-b border-default"
-                data-testid="optimization-results-tabs"
-                role="tablist"
-                aria-label="Resultados del día"
+                role="tabpanel"
+                id="optimization-results-panel"
+                aria-labelledby={tabButtonId('optimization-results', resultsTab())}
               >
-                <For each={visibleResultTabs()}>
-                  {(item) => (
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={resultsTab() === item.id}
-                      data-testid={`optimization-results-tab-${item.id}`}
-                      onClick={() => setResultsTab(item.id)}
-                      class={`shrink-0 border-b-2 px-3.5 py-2 text-sm font-medium transition-colors ${
-                        resultsTab() === item.id
-                          ? 'border-fero-green-mid text-fero-green-dark'
-                          : 'border-transparent text-text-muted hover:text-text-secondary'
-                      }`}
-                    >
-                      {item.label}
-                    </button>
-                  )}
-                </For>
-              </div>
 
               <Show when={resultsTab() === 'resumen'}>
                 <div class="space-y-4">
@@ -777,6 +811,7 @@ export default function OptimizationPage() {
                   </div>
                 </Show>
               </Show>
+              </div>
             </Show>
           </Show>
 
@@ -795,6 +830,21 @@ export default function OptimizationPage() {
           </p>
         </div>
       </Show>
+      </div>
+
+      <ConfirmDialog
+        open={confirmCloseDayOpen()}
+        title="¿Cerrar el día?"
+        message="Se cerrará la jornada seleccionada. Los puntos no visitados quedarán como pendientes para el siguiente plan."
+        confirmLabel="Cerrar día"
+        tone="danger"
+        onConfirm={() => {
+          setConfirmCloseDayOpen(false);
+          void handleCloseDay();
+        }}
+        onCancel={() => setConfirmCloseDayOpen(false)}
+        testId="optimization-close-day-confirm"
+      />
     </div>
   );
 }
