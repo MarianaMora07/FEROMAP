@@ -585,6 +585,13 @@ def approve_weekly_plan(
     return get_weekly_plan(db, plan.id)
 
 
+# El motor hace **multi-viaje** al vertedero, así que un vehículo mueve varias cargas por
+# jornada. El pre-flight comparaba la demanda contra una sola carga de la flota y marcaba como
+# sobrecargados días que el motor cubre sin problema; se usa una cota conservadora de 2 cargas
+# por vehículo para no dar falsos avisos sin dejar de señalar los días realmente abultados.
+MIN_LOADS_PER_VEHICLE_PER_DAY = 2
+
+
 def evaluate_day_load(
     *,
     demand_kg: float,
@@ -610,6 +617,11 @@ def preflight_weekly_feasibility(db: Session, plan: WeeklyPlan) -> dict[str, Any
     Heurística aproximada (no reemplaza al motor): usa el llenado actual de cada
     contenedor y la capacidad de la flota disponible/esperada por día. Se persiste
     en ``preflight_json`` y se usa como guarda al aprobar.
+
+    La capacidad del día cuenta las **múltiples cargas por vehículo** (el motor hace
+    multi-viaje al vertedero): comparar la demanda contra una sola carga marcaba como
+    sobrecargados días que el motor cubre sin problema. Se usa una cota conservadora de
+    :data:`MIN_LOADS_PER_VEHICLE_PER_DAY` cargas por vehículo.
     """
     from app.db.models import CollectionPoint
 
@@ -631,7 +643,8 @@ def preflight_weekly_feasibility(db: Session, plan: WeeklyPlan) -> dict[str, Any
             points = db.scalars(select(CollectionPoint).where(CollectionPoint.id.in_(resolved_ids))).all()
             demand_kg = sum(float(point.current_fill_level_kg or 0) for point in points)
             expected = day.expected_vehicle_count or available_vehicles
-            capacity_kg = sum(vehicle_capacities[:expected])
+            single_load_kg = sum(vehicle_capacities[:expected])
+            capacity_kg = single_load_kg * MIN_LOADS_PER_VEHICLE_PER_DAY
             entry.update(
                 evaluate_day_load(
                     demand_kg=demand_kg,
@@ -640,6 +653,8 @@ def preflight_weekly_feasibility(db: Session, plan: WeeklyPlan) -> dict[str, Any
                     available_vehicles=available_vehicles,
                 )
             )
+            entry["singleLoadCapacityKg"] = round(single_load_kg, 1)
+            entry["loadsPerVehicle"] = MIN_LOADS_PER_VEHICLE_PER_DAY
         else:
             entry.update(
                 evaluate_day_load(
