@@ -1,0 +1,182 @@
+{
+  "generatedAt": "2026-09-24T20:47:45.205714+00:00",
+  "acoProfile": {
+    "ants": 12,
+    "iterations": 20
+  },
+  "cacheState": "warm",
+  "scenarioIds": [
+    "normal",
+    "peak_traffic",
+    "rain",
+    "saturated",
+    "broken_vehicle"
+  ],
+  "runs": [
+    {
+      "scenarioId": "normal",
+      "distanceKm": {
+        "current": 1808.7,
+        "optimized": 1076.0
+      },
+      "durationHours": {
+        "current": 156.85,
+        "optimized": 144.59
+      },
+      "uncoveredPoints": 0,
+      "uncoveredPointCodes": [],
+      "co2KgAvoided": 687.2,
+      "fuelLiters": {
+        "current": 633.0,
+        "optimized": 376.6
+      },
+      "coveragePct": {
+        "current": 100,
+        "optimized": 100
+      },
+      "criticalCoveragePct": {
+        "current": 100,
+        "optimized": 100
+      },
+      "containersServed": 300,
+      "landfillTrips": 43,
+      "computationSeconds": 2.7,
+      "graphLoadSeconds": 0.23,
+      "acoSeconds": 2.43,
+      "overheadSeconds": 0.02,
+      "savingPct": 40.5
+    },
+    {
+      "scenarioId": "peak_traffic",
+      "distanceKm": {
+        "current": 1851.4,
+        "optimized": 1148.3
+      },
+      "durationHours": {
+        "current": 163.61,
+        "optimized": 147.94
+      },
+      "uncoveredPoints": 0,
+      "uncoveredPointCodes": [],
+      "co2KgAvoided": 659.6,
+      "fuelLiters": {
+        "current": 648.0,
+        "optimized": 401.9
+      },
+      "coveragePct": {
+        "current": 100,
+        "optimized": 100
+      },
+      "criticalCoveragePct": {
+        "current": 100,
+        "optimized": 100
+      },
+      "containersServed": 300,
+      "landfillTrips": 45,
+      "computationSeconds": 3.0,
+      "graphLoadSeconds": 0.21,
+      "acoSeconds": 2.75,
+      "overheadSeconds": 0.01,
+      "savingPct": 38.0
+    },
+    {
+      "scenarioId": "rain",
+      "distanceKm": {
+        "current": 1795.0,
+        "optimized": 1121.1
+      },
+      "durationHours": {
+        "current": 158.78,
+        "optimized": 147.1
+      },
+      "uncoveredPoints": 0,
+      "uncoveredPointCodes": [],
+      "co2KgAvoided": 632.1,
+      "fuelLiters": {
+        "current": 628.2,
+        "optimized": 392.4
+      },
+      "coveragePct": {
+        "current": 100,
+        "optimized": 100
+      },
+      "criticalCoveragePct": {
+        "current": 100,
+        "optimized": 100
+      },
+      "containersServed": 300,
+      "landfillTrips": 46,
+      "computationSeconds": 2.7,
+      "graphLoadSeconds": 0.21,
+      "acoSeconds": 2.44,
+      "overheadSeconds": 0.01,
+      "savingPct": 37.5
+    },
+    {
+      "scenarioId": "saturated",
+      "distanceKm": {
+        "current": 1973.4,
+        "optimized": 1250.6
+      },
+      "durationHours": {
+        "current": 165.93,
+        "optimized": 152.27
+      },
+      "uncoveredPoints": 0,
+      "uncoveredPointCodes": [],
+      "co2KgAvoided": 678.0,
+      "fuelLiters": {
+        "current": 690.7,
+        "optimized": 437.7
+      },
+      "coveragePct": {
+        "current": 100,
+        "optimized": 100
+      },
+      "criticalCoveragePct": {
+        "current": 100,
+        "optimized": 100
+      },
+      "containersServed": 300,
+      "landfillTrips": 50,
+      "computationSeconds": 3.0,
+      "graphLoadSeconds": 0.21,
+      "acoSeconds": 2.77,
+      "overheadSeconds": 0.01,
+      "savingPct": 36.6
+    },
+    {
+      "scenarioId": "broken_vehicle",
+      "distanceKm": {
+        "current": 1823.8,
+        "optimized": 1148.9
+      },
+      "durationHours": {
+        "current": 159.91,
+        "optimized": 147.37
+      },
+      "uncoveredPoints": 0,
+      "uncoveredPointCodes": [],
+      "co2KgAvoided": 633.0,
+      "fuelLiters": {
+        "current": 638.3,
+        "optimized": 402.1
+      },
+      "coveragePct": {
+        "current": 100,
+        "optimized": 100
+      },
+      "criticalCoveragePct": {
+        "current": 100,
+        "optimized": 100
+      },
+      "containersServed": 300,
+      "landfillTrips": 44,
+      "computationSeconds": 2.7,
+      "graphLoadSeconds": 0.24,
+      "acoSeconds": 2.49,
+      "overheadSeconds": 0.02,
+      "savingPct": 37.0
+    }
+  ]
+}

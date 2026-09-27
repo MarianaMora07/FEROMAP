@@ -1,0 +1,2257 @@
+"""Servicio de planificación operativa (semanal, diaria, pendientes)."""
+
+from __future__ import annotations
+
+import json
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
+from typing import Any, Callable
+
+from fastapi import HTTPException, status
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.orm import Session, joinedload
+
+from app.db.models import (
+    CaseStudy,
+    CollectionPoint,
+    DailyPlan,
+    OptimizedRoute,
+    PendingVisit,
+    PlanVersion,
+    RouteWaypoint,
+    Simulation,
+    VehicleIncident,
+    VisitSchedule,
+    WeeklyPlan,
+    WeeklyPlanDay,
+)
+from app.domain.criticality import HIGH_FILL_PCT, is_critical_now, is_overloaded, required_visits_per_week
+from app.domain.operational_clock import operational_departure_at
+from app.domain.visit_schedule_distribution import planned_visits_and_weekdays
+from app.services.case_study_planning import (
+    effective_case_study_id,
+    resolve_case_study_active_point_ids,
+    resolve_weekly_day_point_ids,
+)
+from app.domain.plan_kpis import (
+    dump_kpi_json,
+    forecast_from_routes,
+    parse_kpi_json,
+    plan_vs_real_from_routes,
+)
+
+_UNSET = object()
+
+
+def _json_list(value: str | None) -> list[int]:
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+        return [int(item) for item in parsed]
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
+
+
+def _dump_json_list(values: list[int]) -> str:
+    return json.dumps(sorted(set(values)))
+
+
+def _parse_fleet_by_type(value: str | None) -> dict[str, int] | None:
+    """Composición de flota semanal por tipo (ej. {"Compactadora": 3})."""
+    if not value:
+        return None
+    try:
+        parsed = json.loads(value)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    resolved: dict[str, int] = {}
+    for key, count in parsed.items():
+        if isinstance(count, bool) or not isinstance(count, int) or count < 1:
+            continue
+        resolved[str(key)] = count
+    return resolved or None
+
+
+def _dump_fleet_by_type(fleet: dict[str, int] | None) -> str | None:
+    if not fleet:
+        return None
+    normalized = {str(key): int(count) for key, count in fleet.items() if int(count) > 0}
+    return json.dumps(normalized, ensure_ascii=False) if normalized else None
+
+
+def _weekly_fleet_by_type(plan: WeeklyPlan) -> dict[str, int] | None:
+    return _parse_fleet_by_type(plan.fleet_by_type_json)
+
+
+def _plan_fleet_vehicles(db: Session, plan: WeeklyPlan) -> list[Any]:
+    """Vehículos asignables de la semana respetando la composición por tipo.
+
+    Sin ``fleetByType`` configurada devuelve toda la flota asignable (legacy). Con
+    configuración, por cada tipo se toman las primeras N unidades por id (mismo
+    criterio que el motor: ``build_optimization_vehicle_units``).
+    """
+    from app.db.models import Vehicle
+
+    vehicles = db.scalars(
+        select(Vehicle).where(Vehicle.status.in_(("available", "in_route"))).order_by(Vehicle.id)
+    ).all()
+    fleet = _weekly_fleet_by_type(plan)
+    if not fleet:
+        return list(vehicles)
+    selected: list[Vehicle] = []
+    used: dict[str, int] = {}
+    for vehicle in vehicles:
+        vtype = vehicle.vehicle_type
+        if vtype not in fleet:
+            continue
+        if used.get(vtype, 0) >= fleet[vtype]:
+            continue
+        selected.append(vehicle)
+        used[vtype] = used.get(vtype, 0) + 1
+    return selected or list(vehicles)
+
+
+def _estimate_fleet_for_points(db: Session, plan: WeeklyPlan, point_ids: list[int]) -> int:
+    """Vehículos necesarios para mover la demanda del día en un cargamento.
+
+    Dimensiona con la demanda estimada (llenado actual de los puntos del día) frente a
+    las capacidades de la flota asignable, de mayor a menor, sin tope distinto del
+    tamaño de la flota. Devuelve al menos 1.
+    """
+    capacities = sorted(
+        (float(vehicle.max_capacity_kg) or 0.0 for vehicle in _plan_fleet_vehicles(db, plan)),
+        reverse=True,
+    )
+    if not capacities or not point_ids:
+        return 1
+    demand_kg = 0.0
+    for point in db.scalars(select(CollectionPoint).where(CollectionPoint.id.in_(point_ids))):
+        demand_kg += float(point.current_fill_level_kg or 0)
+    # Margen del 5 % (mismo umbral del pre-flight) para no quedar al borde.
+    target = demand_kg / 0.95 if demand_kg > 0 else 0.0
+    cumulative = 0.0
+    for index, capacity in enumerate(capacities, start=1):
+        cumulative += capacity
+        if cumulative >= target:
+            return index
+    return len(capacities)
+
+
+def monday_of_week(value: date) -> date:
+    return value - timedelta(days=value.weekday())
+
+
+def week_range(week_start: date) -> tuple[date, date]:
+    start = monday_of_week(week_start)
+    return start, start + timedelta(days=6)
+
+
+def _serialize_point(point: CollectionPoint) -> dict[str, Any]:
+    from app.domain.waste_generation import projected_fill_level_pct
+
+    return {
+        "id": point.id,
+        "code": point.code,
+        "sectorName": point.sector.name if point.sector else None,
+        "fillLevelPct": projected_fill_level_pct(point),
+    }
+
+
+def _serialize_pending(db: Session, visit: PendingVisit) -> dict[str, Any]:
+    point = visit.collection_point or db.get(CollectionPoint, visit.collection_point_id)
+    return {
+        "id": visit.id,
+        "collectionPointId": visit.collection_point_id,
+        "code": point.code if point else None,
+        "originOperationDate": visit.origin_operation_date.isoformat(),
+        "targetOperationDate": visit.target_operation_date.isoformat() if visit.target_operation_date else None,
+        "reason": visit.reason,
+        "status": visit.status,
+        "priority": visit.priority,
+    }
+
+
+def _case_study_summary(db: Session, case_study_id: int | None) -> dict[str, Any] | None:
+    if case_study_id is None:
+        return None
+    study = db.get(CaseStudy, case_study_id)
+    if study is None or study.deleted_at is not None:
+        return None
+    return {
+        "id": study.id,
+        "code": study.code,
+        "name": study.name,
+    }
+
+
+def _weekly_plan_payload(db: Session, plan: WeeklyPlan) -> dict[str, Any]:
+    expected_kpis = None
+    if plan.expected_kpis_json:
+        expected_kpis = json.loads(plan.expected_kpis_json)
+    preflight = None
+    if plan.preflight_json:
+        try:
+            preflight = json.loads(plan.preflight_json)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            preflight = None
+    plan_case = _case_study_summary(db, plan.case_study_id)
+    operational_plan = None
+    if plan.operational_plan_json:
+        try:
+            operational_plan = json.loads(plan.operational_plan_json)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            operational_plan = None
+    # Estado vivo del plan operativo: sobrescribe el estado guardado en el JSON con el
+    # estado real del DailyPlan (optimized / dispatched / closed), de modo que al volver
+    # a entrar la tabla refleje la operación sin depender de la sesión.
+    if operational_plan and isinstance(operational_plan, dict):
+        op_days = operational_plan.get("days") or []
+        daily_plan_ids = [
+            day.get("dailyPlanId") for day in op_days if day.get("dailyPlanId")
+        ]
+        if daily_plan_ids:
+            daily_rows = db.execute(
+                select(DailyPlan.id, DailyPlan.status).where(DailyPlan.id.in_(daily_plan_ids))
+            ).all()
+            live_status = {int(row[0]): str(row[1]) for row in daily_rows}
+            for day in op_days:
+                daily_id = day.get("dailyPlanId")
+                if daily_id is not None and daily_id in live_status:
+                    day["status"] = live_status[daily_id]
+    return {
+        "id": plan.id,
+        "weekStartDate": plan.week_start_date.isoformat(),
+        "weekEndDate": plan.week_end_date.isoformat(),
+        "status": plan.status,
+        "scenarioId": plan.scenario_id,
+        "caseStudyId": plan.case_study_id,
+        "caseStudyCode": plan_case["code"] if plan_case else None,
+        "caseStudyName": plan_case["name"] if plan_case else None,
+        "referenceSimulationId": plan.reference_simulation_id,
+        "fleetByType": _parse_fleet_by_type(plan.fleet_by_type_json),
+        "operationalPlan": operational_plan,
+        "expectedKpis": expected_kpis,
+        "preflight": preflight,
+        "preflightFeasible": bool(preflight and preflight.get("feasible")),
+        "notes": plan.notes,
+        "approvedAt": plan.approved_at.isoformat() if plan.approved_at else None,
+        "days": [
+            _weekly_plan_day_payload(db, plan, day)
+            for day in sorted(plan.days, key=lambda row: row.operation_date)
+        ],
+    }
+
+
+def _weekly_plan_day_payload(db: Session, plan: WeeklyPlan, day: WeeklyPlanDay) -> dict[str, Any]:
+    resolved_ids, point_source, effective_case_id = resolve_weekly_day_point_ids(db, plan, day)
+    case_meta = _case_study_summary(db, effective_case_id)
+    return {
+        "id": day.id,
+        "operationDate": day.operation_date.isoformat(),
+        "weekday": day.weekday,
+        "sectorIds": _json_list(day.sector_ids_json),
+        "collectionPointIds": resolved_ids,
+        "pointSource": point_source,
+        "caseStudyId": effective_case_id,
+        "caseStudyCode": case_meta["code"] if case_meta else None,
+        "expectedVehicleCount": day.expected_vehicle_count,
+        "scenarioIdOverride": day.scenario_id_override,
+        "status": day.status,
+    }
+
+
+def _ensure_case_study_linkable(db: Session, case_study_id: int) -> CaseStudy:
+    study = db.get(CaseStudy, case_study_id)
+    if study is None or study.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Caso de estudio {case_study_id} no encontrado",
+        )
+    return study
+
+
+def _sync_day_point_snapshot(db: Session, plan: WeeklyPlan, day: WeeklyPlanDay) -> None:
+    resolved_ids, point_source, _ = resolve_weekly_day_point_ids(db, plan, day)
+    if point_source == "case_study":
+        day.collection_point_ids_json = _dump_json_list(resolved_ids)
+
+
+def _daily_plan_payload(db: Session, plan: DailyPlan) -> dict[str, Any]:
+    scheduled_ids = _json_list(plan.scheduled_point_ids_json)
+    pending_ids = _json_list(plan.pending_point_ids_json)
+    final_ids = _json_list(plan.final_point_ids_json)
+
+    point_map: dict[int, CollectionPoint] = {}
+    if scheduled_ids or pending_ids or final_ids:
+        all_ids = sorted(set(scheduled_ids + pending_ids + final_ids))
+        points = db.scalars(
+            select(CollectionPoint)
+            .where(CollectionPoint.id.in_(all_ids))
+            .options(joinedload(CollectionPoint.sector))
+        ).all()
+        point_map = {point.id: point for point in points}
+
+    open_pending = db.scalars(
+        select(PendingVisit)
+        .where(
+            PendingVisit.status == "open",
+            (PendingVisit.target_operation_date.is_(None))
+            | (PendingVisit.target_operation_date == plan.operation_date),
+        )
+        .options(joinedload(PendingVisit.collection_point).joinedload(CollectionPoint.sector))
+        .order_by(PendingVisit.priority.desc(), PendingVisit.id)
+    ).all()
+
+    return {
+        "id": plan.id,
+        "operationDate": plan.operation_date.isoformat(),
+        "status": plan.status,
+        "scenarioId": plan.scenario_id,
+        "weeklyPlanId": plan.weekly_plan_id,
+        "simulationId": plan.simulation_id,
+        "scheduledPoints": [_serialize_point(point_map[pid]) for pid in scheduled_ids if pid in point_map],
+        "pendingPoints": [_serialize_pending(db, visit) for visit in open_pending],
+        "pendingPointIds": pending_ids,
+        "finalPointIds": final_ids,
+        "plannedKpis": parse_kpi_json(plan.planned_kpis_json),
+        "actualKpis": parse_kpi_json(plan.actual_kpis_json),
+        "dispatchedAt": plan.dispatched_at.isoformat() if plan.dispatched_at else None,
+        "closedAt": plan.closed_at.isoformat() if plan.closed_at else None,
+        "notes": plan.notes,
+    }
+
+
+def _record_version(
+    db: Session,
+    *,
+    entity_type: str,
+    entity_id: int,
+    snapshot: dict[str, Any],
+    summary: str,
+    user_id: int | None = None,
+) -> None:
+    last_version = db.scalar(
+        select(PlanVersion.version_number)
+        .where(PlanVersion.entity_type == entity_type, PlanVersion.entity_id == entity_id)
+        .order_by(PlanVersion.version_number.desc())
+        .limit(1)
+    )
+    db.add(
+        PlanVersion(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            version_number=(last_version or 0) + 1,
+            snapshot_json=json.dumps(snapshot, ensure_ascii=False),
+            change_summary=summary,
+            created_by_user_id=user_id,
+        )
+    )
+
+
+def list_weekly_plans(
+    db: Session,
+    *,
+    status: str | None = None,
+    week_from: date | None = None,
+    week_to: date | None = None,
+    limit: int = 25,
+    offset: int = 0,
+) -> dict[str, Any]:
+    stmt = select(WeeklyPlan).options(joinedload(WeeklyPlan.days)).order_by(WeeklyPlan.week_start_date.desc())
+    if status:
+        stmt = stmt.where(WeeklyPlan.status == status)
+    if week_from is not None:
+        stmt = stmt.where(WeeklyPlan.week_start_date >= week_from)
+    if week_to is not None:
+        stmt = stmt.where(WeeklyPlan.week_start_date <= week_to)
+    plans = db.scalars(stmt.offset(offset).limit(limit)).unique().all()
+    total_stmt = select(func.count()).select_from(WeeklyPlan)
+    if status:
+        total_stmt = total_stmt.where(WeeklyPlan.status == status)
+    if week_from is not None:
+        total_stmt = total_stmt.where(WeeklyPlan.week_start_date >= week_from)
+    if week_to is not None:
+        total_stmt = total_stmt.where(WeeklyPlan.week_start_date <= week_to)
+    total = db.scalar(total_stmt) or 0
+    return {
+        "items": [_weekly_plan_payload(db, plan) for plan in plans],
+        "count": len(plans),
+        "total": total,
+    }
+
+
+def get_current_weekly_plan(db: Session, *, reference: date | None = None) -> dict[str, Any] | None:
+    week_start, _ = week_range(reference or date.today())
+    plan = db.scalar(
+        select(WeeklyPlan)
+        .where(WeeklyPlan.week_start_date == week_start, WeeklyPlan.status == "approved")
+        .options(joinedload(WeeklyPlan.days))
+    )
+    return _weekly_plan_payload(db, plan) if plan else None
+
+
+def get_weekly_plan(db: Session, plan_id: int) -> dict[str, Any]:
+    plan = db.scalar(
+        select(WeeklyPlan).where(WeeklyPlan.id == plan_id).options(joinedload(WeeklyPlan.days))
+    )
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan semanal no encontrado")
+    return _weekly_plan_payload(db, plan)
+
+
+def create_weekly_plan_draft(
+    db: Session,
+    *,
+    week_start_date: date,
+    scenario_id: str,
+    days: list[dict[str, Any]],
+    notes: str | None = None,
+    case_study_id: int | None = None,
+    fleet_by_type: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    week_start, week_end = week_range(week_start_date)
+    existing = db.scalar(select(WeeklyPlan).where(WeeklyPlan.week_start_date == week_start))
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Ya existe un plan para la semana que inicia {week_start.isoformat()}",
+        )
+
+    if case_study_id is not None:
+        _ensure_case_study_linkable(db, case_study_id)
+
+    plan = WeeklyPlan(
+        week_start_date=week_start,
+        week_end_date=week_end,
+        status="draft",
+        scenario_id=scenario_id,
+        case_study_id=case_study_id,
+        fleet_by_type_json=_dump_fleet_by_type(fleet_by_type),
+        notes=notes,
+    )
+    db.add(plan)
+    db.flush()
+
+    for day_input in days:
+        operation_date = day_input["operation_date"]
+        if not week_start <= operation_date <= week_end:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"La fecha {operation_date} no pertenece a la semana del plan",
+            )
+        day_case_id = day_input.get("case_study_id")
+        if day_case_id is not None:
+            _ensure_case_study_linkable(db, day_case_id)
+        day = WeeklyPlanDay(
+            weekly_plan_id=plan.id,
+            operation_date=operation_date,
+            weekday=operation_date.weekday(),
+            sector_ids_json=_dump_json_list(day_input.get("sector_ids", [])),
+            collection_point_ids_json=_dump_json_list(
+                [] if (case_study_id is not None or day_case_id is not None) else day_input.get("collection_point_ids", [])
+            ),
+            case_study_id=day_case_id,
+            expected_vehicle_count=day_input.get("expected_vehicle_count"),
+            scenario_id_override=day_input.get("scenario_id_override"),
+        )
+        db.add(day)
+
+    db.flush()
+    db.refresh(plan)
+    for day in plan.days:
+        _sync_day_point_snapshot(db, plan, day)
+    db.flush()
+    return get_weekly_plan(db, plan.id)
+
+
+def update_weekly_plan(
+    db: Session,
+    plan_id: int,
+    *,
+    days: list[dict[str, Any]] | None,
+    scenario_id: str | None,
+    notes: str | None,
+    case_study_id: int | None | object = _UNSET,
+    fleet_by_type: dict[str, int] | None | object = _UNSET,
+) -> dict[str, Any]:
+    plan = db.scalar(select(WeeklyPlan).where(WeeklyPlan.id == plan_id).options(joinedload(WeeklyPlan.days)))
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan semanal no encontrado")
+    if plan.status == "approved":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No se puede editar un plan aprobado")
+
+    if scenario_id is not None:
+        plan.scenario_id = scenario_id
+    if notes is not None:
+        plan.notes = notes
+    if case_study_id is not _UNSET:
+        if case_study_id is not None:
+            _ensure_case_study_linkable(db, case_study_id)
+        plan.case_study_id = case_study_id  # type: ignore[assignment]
+    if fleet_by_type is not _UNSET:
+        plan.fleet_by_type_json = _dump_fleet_by_type(
+            fleet_by_type if fleet_by_type is not None else {}
+        )
+
+    if days:
+        day_ids = [day.id for day in plan.days]
+        # Los planes diarios no deben quedar apuntando a filas eliminadas.
+        if day_ids:
+            db.execute(
+                update(DailyPlan)
+                .where(DailyPlan.weekly_plan_day_id.in_(day_ids))
+                .values(weekly_plan_day_id=None)
+            )
+        for day in list(plan.days):
+            db.delete(day)
+        db.flush()
+        week_start, week_end = plan.week_start_date, plan.week_end_date
+        for day_input in days:
+            operation_date = day_input["operation_date"]
+            if not week_start <= operation_date <= week_end:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"La fecha {operation_date} no pertenece a la semana del plan",
+                )
+            day_case_id = day_input.get("case_study_id")
+            if day_case_id is not None:
+                _ensure_case_study_linkable(db, day_case_id)
+            use_case = plan.case_study_id is not None or day_case_id is not None
+            db.add(
+                WeeklyPlanDay(
+                    weekly_plan_id=plan.id,
+                    operation_date=operation_date,
+                    weekday=operation_date.weekday(),
+                    sector_ids_json=_dump_json_list(day_input.get("sector_ids", [])),
+                    collection_point_ids_json=_dump_json_list(
+                        [] if use_case else day_input.get("collection_point_ids", [])
+                    ),
+                    case_study_id=day_case_id,
+                    expected_vehicle_count=day_input.get("expected_vehicle_count"),
+                    scenario_id_override=day_input.get("scenario_id_override"),
+                )
+            )
+
+    db.flush()
+    db.refresh(plan)
+    for day in plan.days:
+        _sync_day_point_snapshot(db, plan, day)
+    db.flush()
+    return get_weekly_plan(db, plan.id)
+
+
+def approve_weekly_plan(
+    db: Session,
+    plan_id: int,
+    *,
+    reference_simulation_id: int | None = None,
+    expected_kpis: dict[str, Any] | None = None,
+    allow_warnings: bool = False,
+    user_id: int | None = None,
+) -> dict[str, Any]:
+    plan = db.scalar(select(WeeklyPlan).where(WeeklyPlan.id == plan_id).options(joinedload(WeeklyPlan.days)))
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan semanal no encontrado")
+    if plan.status != "draft":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Solo se pueden aprobar planes en borrador")
+    if not plan.days:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El plan semanal no tiene días configurados")
+
+    # Pre-flight por día: demanda estimada vs capacidad de flota y jornada.
+    preflight = preflight_weekly_feasibility(db, plan)
+    if not preflight["feasible"] and not allow_warnings:
+        overloaded = sorted(row["operationDate"] for row in preflight["rows"] if row["overloaded"])
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Día(s) con sobrecapacidad estimada de recolección: "
+                + ", ".join(overloaded)
+                + ". Ajusta la flota esperada por día o aprueba con allowWarnings=true."
+            ),
+        )
+
+    plan.status = "approved"
+    plan.approved_at = datetime.now(timezone.utc)
+    plan.approved_by_user_id = user_id
+    if reference_simulation_id is not None:
+        plan.reference_simulation_id = reference_simulation_id
+    if expected_kpis is not None:
+        plan.expected_kpis_json = json.dumps(expected_kpis, ensure_ascii=False)
+
+    _record_version(
+        db,
+        entity_type="weekly_plan",
+        entity_id=plan.id,
+        snapshot=_weekly_plan_payload(db, plan),
+        summary="Plan semanal aprobado",
+        user_id=user_id,
+    )
+    db.flush()
+    return get_weekly_plan(db, plan.id)
+
+
+# El motor hace **multi-viaje** al vertedero, así que un vehículo mueve varias cargas por
+# jornada. El pre-flight comparaba la demanda contra una sola carga de la flota y marcaba como
+# sobrecargados días que el motor cubre sin problema; se usa una cota conservadora de 2 cargas
+# por vehículo para no dar falsos avisos sin dejar de señalar los días realmente abultados.
+MIN_LOADS_PER_VEHICLE_PER_DAY = 2
+
+
+def evaluate_day_load(
+    *,
+    demand_kg: float,
+    capacity_kg: float,
+    expected_vehicles: int,
+    available_vehicles: int,
+) -> dict[str, Any]:
+    """Evalúa si un día cabe en la flota esperada (heurística de pre-flight)."""
+    overloaded = capacity_kg > 0 and demand_kg > capacity_kg * 0.95
+    return {
+        "demandKg": round(demand_kg, 1),
+        "capacityKg": round(capacity_kg, 1),
+        "expectedVehicles": expected_vehicles,
+        "availableVehicles": available_vehicles,
+        "insufficientFleet": available_vehicles < expected_vehicles,
+        "overloaded": overloaded,
+    }
+
+
+def preflight_weekly_feasibility(db: Session, plan: WeeklyPlan) -> dict[str, Any]:
+    """Pre-flight por día: demanda estimada vs capacidad de la flota (Tarea 9).
+
+    Heurística aproximada (no reemplaza al motor): usa el llenado actual de cada
+    contenedor y la capacidad de la flota disponible/esperada por día. Se persiste
+    en ``preflight_json`` y se usa como guarda al aprobar.
+
+    La capacidad del día cuenta las **múltiples cargas por vehículo** (el motor hace
+    multi-viaje al vertedero): comparar la demanda contra una sola carga marcaba como
+    sobrecargados días que el motor cubre sin problema. Se usa una cota conservadora de
+    :data:`MIN_LOADS_PER_VEHICLE_PER_DAY` cargas por vehículo.
+    """
+    from app.db.models import CollectionPoint
+
+    vehicles = _plan_fleet_vehicles(db, plan)
+    vehicle_capacities = sorted((float(v.max_capacity_kg) or 0 for v in vehicles), reverse=True)
+    available_vehicles = len(vehicles)
+    rows: list[dict[str, Any]] = []
+
+    for day in sorted(plan.days, key=lambda row: row.operation_date):
+        resolved_ids, _source, _case = resolve_weekly_day_point_ids(db, plan, day)
+        entry: dict[str, Any] = {
+            "operationDate": day.operation_date.isoformat(),
+            "pointCount": len(resolved_ids),
+            "scenarioId": day.scenario_id_override or plan.scenario_id,
+            "expectedVehicles": day.expected_vehicle_count or available_vehicles,
+            "availableVehicles": available_vehicles,
+        }
+        if resolved_ids:
+            points = db.scalars(select(CollectionPoint).where(CollectionPoint.id.in_(resolved_ids))).all()
+            demand_kg = sum(float(point.current_fill_level_kg or 0) for point in points)
+            expected = day.expected_vehicle_count or available_vehicles
+            single_load_kg = sum(vehicle_capacities[:expected])
+            capacity_kg = single_load_kg * MIN_LOADS_PER_VEHICLE_PER_DAY
+            entry.update(
+                evaluate_day_load(
+                    demand_kg=demand_kg,
+                    capacity_kg=capacity_kg,
+                    expected_vehicles=expected,
+                    available_vehicles=available_vehicles,
+                )
+            )
+            entry["singleLoadCapacityKg"] = round(single_load_kg, 1)
+            entry["loadsPerVehicle"] = MIN_LOADS_PER_VEHICLE_PER_DAY
+        else:
+            entry.update(
+                evaluate_day_load(
+                    demand_kg=0.0,
+                    capacity_kg=0.0,
+                    expected_vehicles=entry["expectedVehicles"],
+                    available_vehicles=available_vehicles,
+                )
+            )
+        entry["demandKg"] = entry.get("demandKg", 0.0)
+        entry["capacityKg"] = entry.get("capacityKg", 0.0)
+        rows.append(entry)
+
+    feasible = all(not row["overloaded"] and not row["insufficientFleet"] for row in rows)
+    payload = {"feasible": feasible, "rows": rows}
+    plan.preflight_json = json.dumps(payload, ensure_ascii=False)
+    return payload
+
+
+def _aggregate_weekly_day_results(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    total_km = sum(float(row.get("distanceKm") or 0) for row in rows if not row.get("error"))
+    total_hours = sum(float(row.get("durationHours") or 0) for row in rows if not row.get("error"))
+    all_feasible = all(
+        row.get("error") is None and row.get("feasible", False)
+        for row in rows
+        if not row.get("skipped")
+    )
+    return {
+        "kpis": {
+            "distanceKm": {"current": 0, "optimized": round(total_km, 1)},
+            "durationHours": {"current": 0, "optimized": round(total_hours, 2)},
+        },
+        "feasible": bool(all_feasible),
+    }
+
+
+def _simulation_route_rows(db: Session, simulation_id: int) -> list[dict[str, Any]]:
+    """Rutas optimizadas de una simulación **aún en sesión** (sin commit).
+
+    La validación corre el motor con ``auto_commit=False``: las rutas y sus waypoints
+    existen en la sesión hasta el ``rollback``. Este helper las lee para poder mostrar
+    la previsualización 'qué / quién / cuándo' antes de aprobar la semana.
+    """
+    routes = db.scalars(
+        select(OptimizedRoute)
+        .where(
+            OptimizedRoute.simulation_id == simulation_id,
+            OptimizedRoute.route_kind == "optimized",
+        )
+        .options(joinedload(OptimizedRoute.vehicle), joinedload(OptimizedRoute.driver))
+        .order_by(OptimizedRoute.id)
+    ).unique().all()
+    rows: list[dict[str, Any]] = []
+    for route in routes:
+        stops = int(
+            db.scalar(
+                select(func.count())
+                .select_from(RouteWaypoint)
+                .where(
+                    RouteWaypoint.route_id == route.id,
+                    RouteWaypoint.waypoint_type == "collection",
+                )
+            )
+            or 0
+        )
+        driver = route.driver
+        rows.append(
+            {
+                "vehicleCode": route.vehicle.code if route.vehicle else "—",
+                "driverName": (
+                    f"{driver.first_name} {driver.last_name}".strip() if driver else None
+                ),
+                "distanceKm": round(float(route.total_distance_meters or 0) / 1000, 1),
+                "durationMin": round((route.estimated_duration_seconds or 0) / 60),
+                "stops": stops,
+            }
+        )
+    return rows
+
+
+def validate_weekly_plan_days(
+    db: Session,
+    *,
+    plan_id: int,
+    on_progress: Callable[[str, int], None] | None = None,
+    persist_operational: bool = False,
+) -> dict[str, Any]:
+    """Valida la semana ejecutando el motor ACO **por día** (Tarea 9).
+
+    Con ``persist_operational=False`` (por defecto) es una **simulación**: cada día
+    corre su propia optimización, se lee el resultado en sesión y se descarta con un
+    ``rollback`` (no crea rutas ni planes de día).
+
+    Con ``persist_operational=True`` la validación **es** la generación del plan
+    operativo: persiste las rutas del día y el resumen camión × día, de modo que
+    «Ver plan» reutiliza ese resultado en vez de optimizar la semana una segunda vez.
+    Cae a la simulación cuando el plan no está en borrador/aprobado o cuando no se
+    puede generar el operativo (sin días laborables, días ya despachados).
+
+    Devuelve KPIs agregados de la semana (contrato del job). Con ``on_progress``
+    publica el avance día a día (10 % → 95 %); el 100 % final lo fija el worker.
+    """
+    if persist_operational:
+        plan_status = db.scalar(select(WeeklyPlan.status).where(WeeklyPlan.id == plan_id))
+        if plan_status in ("draft", "approved"):
+            return _validate_weekly_plan_days_persisted(
+                db, plan_id=plan_id, on_progress=on_progress
+            )
+    return _validate_weekly_plan_days_simulated(db, plan_id=plan_id, on_progress=on_progress)
+
+
+def _validate_weekly_plan_days_simulated(
+    db: Session,
+    *,
+    plan_id: int,
+    on_progress: Callable[[str, int], None] | None = None,
+) -> dict[str, Any]:
+    """Simulación no persistente: optimiza cada día y descarta las rutas con ``rollback``."""
+    from app.services.optimization_service import run_optimization_engine
+
+    plan = db.scalar(select(WeeklyPlan).where(WeeklyPlan.id == plan_id).options(joinedload(WeeklyPlan.days)))
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan semanal no encontrado")
+
+    days = sorted(plan.days, key=lambda row: row.operation_date)
+    total = max(len(days), 1)
+    rows: list[dict[str, Any]] = []
+    for index, day in enumerate(days, start=1):
+        if on_progress is not None:
+            on_progress(
+                f"Validando {day.operation_date.isoformat()} ({index}/{total})",
+                10 + int(85 * (index - 1) / total),
+            )
+        resolved_ids, _source, _case = resolve_weekly_day_point_ids(db, plan, day)
+        entry: dict[str, Any] = {"operationDate": day.operation_date.isoformat()}
+        if not resolved_ids:
+            entry["skipped"] = True
+            rows.append(entry)
+            continue
+        scenario_id = day.scenario_id_override or plan.scenario_id
+        try:
+            result = run_optimization_engine(
+                db,
+                scenario_id,
+                collection_point_ids=resolved_ids,
+                fleet_limit=day.expected_vehicle_count,
+                fleet_by_type=_weekly_fleet_by_type(plan),
+                sector_partition=False if _json_list(day.sector_ids_json) else None,
+                auto_commit=False,
+                auto_dispatch=False,
+                reporter=None,
+                planning_level="administrative",
+                weekly_plan_id=plan.id,
+                operation_date=day.operation_date,
+            )
+            kpis = result["kpis"]
+            # `coveragePct` es un KPI con forma {current, optimized} (igual que `distanceKm`),
+            # no un escalar: se toma el valor optimizado del día.
+            coverage_raw = kpis.get("coveragePct")
+            coverage_pct = (
+                coverage_raw.get("optimized") if isinstance(coverage_raw, dict) else coverage_raw
+            )
+            entry.update(
+                {
+                    "scenarioId": scenario_id,
+                    "distanceKm": round(kpis["distanceKm"]["optimized"], 1),
+                    "baselineDistanceKm": round(float((kpis.get("distanceKm") or {}).get("current") or 0), 1),
+                    "durationHours": kpis["durationHours"]["optimized"],
+                    "coveragePct": coverage_pct,
+                    "uncoveredPoints": kpis.get("uncoveredPoints"),
+                    "servedPoints": len(result.get("servedPointCodes") or []),
+                    "feasible": int(kpis.get("uncoveredPoints", 0) or 0) == 0,
+                    # Previsualización 'quién': camiones/conductores que asigna el motor
+                    # en esta corrida (rutas en sesión, se descartan con el rollback).
+                    "vehicles": _simulation_route_rows(db, int(result["simulationId"])),
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            entry["error"] = str(exc)
+        finally:
+            db.rollback()
+        rows.append(entry)
+        if on_progress is not None:
+            on_progress(
+                f"Validado {day.operation_date.isoformat()} ({index}/{total})",
+                10 + int(85 * index / total),
+            )
+
+    aggregate = _aggregate_weekly_day_results(rows)
+    preflight: dict[str, Any] = {"feasible": aggregate["feasible"], "rows": []}
+    if plan.preflight_json:
+        try:
+            preflight = json.loads(plan.preflight_json)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            preflight = {"feasible": aggregate["feasible"], "rows": []}
+    preflight["simulation"] = {"feasible": aggregate["feasible"], "rows": rows}
+    preflight["feasible"] = preflight["feasible"] and aggregate["feasible"]
+    plan.preflight_json = json.dumps(preflight, ensure_ascii=False)
+    db.commit()
+
+    return {
+        "kpis": aggregate["kpis"],
+        "perDay": rows,
+        "feasible": aggregate["feasible"],
+        "weeklyPlanId": plan.id,
+    }
+
+
+def _validation_row_from_operational_day(day: dict[str, Any]) -> dict[str, Any]:
+    """Traduce un día del resumen operativo a la fila de validación (previsualización)."""
+    operation_date = str(day.get("operationDate") or "?")
+    status = day.get("status")
+    if status == "skipped":
+        return {"operationDate": operation_date, "skipped": True}
+    if status == "error":
+        return {
+            "operationDate": operation_date,
+            "error": day.get("error") or "Error al optimizar el día",
+        }
+    uncovered = int(day.get("uncoveredPoints") or 0)
+    return {
+        "operationDate": operation_date,
+        "scenarioId": day.get("scenarioId"),
+        "distanceKm": day.get("distanceKm"),
+        "baselineDistanceKm": day.get("baselineDistanceKm", 0.0),
+        "durationHours": day.get("durationHours"),
+        "coveragePct": day.get("coveragePct"),
+        "uncoveredPoints": uncovered,
+        "servedPoints": day.get("servedPoints"),
+        "feasible": uncovered == 0,
+        "vehicles": day.get("vehicles") or [],
+    }
+
+
+def _validate_weekly_plan_days_persisted(
+    db: Session,
+    *,
+    plan_id: int,
+    on_progress: Callable[[str, int], None] | None = None,
+) -> dict[str, Any]:
+    """Valida reutilizando la generación del plan operativo (una sola pasada).
+
+    Delegar en :func:`generate_weekly_operational_plan` evita que la semana se
+    optimice dos veces (validar + «Ver plan»): el motor corre una vez, persiste las
+    rutas y el resumen camión × día, y las filas de validación se derivan de ese
+    resumen. Si «Ver plan» se pide después con la misma configuración, el backend
+    reutiliza el resumen persistido (ver ``_reuse_persisted_operational_summary``).
+
+    Solo el horizonte operativo (Lun–Vie) se optimiza; los días fuera de él se
+    reportan como ``skipped`` (el pre-flight los sigue cubriendo).
+    """
+    from app.services.weekly_operational_service import generate_weekly_operational_plan
+
+    plan = db.scalar(
+        select(WeeklyPlan).where(WeeklyPlan.id == plan_id).options(joinedload(WeeklyPlan.days))
+    )
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan semanal no encontrado")
+
+    # Fechas calculadas antes de delegar: el generador hace commit y expira los objetos ORM.
+    day_dates = [day.operation_date.isoformat() for day in plan.days]
+    day_dates.sort()
+
+    def _scaled(message: str, value: int) -> None:
+        if on_progress is not None:
+            on_progress(message, 10 + int(85 * max(0, min(100, int(value))) / 100))
+
+    try:
+        summary = generate_weekly_operational_plan(
+            db, plan_id, on_progress=_scaled if on_progress is not None else None
+        )
+    except HTTPException as exc:
+        # Sin días laborables o con días ya despachados no se puede persistir: se cae a la
+        # simulación clásica (no destructiva) en vez de fallar la validación.
+        if exc.status_code == status.HTTP_400_BAD_REQUEST:
+            db.rollback()
+            return _validate_weekly_plan_days_simulated(db, plan_id=plan_id, on_progress=on_progress)
+        raise
+
+    operational_by_date = {
+        str(row.get("operationDate")): row
+        for row in summary.get("days") or []
+        if isinstance(row, dict)
+    }
+    rows: list[dict[str, Any]] = []
+    for operation_date in day_dates:
+        operational = operational_by_date.get(operation_date)
+        if operational is None:
+            # Día fuera del horizonte operativo (p. ej. fin de semana).
+            rows.append({"operationDate": operation_date, "skipped": True})
+            continue
+        rows.append(_validation_row_from_operational_day(operational))
+
+    aggregate = _aggregate_weekly_day_results(rows)
+    preflight: dict[str, Any] = {"feasible": aggregate["feasible"], "rows": []}
+    if plan.preflight_json:
+        try:
+            preflight = json.loads(plan.preflight_json)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            preflight = {"feasible": aggregate["feasible"], "rows": []}
+    preflight["simulation"] = {"feasible": aggregate["feasible"], "rows": rows}
+    preflight["feasible"] = preflight["feasible"] and aggregate["feasible"]
+    plan.preflight_json = json.dumps(preflight, ensure_ascii=False)
+    db.commit()
+
+    return {
+        "kpis": aggregate["kpis"],
+        "perDay": rows,
+        "feasible": aggregate["feasible"],
+        "weeklyPlanId": plan.id,
+    }
+
+
+def get_weekly_day_plan(db: Session, plan_id: int, operation_date: date) -> dict[str, Any]:
+    """Plan de un día de la semana enriquecido con los puntos a recorrer (Tarea 10).
+
+    Devuelve el detalle que necesita el nivel 2 (día) de la vista de optimización:
+    fecha, escenario efectivo, flota esperada, pre-flight/validación del día y la
+    lista de puntos (código, sector, % de llenado proyectado, estado).
+    """
+    from app.domain.waste_generation import projected_fill_level_pct
+
+    plan = db.scalar(select(WeeklyPlan).where(WeeklyPlan.id == plan_id).options(joinedload(WeeklyPlan.days)))
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan semanal no encontrado")
+    day = next((row for row in plan.days if row.operation_date == operation_date), None)
+    if day is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El plan no tiene ese día")
+
+    resolved_ids, point_source, effective_case_id = resolve_weekly_day_point_ids(db, plan, day)
+    case_meta = _case_study_summary(db, effective_case_id)
+    points: list[dict[str, Any]] = []
+    if resolved_ids:
+        rows = db.scalars(
+            select(CollectionPoint)
+            .where(CollectionPoint.id.in_(resolved_ids))
+            .options(joinedload(CollectionPoint.sector))
+        ).all()
+        by_id = {point.id: point for point in rows}
+        for point_id in resolved_ids:
+            point = by_id.get(point_id)
+            if point is None:
+                continue
+            points.append(
+                {
+                    "id": point.id,
+                    "code": point.code,
+                    "sector": point.sector.name if point.sector else None,
+                    "fillLevelPct": projected_fill_level_pct(point),
+                    "active": point.status == "active",
+                }
+            )
+
+    preflight: dict[str, Any] | None = None
+    if plan.preflight_json:
+        try:
+            preflight = json.loads(plan.preflight_json)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            preflight = None
+    day_preflight = None
+    day_simulation = None
+    if preflight:
+        day_preflight = next(
+            (row for row in preflight.get("rows") or [] if row.get("operationDate") == operation_date.isoformat()),
+            None,
+        )
+        day_simulation = next(
+            (row for row in (preflight.get("simulation") or {}).get("rows") or []
+             if row.get("operationDate") == operation_date.isoformat()),
+            None,
+        )
+
+    return {
+        "weeklyPlanId": plan.id,
+        "operationDate": operation_date.isoformat(),
+        "weekday": day.weekday,
+        "pointSource": point_source,
+        "caseStudyId": effective_case_id,
+        "caseStudyCode": case_meta["code"] if case_meta else None,
+        "caseStudyName": case_meta["name"] if case_meta else None,
+        "scenarioId": day.scenario_id_override or plan.scenario_id,
+        "expectedVehicleCount": day.expected_vehicle_count,
+        "preflight": day_preflight,
+        "simulation": day_simulation,
+        "points": points,
+        "pointCount": len(points),
+    }
+
+
+def compute_pending_priority(
+    origin_operation_date: date,
+    point: CollectionPoint | None = None,
+    *,
+    reason: str = "not_visited",
+    overloaded: bool = False,
+) -> int:
+    days_old = max(0, (date.today() - origin_operation_date).days)
+    priority = 100 + days_old * 10
+    reason_weights = {
+        "skipped_breakdown": 40,
+        "not_visited": 20,
+        "critical_overflow": 35,
+        "manual_escalation": 25,
+    }
+    priority += reason_weights.get(reason, 0)
+    if overloaded:
+        priority += 25
+    if point is not None:
+        if bool(getattr(point, "priority_boost", False)):
+            priority += 50
+        max_cap = getattr(point, "max_capacity_kg", None)
+        current = getattr(point, "current_fill_level_kg", None)
+        if max_cap is not None and current is not None and float(max_cap) > 0:
+            from app.domain.waste_generation import projected_fill_level_pct
+
+            fill_level = projected_fill_level_pct(point)
+            if is_critical_now(fill_level):
+                priority += 30
+            elif fill_level >= HIGH_FILL_PCT:
+                priority += 15
+    return priority
+
+
+def _refresh_open_pending_priorities(db: Session) -> None:
+    visits = db.scalars(
+        select(PendingVisit)
+        .where(PendingVisit.status == "open")
+        .options(joinedload(PendingVisit.collection_point))
+    ).all()
+    point_ids = [visit.collection_point_id for visit in visits]
+    schedules = db.scalars(
+        select(VisitSchedule).where(VisitSchedule.collection_point_id.in_(point_ids))
+    ).all()
+    declared_by_point = {
+        schedule.collection_point_id: schedule.visits_per_week for schedule in schedules
+    }
+    for visit in visits:
+        point = visit.collection_point
+        required = required_visits_per_week(point) if point is not None else 0
+        overloaded = is_overloaded(required, declared_by_point.get(visit.collection_point_id))
+        visit.priority = compute_pending_priority(
+            visit.origin_operation_date,
+            point,
+            reason=visit.reason,
+            overloaded=overloaded,
+        )
+    db.flush()
+
+
+def get_weekly_plan_day(db: Session, operation_date: date) -> WeeklyPlanDay | None:
+    week_start, _ = week_range(operation_date)
+    plan = db.scalar(
+        select(WeeklyPlan)
+        .where(WeeklyPlan.week_start_date == week_start, WeeklyPlan.status == "approved")
+        .options(joinedload(WeeklyPlan.days))
+    )
+    if plan is None:
+        return None
+    return next((row for row in plan.days if row.operation_date == operation_date), None)
+
+
+def get_daily_plan_execution_context(db: Session, daily_plan_id: int) -> dict[str, Any]:
+    plan = db.get(DailyPlan, daily_plan_id)
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan del día no encontrado")
+    weekly_day = get_weekly_plan_day(db, plan.operation_date)
+    weekly_plan = None
+    if weekly_day is not None:
+        weekly_plan = db.get(WeeklyPlan, weekly_day.weekly_plan_id)
+    scenario_id = plan.scenario_id
+    fleet_limit: int | None = None
+    fleet_by_type: dict[str, int] | None = None
+    sector_partition: bool | None = None
+    case_study_id: int | None = None
+    if weekly_day is not None:
+        if weekly_day.scenario_id_override:
+            scenario_id = weekly_day.scenario_id_override
+        fleet_limit = weekly_day.expected_vehicle_count
+        if weekly_plan is not None:
+            case_study_id = effective_case_study_id(weekly_plan, weekly_day)
+            fleet_by_type = _weekly_fleet_by_type(weekly_plan)
+            if _json_list(weekly_day.sector_ids_json):
+                # Día armado por zonas (Plan semanal): el ACO reparte libre entre la flota.
+                sector_partition = False
+    return {
+        "scenarioId": scenario_id,
+        "fleetLimit": fleet_limit,
+        "fleetByType": fleet_by_type,
+        "sectorPartition": sector_partition,
+        "weeklyPlanDayId": weekly_day.id if weekly_day else None,
+        "caseStudyId": case_study_id,
+    }
+
+
+def resolve_scheduled_point_ids(db: Session, operation_date: date) -> list[int]:
+    week_start, _ = week_range(operation_date)
+    plan = db.scalar(
+        select(WeeklyPlan)
+        .where(WeeklyPlan.week_start_date == week_start, WeeklyPlan.status == "approved")
+        .options(joinedload(WeeklyPlan.days))
+    )
+    if plan is None:
+        return []
+
+    day = next((row for row in plan.days if row.operation_date == operation_date), None)
+    if day is None:
+        return []
+
+    resolved_ids, _, _ = resolve_weekly_day_point_ids(db, plan, day)
+    return resolved_ids
+
+
+def list_pending_visits(
+    db: Session,
+    *,
+    status: str | None = "open",
+    target_date: date | None = None,
+    origin_from: date | None = None,
+    origin_to: date | None = None,
+) -> list[dict[str, Any]]:
+    stmt = (
+        select(PendingVisit)
+        .options(joinedload(PendingVisit.collection_point).joinedload(CollectionPoint.sector))
+        .order_by(PendingVisit.priority.desc(), PendingVisit.id)
+    )
+    if status:
+        stmt = stmt.where(PendingVisit.status == status)
+    if target_date is not None:
+        stmt = stmt.where(
+            (PendingVisit.target_operation_date.is_(None)) | (PendingVisit.target_operation_date == target_date)
+        )
+    if origin_from is not None:
+        stmt = stmt.where(PendingVisit.origin_operation_date >= origin_from)
+    if origin_to is not None:
+        stmt = stmt.where(PendingVisit.origin_operation_date <= origin_to)
+    visits = db.scalars(stmt).all()
+    return [_serialize_pending(db, visit) for visit in visits]
+
+
+def list_open_pending_visits(db: Session, *, target_date: date | None = None) -> list[dict[str, Any]]:
+    return list_pending_visits(db, status="open", target_date=target_date)
+
+
+def get_daily_plan_by_date(db: Session, operation_date: date) -> dict[str, Any]:
+    plan = db.scalar(select(DailyPlan).where(DailyPlan.operation_date == operation_date))
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan del día no encontrado")
+    return _daily_plan_payload(db, plan)
+
+
+ACTIVE_DAILY_PLAN_STATUSES = ("draft", "optimized", "dispatched")
+
+
+def get_active_daily_plan(
+    db: Session,
+    *,
+    operation_date: date | None = None,
+) -> DailyPlan | None:
+    """Plan operativo del día: draft/optimized/dispatched o con rutas aún activas."""
+    target = operation_date or date.today()
+    plan = db.scalar(select(DailyPlan).where(DailyPlan.operation_date == target))
+    if plan is None:
+        return None
+    if plan.status in ACTIVE_DAILY_PLAN_STATUSES:
+        return plan
+
+    has_active_routes = db.scalar(
+        select(OptimizedRoute.id)
+        .where(
+            OptimizedRoute.daily_plan_id == plan.id,
+            OptimizedRoute.route_kind == "optimized",
+            OptimizedRoute.status.in_(("pending", "in_progress")),
+        )
+        .limit(1)
+    )
+    return plan if has_active_routes is not None else None
+
+
+def get_or_create_daily_plan(db: Session, operation_date: date) -> dict[str, Any]:
+    plan = db.scalar(select(DailyPlan).where(DailyPlan.operation_date == operation_date))
+    if plan is None:
+        week_start, _ = week_range(operation_date)
+        weekly_plan = db.scalar(
+            select(WeeklyPlan)
+            .where(WeeklyPlan.week_start_date == week_start, WeeklyPlan.status == "approved")
+            .options(joinedload(WeeklyPlan.days))
+        )
+        weekly_day = None
+        if weekly_plan is not None:
+            weekly_day = next((row for row in weekly_plan.days if row.operation_date == operation_date), None)
+
+        scheduled_ids = resolve_scheduled_point_ids(db, operation_date)
+        scenario_id = weekly_plan.scenario_id if weekly_plan else "normal"
+        if weekly_day is not None and weekly_day.scenario_id_override:
+            scenario_id = weekly_day.scenario_id_override
+        plan = DailyPlan(
+            operation_date=operation_date,
+            weekly_plan_id=weekly_plan.id if weekly_plan else None,
+            weekly_plan_day_id=weekly_day.id if weekly_day else None,
+            status="draft",
+            scenario_id=scenario_id,
+            scheduled_point_ids_json=_dump_json_list(scheduled_ids),
+        )
+        db.add(plan)
+        db.flush()
+
+    return _daily_plan_payload(db, plan)
+
+
+def consolidate_daily_points(db: Session, daily_plan_id: int) -> list[int]:
+    plan = db.get(DailyPlan, daily_plan_id)
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan del día no encontrado")
+
+    _refresh_open_pending_priorities(db)
+    exec_ctx = get_daily_plan_execution_context(db, daily_plan_id)
+    plan.scenario_id = exec_ctx["scenarioId"]
+
+    scheduled_ids = resolve_scheduled_point_ids(db, plan.operation_date)
+    if not scheduled_ids:
+        scheduled_ids = _json_list(plan.scheduled_point_ids_json)
+
+    pending_visits = db.scalars(
+        select(PendingVisit)
+        .where(
+            PendingVisit.status == "open",
+            (PendingVisit.target_operation_date.is_(None))
+            | (PendingVisit.target_operation_date == plan.operation_date),
+        )
+        .order_by(PendingVisit.priority.desc(), PendingVisit.id)
+    ).all()
+    pending_ids = [visit.collection_point_id for visit in pending_visits]
+
+    final_ids = sorted(set(scheduled_ids) | set(pending_ids))
+    if not final_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Día sin puntos programados ni pendientes para optimizar",
+        )
+
+    plan.scheduled_point_ids_json = _dump_json_list(scheduled_ids)
+    plan.pending_point_ids_json = _dump_json_list(pending_ids)
+    plan.final_point_ids_json = _dump_json_list(final_ids)
+    db.flush()
+    return final_ids
+
+
+def open_daily_plan(db: Session, operation_date: date) -> dict[str, Any]:
+    payload = get_or_create_daily_plan(db, operation_date)
+    consolidate_daily_points(db, payload["id"])
+    db.flush()
+    return get_daily_plan_by_date(db, operation_date)
+
+
+def update_daily_plan_points(db: Session, daily_plan_id: int, final_point_ids: list[int]) -> dict[str, Any]:
+    plan = db.get(DailyPlan, daily_plan_id)
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan del día no encontrado")
+    if not final_point_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Debe incluir al menos un punto")
+    plan.final_point_ids_json = _dump_json_list(final_point_ids)
+    db.flush()
+    return _daily_plan_payload(db, plan)
+
+
+def mark_daily_plan_optimized(db: Session, daily_plan_id: int, simulation_id: int) -> None:
+    plan = db.get(DailyPlan, daily_plan_id)
+    if plan is None:
+        return
+    plan.simulation_id = simulation_id
+    plan.status = "optimized"
+    db.flush()
+
+
+def mark_daily_plan_dispatched(db: Session, daily_plan_id: int) -> None:
+    plan = db.get(DailyPlan, daily_plan_id)
+    if plan is None:
+        return
+    plan.status = "dispatched"
+    plan.dispatched_at = datetime.now(timezone.utc)
+    db.flush()
+
+
+def incorporate_pending_visit(db: Session, pending_id: int, target_date: date) -> dict[str, Any]:
+    visit = db.get(PendingVisit, pending_id)
+    if visit is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pendiente no encontrado")
+    if visit.status != "open":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El pendiente ya fue procesado")
+    visit.target_operation_date = target_date
+    visit.status = "incorporated"
+    db.flush()
+    return _serialize_pending(db, visit)
+
+
+def defer_uncovered_points_from_daily_plan(
+    db: Session,
+    daily_plan_id: int,
+    *,
+    target_operation_date: date | None = None,
+) -> dict[str, Any]:
+    """Crea pendientes abiertos para contenedores no cubiertos en la última optimización del día."""
+    plan = db.get(DailyPlan, daily_plan_id)
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan del día no encontrado")
+    if plan.simulation_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No hay optimización asociada al plan del día",
+        )
+
+    simulation = db.get(Simulation, plan.simulation_id)
+    if simulation is None or not simulation.parameters_json:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se encontraron KPIs de la optimización",
+        )
+
+    params = json.loads(simulation.parameters_json)
+    kpis = params.get("kpis") or {}
+    codes: list[str] = list(kpis.get("uncoveredPointCodes") or [])
+    if not codes:
+        return {
+            "created": 0,
+            "targetOperationDate": None,
+            "codes": [],
+            "message": "No hay puntos no cubiertos en la última optimización",
+        }
+
+    target_date = target_operation_date or (plan.operation_date + timedelta(days=1))
+    points = db.scalars(
+        select(CollectionPoint).where(
+            CollectionPoint.code.in_(codes),
+            CollectionPoint.deleted_at.is_(None),
+        )
+    ).all()
+    point_by_code = {point.code: point for point in points}
+
+    created = 0
+    missing_codes: list[str] = []
+    for code in codes:
+        point = point_by_code.get(code)
+        if point is None:
+            missing_codes.append(code)
+            continue
+        create_pending_visit(
+            db,
+            collection_point_id=point.id,
+            origin_operation_date=plan.operation_date,
+            target_operation_date=target_date,
+            reason="uncovered_optimization",
+        )
+        created += 1
+
+    db.flush()
+    return {
+        "created": created,
+        "targetOperationDate": target_date.isoformat(),
+        "codes": codes,
+        "missingCodes": missing_codes,
+        "message": f"{created} pendiente(s) creado(s) para {target_date.isoformat()}",
+    }
+
+
+def create_pending_visit(
+    db: Session,
+    *,
+    collection_point_id: int,
+    origin_operation_date: date,
+    reason: str,
+    source_waypoint_id: int | None = None,
+    source_incident_id: int | None = None,
+    target_operation_date: date | None = None,
+) -> PendingVisit:
+    existing = db.scalar(
+        select(PendingVisit).where(
+            PendingVisit.collection_point_id == collection_point_id,
+            PendingVisit.origin_operation_date == origin_operation_date,
+            PendingVisit.status == "open",
+        )
+    )
+    if existing is not None:
+        return existing
+
+    point = db.get(CollectionPoint, collection_point_id)
+    schedule = db.scalar(
+        select(VisitSchedule).where(VisitSchedule.collection_point_id == collection_point_id)
+    )
+    declared = schedule.visits_per_week if schedule is not None else None
+    overloaded = point is not None and is_overloaded(required_visits_per_week(point), declared)
+    visit = PendingVisit(
+        collection_point_id=collection_point_id,
+        origin_operation_date=origin_operation_date,
+        target_operation_date=target_operation_date,
+        reason=reason,
+        source_waypoint_id=source_waypoint_id,
+        source_incident_id=source_incident_id,
+        status="open",
+        priority=compute_pending_priority(origin_operation_date, point, overloaded=overloaded),
+    )
+    db.add(visit)
+    db.flush()
+    return visit
+
+
+def simulate_day_execution(db: Session, daily_plan_id: int) -> dict[str, Any]:
+    """Registra una **ejecución simulada** del día y consolida el previsto vs. real.
+
+    Marca las paradas de las rutas vigentes como visitadas (``completed``) usando su llegada
+    estimada como real, deja trazabilidad (``confirmation_source='simulated'``) y escribe
+    ``actual_kpis_json``, de modo que el ciclo previsto → real se pueda mostrar sin capturar
+    campo. **No cierra el día**: el cierre real sigue siendo de planificación.
+    """
+    from app.services.operations_service import route_actual_distance_km
+
+    plan = db.get(DailyPlan, daily_plan_id)
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan del día no encontrado")
+    if plan.status in {"completed", "partial"} and plan.closed_at is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El plan del día ya fue cerrado")
+
+    route_filter = [
+        OptimizedRoute.daily_plan_id == daily_plan_id,
+        OptimizedRoute.route_kind == "optimized",
+        OptimizedRoute.status != "superseded",
+    ]
+    if plan.simulation_id is not None:
+        route_filter.append(OptimizedRoute.simulation_id == plan.simulation_id)
+    routes = db.scalars(
+        select(OptimizedRoute)
+        .where(*route_filter)
+        .options(
+            joinedload(OptimizedRoute.waypoints).joinedload(RouteWaypoint.collection_point),
+        )
+        .order_by(OptimizedRoute.id)
+    ).unique().all()
+
+    day_start = datetime(plan.operation_date.year, plan.operation_date.month, plan.operation_date.day, 6, 0, tzinfo=timezone.utc)
+    executed = 0
+    for route in routes:
+        cursor: datetime | None = None
+        for waypoint in sorted(route.waypoints, key=lambda row: row.sequence_order):
+            if waypoint.status in {"completed", "collected", "skipped"}:
+                cursor = waypoint.actual_arrival_at or cursor
+                continue
+            if waypoint.estimated_arrival_at is not None:
+                arrival = waypoint.estimated_arrival_at
+            elif cursor is not None:
+                arrival = cursor + timedelta(minutes=5)
+            else:
+                arrival = day_start
+            waypoint.status = "completed"
+            waypoint.actual_arrival_at = arrival
+            waypoint.confirmation_source = "simulated"
+            cursor = arrival
+            executed += 1
+    db.flush()
+
+    scheduled_ids = _json_list(plan.final_point_ids_json) or _json_list(plan.scheduled_point_ids_json)
+    actual_km_values = [
+        km for route in routes if (km := route_actual_distance_km(route)) is not None
+    ]
+    plan.actual_kpis_json = dump_kpi_json(
+        plan_vs_real_from_routes(
+            routes,
+            scheduled_points=len(scheduled_ids),
+            actual_distance_km=sum(actual_km_values) if actual_km_values else None,
+            pending_visits={},
+            close_status=plan.status,
+        )
+    )
+    db.flush()
+    return {
+        "dailyPlanId": plan.id,
+        "executedWaypoints": executed,
+        "actualKpis": parse_kpi_json(plan.actual_kpis_json),
+    }
+
+
+def close_daily_plan(db: Session, daily_plan_id: int, *, user_id: int | None = None) -> dict[str, Any]:
+    plan = db.get(DailyPlan, daily_plan_id)
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan del día no encontrado")
+    if plan.status in {"completed", "partial"} and plan.closed_at is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El plan del día ya fue cerrado")
+
+    routes = db.scalars(
+        select(OptimizedRoute)
+        .where(OptimizedRoute.daily_plan_id == daily_plan_id)
+        .options(joinedload(OptimizedRoute.waypoints).joinedload(RouteWaypoint.collection_point))
+    ).unique().all()
+
+    new_pending = 0
+    pending_reasons: dict[str, int] = {}
+    for route in routes:
+        for waypoint in route.waypoints:
+            if waypoint.status not in {"pending", "skipped"}:
+                continue
+            # Solo las paradas de contenedor generan pendientes: los waypoints de
+            # vertedero/base no tienen `collection_point_id` (NULL) y no son visitas a
+            # recuperar (`pending_visits.collection_point_id` es NOT NULL).
+            if waypoint.collection_point_id is None or waypoint.waypoint_type == "landfill":
+                continue
+            reason = "skipped_breakdown" if waypoint.status == "skipped" else "not_visited"
+            create_pending_visit(
+                db,
+                collection_point_id=waypoint.collection_point_id,
+                origin_operation_date=plan.operation_date,
+                reason=reason,
+                source_waypoint_id=waypoint.id,
+            )
+            pending_reasons[reason] = pending_reasons.get(reason, 0) + 1
+            new_pending += 1
+
+    plan.closed_at = datetime.now(timezone.utc)
+    plan.status = "partial" if new_pending else "completed"
+
+    # Resultado real (Fase 4): consolida previsto vs. ejecutado desde los waypoints.
+    from app.services.operations_service import route_actual_distance_km
+
+    scheduled_ids = _json_list(plan.final_point_ids_json) or _json_list(
+        plan.scheduled_point_ids_json
+    )
+    actual_km_values = [
+        km for route in routes if (km := route_actual_distance_km(route)) is not None
+    ]
+    incident_rows = db.scalars(
+        select(VehicleIncident)
+        .join(OptimizedRoute, VehicleIncident.route_id == OptimizedRoute.id)
+        .where(OptimizedRoute.daily_plan_id == daily_plan_id)
+    ).all()
+    plan.actual_kpis_json = dump_kpi_json(
+        plan_vs_real_from_routes(
+            routes,
+            scheduled_points=len(scheduled_ids),
+            actual_distance_km=sum(actual_km_values) if actual_km_values else None,
+            incidents=incident_rows,
+            pending_visits=pending_reasons,
+            close_status=plan.status,
+        )
+    )
+
+    _record_version(
+        db,
+        entity_type="daily_plan",
+        entity_id=plan.id,
+        snapshot=_daily_plan_payload(db, plan),
+        summary=f"Cierre del día — {new_pending} pendiente(s) generado(s)",
+        user_id=user_id,
+    )
+    db.flush()
+    return {
+        "closedAt": plan.closed_at.isoformat(),
+        "newPendingVisits": new_pending,
+        "status": plan.status,
+    }
+
+
+def seed_visit_schedules(db: Session, rows: list[dict[str, Any]]) -> None:
+    for row in rows:
+        point = db.scalar(
+            select(CollectionPoint)
+            .where(CollectionPoint.code == row["pointCode"])
+            .options(joinedload(CollectionPoint.sector))
+        )
+        if point is None:
+            continue
+        existing = db.scalar(select(VisitSchedule).where(VisitSchedule.collection_point_id == point.id))
+        if existing is not None:
+            continue
+        # Frecuencia declarada derivada de la física (híbrida); ver Fase 5.
+        visits, weekdays = planned_visits_and_weekdays(point)
+        db.add(
+            VisitSchedule(
+                collection_point_id=point.id,
+                visits_per_week=visits,
+                weekdays_json=json.dumps(weekdays),
+                is_extra_visit=bool(row.get("isExtraVisit", False)),
+                effective_from=date.fromisoformat(row["effectiveFrom"]),
+                effective_until=date.fromisoformat(row["effectiveUntil"]) if row.get("effectiveUntil") else None,
+            )
+        )
+    db.flush()
+
+
+def seed_weekly_plan_demo(db: Session, payload: dict[str, Any]) -> None:
+    week_start = date.fromisoformat(payload["weekStartDate"])
+    week_start, week_end = week_range(week_start)
+    existing = db.scalar(select(WeeklyPlan).where(WeeklyPlan.week_start_date == week_start))
+    if existing is not None:
+        return
+
+    plan = WeeklyPlan(
+        week_start_date=week_start,
+        week_end_date=week_end,
+        status=payload.get("status", "approved"),
+        scenario_id=payload.get("scenarioId", "normal"),
+        notes=payload.get("notes"),
+        approved_at=datetime.now(timezone.utc) if payload.get("status") == "approved" else None,
+    )
+    db.add(plan)
+    db.flush()
+
+    for day in payload.get("days", []):
+        db.add(
+            WeeklyPlanDay(
+                weekly_plan_id=plan.id,
+                operation_date=date.fromisoformat(day["operationDate"]),
+                weekday=date.fromisoformat(day["operationDate"]).weekday(),
+                sector_ids_json=_dump_json_list(day.get("sectorIds", [])),
+                collection_point_ids_json=_dump_json_list(day.get("collectionPointIds", [])),
+                expected_vehicle_count=day.get("expectedVehicleCount"),
+            )
+        )
+
+    db.flush()
+
+
+def seed_pending_visits_demo(db: Session, rows: list[dict[str, Any]]) -> None:
+    yesterday = date.today() - timedelta(days=1)
+    for row in rows:
+        point = db.scalar(select(CollectionPoint).where(CollectionPoint.code == row["pointCode"]))
+        if point is None:
+            continue
+        origin = date.fromisoformat(row.get("originOperationDate", yesterday.isoformat()))
+        create_pending_visit(
+            db,
+            collection_point_id=point.id,
+            origin_operation_date=origin,
+            reason=row.get("reason", "not_visited"),
+        )
+
+
+def seed_daily_plan_demo(db: Session, payload: dict[str, Any]) -> None:
+    operation_date = date.fromisoformat(payload["operationDate"])
+    existing = db.scalar(select(DailyPlan).where(DailyPlan.operation_date == operation_date))
+    if existing is not None:
+        return
+
+    week_start, _ = week_range(operation_date)
+    weekly_plan = db.scalar(select(WeeklyPlan).where(WeeklyPlan.week_start_date == week_start))
+    scheduled_ids = resolve_scheduled_point_ids(db, operation_date)
+    if not scheduled_ids:
+        scheduled_ids = [int(value) for value in payload.get("scheduledPointIds", [])]
+
+    db.add(
+        DailyPlan(
+            operation_date=operation_date,
+            weekly_plan_id=weekly_plan.id if weekly_plan else None,
+            status=payload.get("status", "draft"),
+            scenario_id=payload.get("scenarioId", weekly_plan.scenario_id if weekly_plan else "normal"),
+            scheduled_point_ids_json=_dump_json_list(scheduled_ids),
+        )
+    )
+    db.flush()
+
+
+def seed_optimized_daily_playback_demo(
+    db: Session,
+    *,
+    operation_date: date,
+    simulation_id: int,
+    vehicles: list[Any],
+    drivers: list[Any],
+    collection_points: list[CollectionPoint],
+) -> int | None:
+    """Plan del día pre-optimizado con rutas enlazadas para playback rápido en demo."""
+    plan = db.scalar(select(DailyPlan).where(DailyPlan.operation_date == operation_date))
+    week_start, _ = week_range(operation_date)
+    weekly_plan = db.scalar(select(WeeklyPlan).where(WeeklyPlan.week_start_date == week_start))
+
+    scheduled_ids = resolve_scheduled_point_ids(db, operation_date)
+    if not scheduled_ids:
+        scheduled_ids = [point.id for point in collection_points[:12]]
+
+    if plan is None:
+        plan = DailyPlan(
+            operation_date=operation_date,
+            weekly_plan_id=weekly_plan.id if weekly_plan else None,
+            status="optimized",
+            scenario_id=weekly_plan.scenario_id if weekly_plan else "normal",
+            simulation_id=simulation_id,
+            scheduled_point_ids_json=_dump_json_list(scheduled_ids),
+            final_point_ids_json=_dump_json_list(scheduled_ids),
+        )
+        db.add(plan)
+        db.flush()
+    else:
+        plan.status = "optimized"
+        plan.simulation_id = simulation_id
+        if weekly_plan:
+            plan.scenario_id = weekly_plan.scenario_id
+            plan.weekly_plan_id = weekly_plan.id
+        if not _json_list(plan.final_point_ids_json):
+            plan.final_point_ids_json = _dump_json_list(scheduled_ids)
+        db.flush()
+
+    linked_routes = db.scalar(
+        select(func.count())
+        .select_from(OptimizedRoute)
+        .where(
+            OptimizedRoute.daily_plan_id == plan.id,
+            OptimizedRoute.route_kind == "optimized",
+        )
+    )
+    if linked_routes and int(linked_routes) > 0:
+        return plan.id
+
+    available_vehicles = [
+        vehicle for vehicle in vehicles if getattr(vehicle, "status", "available") != "maintenance"
+    ][:2]
+    if not available_vehicles:
+        available_vehicles = vehicles[:2]
+    default_driver_id = drivers[0].id if drivers else None
+    points_pool = collection_points[:12] if len(collection_points) >= 4 else collection_points
+
+    for route_index, vehicle in enumerate(available_vehicles):
+        driver_id = vehicle.default_driver_id or default_driver_id
+        if driver_id is None:
+            continue
+        slice_start = route_index * 4
+        route_points = points_pool[slice_start : slice_start + 4]
+        if len(route_points) < 2:
+            route_points = points_pool[: min(4, len(points_pool))]
+        if len(route_points) < 2:
+            continue
+
+        route = OptimizedRoute(
+            vehicle_id=vehicle.id,
+            driver_id=driver_id,
+            daily_plan_id=plan.id,
+            simulation_id=simulation_id,
+            route_kind="optimized",
+            total_distance_meters=Decimal("14500"),
+            estimated_duration_seconds=260 * 60,
+            status="pending",
+        )
+        db.add(route)
+        db.flush()
+
+        # Reloj operativo (Fase 13.5): 06:15 en la zona horaria configurada, no UTC.
+        base_time = operational_departure_at(operation_date, extra_minutes=15)
+        for sequence, point in enumerate(route_points, start=1):
+            arrival = base_time + timedelta(minutes=18 * sequence)
+            db.add(
+                RouteWaypoint(
+                    route_id=route.id,
+                    collection_point_id=point.id,
+                    sequence_order=sequence,
+                    status="pending",
+                    estimated_arrival_at=arrival,
+                )
+            )
+
+    db.flush()
+    seeded_routes = db.scalars(
+        select(OptimizedRoute).where(OptimizedRoute.daily_plan_id == plan.id)
+    ).all()
+    plan.planned_kpis_json = dump_kpi_json(
+        forecast_from_routes(seeded_routes, scheduled_points=len(scheduled_ids))
+    )
+    db.flush()
+
+    return plan.id
+
+
+def autofill_weekly_plan_from_schedules(db: Session, plan_id: int) -> dict[str, Any]:
+    from app.services.visit_schedule_service import list_active_visit_schedules
+
+    plan = db.scalar(select(WeeklyPlan).where(WeeklyPlan.id == plan_id).options(joinedload(WeeklyPlan.days)))
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan semanal no encontrado")
+    if plan.status == "approved":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No se puede autocompletar un plan aprobado")
+
+    if plan.case_study_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El plan está vinculado a un caso de estudio; use autocompletar desde caso",
+        )
+
+    schedules = list_active_visit_schedules(db, reference=plan.week_start_date)
+    if not schedules:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No hay frecuencias de visita configuradas")
+
+    points_by_weekday: dict[int, list[int]] = {offset: [] for offset in range(7)}
+    for row in schedules:
+        point_id = row["collectionPointId"]
+        for weekday in row["weekdays"]:
+            if weekday in points_by_weekday and point_id not in points_by_weekday[weekday]:
+                points_by_weekday[weekday].append(point_id)
+
+    for day in list(plan.days):
+        db.delete(day)
+    db.flush()
+
+    for offset in range(7):
+        operation_date = plan.week_start_date + timedelta(days=offset)
+        point_ids = sorted(points_by_weekday.get(offset, []))
+        if not point_ids:
+            continue
+        fleet_estimate = _estimate_fleet_for_points(db, plan, point_ids)
+        db.add(
+            WeeklyPlanDay(
+                weekly_plan_id=plan.id,
+                operation_date=operation_date,
+                weekday=offset,
+                collection_point_ids_json=_dump_json_list(point_ids),
+                case_study_id=None,
+                expected_vehicle_count=fleet_estimate,
+            )
+        )
+
+    db.flush()
+    db.refresh(plan)
+    for day in plan.days:
+        _sync_day_point_snapshot(db, plan, day)
+    db.flush()
+    snapshot = _weekly_plan_payload(db, plan)
+    _record_version(db, entity_type="weekly_plan", entity_id=plan.id, snapshot=snapshot, summary="Autocompletado desde visit_schedules")
+    return get_weekly_plan(db, plan.id)
+
+
+def autofill_weekly_plan_from_case_study(
+    db: Session,
+    plan_id: int,
+    *,
+    case_study_id: int | None = None,
+) -> dict[str, Any]:
+    plan = db.scalar(select(WeeklyPlan).where(WeeklyPlan.id == plan_id).options(joinedload(WeeklyPlan.days)))
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan semanal no encontrado")
+    if plan.status == "approved":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No se puede autocompletar un plan aprobado")
+
+    resolved_case_id = case_study_id if case_study_id is not None else plan.case_study_id
+    if resolved_case_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El plan no tiene caso de estudio vinculado",
+        )
+    _ensure_case_study_linkable(db, resolved_case_id)
+    point_ids = resolve_case_study_active_point_ids(db, resolved_case_id)
+    if not point_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El caso de estudio no tiene puntos activos",
+        )
+
+    plan.case_study_id = resolved_case_id
+    for day in list(plan.days):
+        db.delete(day)
+    db.flush()
+
+    fleet_estimate = _estimate_fleet_for_points(db, plan, point_ids)
+    for offset in range(5):
+        operation_date = plan.week_start_date + timedelta(days=offset)
+        db.add(
+            WeeklyPlanDay(
+                weekly_plan_id=plan.id,
+                operation_date=operation_date,
+                weekday=offset,
+                collection_point_ids_json=_dump_json_list(point_ids),
+                case_study_id=None,
+                expected_vehicle_count=fleet_estimate,
+            )
+        )
+
+    db.flush()
+    db.refresh(plan)
+    for day in plan.days:
+        _sync_day_point_snapshot(db, plan, day)
+    db.flush()
+    snapshot = _weekly_plan_payload(db, plan)
+    _record_version(
+        db,
+        entity_type="weekly_plan",
+        entity_id=plan.id,
+        snapshot=snapshot,
+        summary="Autocompletado desde caso de estudio",
+    )
+    return get_weekly_plan(db, plan.id)
+
+
+def list_plan_versions(db: Session, *, entity_type: str, entity_id: int) -> list[dict[str, Any]]:
+    versions = db.scalars(
+        select(PlanVersion)
+        .where(PlanVersion.entity_type == entity_type, PlanVersion.entity_id == entity_id)
+        .order_by(PlanVersion.version_number.desc())
+    ).all()
+    return [
+        {
+            "id": version.id,
+            "entityType": version.entity_type,
+            "entityId": version.entity_id,
+            "versionNumber": version.version_number,
+            "changeSummary": version.change_summary,
+            "createdAt": version.created_at.isoformat() if version.created_at else None,
+            "snapshot": json.loads(version.snapshot_json),
+        }
+        for version in versions
+    ]
+
+
+def _diff_values(before: Any, after: Any, path: str = "") -> list[dict[str, Any]]:
+    changes: list[dict[str, Any]] = []
+    if isinstance(before, dict) and isinstance(after, dict):
+        keys = sorted(set(before.keys()) | set(after.keys()))
+        for key in keys:
+            child_path = f"{path}.{key}" if path else key
+            if key not in before:
+                changes.append({"path": child_path, "before": None, "after": after[key]})
+            elif key not in after:
+                changes.append({"path": child_path, "before": before[key], "after": None})
+            else:
+                changes.extend(_diff_values(before[key], after[key], child_path))
+        return changes
+    if isinstance(before, list) and isinstance(after, list):
+        if before != after:
+            changes.append({"path": path or "root", "before": before, "after": after})
+        return changes
+    if before != after:
+        changes.append({"path": path or "root", "before": before, "after": after})
+    return changes
+
+
+def compare_plan_versions(db: Session, version_a_id: int, version_b_id: int) -> dict[str, Any]:
+    version_a = db.get(PlanVersion, version_a_id)
+    version_b = db.get(PlanVersion, version_b_id)
+    if version_a is None or version_b is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Versión no encontrada")
+    snapshot_a = json.loads(version_a.snapshot_json)
+    snapshot_b = json.loads(version_b.snapshot_json)
+    return {
+        "versionA": version_a_id,
+        "versionB": version_b_id,
+        "changes": _diff_values(snapshot_a, snapshot_b),
+    }
+
+
+def cancel_pending_visit(db: Session, pending_id: int, *, reason: str | None = None) -> dict[str, Any]:
+    visit = db.get(PendingVisit, pending_id)
+    if visit is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pendiente no encontrado")
+    if visit.status not in {"open", "incorporated"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El pendiente ya fue cerrado")
+    visit.status = "cancelled"
+    visit.resolved_at = datetime.now(timezone.utc)
+    db.flush()
+    payload = _serialize_pending(db, visit)
+    if reason:
+        payload["cancelReason"] = reason
+    return payload
+
+
+def bulk_cancel_pending_visits(
+    db: Session,
+    *,
+    pending_ids: list[int] | None = None,
+    older_than_days: int | None = None,
+    target_date: date | None = None,
+) -> dict[str, Any]:
+    """Cancela pendientes en lote (misma regla que ``cancel_pending_visit``).
+
+    Sin filtros no hace nada (evita borrados masivos accidentales). Filtros opcionales:
+    ``pending_ids`` (ids concretos), ``older_than_days`` (sin fecha objetivo y origen más
+    antiguo que N días), ``target_date`` (fecha objetivo concreta). Se combinan con AND.
+    """
+    if not pending_ids and older_than_days is None and target_date is None:
+        return {"cancelled": 0, "ids": []}
+
+    stmt = select(PendingVisit).where(PendingVisit.status.in_(["open", "incorporated"]))
+    if pending_ids:
+        stmt = stmt.where(PendingVisit.id.in_(pending_ids))
+    if older_than_days is not None and older_than_days > 0:
+        cutoff = date.today() - timedelta(days=older_than_days)
+        stmt = stmt.where(PendingVisit.origin_operation_date < cutoff)
+        if target_date is None:
+            stmt = stmt.where(PendingVisit.target_operation_date.is_(None))
+    if target_date is not None:
+        stmt = stmt.where(PendingVisit.target_operation_date == target_date)
+
+    visits = db.scalars(stmt).all()
+    now = datetime.now(timezone.utc)
+    cancelled_ids: list[int] = []
+    for visit in visits:
+        visit.status = "cancelled"
+        visit.resolved_at = now
+        cancelled_ids.append(visit.id)
+    db.flush()
+    return {"cancelled": len(cancelled_ids), "ids": cancelled_ids}
+
+
+def resolve_pending_visit(db: Session, pending_id: int) -> dict[str, Any]:
+    """Marca un pendiente abierto como ya visitado (no volverá a la optimización)."""
+    visit = db.get(PendingVisit, pending_id)
+    if visit is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pendiente no encontrado")
+    if visit.status not in {"open", "incorporated"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El pendiente ya fue cerrado")
+    visit.status = "resolved"
+    visit.resolved_at = datetime.now(timezone.utc)
+    db.flush()
+    return _serialize_pending(db, visit)
+
+
+def resolve_pending_visits_for_points(db: Session, point_ids: list[int], *, operation_date: date) -> int:
+    if not point_ids:
+        return 0
+    visits = db.scalars(
+        select(PendingVisit).where(
+            PendingVisit.collection_point_id.in_(point_ids),
+            PendingVisit.status.in_(["open", "incorporated"]),
+        )
+    ).all()
+    resolved = 0
+    now = datetime.now(timezone.utc)
+    for visit in visits:
+        visit.status = "resolved"
+        visit.resolved_at = now
+        if visit.target_operation_date is None:
+            visit.target_operation_date = operation_date
+        resolved += 1
+    db.flush()
+    return resolved
+
+
+def list_operational_history(db: Session, *, limit: int = 25) -> list[dict[str, Any]]:
+    from app.services.simulation_parsing import parse_simulation
+
+    plans = db.scalars(
+        select(DailyPlan)
+        .where(DailyPlan.simulation_id.isnot(None))
+        .order_by(DailyPlan.operation_date.desc(), DailyPlan.id.desc())
+        .limit(limit)
+    ).all()
+    rows: list[dict[str, Any]] = []
+    for plan in plans:
+        if plan.simulation_id is None:
+            continue
+        simulation = db.get(Simulation, plan.simulation_id)
+        if simulation is None:
+            continue
+        parsed = parse_simulation(simulation)
+        final_ids = _json_list(plan.final_point_ids_json)
+        scheduled_ids = _json_list(plan.scheduled_point_ids_json)
+        point_count = len(final_ids) or len(scheduled_ids)
+        rows.append(
+            {
+                "id": simulation.id,
+                "dailyPlanId": plan.id,
+                "operationDate": plan.operation_date.isoformat(),
+                "status": plan.status,
+                "pointCount": point_count,
+                "distanceKm": float(parsed.get("distanceOptimizedKm") or 0),
+                "name": f"Operación {plan.operation_date.isoformat()} — {parsed.get('scenarioName', 'Ruta')}",
+                "datetime": simulation.executed_at.isoformat() if simulation.executed_at else None,
+                "efficiency": float(simulation.kpi_saving_percentage or 0),
+                "scenarioId": parsed.get("scenarioId", "normal"),
+                "scenarioName": parsed.get("scenarioName"),
+                "contingency": parsed.get("contingency", False),
+            }
+        )
+    return rows
+
+
+def archive_weekly_plan(db: Session, plan_id: int, *, user_id: int | None = None) -> dict[str, Any]:
+    plan = db.scalar(select(WeeklyPlan).where(WeeklyPlan.id == plan_id).options(joinedload(WeeklyPlan.days)))
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan semanal no encontrado")
+    if plan.status == "archived":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El plan ya está archivado")
+    if plan.status != "approved":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Solo se pueden archivar planes aprobados",
+        )
+    plan.status = "archived"
+    _record_version(
+        db,
+        entity_type="weekly_plan",
+        entity_id=plan.id,
+        snapshot=_weekly_plan_payload(db, plan),
+        summary="Plan semanal archivado",
+        user_id=user_id,
+    )
+    db.flush()
+    return get_weekly_plan(db, plan.id)
+
+
+def delete_weekly_plan(db: Session, plan_id: int) -> dict[str, Any]:
+    """Elimina un borrador de plan semanal (con sus días) y sus referencias.
+
+    Solo se permiten borradores: las semanas aprobadas quedan en el historial y los
+    planes diarios ya despachados dependen de ellas, por lo que se archivan en su lugar.
+    """
+    plan = db.scalar(select(WeeklyPlan).where(WeeklyPlan.id == plan_id).options(joinedload(WeeklyPlan.days)))
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan semanal no encontrado")
+    if plan.status != "draft":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Solo se pueden eliminar borradores. Usa «Archivar» para semanas aprobadas.",
+        )
+    day_ids = [day.id for day in plan.days]
+    # Los planes diarios no deben quedar apuntando a filas eliminadas.
+    if day_ids:
+        db.execute(
+            update(DailyPlan)
+            .where(DailyPlan.weekly_plan_day_id.in_(day_ids))
+            .values(weekly_plan_day_id=None)
+        )
+    db.execute(update(DailyPlan).where(DailyPlan.weekly_plan_id == plan.id).values(weekly_plan_id=None))
+    db.execute(
+        delete(PlanVersion).where(
+            PlanVersion.entity_type == "weekly_plan", PlanVersion.entity_id == plan.id
+        )
+    )
+    db.delete(plan)
+    db.flush()
+    return {"id": plan_id, "deleted": True}
+
+
+def trace_incident(db: Session, incident_id: int) -> dict[str, Any]:
+    incident = db.scalar(
+        select(VehicleIncident)
+        .where(VehicleIncident.id == incident_id)
+        .options(joinedload(VehicleIncident.vehicle), joinedload(VehicleIncident.route))
+    )
+    if incident is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Incidencia no encontrada")
+
+    pending_visits = db.scalars(
+        select(PendingVisit)
+        .where(PendingVisit.source_incident_id == incident_id)
+        .options(joinedload(PendingVisit.collection_point))
+        .order_by(PendingVisit.created_at)
+    ).all()
+
+    pending_payload = []
+    for visit in pending_visits:
+        target_date = visit.target_operation_date or (date.today() + timedelta(days=1))
+        next_daily = db.scalar(select(DailyPlan).where(DailyPlan.operation_date == target_date))
+        pending_payload.append(
+            {
+                "pendingVisit": _serialize_pending(db, visit),
+                "nextDailyPlan": _daily_plan_payload(db, next_daily) if next_daily else None,
+                "targetOperationDate": target_date.isoformat(),
+            }
+        )
+
+    return {
+        "incident": {
+            "id": incident.id,
+            "incidentType": incident.incident_type,
+            "description": incident.description,
+            "reportedAt": incident.reported_at.isoformat() if incident.reported_at else None,
+            "resolvedAt": incident.resolved_at.isoformat() if incident.resolved_at else None,
+            "vehicleId": incident.vehicle.code if incident.vehicle else None,
+            "routeId": incident.route_id,
+        },
+        "pendingVisits": pending_payload,
+    }
+
+
+def query_planning_history(
+    db: Session,
+    *,
+    week_start: date | None = None,
+    operation_date: date | None = None,
+    incident_id: int | None = None,
+    limit: int = 50,
+) -> dict[str, Any]:
+    if incident_id is not None:
+        return {"type": "incident_trace", "data": trace_incident(db, incident_id)}
+
+    if operation_date is not None:
+        daily = db.scalar(select(DailyPlan).where(DailyPlan.operation_date == operation_date))
+        if daily is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan del día no encontrado")
+        return {
+            "type": "daily",
+            "data": _daily_plan_payload(db, daily),
+            "operationalRuns": list_operational_history(db, limit=10),
+        }
+
+    week_from = week_start
+    week_to = week_start
+    if week_start is not None:
+        week_from, week_to = week_range(week_start)
+    items = list_weekly_plans(db, week_from=week_from, week_to=week_to, limit=limit)
+    return {"type": "weekly", "data": items}

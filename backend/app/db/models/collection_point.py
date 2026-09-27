@@ -1,0 +1,47 @@
+from datetime import datetime
+from decimal import Decimal
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base
+
+
+class CollectionPoint(Base):
+    __tablename__ = "collection_points"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    sector_id: Mapped[int] = mapped_column(ForeignKey("sectors.id"), nullable=False)
+    road_node_id: Mapped[int | None] = mapped_column(ForeignKey("road_nodes.id"), nullable=True)
+    code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    latitude: Mapped[Decimal] = mapped_column(Numeric(10, 8), nullable=False)
+    longitude: Mapped[Decimal] = mapped_column(Numeric(11, 8), nullable=False)
+    max_capacity_kg: Mapped[Decimal] = mapped_column(Numeric(8, 2), nullable=False)
+    current_fill_level_kg: Mapped[Decimal] = mapped_column(Numeric(8, 2), nullable=False, server_default="0")
+    estimated_fill_hours: Mapped[Decimal] = mapped_column(
+        Numeric(6, 1), nullable=False, server_default="72"
+    )
+    # Override por contenedor del factor de llenado; NULL = hereda del sector.
+    fill_rate_factor_override: Mapped[Decimal | None] = mapped_column(Numeric(4, 2), nullable=True)
+    # Tasa absoluta de generación del contenedor (kg/día). Tiene prioridad sobre la
+    # derivada capacidad/horas. La zona puede escribirla al repartir su tasa total.
+    generation_rate_kg_per_day: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    # Población servida por el contenedor (para el reparto por población de la zona).
+    served_population: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    # Metadatos de calibración con pesos reales recolectados (EWMA).
+    last_calibrated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    calibration_samples: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, server_default="active")
+    priority_boost: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    last_emptied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    sector: Mapped["Sector"] = relationship(back_populates="collection_points")
+    waypoints: Mapped[list["RouteWaypoint"]] = relationship(back_populates="collection_point")
+    case_study_memberships: Mapped[list["CaseStudyPoint"]] = relationship(
+        back_populates="collection_point",
+    )

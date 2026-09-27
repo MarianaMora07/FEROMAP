@@ -1,0 +1,37 @@
+# API
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.12
+pydantic>=2.10.0
+pydantic-settings>=2.6.0
+PyJWT>=2.10.0
+email-validator>=2.2.0
+
+# Base de datos
+sqlalchemy>=2.0.36
+geoalchemy2>=0.15.0
+psycopg[binary]>=3.2.0
+alembic>=1.14.0
+
+# Optimización / GIS (motor de tesis)
+numpy>=2.0.0
+networkx>=3.4.0
+osmnx>=2.0.0
+shapely>=2.0.0
+scikit-learn>=1.5.0
+
+# Baseline exacto F7 (post-defensa). Opcional: el benchmark lo omite si falta.
+# ortools>=9.10.0
+
+# Validación estadística
+scipy>=1.14.0
+# Figuras del reporte de calibración (F1–F4, PNG en docs/fase-13).
+matplotlib>=3.9
+
+# Reportes
+fpdf2>=2.8.0
+
+# Tests
+pytest>=8.3.0
+pytest-cov>=6.0.0
+httpx>=0.28.0

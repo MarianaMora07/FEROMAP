@@ -1,0 +1,263 @@
+#!/usr/bin/env bash
+# Verificación pre-defensa: health, autenticación, optimización, KPIs, playback, dispatch.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+if [[ -f .env ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source <(sed 's/\r$//' .env)
+  set +a
+fi
+
+COMPOSE_ENV="${COMPOSE_ENV:-dev}"
+API_PORT="${API_PORT:-8000}"
+FRONTEND_PORT="${FRONTEND_PORT:-5173}"
+API_BASE="http://localhost:${API_PORT}"
+FRONT_BASE="http://localhost:${FRONTEND_PORT}"
+
+DEMO_EMAIL="${DEMO_EMAIL:-plan@fero.com}"
+DEMO_PASSWORD="${DEMO_PASSWORD:-123456789}"
+
+# Espera a que un job de optimización termine; deja el JSON final en OPTIMIZE_JSON.
+# Devuelve 0 si terminó en "completed", 1 si falló/canceló o venció el plazo.
+wait_for_job() {
+  local job_id="$1"
+  local deadline=$((SECONDS + 600))
+  local warned_slow=false
+  OPTIMIZE_JSON=""
+  while [[ "${SECONDS}" -lt "${deadline}" ]]; do
+    OPTIMIZE_JSON="$(curl -sf -H "Authorization: Bearer ${TOKEN}" "${API_BASE}/api/v1/simulations/jobs/${job_id}")"
+    local status
+    status="$(echo "${OPTIMIZE_JSON}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))")"
+    if [[ "${status}" == "completed" ]]; then
+      return 0
+    fi
+    if [[ "${status}" == "failed" || "${status}" == "cancelled" ]]; then
+      echo "❌ Job ${job_id} terminó con status=${status}" >&2
+      return 1
+    fi
+    if [[ ${SECONDS} -gt 150 && "${warned_slow}" == "false" ]]; then
+      warned_slow=true
+      echo "   ⏳ Job en curso (matriz de costos en frío la primera vez; puede tardar y luego se cachea)." >&2
+    fi
+    sleep 1
+  done
+  echo "❌ Job ${job_id} no terminó a tiempo" >&2
+  return 1
+}
+
+echo "═══════════════════════════════════════════"
+echo " FEROMAP — verificación pre-defensa"
+echo " Entorno: ${COMPOSE_ENV}  API:${API_PORT}  UI:${FRONTEND_PORT}"
+echo "═══════════════════════════════════════════"
+
+echo ""
+echo "▶ 1/9 Health check (just health)…"
+just health
+
+echo ""
+echo "▶ 2/9 Autenticación (${DEMO_EMAIL})…"
+login_json="$(curl -sf -X POST "${API_BASE}/api/v1/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d "{\"email\":\"${DEMO_EMAIL}\",\"password\":\"${DEMO_PASSWORD}\"}")"
+TOKEN="$(echo "${login_json}" | python -c "import sys,json; print(json.load(sys.stdin)['accessToken'])")"
+ROLE="$(echo "${login_json}" | python -c "import sys,json; print(json.load(sys.stdin)['user']['role'])")"
+echo "   ✅ Login OK (rol: ${ROLE})"
+
+echo ""
+echo "▶ 3/9 Datos GIS (sectores y contenedores)…"
+sectors_count="$(curl -sf "${API_BASE}/api/v1/sectors" | python -c "import sys,json; print(len(json.load(sys.stdin).get('features',[])))")"
+points_count="$(curl -sf "${API_BASE}/api/v1/collection-points" | python -c "import sys,json; print(len(json.load(sys.stdin).get('features',[])))")"
+if [[ "${sectors_count}" -lt 1 || "${points_count}" -lt 120 ]]; then
+  echo "❌ Datos insuficientes (sectores=${sectors_count}, puntos=${points_count}, esperados ≥120). Ejecuta: just seed" >&2
+  exit 1
+fi
+echo "   ✅ ${sectors_count} sectores, ${points_count} contenedores"
+
+echo ""
+echo "▶ 4/9 Optimización ACO (POST /simulations/optimize → job)…"
+job_json="$(curl -sf -X POST "${API_BASE}/api/v1/simulations/optimize" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H 'Content-Type: application/json' \
+  -d '{"scenarioId":"normal"}')"
+job_id="$(echo "${job_json}" | python -c "import sys,json; print(json.load(sys.stdin).get('jobId',''))")"
+if [[ -z "${job_id}" ]]; then
+  echo "❌ Optimización no devolvió jobId" >&2
+  exit 1
+fi
+optimize_json=""
+deadline=$((SECONDS + 600))
+warned_slow=false
+while [[ "${SECONDS}" -lt "${deadline}" ]]; do
+  optimize_json="$(curl -sf -H "Authorization: Bearer ${TOKEN}" "${API_BASE}/api/v1/simulations/jobs/${job_id}")"
+  status="$(echo "${optimize_json}" | python -c "import sys,json; print(json.load(sys.stdin).get('status',''))")"
+  if [[ "${status}" == "completed" ]]; then
+    break
+  fi
+  if [[ "${status}" == "failed" || "${status}" == "cancelled" ]]; then
+    echo "❌ Job terminó con status=${status}" >&2
+    exit 1
+  fi
+  if [[ ${SECONDS} -gt 150 && "${warned_slow}" == "false" ]]; then
+    warned_slow=true
+    echo "   ⏳ Sigue corriendo (primera corrida construye la matriz de costos en frío; puede tardar varios minutos y luego se cachea)." >&2
+  fi
+  sleep 1
+done
+sim_id="$(echo "${optimize_json}" | python -c "
+import sys, json
+d = json.load(sys.stdin)
+result = d.get('result') or {}
+print(result.get('simulationId',''))
+")"
+saving="$(echo "${optimize_json}" | python -c "
+import sys, json
+d = json.load(sys.stdin)
+result = d.get('result') or {}
+kpis = result.get('kpis') or {}
+dist = kpis.get('distanceKm') or {}
+print(dist.get('savingPct', result.get('savingPercentage', '?')))
+")"
+if [[ -z "${sim_id}" ]]; then
+  echo "❌ Optimización no devolvió simulationId" >&2
+  exit 1
+fi
+echo "   ✅ simulationId=${sim_id}  ahorro≈${saving}%"
+
+echo ""
+echo "▶ 5/9 KPIs plausibles (distancia, CPU, rutas)…"
+kpi_check="$(echo "${optimize_json}" | python -c "
+import sys, json
+d = json.load(sys.stdin)
+result = d.get('result') or {}
+kpis = result.get('kpis') or {}
+dist = kpis.get('distanceKm') or {}
+metrics = result.get('engineMetrics') or kpis.get('engineMetrics') or {}
+current = float(dist.get('current') or 0)
+optimized = float(dist.get('optimized') or 0)
+cpu = float(metrics.get('computationSeconds') or 0)
+raw_routes = result.get('routes') or []
+if isinstance(raw_routes, dict):
+    optimized_fc = raw_routes.get('optimized') or {}
+    feats = optimized_fc.get('features') if isinstance(optimized_fc, dict) else None
+    routes = len(feats) if isinstance(feats, list) else 0
+elif isinstance(raw_routes, list):
+    routes = len(raw_routes)
+else:
+    routes = int(kpis.get('routesCount') or result.get('routesCount') or 0)
+errors = []
+if current <= 0:
+    errors.append('baseline_km')
+if optimized <= 0:
+    errors.append('optimized_km')
+if cpu <= 0:
+    errors.append('cpu_seconds')
+if routes < 1:
+    errors.append('routes_count')
+if errors:
+    print('FAIL:' + ','.join(errors))
+else:
+    print(f'OK:{optimized:.1f}km/{current:.1f}km cpu={cpu:.1f}s routes={routes}')
+")"
+if [[ "${kpi_check}" == FAIL:* ]]; then
+  echo "❌ KPIs no plausibles (${kpi_check#FAIL:})" >&2
+  exit 1
+fi
+echo "   ✅ ${kpi_check#OK:}"
+
+echo ""
+echo "▶ 6/9 Rutas, dashboard y playback del plan del día…"
+curl -sf -H "Authorization: Bearer ${TOKEN}" "${API_BASE}/api/v1/routes/optimized" >/dev/null
+curl -sf "${API_BASE}/api/v1/dashboard/summary" >/dev/null
+curl -sf -H "Authorization: Bearer ${TOKEN}" "${API_BASE}/api/v1/reports/summary" >/dev/null
+today_iso="$(date +%Y-%m-%d)"
+daily_json="$(curl -sf -H "Authorization: Bearer ${TOKEN}" "${API_BASE}/api/v1/planning/daily/${today_iso}")"
+daily_id="$(echo "${daily_json}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))")"
+if [[ -z "${daily_id}" ]]; then
+  echo "❌ No se encontró plan del día para ${today_iso}" >&2
+  exit 1
+fi
+playback_json="$(curl -sf -H "Authorization: Bearer ${TOKEN}" "${API_BASE}/api/v1/planning/daily/${daily_id}/routes/playback")"
+routes_count="$(echo "${playback_json}" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('routes',[])))")"
+SKIP_DAY_VERIFY=false
+if [[ "${routes_count}" -lt 1 ]]; then
+  # Seed limpio: el plan de hoy queda en borrador y la demo genera las rutas en vivo.
+  echo "   ℹ Plan del día sin rutas (${today_iso}); intentando optimizar en vivo…"
+  optimize_tmp="$(mktemp)"
+  optimize_code="$(curl -s -o "${optimize_tmp}" -w '%{http_code}' \
+    -X POST "${API_BASE}/api/v1/planning/daily/${daily_id}/optimize" \
+    -H "Authorization: Bearer ${TOKEN}" \
+    -H 'Content-Type: application/json' \
+    -d '{}')"
+  optimize_body="$(cat "${optimize_tmp}")"
+  rm -f "${optimize_tmp}"
+  if [[ "${optimize_code}" == "200" ]]; then
+    daily_job_id="$(echo "${optimize_body}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('jobId',''))")"
+    if [[ -n "${daily_job_id}" ]]; then
+      wait_for_job "${daily_job_id}" || exit 1
+      playback_json="$(curl -sf -H "Authorization: Bearer ${TOKEN}" "${API_BASE}/api/v1/planning/daily/${daily_id}/routes/playback")"
+      routes_count="$(echo "${playback_json}" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('routes',[])))")"
+    fi
+  else
+    optimize_detail="$(echo "${optimize_body}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('detail',''))" 2>/dev/null || true)"
+    echo "   ⚠ No se pudo optimizar el día (HTTP ${optimize_code}: ${optimize_detail})."
+  fi
+fi
+if [[ "${routes_count}" -lt 1 ]]; then
+  echo "   ⚠ Playback sin rutas (dailyPlanId=${daily_id}): el seed limpio deja el plan de hoy en borrador y sin puntos programados."
+  echo "     Se OMITE la verificación de playback y despacho (crea/aprueba un plan semanal para cubrirla)."
+  SKIP_DAY_VERIFY=true
+else
+  echo "   ✅ Rutas optimizadas, dashboard, reportes y playback (${routes_count} ruta(s))"
+fi
+
+echo ""
+echo "▶ 7/9 Despacho operativo (POST /planning/daily/{id}/dispatch)…"
+if [[ "${SKIP_DAY_VERIFY}" == "true" ]]; then
+  echo "   ⚠ Omitido: el plan del día no tiene rutas (ver paso 6)."
+else
+  dispatch_json="$(curl -sf -X POST "${API_BASE}/api/v1/planning/daily/${daily_id}/dispatch" \
+    -H "Authorization: Bearer ${TOKEN}" \
+    -H 'Content-Type: application/json')"
+  dispatch_count="$(echo "${dispatch_json}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('count',0))")"
+  if [[ "${dispatch_count}" -lt 1 ]]; then
+    echo "❌ Dispatch sin rutas despachadas (dailyPlanId=${daily_id})" >&2
+    exit 1
+  fi
+  echo "   ✅ ${dispatch_count} ruta(s) despachada(s)"
+fi
+
+echo ""
+echo "▶ 8/9 Detalle de simulación #${sim_id}…"
+curl -sf -H "Authorization: Bearer ${TOKEN}" "${API_BASE}/api/v1/simulations/${sim_id}" >/dev/null
+echo "   ✅ GET /simulations/${sim_id}"
+
+if [[ "${COMPOSE_ENV}" == "prod" ]]; then
+  echo ""
+  echo "▶ 9/9 Proxy Nginx (SPA + /api)…"
+  curl -sf "${FRONT_BASE}/" >/dev/null
+  curl -sf "${FRONT_BASE}/health" >/dev/null
+  nginx_opt="$(curl -sf -X POST "${FRONT_BASE}/api/v1/auth/login" \
+    -H 'Content-Type: application/json' \
+    -d "{\"email\":\"${DEMO_EMAIL}\",\"password\":\"${DEMO_PASSWORD}\"}" | python -c "import sys,json; print('ok' if json.load(sys.stdin).get('accessToken') else 'fail')")"
+  if [[ "${nginx_opt}" != "ok" ]]; then
+    echo "❌ Login vía Nginx /api falló" >&2
+    exit 1
+  fi
+  echo "   ✅ UI en ${FRONT_BASE} y proxy /api operativo"
+else
+  echo ""
+  echo "▶ 9/9 Modo dev — omitiendo proxy Nginx (usa COMPOSE_ENV=prod para probarlo)"
+fi
+
+echo ""
+echo "═══════════════════════════════════════════"
+echo " ✅ Verificación pre-defensa completada"
+echo "   Flujo: optimize → KPIs → playback → dispatch"
+echo "   UI:  ${FRONT_BASE}"
+echo "   API: ${API_BASE}/health"
+echo "   Demo: /optimization → Ejecutar → Analítica/Reportes"
+echo "═══════════════════════════════════════════"

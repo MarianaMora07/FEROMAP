@@ -1,0 +1,845 @@
+import { createStore } from 'solid-js/store';
+/**
+ * Store de Planificación operativa (/optimization).
+ * Historial filtrado con recordOperationalRun(); despacho exclusivo de este módulo.
+ */
+import { useMocks } from '../api/client';
+import {
+  dispatchDailyPlanRoutes,
+  closeDailyPlanForId,
+  fetchOptimizationHistory,
+  fetchOptimizationPageContext,
+  loadDailyPlanForDate,
+  loadOptimizationPreset,
+  openDailyPlanForDate,
+  runOptimization,
+  saveOptimizationPreset,
+  dispatchOptimizationRoutes,
+  OptimizationCancelledError,
+  type DailyPlan,
+  type OptimizationPageContext,
+  type OptimizationPreset,
+  type OptimizeResponse,
+} from '../api/optimization';
+import {
+  fetchCurrentWeeklyPlan,
+  fetchDailyPlansInRange,
+  fetchPendingVisits,
+  simulateDailyExecution,
+} from '../api/planning';
+import {
+  mapDailyStatusToCalendar,
+  mondayOfDate,
+  weekDaysFromMonday,
+  type DailyCalendarStatus,
+} from '../planning/dailyPlanningUx';
+import { todayIso } from '../planning/planningUx';
+import { mergeRouteCollections } from '../api/routes';
+import { fetchSimulationDetail } from '../api/simulationOperations';
+import type { KpiMetrics, ScenarioId, AcoConvergencePoint } from '../../data/types/simulation';
+import { optimizationLogMessages } from '../../data/mock/kpis';
+import { getScenarioRoutes } from '../../data/mock/routes';
+import { kpiByScenario } from '../../data/mock/kpis';
+import { isPlausibleDailyOptimizationKpis, formatDurationHours } from '../utils/optimizationResults';
+import { loadRoutesOnMap, loadRoutesWithRoadSnapping, showOptimizedRoute } from './appStore';
+import { loadDashboardData } from './dashboardStore';
+import { writeLastOptimizedCodes } from '../utils/collectionPointsOptimization';
+import { recordOperationalRun } from '../utils/operationalHistory';
+import { fetchDailyRoutePlayback } from '../api/routePlayback';
+import {
+  recalcCriticalContainer,
+  reportVehicleBreakdown,
+  simulateDailyContingency,
+  type ContingencySimulationRequest,
+  type ContingencySimulationResult,
+} from '../api/contingencies';
+import { globalToast } from './toastStore';
+import type { ExecutionPhaseId } from '../../features/simulation/executionPhases';
+import { resolvePhaseFromLogMessage } from '../../features/simulation/executionPhases';
+
+interface WeekCalendarDay {
+  operationDate: string;
+  status: DailyCalendarStatus;
+  pendingCount: number;
+}
+
+interface OptimizationDispatchNotice {
+  count: number;
+  routeIds: number[];
+  vehicleCodes: string[];
+  dismissed: boolean;
+}
+
+//: Clave de `sessionStorage` del último día simulado (P1: «Simular día» gatea el Previsto).
+//: Se persiste para que un recargo no vuelva a ocultar el bloque ni muestre «simula el día»
+//: después de haber simulado.
+const SIMULATED_DAY_KEY = 'feromap:optimization:simulatedDay';
+
+function loadSimulatedDayDate(): string | null {
+  try {
+    return sessionStorage.getItem(SIMULATED_DAY_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function saveSimulatedDayDate(value: string | null): void {
+  try {
+    if (value) sessionStorage.setItem(SIMULATED_DAY_KEY, value);
+    else sessionStorage.removeItem(SIMULATED_DAY_KEY);
+  } catch {
+    // sessionStorage no disponible: el gate queda solo en memoria.
+  }
+}
+
+interface OptimizationState {
+  context: OptimizationPageContext | null;
+  preset: OptimizationPreset;
+  dailyPlan: DailyPlan | null;
+  weekCalendar: WeekCalendarDay[];
+  weekStartDate: string;
+  weeklyPlanApproved: boolean;
+  isLoadingDailyPlan: boolean;
+  isLoadingCalendar: boolean;
+  kpis: KpiMetrics | null;
+  lastResult: OptimizeResponse | null;
+  lastSimulationId: number | null;
+  isLoadingContext: boolean;
+  isOptimizing: boolean;
+  isDispatching: boolean;
+  optimizationProgress: number;
+  optimizationPhase: ExecutionPhaseId | null;
+  activeOptimizationJobId: string | null;
+  acoConvergence: AcoConvergencePoint[];
+  cancelOptimizationRequested: boolean;
+  logs: OptimizeResponse['logs'];
+  history: Awaited<ReturnType<typeof fetchOptimizationHistory>>;
+  lastDispatch: OptimizationDispatchNotice | null;
+  playbackOpen: boolean;
+  /** Fecha (ISO) del día para el que se ejecutó «Simular día»; gatea el bloque Previsto. */
+  simulatedDayDate: string | null;
+  /** Plan alternativo de una contingencia simulada (dry-run), pendiente de aplicar. */
+  contingencySimulation: ContingencySimulationResult | null;
+  isSimulatingContingency: boolean;
+  isApplyingContingency: boolean;
+  contingencyError: string | null;
+  error: string | null;
+}
+
+const [optimizationState, setState] = createStore<OptimizationState>({
+  context: null,
+  preset: loadOptimizationPreset(),
+  dailyPlan: null,
+  weekCalendar: [],
+  weekStartDate: mondayOfDate(loadOptimizationPreset().operationDate),
+  weeklyPlanApproved: true,
+  isLoadingDailyPlan: false,
+  isLoadingCalendar: false,
+  kpis: null,
+  lastResult: null,
+  lastSimulationId: null,
+  isLoadingContext: false,
+  isOptimizing: false,
+  isDispatching: false,
+  optimizationProgress: 0,
+  optimizationPhase: null,
+  activeOptimizationJobId: null,
+  acoConvergence: [],
+  cancelOptimizationRequested: false,
+  logs: [],
+  history: [],
+  lastDispatch: null,
+  playbackOpen: false,
+  simulatedDayDate: loadSimulatedDayDate(),
+  contingencySimulation: null,
+  isSimulatingContingency: false,
+  isApplyingContingency: false,
+  contingencyError: null,
+  error: null,
+});
+
+/** Flag de cancelación legible desde callbacks pasados a otros módulos (p. ej. polling). */
+let optimizationCancelRequested = false;
+
+function resetOptimizationCancelFlag(): void {
+  optimizationCancelRequested = false;
+}
+
+function requestOptimizationCancel(): void {
+  optimizationCancelRequested = true;
+}
+
+function isOptimizationRunCancelled(): boolean {
+  return optimizationCancelRequested;
+}
+
+function resolveVehicleCodesFromDispatchedRoutes(): Promise<string[]> {
+  const planId = optimizationState.dailyPlan?.id;
+  if (!planId) return Promise.resolve([]);
+  return fetchDailyRoutePlayback(planId)
+    .then((playback) =>
+      Array.from(
+        new Set(
+          (playback.routes ?? [])
+            .map((route) => route.vehicleLabel)
+            .filter((label): label is string => Boolean(label)),
+        ),
+      ),
+    )
+    .catch(() => []);
+}
+
+function applyOptimizationProgress(
+  progress: number,
+  phase: ExecutionPhaseId | null,
+  logs: OptimizeResponse['logs'],
+  extras?: { jobId?: string; acoConvergence?: AcoConvergencePoint[] },
+): void {
+  setState({
+    optimizationProgress: progress,
+    optimizationPhase: phase,
+    logs,
+    ...(extras?.jobId ? { activeOptimizationJobId: extras.jobId } : {}),
+    ...(extras?.acoConvergence ? { acoConvergence: extras.acoConvergence } : {}),
+  });
+}
+
+export async function cancelOptimization(): Promise<void> {
+  if (!optimizationState.isOptimizing) return;
+  requestOptimizationCancel();
+  setState({ cancelOptimizationRequested: true });
+}
+
+export function dismissDispatchNotice(): void {
+  if (!optimizationState.lastDispatch) return;
+  setState('lastDispatch', { ...optimizationState.lastDispatch, dismissed: true });
+}
+
+async function resolveWeeklyPlanApproved(operationDate: string): Promise<boolean> {
+  try {
+    await fetchCurrentWeeklyPlan(operationDate);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Relee si la semana de la fecha está aprobada y actualiza el gate si cambió. */
+async function refreshWeeklyPlanApproval(operationDate: string): Promise<void> {
+  const approved = await resolveWeeklyPlanApproved(operationDate);
+  if (approved !== optimizationState.weeklyPlanApproved) {
+    setState({ weeklyPlanApproved: approved });
+  }
+}
+
+let contextLoaded = false;
+
+export async function refreshWeekCalendar(weekStart?: string): Promise<void> {
+  const start = weekStart ?? mondayOfDate(optimizationState.preset.operationDate);
+  const days = weekDaysFromMonday(start);
+  const end = days[6]!;
+  setState({ isLoadingCalendar: true, weekStartDate: start });
+  try {
+    const [dailyPlans, pending] = await Promise.all([
+      fetchDailyPlansInRange(start, end),
+      fetchPendingVisits({ status: 'open' }).catch(() => ({ items: [] })),
+    ]);
+    const statusByDate = new Map(
+      dailyPlans.items.map((row) => [row.operationDate, mapDailyStatusToCalendar(row.status)]),
+    );
+    const pendingByDate = new Map<string, number>();
+    for (const visit of pending.items) {
+      const target = visit.targetOperationDate ?? optimizationState.preset.operationDate;
+      pendingByDate.set(target, (pendingByDate.get(target) ?? 0) + 1);
+    }
+    setState({
+      weekCalendar: days.map((operationDate) => ({
+        operationDate,
+        status: statusByDate.get(operationDate) ?? 'none',
+        pendingCount: pendingByDate.get(operationDate) ?? 0,
+      })),
+    });
+  } finally {
+    setState({ isLoadingCalendar: false });
+  }
+}
+
+function canHydrateDailySimulation(dailyPlan: DailyPlan, detail: Awaited<ReturnType<typeof fetchSimulationDetail>>): boolean {
+  // Se hidrata también el día **cerrado** (`partial`/`completed`): su plan ya existe y el
+  // previsto (mapa, desglose y bloque «Previsto» de Resultados) debe seguir disponible al
+  // recargar, no solo mientras el día está `optimized`/`dispatched`.
+  if (!['optimized', 'dispatched', 'partial', 'completed'].includes(dailyPlan.status)) {
+    return false;
+  }
+  const context = detail.planningContext;
+  if (context?.level === 'strategic') {
+    return false;
+  }
+  if (context?.operationDate && context.operationDate !== dailyPlan.operationDate) {
+    return false;
+  }
+  const pointCount = dailyPlan.finalPointIds?.length ?? dailyPlan.scheduledPoints.length;
+  return isPlausibleDailyOptimizationKpis(detail.kpis, pointCount);
+}
+
+async function clearOptimizationResultsOnMap(): Promise<void> {
+  await loadRoutesOnMap({ type: 'FeatureCollection', features: [] });
+  showOptimizedRoute(false);
+}
+
+async function hydrateOptimizationFromDailyPlan(dailyPlan: DailyPlan): Promise<void> {
+  if (!dailyPlan.simulationId) return;
+  try {
+    const detail = await fetchSimulationDetail(dailyPlan.simulationId);
+    if (!canHydrateDailySimulation(dailyPlan, detail)) {
+      await clearOptimizationResultsOnMap();
+      return;
+    }
+    const merged = mergeRouteCollections(detail.routes.current, detail.routes.optimized);
+    await loadRoutesWithRoadSnapping(merged);
+    setState({
+      kpis: detail.kpis,
+      lastSimulationId: detail.id,
+      preset: { ...optimizationState.preset, scenarioId: detail.scenarioId },
+      acoConvergence: detail.kpis.engineMetrics?.acoConvergence ?? [],
+    });
+    showOptimizedRoute(true);
+  } catch {
+    await clearOptimizationResultsOnMap();
+  }
+}
+
+function assertPlausibleOptimizationResult(kpis: KpiMetrics, pointCount: number): void {
+  if (!isPlausibleDailyOptimizationKpis(kpis, pointCount)) {
+    throw new Error(
+      `La optimización devolvió métricas incoherentes (${kpis.distanceKm.optimized.toFixed(1)} km, ${formatDurationHours(kpis.durationHours.optimized)}) para ${pointCount} puntos del día. Reinicie el backend si acaba de actualizar el código y vuelva a generar la ruta.`,
+    );
+  }
+}
+
+export async function initOptimizationPage(operationDate?: string): Promise<void> {
+  const dateValue = operationDate ?? optimizationState.preset.operationDate;
+  if (contextLoaded && optimizationState.context && optimizationState.dailyPlan?.operationDate === dateValue) {
+    // La semana pudo aprobarse mientras se navegaba en otra vista: refrescar el gate
+    // y, si acaba de aprobarse, releer el día (pudo quedar notificado) antes de intentar
+    // la notificación automática.
+    const wasApproved = optimizationState.weeklyPlanApproved;
+    await refreshWeeklyPlanApproval(dateValue);
+    if (!wasApproved && optimizationState.weeklyPlanApproved) {
+      await refreshDailyPlan();
+      void autoDispatchOptimizedDay();
+    }
+    return;
+  }
+  setState({ isLoadingContext: true, isLoadingDailyPlan: true, error: null });
+  try {
+    const [context, history, dailyPlan, weeklyPlanApproved] = await Promise.all([
+      fetchOptimizationPageContext(),
+      fetchOptimizationHistory(),
+      openDailyPlanForDate(dateValue).catch(() => loadDailyPlanForDate(dateValue)),
+      resolveWeeklyPlanApproved(dateValue),
+    ]);
+    setState({
+      context,
+      history,
+      dailyPlan,
+      weeklyPlanApproved,
+      preset: {
+        ...optimizationState.preset,
+        operationDate: dateValue,
+        scenarioId: dailyPlan.scenarioId ?? optimizationState.preset.scenarioId,
+      },
+      lastSimulationId: dailyPlan.simulationId ?? optimizationState.lastSimulationId,
+      kpis: null,
+    });
+    if (dailyPlan.status === 'draft') {
+      await clearOptimizationResultsOnMap();
+    } else if (dailyPlan.simulationId) {
+      await hydrateOptimizationFromDailyPlan(dailyPlan);
+    }
+    saveOptimizationPreset(optimizationState.preset);
+    await refreshWeekCalendar(mondayOfDate(dateValue));
+    contextLoaded = true;
+    // Día ya optimizado (p. ej. recién generado desde "Ver plan"): notificar automático.
+    void autoDispatchOptimizedDay();
+  } catch (error) {
+    setState({
+      error: error instanceof Error ? error.message : 'No se pudo cargar el contexto de optimización',
+    });
+  } finally {
+    setState({ isLoadingContext: false, isLoadingDailyPlan: false });
+  }
+}
+
+export function selectOperationDate(operationDate: string): void {
+  if (operationDate === optimizationState.preset.operationDate) return;
+  contextLoaded = false;
+  setState({
+    lastResult: null,
+    lastDispatch: null,
+    kpis: null,
+    logs: [],
+    playbackOpen: false,
+    contingencySimulation: null,
+    contingencyError: null,
+  });
+  // Cambiar de día olvida la simulación (el marcador es por fecha).
+  clearSimulatedDay();
+  updateOptimizationPreset({ operationDate });
+}
+
+export function openOptimizationPlayback(): void {
+  setState({ playbackOpen: true });
+}
+
+/** Marca que el día se simuló (gatea el bloque Previsto del tab Resultados). */
+export function markDaySimulated(operationDate: string): void {
+  saveSimulatedDayDate(operationDate);
+  setState({ simulatedDayDate: operationDate });
+}
+
+/** Invalida la simulación del día (p. ej. al regenerar el plan). */
+function clearSimulatedDay(): void {
+  saveSimulatedDayDate(null);
+  setState({ simulatedDayDate: null });
+}
+
+export function closeOptimizationPlayback(): void {
+  setState({ playbackOpen: false });
+}
+
+export async function refreshDailyPlan(): Promise<void> {
+  const dateValue = optimizationState.preset.operationDate;
+  setState({ isLoadingDailyPlan: true, error: null });
+  try {
+    const dailyPlan = await openDailyPlanForDate(dateValue);
+    setState({ dailyPlan });
+    await refreshWeekCalendar();
+  } catch (error) {
+    setState({
+      error: error instanceof Error ? error.message : 'No se pudo actualizar el plan del día',
+    });
+  } finally {
+    setState({ isLoadingDailyPlan: false });
+  }
+}
+
+export function updateOptimizationPreset(patch: Partial<OptimizationPreset>): void {
+  const next = { ...optimizationState.preset, ...patch };
+  if (patch.constraints) {
+    next.constraints = { ...optimizationState.preset.constraints, ...patch.constraints };
+  }
+  setState('preset', next);
+  saveOptimizationPreset(next);
+  if (patch.operationDate) {
+    contextLoaded = false;
+    void initOptimizationPage(next.operationDate);
+  }
+}
+
+export function setOptimizationScenario(scenarioId: ScenarioId): void {
+  updateOptimizationPreset({ scenarioId });
+}
+
+export async function executeOptimization(): Promise<void> {
+  if (optimizationState.isOptimizing) return;
+
+  resetOptimizationCancelFlag();
+  setState({
+    isOptimizing: true,
+    optimizationProgress: 0,
+    optimizationPhase: null,
+    activeOptimizationJobId: null,
+    acoConvergence: [],
+    cancelOptimizationRequested: false,
+    logs: [],
+    error: null,
+    lastDispatch: null,
+    playbackOpen: false,
+  });
+  // Un plan nuevo invalida la simulación previa: hay que volver a simular para ver el previsto.
+  clearSimulatedDay();
+
+  const isCancelled = isOptimizationRunCancelled;
+
+  try {
+    if (useMocks) {
+      for (let i = 0; i < optimizationLogMessages.length; i++) {
+        if (isCancelled()) {
+          throw new OptimizationCancelledError();
+        }
+        const entry = optimizationLogMessages[i];
+        await delay(350);
+        const progress = Math.round(((i + 1) / optimizationLogMessages.length) * 100);
+        const phase = resolvePhaseFromLogMessage(entry.message);
+        setState('optimizationProgress', progress);
+        if (phase) {
+          setState('optimizationPhase', phase);
+          if (phase === 'aco') {
+            const points: AcoConvergencePoint[] = [];
+            let bestKm = 32.8;
+            for (let iteration = 1; iteration <= 8; iteration++) {
+              if (isCancelled()) throw new OptimizationCancelledError();
+              bestKm = Math.max(20.1, bestKm - 0.4);
+              points.push({
+                iteration,
+                bestDistanceKm: Number(bestKm.toFixed(2)),
+                iterationBestDistanceKm: Number((bestKm + 0.5).toFixed(2)),
+              });
+              setState('acoConvergence', [...points]);
+              await delay(80);
+            }
+          }
+        }
+        setState('logs', (logs) => [
+          ...logs,
+          {
+            id: `log-${Date.now()}-${i}`,
+            timestamp: new Date().toLocaleTimeString('es-VE'),
+            message: entry.message,
+            type: entry.type,
+          },
+        ]);
+      }
+      const routes = getScenarioRoutes(optimizationState.preset.scenarioId);
+      await loadRoutesOnMap(routes);
+      const kpis = kpiByScenario[optimizationState.preset.scenarioId];
+      const pointCount = optimizationState.dailyPlan?.finalPointIds?.length ?? optimizationState.context?.pointsToVisit ?? 0;
+      assertPlausibleOptimizationResult(kpis, pointCount);
+      setState({
+        kpis,
+        lastSimulationId: 1,
+        dailyPlan: optimizationState.dailyPlan
+          ? { ...optimizationState.dailyPlan, status: 'optimized', simulationId: 1 }
+          : null,
+        lastResult: {
+          simulationId: 1,
+          scenarioId: optimizationState.preset.scenarioId,
+          scenario: optimizationState.context?.scenarios.find((s) => s.id === optimizationState.preset.scenarioId) ?? {
+            id: optimizationState.preset.scenarioId,
+            label: optimizationState.preset.scenarioId,
+            description: '',
+            trafficMultiplier: 1,
+            fillLevelBoost: 0,
+          },
+          kpis,
+          routes: {
+            current: {
+              type: 'FeatureCollection',
+              features: routes.features.filter((feature) => feature.properties.type === 'current'),
+            },
+            optimized: {
+              type: 'FeatureCollection',
+              features: routes.features.filter((feature) => feature.properties.type === 'optimized'),
+            },
+          },
+          logs: optimizationState.logs,
+        },
+      });
+      await loadDashboardData();
+    } else {
+      const dailyPlanId = optimizationState.dailyPlan?.id;
+      if (!dailyPlanId) {
+        throw new Error('No hay plan del día cargado');
+      }
+      await refreshDailyPlan();
+      const result = await runOptimization(
+        {
+          scenarioId: optimizationState.preset.scenarioId,
+          preset: optimizationState.preset,
+          dailyPlanId,
+        },
+        (update) =>
+          applyOptimizationProgress(update.progress, update.phase, update.logs, {
+            jobId: update.jobId,
+            acoConvergence: update.acoConvergence,
+          }),
+        { isCancelled },
+      );
+
+      const pointCount = Math.max(
+        optimizationState.dailyPlan?.finalPointIds?.length ?? 0,
+        result.kpis.containersServed ?? 0,
+        result.servedPointCodes?.length ?? 0,
+      );
+      assertPlausibleOptimizationResult(result.kpis, pointCount);
+      const merged = mergeRouteCollections(result.routes.current, result.routes.optimized);
+      await loadRoutesOnMap(merged);
+      setState({
+        kpis: result.kpis,
+        lastResult: result,
+        lastSimulationId: result.simulationId,
+        logs: result.logs,
+        optimizationProgress: 100,
+        optimizationPhase: 'listo',
+        acoConvergence:
+          result.kpis.engineMetrics?.acoConvergence ?? optimizationState.acoConvergence,
+        dailyPlan: optimizationState.dailyPlan
+          ? { ...optimizationState.dailyPlan, status: 'optimized', simulationId: result.simulationId }
+          : null,
+      });
+
+      if (result.servedPointCodes?.length) {
+        writeLastOptimizedCodes(result.servedPointCodes);
+      }
+      await loadDashboardData();
+    }
+
+    showOptimizedRoute(true);
+    setState({ optimizationProgress: 100 });
+    if (optimizationState.lastSimulationId != null) {
+      recordOperationalRun(optimizationState.lastSimulationId);
+    }
+    await refreshOptimizationHistory();
+    await refreshWeekCalendar();
+    await autoDispatchOptimizedDay();
+  } catch (error) {
+    if (error instanceof OptimizationCancelledError) {
+      setState({
+        logs: [
+          ...optimizationState.logs,
+          {
+            id: `log-cancel-${Date.now()}`,
+            timestamp: new Date().toLocaleTimeString('es-VE'),
+            message: 'Optimización cancelada por el planificador',
+            type: 'warning',
+          },
+        ],
+      });
+      return;
+    }
+    setState({
+      error: error instanceof Error ? error.message : 'No se pudo ejecutar la optimización',
+    });
+    throw error;
+  } finally {
+    resetOptimizationCancelFlag();
+    setState({
+      isOptimizing: false,
+      activeOptimizationJobId: null,
+      cancelOptimizationRequested: false,
+    });
+  }
+}
+
+export async function loadOptimizationFromHistory(simulationId: number): Promise<void> {
+  if (optimizationState.isOptimizing) return;
+
+  setState({ isOptimizing: true, optimizationProgress: 0, logs: [], error: null });
+  try {
+    const detail = await fetchSimulationDetail(simulationId);
+    const merged = mergeRouteCollections(detail.routes.current, detail.routes.optimized);
+    await loadRoutesWithRoadSnapping(merged);
+    setState({
+      kpis: detail.kpis,
+      lastSimulationId: detail.id,
+      preset: { ...optimizationState.preset, scenarioId: detail.scenarioId },
+      acoConvergence: detail.kpis.engineMetrics?.acoConvergence ?? [],
+      logs: [
+        {
+          id: `log-history-${detail.id}`,
+          timestamp: new Date().toLocaleTimeString('es-VE'),
+          message: `Optimización #${detail.id} cargada — ${detail.scenarioName}`,
+          type: 'info',
+        },
+      ],
+      optimizationProgress: 100,
+    });
+    showOptimizedRoute(true);
+  } catch (error) {
+    setState({
+      error: error instanceof Error ? error.message : 'No se pudo cargar la optimización',
+    });
+    throw error;
+  } finally {
+    setState({ isOptimizing: false });
+  }
+}
+
+export async function dispatchOptimizationResult(): Promise<void> {
+  if (optimizationState.isDispatching) return;
+  if (optimizationState.lastSimulationId == null && !optimizationState.dailyPlan?.id) {
+    throw new Error('No hay rutas optimizadas para despachar');
+  }
+
+  setState({ isDispatching: true, error: null });
+  try {
+    const result = useMocks
+      ? { dispatchedRouteIds: [1, 2], count: 2 }
+      : optimizationState.dailyPlan?.id
+        ? await dispatchDailyPlanRoutes(optimizationState.dailyPlan.id)
+        : await dispatchOptimizationRoutes();
+
+    // Camiones reales de las rutas despachadas (playback del plan del día).
+    const dispatchedCodes = await resolveVehicleCodesFromDispatchedRoutes();
+    const vehicleCodes =
+      dispatchedCodes.length > 0
+        ? dispatchedCodes
+        : (optimizationState.context?.assignableVehicles ?? []).slice(0, result.count).map((vehicle) => vehicle.id);
+
+    setState({
+      lastDispatch: {
+        count: result.count,
+        routeIds: result.dispatchedRouteIds,
+        vehicleCodes,
+        dismissed: false,
+      },
+      dailyPlan: optimizationState.dailyPlan ? { ...optimizationState.dailyPlan, status: 'dispatched' } : null,
+      logs: [
+        ...optimizationState.logs,
+        {
+          id: `log-dispatch-${Date.now()}`,
+          timestamp: new Date().toLocaleTimeString('es-VE'),
+          message: `Notificadas ${result.count} ruta(s) a conductores`,
+          type: 'success',
+        },
+      ],
+    });
+
+    const vehicleLabel =
+      vehicleCodes.length > 0 ? vehicleCodes.join(', ') : `${result.count} vehículo(s)`;
+    globalToast.addToast(
+      `${result.count} ruta${result.count === 1 ? '' : 's'} notificada${result.count === 1 ? '' : 's'} a conductores · ${vehicleLabel}`,
+      'success',
+    );
+
+    if (!useMocks) {
+      await loadDashboardData();
+    }
+    await refreshWeekCalendar();
+  } finally {
+    setState({ isDispatching: false });
+  }
+}
+
+let autoDispatchDate: string | null = null;
+
+/**
+ * Notifica (despacha) automáticamente al cargar/optimizar un día que ya tiene rutas.
+ * Idempotente: solo actúa si el plan del día está ``optimized`` y la semana está aprobada;
+ * tras despachar el estado pasa a ``dispatched`` y no se repite.
+ */
+export async function autoDispatchOptimizedDay(): Promise<void> {
+  const plan = optimizationState.dailyPlan;
+  if (!plan || plan.status !== 'optimized') return;
+  if (plan.operationDate < todayIso()) return; // no notificar días pasados
+  if (optimizationState.isDispatching || optimizationState.isOptimizing) return;
+  if (!optimizationState.weeklyPlanApproved) return;
+  if (optimizationState.lastSimulationId == null && optimizationState.kpis == null) return;
+  if (autoDispatchDate === plan.operationDate) return;
+  autoDispatchDate = plan.operationDate;
+  try {
+    await dispatchOptimizationResult();
+  } catch {
+    // Permite reintento manual desde ⋯ → "Reenviar notificación".
+    autoDispatchDate = null;
+  }
+}
+
+export async function refreshOptimizationHistory(): Promise<void> {
+  setState('history', await fetchOptimizationHistory());
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Registra una **ejecución simulada** del día (demo) y recarga el plan para traer el
+ * previsto vs. real consolidado. No cierra el día.
+ */
+export async function simulateDayExecution(): Promise<number> {
+  const planId = optimizationState.dailyPlan?.id;
+  if (!planId) throw new Error('No hay plan del día para simular la ejecución');
+  const result = await simulateDailyExecution(planId);
+  // Recarga el plan: `actualKpis` ya viene consolidado por el backend.
+  await refreshDailyPlan();
+  return result.executedWaypoints;
+}
+
+export async function closeOptimizationDay(): Promise<void> {
+  if (!optimizationState.dailyPlan?.id) {
+    throw new Error('No hay plan del día para cerrar');
+  }
+  const result = await closeDailyPlanForId(optimizationState.dailyPlan.id);
+  setState({
+    dailyPlan: optimizationState.dailyPlan
+      ? { ...optimizationState.dailyPlan, status: result.status, closedAt: result.closedAt }
+      : null,
+    logs: [
+      ...optimizationState.logs,
+      {
+        id: `log-close-${Date.now()}`,
+        timestamp: new Date().toLocaleTimeString('es-VE'),
+        message: `Día cerrado — ${result.newPendingVisits} pendiente(s) para mañana`,
+        type: 'info',
+      },
+    ],
+  });
+  // Recarga el plan para traer el resultado real consolidado (`actualKpis`, Fase 4).
+  await refreshDailyPlan();
+  await refreshWeekCalendar();
+}
+
+/**
+ * Simula una contingencia del día en **dry-run**: calcula el plan alternativo sin
+ * despachar ni persistir rutas. El resultado queda en `contingencySimulation`.
+ */
+export async function simulateContingency(payload: ContingencySimulationRequest): Promise<void> {
+  const planId = optimizationState.dailyPlan?.id;
+  if (!planId) throw new Error('No hay plan del día para simular');
+  setState({ isSimulatingContingency: true, contingencyError: null });
+  try {
+    const result = await simulateDailyContingency(planId, payload);
+    setState({ contingencySimulation: result });
+  } catch (error) {
+    setState({
+      contingencyError:
+        error instanceof Error ? error.message : 'No se pudo simular la contingencia',
+    });
+    throw error;
+  } finally {
+    setState({ isSimulatingContingency: false });
+  }
+}
+
+/** Descarta la simulación sin aplicarla. */
+export function clearContingencySimulation(): void {
+  setState({ contingencySimulation: null, contingencyError: null });
+}
+
+/** Aplica la contingencia simulada con los endpoints reales (despacha/notifica). */
+export async function applyContingencySimulation(): Promise<void> {
+  const simulation = optimizationState.contingencySimulation;
+  if (!simulation) throw new Error('No hay simulación de contingencia para aplicar');
+  setState({ isApplyingContingency: true, contingencyError: null });
+  try {
+    if (simulation.type === 'breakdown') {
+      if (!simulation.vehicleId) throw new Error('La simulación no tiene vehículo para aplicar');
+      await reportVehicleBreakdown({
+        vehicleId: simulation.vehicleId,
+        description: 'Contingencia simulada aplicada desde el plan del día',
+      });
+    } else {
+      if (!simulation.pointCode) throw new Error('La simulación no tiene punto para aplicar');
+      await recalcCriticalContainer({
+        collectionPointCode: simulation.pointCode,
+        dailyPlanId: simulation.dailyPlanId,
+      });
+    }
+    globalToast.addToast('Contingencia aplicada: rutas recalculadas.', 'success');
+    setState({ contingencySimulation: null });
+    await refreshDailyPlan();
+    await refreshWeekCalendar();
+  } catch (error) {
+    setState({
+      contingencyError:
+        error instanceof Error ? error.message : 'No se pudo aplicar la contingencia',
+    });
+    throw error;
+  } finally {
+    setState({ isApplyingContingency: false });
+  }
+}
+
+export { optimizationState };

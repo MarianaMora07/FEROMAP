@@ -1,0 +1,18 @@
+@startuml
+skinparam packageStyle rectangle
+left to right direction
+
+actor "Residente" as residente
+
+rectangle "Sistema de Optimización de Rutas" {
+  usecase "Consultar horario de paso del camión" as UC_R1
+  usecase "Consultar proximidad del camión a su zona" as UC_R2
+  usecase "Visualizar ubicación del camión en mapa" as UC_R3
+}
+
+residente --> UC_R1
+residente --> UC_R2
+
+UC_R2 <-- UC_R3 : <<include>>
+
+@enduml

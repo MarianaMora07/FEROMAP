@@ -1,0 +1,2902 @@
+[
+  {
+    "code": "CNT-001",
+    "sectorName": "Unare I",
+    "latitude": 8.279005,
+    "longitude": -62.752116,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 45.0,
+    "priority": "media",
+    "lastCollection": "2026-06-08T06:30:00Z"
+  },
+  {
+    "code": "CNT-002",
+    "sectorName": "Unare I",
+    "latitude": 8.285257,
+    "longitude": -62.746708,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 72.0,
+    "priority": "media",
+    "lastCollection": "2026-06-07T06:30:00Z"
+  },
+  {
+    "code": "CNT-003",
+    "sectorName": "Unare I",
+    "latitude": 8.282756,
+    "longitude": -62.750764,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 88.0,
+    "priority": "media",
+    "lastCollection": "2026-06-06T06:30:00Z"
+  },
+  {
+    "code": "CNT-004",
+    "sectorName": "Unare II",
+    "latitude": 8.2763,
+    "longitude": -62.75889,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 55.0,
+    "priority": "media",
+    "lastCollection": "2026-06-08T07:00:00Z"
+  },
+  {
+    "code": "CNT-005",
+    "sectorName": "Unare II",
+    "latitude": 8.277674,
+    "longitude": -62.760445,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 91.0,
+    "priority": "media",
+    "lastCollection": "2026-06-05T07:00:00Z"
+  },
+  {
+    "code": "CNT-006",
+    "sectorName": "Unare II",
+    "latitude": 8.274926,
+    "longitude": -62.759408,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 38.0,
+    "priority": "media",
+    "lastCollection": "2026-06-09T07:00:00Z"
+  },
+  {
+    "code": "CNT-007",
+    "sectorName": "Uchire",
+    "latitude": 8.277761,
+    "longitude": -62.755928,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 67.0,
+    "priority": "media",
+    "lastCollection": "2026-06-07T08:00:00Z"
+  },
+  {
+    "code": "CNT-008",
+    "sectorName": "Uchire",
+    "latitude": 8.281281,
+    "longitude": -62.758002,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 42.0,
+    "priority": "media",
+    "lastCollection": "2026-06-08T08:00:00Z"
+  },
+  {
+    "code": "CNT-009",
+    "sectorName": "Rio Caura",
+    "latitude": 8.269404,
+    "longitude": -62.761041,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 83.0,
+    "priority": "media",
+    "lastCollection": "2026-06-06T05:30:00Z"
+  },
+  {
+    "code": "CNT-010",
+    "sectorName": "Rio Caura",
+    "latitude": 8.268871,
+    "longitude": -62.758804,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 51.0,
+    "priority": "media",
+    "lastCollection": "2026-06-08T05:30:00Z"
+  },
+  {
+    "code": "CNT-011",
+    "sectorName": "Ventuari",
+    "latitude": 8.267479,
+    "longitude": -62.769073,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 76.0,
+    "priority": "media",
+    "lastCollection": "2026-06-07T09:00:00Z"
+  },
+  {
+    "code": "CNT-012",
+    "sectorName": "Ventuari",
+    "latitude": 8.267636,
+    "longitude": -62.769762,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 33.0,
+    "priority": "media",
+    "lastCollection": "2026-06-09T09:00:00Z"
+  },
+  {
+    "code": "CNT-013",
+    "sectorName": "Curagua B",
+    "latitude": 8.270327,
+    "longitude": -62.778578,
+    "maxCapacityKg": 800.0,
+    "fillLevelPct": 59.0,
+    "priority": "media",
+    "lastCollection": "2026-06-08T10:00:00Z"
+  },
+  {
+    "code": "CNT-014",
+    "sectorName": "Curagua B",
+    "latitude": 8.26852,
+    "longitude": -62.7759,
+    "maxCapacityKg": 800.0,
+    "fillLevelPct": 85.0,
+    "priority": "media",
+    "lastCollection": "2026-06-05T10:00:00Z"
+  },
+  {
+    "code": "CNT-015",
+    "sectorName": "El caimito 1-2-3-4",
+    "latitude": 8.266663,
+    "longitude": -62.789832,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 48.0,
+    "priority": "media",
+    "lastCollection": "2026-06-08T11:00:00Z"
+  },
+  {
+    "code": "CNT-016",
+    "sectorName": "El caimito 1-2-3-4",
+    "latitude": 8.264991,
+    "longitude": -62.79547,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 94.0,
+    "priority": "media",
+    "lastCollection": "2026-06-04T11:00:00Z"
+  },
+  {
+    "code": "CNT-017",
+    "sectorName": "Villa Ikabaru",
+    "latitude": 8.255584,
+    "longitude": -62.800748,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 62.0,
+    "priority": "media",
+    "lastCollection": "2026-06-07T12:00:00Z"
+  },
+  {
+    "code": "CNT-018",
+    "sectorName": "Villa Ikabaru",
+    "latitude": 8.252411,
+    "longitude": -62.804058,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 41.0,
+    "priority": "media",
+    "lastCollection": "2026-06-09T12:00:00Z"
+  },
+  {
+    "code": "CNT-019",
+    "sectorName": "Villa Ikabaru",
+    "latitude": 8.258756,
+    "longitude": -62.798265,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 78.0,
+    "priority": "media",
+    "lastCollection": "2026-06-06T12:00:00Z"
+  },
+  {
+    "code": "CNT-020",
+    "sectorName": "Uchire",
+    "latitude": 8.278641,
+    "longitude": -62.758693,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 86.0,
+    "priority": "media",
+    "lastCollection": "2026-06-05T08:00:00Z"
+  },
+  {
+    "code": "CNT-021",
+    "sectorName": "Unare I",
+    "latitude": 8.281506,
+    "longitude": -62.745357,
+    "maxCapacityKg": 800.0,
+    "fillLevelPct": 41.0,
+    "priority": "media",
+    "lastCollection": "2026-06-04T07:30:00Z"
+  },
+  {
+    "code": "CNT-022",
+    "sectorName": "Unare II",
+    "latitude": 8.279048,
+    "longitude": -62.759927,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 54.0,
+    "priority": "media",
+    "lastCollection": "2026-06-05T08:30:00Z"
+  },
+  {
+    "code": "CNT-023",
+    "sectorName": "Uchire",
+    "latitude": 8.278641,
+    "longitude": -62.753853,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 67.0,
+    "priority": "media",
+    "lastCollection": "2026-06-06T09:30:00Z"
+  },
+  {
+    "code": "CNT-024",
+    "sectorName": "Rio Caura",
+    "latitude": 8.268338,
+    "longitude": -62.762533,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 80.0,
+    "priority": "media",
+    "lastCollection": "2026-06-07T06:30:00Z"
+  },
+  {
+    "code": "CNT-025",
+    "sectorName": "Ventuari",
+    "latitude": 8.269504,
+    "longitude": -62.767206,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 28.0,
+    "priority": "media",
+    "lastCollection": "2026-06-08T07:30:00Z"
+  },
+  {
+    "code": "CNT-026",
+    "sectorName": "Curagua B",
+    "latitude": 8.26852,
+    "longitude": -62.781257,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 41.0,
+    "priority": "media",
+    "lastCollection": "2026-06-09T08:30:00Z"
+  },
+  {
+    "code": "CNT-027",
+    "sectorName": "El caimito 1-2-3-4",
+    "latitude": 8.271308,
+    "longitude": -62.78889,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 54.0,
+    "priority": "media",
+    "lastCollection": "2026-06-01T09:30:00Z"
+  },
+  {
+    "code": "CNT-028",
+    "sectorName": "Villa Ikabaru",
+    "latitude": 8.253997,
+    "longitude": -62.802403,
+    "maxCapacityKg": 800.0,
+    "fillLevelPct": 67.0,
+    "priority": "media",
+    "lastCollection": "2026-06-02T06:30:00Z"
+  },
+  {
+    "code": "CNT-029",
+    "sectorName": "Terrazas del caroni A-B-C",
+    "latitude": 8.261352,
+    "longitude": -62.742303,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 80.0,
+    "priority": "media",
+    "lastCollection": "2026-06-03T07:30:00Z"
+  },
+  {
+    "code": "CNT-030",
+    "sectorName": "Las Garzas",
+    "latitude": 8.262746,
+    "longitude": -62.768075,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 28.0,
+    "priority": "media",
+    "lastCollection": "2026-06-04T08:30:00Z"
+  },
+  {
+    "code": "CNT-031",
+    "sectorName": "Las Peonias",
+    "latitude": 8.265258,
+    "longitude": -62.776608,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 41.0,
+    "priority": "media",
+    "lastCollection": "2026-06-05T09:30:00Z"
+  },
+  {
+    "code": "CNT-032",
+    "sectorName": "Paratepuy",
+    "latitude": 8.256339,
+    "longitude": -62.795946,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 54.0,
+    "priority": "media",
+    "lastCollection": "2026-06-06T06:30:00Z"
+  },
+  {
+    "code": "CNT-033",
+    "sectorName": "Villa Caroni",
+    "latitude": 8.264282,
+    "longitude": -62.743627,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 67.0,
+    "priority": "media",
+    "lastCollection": "2026-06-07T07:30:00Z"
+  },
+  {
+    "code": "CNT-034",
+    "sectorName": "Rio Aro",
+    "latitude": 8.272026,
+    "longitude": -62.746698,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 80.0,
+    "priority": "media",
+    "lastCollection": "2026-06-08T08:30:00Z"
+  },
+  {
+    "code": "CNT-035",
+    "sectorName": "Los Bucares",
+    "latitude": 8.267684,
+    "longitude": -62.74881,
+    "maxCapacityKg": 800.0,
+    "fillLevelPct": 28.0,
+    "priority": "media",
+    "lastCollection": "2026-06-09T09:30:00Z"
+  },
+  {
+    "code": "CNT-036",
+    "sectorName": "Unare I",
+    "latitude": 8.280255,
+    "longitude": -62.74806,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 41.0,
+    "priority": "media",
+    "lastCollection": "2026-06-01T06:30:00Z"
+  },
+  {
+    "code": "CNT-037",
+    "sectorName": "Unare II",
+    "latitude": 8.274926,
+    "longitude": -62.757334,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 54.0,
+    "priority": "media",
+    "lastCollection": "2026-06-02T07:30:00Z"
+  },
+  {
+    "code": "CNT-038",
+    "sectorName": "Uchire",
+    "latitude": 8.276001,
+    "longitude": -62.75731,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 67.0,
+    "priority": "media",
+    "lastCollection": "2026-06-03T08:30:00Z"
+  },
+  {
+    "code": "CNT-039",
+    "sectorName": "Rio Caura",
+    "latitude": 8.270469,
+    "longitude": -62.762533,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 80.0,
+    "priority": "media",
+    "lastCollection": "2026-06-04T09:30:00Z"
+  },
+  {
+    "code": "CNT-040",
+    "sectorName": "Ventuari",
+    "latitude": 8.269315,
+    "longitude": -62.768998,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 28.0,
+    "priority": "media",
+    "lastCollection": "2026-06-05T06:30:00Z"
+  },
+  {
+    "code": "CNT-041",
+    "sectorName": "Curagua B",
+    "latitude": 8.269194,
+    "longitude": -62.781194,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 41.0,
+    "priority": "media",
+    "lastCollection": "2026-06-06T07:30:00Z"
+  },
+  {
+    "code": "CNT-042",
+    "sectorName": "El caimito 1-2-3-4",
+    "latitude": 8.263876,
+    "longitude": -62.792007,
+    "maxCapacityKg": 800.0,
+    "fillLevelPct": 54.0,
+    "priority": "media",
+    "lastCollection": "2026-06-07T08:30:00Z"
+  },
+  {
+    "code": "CNT-043",
+    "sectorName": "Villa Ikabaru",
+    "latitude": 8.260342,
+    "longitude": -62.79661,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 67.0,
+    "priority": "media",
+    "lastCollection": "2026-06-08T09:30:00Z"
+  },
+  {
+    "code": "CNT-044",
+    "sectorName": "Terrazas del caroni A-B-C",
+    "latitude": 8.259324,
+    "longitude": -62.746396,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 80.0,
+    "priority": "media",
+    "lastCollection": "2026-06-09T06:30:00Z"
+  },
+  {
+    "code": "CNT-045",
+    "sectorName": "Las Garzas",
+    "latitude": 8.26015,
+    "longitude": -62.769987,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 28.0,
+    "priority": "media",
+    "lastCollection": "2026-06-01T07:30:00Z"
+  },
+  {
+    "code": "CNT-046",
+    "sectorName": "Las Peonias",
+    "latitude": 8.260448,
+    "longitude": -62.776608,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 41.0,
+    "priority": "media",
+    "lastCollection": "2026-06-02T08:30:00Z"
+  },
+  {
+    "code": "CNT-047",
+    "sectorName": "Paratepuy",
+    "latitude": 8.256673,
+    "longitude": -62.796126,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 54.0,
+    "priority": "media",
+    "lastCollection": "2026-06-03T09:30:00Z"
+  },
+  {
+    "code": "CNT-048",
+    "sectorName": "Villa Caroni",
+    "latitude": 8.264754,
+    "longitude": -62.742974,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 67.0,
+    "priority": "media",
+    "lastCollection": "2026-06-04T06:30:00Z"
+  },
+  {
+    "code": "CNT-049",
+    "sectorName": "Rio Aro",
+    "latitude": 8.27534,
+    "longitude": -62.743892,
+    "maxCapacityKg": 800.0,
+    "fillLevelPct": 80.0,
+    "priority": "media",
+    "lastCollection": "2026-06-05T07:30:00Z"
+  },
+  {
+    "code": "CNT-050",
+    "sectorName": "Los Bucares",
+    "latitude": 8.266012,
+    "longitude": -62.751008,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 28.0,
+    "priority": "media",
+    "lastCollection": "2026-06-06T08:30:00Z"
+  },
+  {
+    "code": "CNT-051",
+    "sectorName": "Unare I",
+    "latitude": 8.281506,
+    "longitude": -62.753468,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 41.0,
+    "priority": "media",
+    "lastCollection": "2026-06-07T09:30:00Z"
+  },
+  {
+    "code": "CNT-052",
+    "sectorName": "Unare II",
+    "latitude": 8.280422,
+    "longitude": -62.760445,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 54.0,
+    "priority": "media",
+    "lastCollection": "2026-06-08T06:30:00Z"
+  },
+  {
+    "code": "CNT-053",
+    "sectorName": "Uchire",
+    "latitude": 8.279521,
+    "longitude": -62.756619,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 67.0,
+    "priority": "media",
+    "lastCollection": "2026-06-09T07:30:00Z"
+  },
+  {
+    "code": "CNT-054",
+    "sectorName": "Rio Caura",
+    "latitude": 8.269936,
+    "longitude": -62.75955,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 80.0,
+    "priority": "media",
+    "lastCollection": "2026-06-01T08:30:00Z"
+  },
+  {
+    "code": "CNT-055",
+    "sectorName": "Ventuari",
+    "latitude": 8.268291,
+    "longitude": -62.768899,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 28.0,
+    "priority": "media",
+    "lastCollection": "2026-06-02T09:30:00Z"
+  },
+  {
+    "code": "CNT-056",
+    "sectorName": "Curagua B",
+    "latitude": 8.270327,
+    "longitude": -62.780364,
+    "maxCapacityKg": 800.0,
+    "fillLevelPct": 41.0,
+    "priority": "media",
+    "lastCollection": "2026-06-03T06:30:00Z"
+  },
+  {
+    "code": "CNT-057",
+    "sectorName": "El caimito 1-2-3-4",
+    "latitude": 8.267221,
+    "longitude": -62.793046,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 54.0,
+    "priority": "media",
+    "lastCollection": "2026-06-04T07:30:00Z"
+  },
+  {
+    "code": "CNT-058",
+    "sectorName": "Villa Ikabaru",
+    "latitude": 8.251618,
+    "longitude": -62.802403,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 67.0,
+    "priority": "media",
+    "lastCollection": "2026-06-05T08:30:00Z"
+  },
+  {
+    "code": "CNT-059",
+    "sectorName": "Terrazas del caroni A-B-C",
+    "latitude": 8.262366,
+    "longitude": -62.746396,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 80.0,
+    "priority": "media",
+    "lastCollection": "2026-06-06T09:30:00Z"
+  },
+  {
+    "code": "CNT-060",
+    "sectorName": "Las Garzas",
+    "latitude": 8.261881,
+    "longitude": -62.765208,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 28.0,
+    "priority": "media",
+    "lastCollection": "2026-06-07T06:30:00Z"
+  },
+  {
+    "code": "CNT-061",
+    "sectorName": "Las Peonias",
+    "latitude": 8.265164,
+    "longitude": -62.772016,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 41.0,
+    "priority": "media",
+    "lastCollection": "2026-06-08T07:30:00Z"
+  },
+  {
+    "code": "CNT-062",
+    "sectorName": "Paratepuy",
+    "latitude": 8.256187,
+    "longitude": -62.793448,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 54.0,
+    "priority": "media",
+    "lastCollection": "2026-06-09T08:30:00Z"
+  },
+  {
+    "code": "CNT-063",
+    "sectorName": "Villa Caroni",
+    "latitude": 8.264045,
+    "longitude": -62.74428,
+    "maxCapacityKg": 800.0,
+    "fillLevelPct": 67.0,
+    "priority": "media",
+    "lastCollection": "2026-06-01T09:30:00Z"
+  },
+  {
+    "code": "CNT-064",
+    "sectorName": "Rio Aro",
+    "latitude": 8.270922,
+    "longitude": -62.742489,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 80.0,
+    "priority": "media",
+    "lastCollection": "2026-06-02T06:30:00Z"
+  },
+  {
+    "code": "CNT-065",
+    "sectorName": "Los Bucares",
+    "latitude": 8.268799,
+    "longitude": -62.746613,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 28.0,
+    "priority": "media",
+    "lastCollection": "2026-06-03T07:30:00Z"
+  },
+  {
+    "code": "CNT-066",
+    "sectorName": "Unare I",
+    "latitude": 8.282756,
+    "longitude": -62.74806,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 41.0,
+    "priority": "media",
+    "lastCollection": "2026-06-04T08:30:00Z"
+  },
+  {
+    "code": "CNT-067",
+    "sectorName": "Unare II",
+    "latitude": 8.277674,
+    "longitude": -62.759408,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 54.0,
+    "priority": "media",
+    "lastCollection": "2026-06-05T09:30:00Z"
+  },
+  {
+    "code": "CNT-068",
+    "sectorName": "Uchire",
+    "latitude": 8.275121,
+    "longitude": -62.755928,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 67.0,
+    "priority": "media",
+    "lastCollection": "2026-06-06T06:30:00Z"
+  },
+  {
+    "code": "CNT-069",
+    "sectorName": "Rio Caura",
+    "latitude": 8.268338,
+    "longitude": -62.761041,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 80.0,
+    "priority": "media",
+    "lastCollection": "2026-06-07T07:30:00Z"
+  },
+  {
+    "code": "CNT-070",
+    "sectorName": "Ventuari",
+    "latitude": 8.267986,
+    "longitude": -62.77191,
+    "maxCapacityKg": 800.0,
+    "fillLevelPct": 28.0,
+    "priority": "media",
+    "lastCollection": "2026-06-08T08:30:00Z"
+  },
+  {
+    "code": "CNT-071",
+    "sectorName": "Curagua B",
+    "latitude": 8.26852,
+    "longitude": -62.777685,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 41.0,
+    "priority": "media",
+    "lastCollection": "2026-06-09T09:30:00Z"
+  },
+  {
+    "code": "CNT-072",
+    "sectorName": "El caimito 1-2-3-4",
+    "latitude": 8.26945,
+    "longitude": -62.790968,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 54.0,
+    "priority": "media",
+    "lastCollection": "2026-06-01T06:30:00Z"
+  },
+  {
+    "code": "CNT-073",
+    "sectorName": "Villa Ikabaru",
+    "latitude": 8.25717,
+    "longitude": -62.79992,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 67.0,
+    "priority": "media",
+    "lastCollection": "2026-06-02T07:30:00Z"
+  },
+  {
+    "code": "CNT-074",
+    "sectorName": "Terrazas del caroni A-B-C",
+    "latitude": 8.261352,
+    "longitude": -62.740256,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 80.0,
+    "priority": "media",
+    "lastCollection": "2026-06-03T08:30:00Z"
+  },
+  {
+    "code": "CNT-075",
+    "sectorName": "Las Garzas",
+    "latitude": 8.26015,
+    "longitude": -62.767119,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 28.0,
+    "priority": "media",
+    "lastCollection": "2026-06-04T09:30:00Z"
+  },
+  {
+    "code": "CNT-076",
+    "sectorName": "Las Peonias",
+    "latitude": 8.262617,
+    "longitude": -62.774113,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 41.0,
+    "priority": "media",
+    "lastCollection": "2026-06-05T06:30:00Z"
+  },
+  {
+    "code": "CNT-077",
+    "sectorName": "Paratepuy",
+    "latitude": 8.256867,
+    "longitude": -62.79339,
+    "maxCapacityKg": 800.0,
+    "fillLevelPct": 54.0,
+    "priority": "media",
+    "lastCollection": "2026-06-06T07:30:00Z"
+  },
+  {
+    "code": "CNT-078",
+    "sectorName": "Villa Caroni",
+    "latitude": 8.264282,
+    "longitude": -62.742648,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 67.0,
+    "priority": "media",
+    "lastCollection": "2026-06-07T08:30:00Z"
+  },
+  {
+    "code": "CNT-079",
+    "sectorName": "Rio Aro",
+    "latitude": 8.274235,
+    "longitude": -62.749503,
+    "maxCapacityKg": 1200.0,
+    "fillLevelPct": 80.0,
+    "priority": "media",
+    "lastCollection": "2026-06-08T09:30:00Z"
+  },
+  {
+    "code": "CNT-080",
+    "sectorName": "Los Bucares",
+    "latitude": 8.267684,
+    "longitude": -62.751008,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 28.0,
+    "priority": "media",
+    "lastCollection": "2026-06-09T06:30:00Z"
+  },
+  {
+    "code": "CNT-081",
+    "sectorName": "C.C Los Andes",
+    "latitude": 8.255823,
+    "longitude": -62.794921,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 28.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-082",
+    "sectorName": "Altos de Caroní",
+    "latitude": 8.2643,
+    "longitude": -62.748209,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 41.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-083",
+    "sectorName": "Barrio Guayana",
+    "latitude": 8.273007,
+    "longitude": -62.768508,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 54.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-084",
+    "sectorName": "Bloques de Curagua",
+    "latitude": 8.272379,
+    "longitude": -62.776202,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 67.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-085",
+    "sectorName": "C.C Los Andes",
+    "latitude": 8.254001,
+    "longitude": -62.79934,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 25.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-086",
+    "sectorName": "C.C Los Andes",
+    "latitude": 8.254874,
+    "longitude": -62.792782,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 38.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-087",
+    "sectorName": "Camino Real",
+    "latitude": 8.258391,
+    "longitude": -62.7902,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 51.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-088",
+    "sectorName": "C.C Los Andes",
+    "latitude": 8.25569,
+    "longitude": -62.79751,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 64.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-089",
+    "sectorName": "C.C Los Andes",
+    "latitude": 8.254799,
+    "longitude": -62.796685,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 22.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-090",
+    "sectorName": "C.C Los Andes",
+    "latitude": 8.255307,
+    "longitude": -62.79671,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 35.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-091",
+    "sectorName": "C.C Los Andes",
+    "latitude": 8.255216,
+    "longitude": -62.792377,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 48.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-092",
+    "sectorName": "C.C Los Andes",
+    "latitude": 8.254874,
+    "longitude": -62.79711,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 61.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-093",
+    "sectorName": "C.C Los Andes",
+    "latitude": 8.255174,
+    "longitude": -62.79671,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 74.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-094",
+    "sectorName": "Caujaro",
+    "latitude": 8.260731,
+    "longitude": -62.790336,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 32.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-095",
+    "sectorName": "C.C Los Andes",
+    "latitude": 8.253758,
+    "longitude": -62.794251,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 45.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-096",
+    "sectorName": "C.C Los Andes",
+    "latitude": 8.254244,
+    "longitude": -62.796394,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 58.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-097",
+    "sectorName": "C.C Los Andes",
+    "latitude": 8.25509,
+    "longitude": -62.79671,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 71.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-098",
+    "sectorName": "Colegio Integral Guayana",
+    "latitude": 8.264753,
+    "longitude": -62.756813,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 29.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-099",
+    "sectorName": "Res. El Gigante",
+    "latitude": 8.253066,
+    "longitude": -62.79606,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 42.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-100",
+    "sectorName": "Res. El Gigante",
+    "latitude": 8.252509,
+    "longitude": -62.79624,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 55.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-101",
+    "sectorName": "Res. El Gigante",
+    "latitude": 8.253326,
+    "longitude": -62.797168,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 68.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-102",
+    "sectorName": "Don Guillermo",
+    "latitude": 8.269431,
+    "longitude": -62.783709,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 26.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-103",
+    "sectorName": "Res. El Gigante",
+    "latitude": 8.253626,
+    "longitude": -62.797968,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 39.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-104",
+    "sectorName": "El tiamo Country Club",
+    "latitude": 8.257217,
+    "longitude": -62.781502,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 52.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-105",
+    "sectorName": "Res. El Gigante",
+    "latitude": 8.253409,
+    "longitude": -62.797568,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 65.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-106",
+    "sectorName": "Res. El Gigante",
+    "latitude": 8.253242,
+    "longitude": -62.797168,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 23.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-107",
+    "sectorName": "Res. El Gigante",
+    "latitude": 8.253272,
+    "longitude": -62.795323,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 36.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-108",
+    "sectorName": "Guamo A-B-C",
+    "latitude": 8.274757,
+    "longitude": -62.782163,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 49.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-109",
+    "sectorName": "Res. El Gigante",
+    "latitude": 8.25307,
+    "longitude": -62.796944,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 62.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-110",
+    "sectorName": "Res. El Gigante",
+    "latitude": 8.251814,
+    "longitude": -62.797197,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 20.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-111",
+    "sectorName": "Res. El Gigante",
+    "latitude": 8.253515,
+    "longitude": -62.798268,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 33.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-112",
+    "sectorName": "Isla Bonita",
+    "latitude": 8.255638,
+    "longitude": -62.783166,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 46.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-113",
+    "sectorName": "Isla Coral",
+    "latitude": 8.255334,
+    "longitude": -62.782897,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 59.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-114",
+    "sectorName": "Isla Dorada",
+    "latitude": 8.253536,
+    "longitude": -62.783238,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 72.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-115",
+    "sectorName": "La Pastoreña",
+    "latitude": 8.264211,
+    "longitude": -62.742007,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 30.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-116",
+    "sectorName": "Res. El Gigante",
+    "latitude": 8.252209,
+    "longitude": -62.79624,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 43.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-117",
+    "sectorName": "Las Mercedes",
+    "latitude": 8.271484,
+    "longitude": -62.750305,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 56.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-118",
+    "sectorName": "Las palmeras I y II",
+    "latitude": 8.253893,
+    "longitude": -62.780961,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 69.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-119",
+    "sectorName": "Res. El Gigante",
+    "latitude": 8.253758,
+    "longitude": -62.797465,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 27.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-120",
+    "sectorName": "Lomas del caroni",
+    "latitude": 8.260439,
+    "longitude": -62.774995,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 40.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-121",
+    "sectorName": "Los Rosales",
+    "latitude": 8.265495,
+    "longitude": -62.76,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 53.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-123",
+    "sectorName": "Manuelita Saenz",
+    "latitude": 8.261265,
+    "longitude": -62.737123,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 24.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-130",
+    "sectorName": "Res. Atlantico Plaza",
+    "latitude": 8.254875,
+    "longitude": -62.787563,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 60.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-131",
+    "sectorName": "Res Caroni plaza A-B-C-D",
+    "latitude": 8.269419,
+    "longitude": -62.74912,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 73.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-133",
+    "sectorName": "Res. Prasanthy country",
+    "latitude": 8.266021,
+    "longitude": -62.753381,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 44.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-134",
+    "sectorName": "Rio Cuyuní",
+    "latitude": 8.273945,
+    "longitude": -62.758422,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 57.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-135",
+    "sectorName": "Rio negro",
+    "latitude": 8.267378,
+    "longitude": -62.744231,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 70.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-136",
+    "sectorName": "Rio Yocoima",
+    "latitude": 8.276451,
+    "longitude": -62.747891,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 28.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-137",
+    "sectorName": "Villa Betania",
+    "latitude": 8.246528,
+    "longitude": -62.80986,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 41.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-138",
+    "sectorName": "Res. Kanayma Sur",
+    "latitude": 8.258404,
+    "longitude": -62.794657,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 54.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-139",
+    "sectorName": "Res. Kanayma Sur",
+    "latitude": 8.258704,
+    "longitude": -62.79318,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 67.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-140",
+    "sectorName": "Sierra Parima",
+    "latitude": 8.250307,
+    "longitude": -62.800549,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 25.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-141",
+    "sectorName": "Res. Kanayma Sur",
+    "latitude": 8.258576,
+    "longitude": -62.793608,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 38.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-142",
+    "sectorName": "Res. Kanayma Sur",
+    "latitude": 8.25982,
+    "longitude": -62.793579,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 51.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-143",
+    "sectorName": "Villa Betania",
+    "latitude": 8.248655,
+    "longitude": -62.823801,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 64.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-144",
+    "sectorName": "Terrazas del aluminio",
+    "latitude": 8.258519,
+    "longitude": -62.740681,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 22.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-145",
+    "sectorName": "UD 292",
+    "latitude": 8.274542,
+    "longitude": -62.761677,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 35.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-146",
+    "sectorName": "Villa Betania",
+    "latitude": 8.259291,
+    "longitude": -62.812648,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 48.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-147",
+    "sectorName": "Urb. Sur Aeropuerto",
+    "latitude": 8.265175,
+    "longitude": -62.754962,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 61.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-148",
+    "sectorName": "Urb. Villa del Caroní",
+    "latitude": 8.255338,
+    "longitude": -62.786451,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 74.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-149",
+    "sectorName": "Villa Apso",
+    "latitude": 8.273866,
+    "longitude": -62.776094,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 32.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-150",
+    "sectorName": "Villa Betania",
+    "latitude": 8.244401,
+    "longitude": -62.818225,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 45.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-151",
+    "sectorName": "Villa Guayana",
+    "latitude": 8.257168,
+    "longitude": -62.784936,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 58.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-152",
+    "sectorName": "Villa Betania",
+    "latitude": 8.25291,
+    "longitude": -62.818225,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 71.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-153",
+    "sectorName": "Villa Victoria",
+    "latitude": 8.266203,
+    "longitude": -62.756607,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 29.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-154",
+    "sectorName": "Villa Yenisha",
+    "latitude": 8.255832,
+    "longitude": -62.790303,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 42.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-155",
+    "sectorName": "Yara Yara I y II",
+    "latitude": 8.25503,
+    "longitude": -62.778499,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 55.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-156",
+    "sectorName": "Yuruani",
+    "latitude": 8.270009,
+    "longitude": -62.757663,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 68.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-157",
+    "sectorName": "Villa Betania",
+    "latitude": 8.25291,
+    "longitude": -62.807072,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 26.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-158",
+    "sectorName": "Altos de Caroní",
+    "latitude": 8.265033,
+    "longitude": -62.744811,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 39.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-159",
+    "sectorName": "Barrio Guayana",
+    "latitude": 8.274638,
+    "longitude": -62.773755,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 52.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-160",
+    "sectorName": "Bloques de Curagua",
+    "latitude": 8.272379,
+    "longitude": -62.774188,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 65.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-161",
+    "sectorName": "Villa Betania",
+    "latitude": 8.25291,
+    "longitude": -62.812648,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 23.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-162",
+    "sectorName": "Villa Betania",
+    "latitude": 8.244401,
+    "longitude": -62.804284,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 36.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-163",
+    "sectorName": "Yuruani",
+    "latitude": 8.275199,
+    "longitude": -62.752922,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 49.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-164",
+    "sectorName": "Yuruani",
+    "latitude": 8.270009,
+    "longitude": -62.754503,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 62.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-165",
+    "sectorName": "Yuruani",
+    "latitude": 8.271306,
+    "longitude": -62.756083,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 20.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-166",
+    "sectorName": "Campito",
+    "latitude": 8.274555,
+    "longitude": -62.760497,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 33.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-167",
+    "sectorName": "Campito",
+    "latitude": 8.279219,
+    "longitude": -62.761677,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 46.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-168",
+    "sectorName": "Campito",
+    "latitude": 8.271424,
+    "longitude": -62.759427,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 59.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-169",
+    "sectorName": "Campito",
+    "latitude": 8.276101,
+    "longitude": -62.760552,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 72.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-170",
+    "sectorName": "Barrio Guayana",
+    "latitude": 8.277901,
+    "longitude": -62.766759,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 30.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-171",
+    "sectorName": "Barrio Guayana",
+    "latitude": 8.269744,
+    "longitude": -62.772006,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 43.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-172",
+    "sectorName": "Caujaro",
+    "latitude": 8.263997,
+    "longitude": -62.78213,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 56.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-173",
+    "sectorName": "Caujaro",
+    "latitude": 8.265957,
+    "longitude": -62.787725,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 69.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-174",
+    "sectorName": "Camino Real",
+    "latitude": 8.255523,
+    "longitude": -62.787994,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 27.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-175",
+    "sectorName": "Caujaro",
+    "latitude": 8.261384,
+    "longitude": -62.78586,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 40.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-176",
+    "sectorName": "Colegio Integral Guayana",
+    "latitude": 8.264569,
+    "longitude": -62.758254,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 53.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-177",
+    "sectorName": "Don Guillermo",
+    "latitude": 8.268525,
+    "longitude": -62.78275,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 66.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-178",
+    "sectorName": "El caimito 1-2-3-4",
+    "latitude": 8.268707,
+    "longitude": -62.787504,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 24.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-179",
+    "sectorName": "El tiamo Country Club",
+    "latitude": 8.257571,
+    "longitude": -62.780411,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 37.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-180",
+    "sectorName": "El caimito 1-2-3-4",
+    "latitude": 8.26239,
+    "longitude": -62.794778,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 50.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-181",
+    "sectorName": "Guamo A-B-C",
+    "latitude": 8.278641,
+    "longitude": -62.776589,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 63.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-182",
+    "sectorName": "Guamo A-B-C",
+    "latitude": 8.274379,
+    "longitude": -62.786404,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 21.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-183",
+    "sectorName": "Guamo A-B-C",
+    "latitude": 8.277504,
+    "longitude": -62.779861,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 34.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-184",
+    "sectorName": "Posada Daniel",
+    "latitude": 8.267479,
+    "longitude": -62.767803,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 47.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-185",
+    "sectorName": "Posada Daniel",
+    "latitude": 8.268555,
+    "longitude": -62.765264,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 60.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-186",
+    "sectorName": "Posada Daniel",
+    "latitude": 8.265928,
+    "longitude": -62.765344,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 73.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-187",
+    "sectorName": "Isla Bonita",
+    "latitude": 8.257069,
+    "longitude": -62.783166,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 31.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-188",
+    "sectorName": "Isla Coral",
+    "latitude": 8.254323,
+    "longitude": -62.782897,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 44.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-189",
+    "sectorName": "Isla Dorada",
+    "latitude": 8.250204,
+    "longitude": -62.785096,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 57.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-190",
+    "sectorName": "Posada Daniel",
+    "latitude": 8.265328,
+    "longitude": -62.769073,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 70.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-191",
+    "sectorName": "Las Peonias",
+    "latitude": 8.2629,
+    "longitude": -62.778904,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 28.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-192",
+    "sectorName": "La Pastoreña",
+    "latitude": 8.263742,
+    "longitude": -62.739502,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 41.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-193",
+    "sectorName": "Las Mercedes",
+    "latitude": 8.268392,
+    "longitude": -62.752898,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 54.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-194",
+    "sectorName": "Las palmeras I y II",
+    "latitude": 8.25501,
+    "longitude": -62.779346,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 67.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-195",
+    "sectorName": "Lomas del caroni",
+    "latitude": 8.25667,
+    "longitude": -62.774995,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 25.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-196",
+    "sectorName": "Los Rosales",
+    "latitude": 8.264944,
+    "longitude": -62.761642,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 38.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-197",
+    "sectorName": "Las Peonias",
+    "latitude": 8.267427,
+    "longitude": -62.773514,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 51.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-198",
+    "sectorName": "Manuelita Saenz",
+    "latitude": 8.262595,
+    "longitude": -62.736583,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 64.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-200",
+    "sectorName": "Unare I",
+    "latitude": 8.280255,
+    "longitude": -62.750764,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 35.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-201",
+    "sectorName": "Unare I",
+    "latitude": 8.279005,
+    "longitude": -62.749412,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 48.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-202",
+    "sectorName": "Yara Yara I y II",
+    "latitude": 8.250857,
+    "longitude": -62.778499,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 61.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-203",
+    "sectorName": "Yara Yara I y II",
+    "latitude": 8.253639,
+    "longitude": -62.776178,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 74.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-204",
+    "sectorName": "Altos de Caroní",
+    "latitude": 8.261801,
+    "longitude": -62.749556,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 32.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-205",
+    "sectorName": "Res Caroni plaza A-B-C-D",
+    "latitude": 8.27026,
+    "longitude": -62.74694,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 45.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-206",
+    "sectorName": "Res. Atlantico Plaza",
+    "latitude": 8.253573,
+    "longitude": -62.787214,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 58.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-207",
+    "sectorName": "Res. Prasanthy country",
+    "latitude": 8.267063,
+    "longitude": -62.754844,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 71.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-208",
+    "sectorName": "Rio Cuyuní",
+    "latitude": 8.273419,
+    "longitude": -62.756925,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 29.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-209",
+    "sectorName": "Rio Yocoima",
+    "latitude": 8.277743,
+    "longitude": -62.745734,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 42.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-210",
+    "sectorName": "Rio negro",
+    "latitude": 8.267378,
+    "longitude": -62.741769,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 55.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-211",
+    "sectorName": "Curagua A",
+    "latitude": 8.271343,
+    "longitude": -62.781723,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 68.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-212",
+    "sectorName": "Curagua A",
+    "latitude": 8.271005,
+    "longitude": -62.782819,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 26.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-213",
+    "sectorName": "Curagua A",
+    "latitude": 8.27236,
+    "longitude": -62.780141,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 39.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-214",
+    "sectorName": "Curagua A",
+    "latitude": 8.272154,
+    "longitude": -62.778754,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 52.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-215",
+    "sectorName": "Sierra Parima",
+    "latitude": 8.252338,
+    "longitude": -62.800549,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 65.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-216",
+    "sectorName": "Curagua B",
+    "latitude": 8.26852,
+    "longitude": -62.779471,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 23.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-217",
+    "sectorName": "Terrazas del aluminio",
+    "latitude": 8.260091,
+    "longitude": -62.74287,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 36.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-218",
+    "sectorName": "UD 292",
+    "latitude": 8.27766,
+    "longitude": -62.763926,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 49.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-219",
+    "sectorName": "Isla Dorada",
+    "latitude": 8.252962,
+    "longitude": -62.786355,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 62.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-220",
+    "sectorName": "Urb. Sur Aeropuerto",
+    "latitude": 8.265332,
+    "longitude": -62.754658,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 20.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-221",
+    "sectorName": "Urb. Villa del Caroní",
+    "latitude": 8.25517,
+    "longitude": -62.784704,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 33.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-222",
+    "sectorName": "Las Garzas",
+    "latitude": 8.264477,
+    "longitude": -62.766164,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 46.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-223",
+    "sectorName": "Villa Apso",
+    "latitude": 8.27519,
+    "longitude": -62.775012,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 59.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-224",
+    "sectorName": "Villa Betania",
+    "latitude": 8.248655,
+    "longitude": -62.815437,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 72.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-225",
+    "sectorName": "Villa Guayana",
+    "latitude": 8.258233,
+    "longitude": -62.784392,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 30.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-226",
+    "sectorName": "Villa Victoria",
+    "latitude": 8.265863,
+    "longitude": -62.757798,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 43.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-227",
+    "sectorName": "Villa Yenisha",
+    "latitude": 8.254638,
+    "longitude": -62.789215,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 56.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-228",
+    "sectorName": "Yara Yara I y II",
+    "latitude": 8.257812,
+    "longitude": -62.777338,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 69.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-229",
+    "sectorName": "Yuruani",
+    "latitude": 8.268711,
+    "longitude": -62.756083,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 27.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-230",
+    "sectorName": "PPL de Curagua",
+    "latitude": 8.271921,
+    "longitude": -62.776202,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 40.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-231",
+    "sectorName": "PPL de Curagua",
+    "latitude": 8.271716,
+    "longitude": -62.77676,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 53.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-232",
+    "sectorName": "PPL de Curagua",
+    "latitude": 8.271004,
+    "longitude": -62.776874,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 66.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-233",
+    "sectorName": "Las Mercedes",
+    "latitude": 8.272515,
+    "longitude": -62.754194,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 24.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-234",
+    "sectorName": "Altos de Caroní",
+    "latitude": 8.26555,
+    "longitude": -62.746744,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 37.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-235",
+    "sectorName": "Barrio Guayana",
+    "latitude": 8.271375,
+    "longitude": -62.765011,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 50.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-236",
+    "sectorName": "Bloques de Curagua",
+    "latitude": 8.272616,
+    "longitude": -62.775232,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 63.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-237",
+    "sectorName": "Lomas del caroni",
+    "latitude": 8.259183,
+    "longitude": -62.772445,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 21.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-238",
+    "sectorName": "Los Bucares",
+    "latitude": 8.267126,
+    "longitude": -62.746613,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 34.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-239",
+    "sectorName": "Res Gran Royal",
+    "latitude": 8.254317,
+    "longitude": -62.785948,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 47.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-240",
+    "sectorName": "Res Gran Royal",
+    "latitude": 8.254112,
+    "longitude": -62.786055,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 60.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-241",
+    "sectorName": "Res Gran Royal",
+    "latitude": 8.253969,
+    "longitude": -62.785957,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 73.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-242",
+    "sectorName": "Paratepuy",
+    "latitude": 8.256673,
+    "longitude": -62.791841,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 31.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-243",
+    "sectorName": "Rio Aro",
+    "latitude": 8.274235,
+    "longitude": -62.746698,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 44.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-244",
+    "sectorName": "Rio Caura",
+    "latitude": 8.270469,
+    "longitude": -62.761041,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 57.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-245",
+    "sectorName": "Trailers de Bauxilum-Alcasa-Venalum",
+    "latitude": 8.25493,
+    "longitude": -62.786451,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 70.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-246",
+    "sectorName": "Trailers de Bauxilum-Alcasa-Venalum",
+    "latitude": 8.254521,
+    "longitude": -62.785659,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 28.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-247",
+    "sectorName": "Trailers de Bauxilum-Alcasa-Venalum",
+    "latitude": 8.254874,
+    "longitude": -62.785916,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 41.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-248",
+    "sectorName": "Rio Yocoima",
+    "latitude": 8.277097,
+    "longitude": -62.750047,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 54.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-249",
+    "sectorName": "Rio negro",
+    "latitude": 8.269059,
+    "longitude": -62.744231,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 67.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-250",
+    "sectorName": "Camino Real",
+    "latitude": 8.259903,
+    "longitude": -62.791545,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 25.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-251",
+    "sectorName": "Caujaro",
+    "latitude": 8.267917,
+    "longitude": -62.783995,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 38.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-252",
+    "sectorName": "Colegio Integral Guayana",
+    "latitude": 8.264569,
+    "longitude": -62.755853,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 51.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-253",
+    "sectorName": "Don Guillermo",
+    "latitude": 8.269431,
+    "longitude": -62.784667,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 64.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-254",
+    "sectorName": "Sierra Parima",
+    "latitude": 8.248275,
+    "longitude": -62.800549,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 22.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-255",
+    "sectorName": "El tiamo Country Club",
+    "latitude": 8.256155,
+    "longitude": -62.781502,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 35.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-256",
+    "sectorName": "Plaza El Delfín",
+    "latitude": 8.2559,
+    "longitude": -62.786126,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 48.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-257",
+    "sectorName": "Plaza El Delfín",
+    "latitude": 8.256156,
+    "longitude": -62.786055,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 61.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-258",
+    "sectorName": "Plaza El Delfín",
+    "latitude": 8.255951,
+    "longitude": -62.785866,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 74.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-259",
+    "sectorName": "Guamo A-B-C",
+    "latitude": 8.276368,
+    "longitude": -62.784223,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 32.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-260",
+    "sectorName": "Terrazas del caroni A-B-C",
+    "latitude": 8.261352,
+    "longitude": -62.744349,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 45.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-261",
+    "sectorName": "UD 292",
+    "latitude": 8.272983,
+    "longitude": -62.763926,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 58.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-262",
+    "sectorName": "Uchire",
+    "latitude": 8.280401,
+    "longitude": -62.759385,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 71.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-263",
+    "sectorName": "Isla Bonita",
+    "latitude": 8.255638,
+    "longitude": -62.78426,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 29.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-264",
+    "sectorName": "Isla Coral",
+    "latitude": 8.256008,
+    "longitude": -62.782364,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 42.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-265",
+    "sectorName": "Isla Dorada",
+    "latitude": 8.2521,
+    "longitude": -62.784557,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 55.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-266",
+    "sectorName": "Villa Sicilia",
+    "latitude": 8.264664,
+    "longitude": -62.755569,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 68.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-267",
+    "sectorName": "Villa Sicilia",
+    "latitude": 8.264973,
+    "longitude": -62.755365,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 26.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-268",
+    "sectorName": "La Pastoreña",
+    "latitude": 8.263273,
+    "longitude": -62.743677,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 39.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-269",
+    "sectorName": "Las Mercedes",
+    "latitude": 8.271484,
+    "longitude": -62.747712,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 52.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-270",
+    "sectorName": "Las palmeras I y II",
+    "latitude": 8.252777,
+    "longitude": -62.781499,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 65.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-271",
+    "sectorName": "Lomas del caroni",
+    "latitude": 8.262952,
+    "longitude": -62.77117,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 23.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-272",
+    "sectorName": "Los Rosales",
+    "latitude": 8.26632,
+    "longitude": -62.758906,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 36.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-273",
+    "sectorName": "Villa Sicilia",
+    "latitude": 8.264598,
+    "longitude": -62.755427,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 49.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-274",
+    "sectorName": "Manuelita Saenz",
+    "latitude": 8.260378,
+    "longitude": -62.737663,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 62.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-276",
+    "sectorName": "Unare II",
+    "latitude": 8.275613,
+    "longitude": -62.758371,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 33.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-277",
+    "sectorName": "Ventuari",
+    "latitude": 8.265897,
+    "longitude": -62.770566,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 46.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-278",
+    "sectorName": "Villa Guayana",
+    "latitude": 8.256636,
+    "longitude": -62.783848,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 59.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-279",
+    "sectorName": "Res. Atlantis",
+    "latitude": 8.265447,
+    "longitude": -62.75498,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 72.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-280",
+    "sectorName": "Res. Atlantis",
+    "latitude": 8.265821,
+    "longitude": -62.754402,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 30.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-281",
+    "sectorName": "Res Caroni plaza A-B-C-D",
+    "latitude": 8.268998,
+    "longitude": -62.7513,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 43.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-282",
+    "sectorName": "Res. Atlantico Plaza",
+    "latitude": 8.253573,
+    "longitude": -62.786515,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 56.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-283",
+    "sectorName": "Res. Prasanthy country",
+    "latitude": 8.264978,
+    "longitude": -62.75265,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 69.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-284",
+    "sectorName": "Rio Cuyuní",
+    "latitude": 8.272368,
+    "longitude": -62.758422,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 27.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-285",
+    "sectorName": "Rio Yocoima",
+    "latitude": 8.275805,
+    "longitude": -62.745734,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 40.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-286",
+    "sectorName": "Rio negro",
+    "latitude": 8.265698,
+    "longitude": -62.74341,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 53.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-287",
+    "sectorName": "Res. Atlantis",
+    "latitude": 8.26567,
+    "longitude": -62.754758,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 66.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-288",
+    "sectorName": "Villa Ikabaru",
+    "latitude": 8.255584,
+    "longitude": -62.799093,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 24.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-289",
+    "sectorName": "Villa Victoria",
+    "latitude": 8.266882,
+    "longitude": -62.756012,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 37.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-290",
+    "sectorName": "Villa Yenisha",
+    "latitude": 8.255832,
+    "longitude": -62.789215,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 50.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-291",
+    "sectorName": "Sierra Parima",
+    "latitude": 8.250307,
+    "longitude": -62.798664,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 63.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-292",
+    "sectorName": "Villa Ángela",
+    "latitude": 8.265576,
+    "longitude": -62.755427,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 21.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-293",
+    "sectorName": "Terrazas del aluminio",
+    "latitude": 8.257995,
+    "longitude": -62.739222,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 34.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-294",
+    "sectorName": "UD 292",
+    "latitude": 8.275818,
+    "longitude": -62.764152,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 47.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-295",
+    "sectorName": "Villa Ángela",
+    "latitude": 8.265414,
+    "longitude": -62.755428,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 60.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-296",
+    "sectorName": "Urb. Sur Aeropuerto",
+    "latitude": 8.265382,
+    "longitude": -62.754777,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 73.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-297",
+    "sectorName": "Urb. Villa del Caroní",
+    "latitude": 8.255396,
+    "longitude": -62.785778,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 31.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-298",
+    "sectorName": "Villa Ángela",
+    "latitude": 8.265247,
+    "longitude": -62.755744,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 44.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-299",
+    "sectorName": "Villa Apso",
+    "latitude": 8.274749,
+    "longitude": -62.776635,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 57.0,
+    "priority": "media",
+    "lastCollection": null
+  },
+  {
+    "code": "CNT-300",
+    "sectorName": "Villa Betania",
+    "latitude": 8.248655,
+    "longitude": -62.804284,
+    "maxCapacityKg": 1000.0,
+    "fillLevelPct": 70.0,
+    "priority": "media",
+    "lastCollection": null
+  }
+]

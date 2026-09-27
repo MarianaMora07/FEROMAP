@@ -1,0 +1,84 @@
+import type { SimulationCrewParameters, VehicleCrewFields } from '../../data/types/crewServiceTime';
+import type { RouteCollection } from '../../data/types/geo';
+import type { KpiMetrics, ScenarioId, SimulationLogEntry, AcoConvergencePoint } from '../../data/types/simulation';
+import type { ExecutionPhaseId } from '../../features/simulation/executionPhases';
+import { apiGet, apiPost, useMocks } from './client';
+import { kpiByScenario } from '../../data/mock/kpis';
+import { getScenarioRoutes } from '../../data/mock/routes';
+import type { SimulationRunParameters } from './simulation';
+
+export type { SimulationCrewParameters, VehicleCrewFields };
+
+export type OptimizationJobStatus = 'pending' | 'running' | 'completed' | 'cancelled' | 'failed';
+
+export interface SimulationOptimizationJob {
+  jobId: string;
+  status: OptimizationJobStatus;
+  phase: ExecutionPhaseId | null;
+  progress: number;
+  logs: SimulationLogEntry[];
+  acoConvergence?: AcoConvergencePoint[];
+  result: OptimizeJobResult | null;
+  error: string | null;
+}
+
+export interface OptimizeJobResult {
+  simulationId: number;
+  scenarioId: ScenarioId;
+  kpis: KpiMetrics;
+  dailyPlanId?: number | null;
+  routes: {
+    current: RouteCollection;
+    optimized: RouteCollection;
+  };
+  logs: SimulationLogEntry[];
+  servedPointCodes?: string[];
+}
+
+export function startSimulationOptimizeJob(
+  scenarioId: ScenarioId | undefined,
+  parameters?: SimulationRunParameters & {
+    planningLevel?: string;
+    autoDispatch?: boolean;
+    collectionPointIds?: number[];
+    dailyPlanId?: number;
+    weeklyPlanId?: number;
+    operationDate?: string;
+    caseStudyId?: number;
+  },
+): Promise<{ jobId: string }> {
+  return apiPost<{ jobId: string }>('/api/v1/simulations/optimize', {
+    ...(scenarioId ? { scenarioId } : {}),
+    planningLevel: parameters?.planningLevel ?? 'simulation',
+    autoDispatch: parameters?.autoDispatch ?? false,
+    ...parameters,
+  });
+}
+
+export function fetchSimulationOptimizeJob(jobId: string): Promise<SimulationOptimizationJob> {
+  if (useMocks || jobId === 'mock-job') {
+    const kpis = kpiByScenario['normal']!;
+    const routes = getScenarioRoutes('normal');
+    return Promise.resolve({
+      jobId,
+      status: 'completed',
+      phase: null,
+      progress: 100,
+      logs: [],
+      result: {
+        simulationId: 42,
+        scenarioId: 'normal',
+        kpis,
+        routes: { current: routes, optimized: routes },
+        logs: [],
+        servedPointCodes: [],
+      },
+      error: null,
+    });
+  }
+  return apiGet<SimulationOptimizationJob>(`/api/v1/simulations/jobs/${jobId}`);
+}
+
+export function cancelSimulationOptimizeJob(jobId: string): Promise<{ jobId: string; status: string }> {
+  return apiPost<{ jobId: string; status: string }>(`/api/v1/simulations/jobs/${jobId}/cancel`, {});
+}

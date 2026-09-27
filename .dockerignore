@@ -1,0 +1,48 @@
+# Git
+.git
+.gitignore
+
+# Dependencias (se instalan en el contenedor)
+node_modules
+dist
+backend/.venv
+backend/__pycache__
+backend/**/__pycache__
+backend/.pytest_cache
+
+# Entorno
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea
+.vscode
+.cursor
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs y cache local
+*.log
+.pytest_cache
+data/cache
+
+# Datos locales (se montan como volumen en dev/prod)
+postgres_data
+
+# Infra (no van en la imagen de producción)
+Containerfile.dev
+Containerfile.frontend
+Containerfile.frontend.dev
+compose.yml
+compose.*.yml
+.dockerignore
+justfile
+scripts
+
+# Documentos
+*.pdf

@@ -1,0 +1,140 @@
+import type { AuthUser } from '../types/auth';
+import type { DailyPlan } from '../api/planning';
+import type { LiveVehicle } from '../api/monitoring';
+import type { OperatorRouteSnapshot } from '../api/operator';
+import {
+  hadOperationalDayPlan,
+  hadOperationalSnapshotRoute,
+  isClosedDailyPlan,
+} from './operatorDayClosureUx';
+
+export interface OperatorGlossaryTerm {
+  id: string;
+  label: string;
+  definition: string;
+  toneClass: string;
+  titleClass: string;
+}
+
+export const OPERATOR_GLOSSARY: OperatorGlossaryTerm[] = [
+  {
+    id: 'route',
+    label: 'Mi ruta',
+    definition: 'Secuencia de paradas asignada a tu vehículo hoy',
+    toneClass: 'border-amber-300/60 bg-amber-50/80 dark:border-amber-900/40 dark:bg-amber-950/20',
+    titleClass: 'text-amber-800 dark:text-amber-200',
+  },
+  {
+    id: 'stop',
+    label: 'Parada',
+    definition: 'Punto de recolección que debes visitar en orden',
+    toneClass: 'border-fero-blue/30 bg-fero-blue/10',
+    titleClass: 'text-fero-blue',
+  },
+  {
+    id: 'incident',
+    label: 'Incidencia',
+    definition: 'Avería o contingencia que reportas desde campo',
+    toneClass: 'border-red-300/50 bg-red-50/80 dark:border-red-900/40 dark:bg-red-950/20',
+    titleClass: 'text-red-700 dark:text-red-300',
+  },
+  {
+    id: 'advance',
+    label: 'Avance',
+    definition: 'Progreso de tu ruta respecto al plan del día',
+    toneClass: 'border-fero-green/40 bg-fero-green/10',
+    titleClass: 'text-fero-green-dark',
+  },
+];
+
+export interface OperatorFieldContext {
+  hasDispatchedPlan: boolean;
+  hasAssignedVehicle: boolean;
+  hasPendingStops: boolean;
+  isDayClosed: boolean;
+  closedAt: string | null;
+  vehicle: LiveVehicle | null;
+  planStatus: string | null;
+  operationDate: string;
+}
+
+export function isDispatchedDailyPlan(plan: DailyPlan | null | undefined): boolean {
+  return hadOperationalDayPlan(plan);
+}
+
+export function matchOperatorVehicle(
+  fleet: LiveVehicle[],
+  user: AuthUser | null | undefined,
+): LiveVehicle | null {
+  if (!user) return null;
+  const fullName = `${user.firstName} ${user.lastName}`.trim();
+  const byName = fleet.find(
+    (vehicle) =>
+      vehicle.driver === fullName ||
+      (fullName.length > 3 && vehicle.driver.toLowerCase().includes(fullName.toLowerCase())),
+  );
+  if (byName) return byName;
+  if (user.driverId != null) {
+    const suffix = String(user.driverId).padStart(2, '0');
+    const bySuffix = fleet.find((vehicle) => vehicle.id.endsWith(suffix));
+    if (bySuffix) return bySuffix;
+    // Fallback: cualquier vehículo con ruta asignada al conductor en el snapshot.
+    return fleet.find((vehicle) => vehicle.routeId != null && vehicle.progress < 100) ?? null;
+  }
+  return null;
+}
+
+export function deriveOperatorFieldContext(params: {
+  plan: DailyPlan | null | undefined;
+  fleet: LiveVehicle[];
+  user: AuthUser | null | undefined;
+  operationDate: string;
+  /** vehicleId del snapshot cuando el matching de flota falla (evita señales mixtas). */
+  snapshotVehicleId?: string | null;
+  /**
+   * Snapshot de la ruta del conductor. Cuando el plan de hoy no está
+   * despachado pero el snapshot trae una jornada despachada (la próxima
+   * asignada), el dashboard debe mostrar la ruta en lugar de "Sin ruta
+   * despachada".
+   */
+  snapshot?: OperatorRouteSnapshot | null;
+}): OperatorFieldContext {
+  const vehicle = matchOperatorVehicle(params.fleet, params.user);
+  const planOperational = hadOperationalDayPlan(params.plan);
+  const snapshotOperational = hadOperationalSnapshotRoute(params.snapshot);
+  // La jornada que manda: la de hoy si ya está despachada; si no, la del snapshot.
+  const fromSnapshot = !planOperational && snapshotOperational;
+  const hasDispatchedPlan = planOperational || snapshotOperational;
+  const isDayClosed = fromSnapshot
+    ? Boolean(params.snapshot?.dailyPlanClosedAt)
+    : isClosedDailyPlan(params.plan);
+  const hasAssignedVehicle =
+    vehicle != null ||
+    params.user?.driverId != null ||
+    params.snapshotVehicleId != null;
+  const hasPendingStops =
+    hasDispatchedPlan &&
+    !isDayClosed &&
+    hasAssignedVehicle &&
+    (vehicle == null || vehicle.progress < 100);
+  const operationDate = fromSnapshot
+    ? (params.snapshot?.operationDate ?? params.operationDate)
+    : params.operationDate;
+  const planStatus = fromSnapshot
+    ? (params.snapshot?.dailyPlanStatus ?? null)
+    : (params.plan?.status ?? null);
+  const closedAt = fromSnapshot
+    ? (params.snapshot?.dailyPlanClosedAt ?? null)
+    : (params.plan?.closedAt ?? null);
+
+  return {
+    hasDispatchedPlan,
+    hasAssignedVehicle,
+    hasPendingStops,
+    isDayClosed,
+    closedAt,
+    vehicle,
+    planStatus,
+    operationDate,
+  };
+}

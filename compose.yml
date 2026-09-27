@@ -1,0 +1,13 @@
+# Servicios compartidos. Variables en .env de la raíz.
+# Desarrollo: compose.yml + compose.dev.yml  (COMPOSE_ENV=dev)
+# Producción: compose.yml + compose.prod.yml (COMPOSE_ENV=prod)
+name: ${COMPOSE_PROJECT_NAME:-feromap}
+
+services:
+  api:
+    container_name: ${COMPOSE_PROJECT_NAME:-feromap}-api
+    restart: unless-stopped
+
+  frontend:
+    container_name: ${COMPOSE_PROJECT_NAME:-feromap}-frontend
+    restart: unless-stopped

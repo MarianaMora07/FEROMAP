@@ -1,0 +1,478 @@
+import { AlertTriangle } from 'lucide-solid';
+import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
+import type { WeeklyPlan, WeeklyPlanDay } from '../../../core/api/planning';
+import type { PlanningCollectionPointRef } from '../../../core/api/collectionPoints';
+import type { ScenarioId } from '../../../data/types/simulation';
+import {
+  findWeeklyPlanMissingFromSchedules,
+  formatWeekdayLabel,
+  weeklyPlanDayLoadLevel,
+  weeklyPlanLoadCardClass,
+  type WeeklyPlanLoadLevel,
+} from '../../../core/planning/weeklyPlanCalendar';
+import { getCollectionPointRef, weeklyPlanState } from '../../../core/stores/weeklyPlanStore';
+import { Button, Drawer, SelectField, TextField } from '../../../design-system/components';
+
+interface WeeklyPlanWeekCalendarProps {
+  days: WeeklyPlanDay[];
+  editable: boolean;
+  selectedWeekday?: number | null;
+  onSelectDay: (weekday: number) => void;
+}
+
+export function WeeklyPlanWeekCalendar(props: WeeklyPlanWeekCalendarProps) {
+  const maxCount = createMemo(() => Math.max(0, ...props.days.map((day) => day.collectionPointIds.length)));
+
+  const loadLevel = (count: number): WeeklyPlanLoadLevel =>
+    weeklyPlanDayLoadLevel(count, maxCount());
+
+  return (
+    <div class="space-y-2" data-testid="weekly-plan-week-calendar">
+      <div class="flex items-center justify-between gap-2">
+        <p class="text-sm font-semibold text-text-primary dark:text-white">Calendario semanal</p>
+        <div class="flex flex-wrap items-center gap-2 text-[11px] text-text-muted">
+          <span class="inline-flex items-center gap-1">
+            <span class="h-2.5 w-2.5 rounded-full bg-emerald-300" /> Pocos
+          </span>
+          <span class="inline-flex items-center gap-1">
+            <span class="h-2.5 w-2.5 rounded-full bg-amber-300" /> Medio
+          </span>
+          <span class="inline-flex items-center gap-1">
+            <span class="h-2.5 w-2.5 rounded-full bg-orange-400" /> Muchos
+          </span>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+        <For each={props.days}>
+          {(day) => {
+            const level = () => loadLevel(day.collectionPointIds.length);
+            const isSelected = () => props.selectedWeekday === day.weekday;
+            const isWorkday = () => day.weekday <= 4;
+
+            return (
+              <button
+                type="button"
+                data-testid={`weekly-plan-day-card-${day.weekday}`}
+                disabled={!props.editable && day.collectionPointIds.length === 0}
+                onClick={() => props.onSelectDay(day.weekday)}
+                class={`rounded-xl border p-3 text-left transition-all ${weeklyPlanLoadCardClass[level()]} ${
+                  isSelected() ? 'ring-2 ring-fero-green-dark' : 'hover:shadow-sm'
+                } ${props.editable ? 'cursor-pointer' : ''}`}
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <p class="text-sm font-semibold">{formatWeekdayLabel(day.weekday)}</p>
+                  <Show when={isWorkday()}>
+                    <span class="rounded-full bg-white/70 px-1.5 py-0.5 text-[10px] font-medium dark:bg-dark-surface/70">
+                      Laboral
+                    </span>
+                  </Show>
+                </div>
+                <p class="mt-1 text-xs opacity-80">{day.operationDate}</p>
+                <p class="mt-3 text-2xl font-bold">{day.collectionPointIds.length}</p>
+                <p class="text-xs opacity-80">puntos</p>
+                <Show when={day.expectedVehicleCount != null}>
+                  <p class="mt-2 text-[11px] opacity-80">Flota {day.expectedVehicleCount}</p>
+                </Show>
+                <Show when={(day.sectorIds?.length ?? 0) > 0}>
+                  <p class="text-[11px] opacity-70">Zonas {day.sectorIds?.length ?? 0}</p>
+                </Show>
+              </button>
+            );
+          }}
+        </For>
+      </div>
+    </div>
+  );
+}
+
+interface WeeklyPlanMissingPointsAlertProps {
+  days: WeeklyPlanDay[];
+}
+
+export function WeeklyPlanValidationTable(props: { plan: WeeklyPlan }) {
+  const rows = () => props.plan.preflight?.simulation?.rows ?? [];
+  const overall = () => props.plan.preflight?.simulation?.feasible;
+  return (
+    <Show when={rows().length > 0}>
+      <div class="space-y-2" data-testid="weekly-plan-validation-table">
+        <div class="flex items-center justify-between gap-2">
+          <p class="text-sm font-semibold text-text-primary dark:text-white">Validación por día (motor ACO)</p>
+          <Show when={overall() !== undefined}>
+            <span
+              class={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                overall()
+                  ? 'bg-fero-green/15 text-fero-green-dark dark:text-fero-green-mid'
+                  : 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+              }`}
+            >
+              {overall() ? 'Semana factible' : 'Hay días con problemas'}
+            </span>
+          </Show>
+        </div>
+        <div class="overflow-x-auto rounded-xl border border-border dark:border-dark-border">
+          <table class="w-full min-w-130 text-sm">
+            <thead>
+              <tr class="border-b border-border text-left text-[10px] uppercase tracking-wide text-text-muted dark:border-dark-border">
+                <th class="px-3 py-2 font-semibold">Día</th>
+                <th class="px-3 py-2 font-semibold">Puntos</th>
+                <th class="px-3 py-2 font-semibold">Km</th>
+                <th class="px-3 py-2 font-semibold">Duración</th>
+                <th class="px-3 py-2 font-semibold">Cobertura</th>
+                <th class="px-3 py-2 font-semibold">Sin cubrir</th>
+                <th class="px-3 py-2 font-semibold">Estado</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border dark:divide-dark-border">
+              <For each={rows()}>
+                {(row) => (
+                  <tr class={row.feasible === false || row.error ? 'bg-red-50/70 dark:bg-red-950/20' : ''}>
+                    <td class="px-3 py-2 font-medium text-text-primary dark:text-white">
+                      {row.operationDate ?? '—'}
+                    </td>
+                    <td class="px-3 py-2 text-text-secondary">{row.skipped ? '—' : (row.servedPoints ?? '—')}</td>
+                    <td class="px-3 py-2 text-text-secondary">
+                      {row.distanceKm != null ? `${row.distanceKm.toFixed(1)}` : '—'}
+                    </td>
+                    <td class="px-3 py-2 text-text-secondary">
+                      {row.durationHours != null ? `${row.durationHours.toFixed(1)} h` : '—'}
+                    </td>
+                    <td class="px-3 py-2 text-text-secondary">
+                      {row.coveragePct != null ? `${row.coveragePct}%` : '—'}
+                    </td>
+                    <td class="px-3 py-2 text-text-secondary">
+                      {row.uncoveredPoints != null && row.uncoveredPoints > 0 ? row.uncoveredPoints : '0'}
+                    </td>
+                    <td class="px-3 py-2">
+                      <Show
+                        when={row.error}
+                        fallback={
+                          <span
+                            class={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                              row.skipped
+                                ? 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                                : row.feasible
+                                  ? 'bg-fero-green/15 text-fero-green-dark dark:text-fero-green-mid'
+                                  : 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+                            }`}
+                          >
+                            {row.skipped ? 'Sin puntos' : row.feasible ? 'OK' : 'Revisar'}
+                          </span>
+                        }
+                      >
+                        {(err) => <span class="text-[11px] font-medium text-red-700 dark:text-red-300">{err()}</span>}
+                      </Show>
+                    </td>
+                  </tr>
+                )}
+              </For>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </Show>
+  );
+}
+
+export function WeeklyPlanMissingPointsAlert(props: WeeklyPlanMissingPointsAlertProps) {
+  const missing = createMemo(() =>
+    findWeeklyPlanMissingFromSchedules(props.days, weeklyPlanState.visitSchedules),
+  );
+
+  return (
+    <Show when={missing().length > 0}>
+      <div
+        class="rounded-xl border border-amber-300/70 bg-amber-50/90 px-4 py-3 dark:border-amber-900/40 dark:bg-amber-950/25"
+        data-testid="weekly-plan-missing-points-alert"
+      >
+        <div class="flex items-start gap-2">
+          <AlertTriangle size={18} class="mt-0.5 shrink-0 text-amber-700 dark:text-amber-200" />
+          <div>
+            <p class="text-sm font-semibold text-amber-900 dark:text-amber-100">
+              {missing().length} punto(s) con frecuencia semanal sin asignar
+            </p>
+            <p class="mt-1 text-sm text-amber-800 dark:text-amber-200">
+              {missing()
+                .slice(0, 6)
+                .map((point) => {
+                  const sector = getCollectionPointRef(point.collectionPointId)?.sectorName;
+                  return sector ? `${point.pointCode} (${sector})` : point.pointCode;
+                })
+                .join(' · ')}
+              <Show when={missing().length > 6}> · …</Show>
+            </p>
+          </div>
+        </div>
+      </div>
+    </Show>
+  );
+}
+
+interface WeeklyPlanDayEditorDrawerProps {
+  open: boolean;
+  day: WeeklyPlanDay | null;
+  editable: boolean;
+  caseStudyLinked?: boolean;
+  catalog: PlanningCollectionPointRef[];
+  scenarios: Array<{ id: ScenarioId; label: string }>;
+  onClose: () => void;
+  onApply: (patch: Partial<WeeklyPlanDay>) => void;
+}
+
+export function WeeklyPlanDayEditorDrawer(props: WeeklyPlanDayEditorDrawerProps) {
+  const [search, setSearch] = createSignal('');
+  const [selectedIds, setSelectedIds] = createSignal<number[]>([]);
+  const [expectedVehicleCount, setExpectedVehicleCount] = createSignal('');
+  const [scenarioOverride, setScenarioOverride] = createSignal('');
+
+  const syncFromDay = () => {
+    const day = props.day;
+    if (!day) return;
+    setSelectedIds([...day.collectionPointIds]);
+    setExpectedVehicleCount(day.expectedVehicleCount != null ? String(day.expectedVehicleCount) : '');
+    setScenarioOverride(day.scenarioIdOverride ?? '');
+    setSearch('');
+  };
+
+  createEffect(() => {
+    if (props.open && props.day) {
+      syncFromDay();
+    }
+  });
+
+  const filteredCatalog = createMemo(() => {
+    const query = search().trim().toLowerCase();
+    if (!query) return props.catalog;
+    return props.catalog.filter(
+      (point) =>
+        point.code.toLowerCase().includes(query) ||
+        (point.sectorName ?? '').toLowerCase().includes(query),
+    );
+  });
+
+  type AssignedRow = { id: number; code: string; sectorName?: string | null };
+  const assignedPoints = createMemo<AssignedRow[]>(() => {
+    const rows: Array<AssignedRow | null> = selectedIds().map((id) => {
+      const ref = props.catalog.find((point) => point.id === id) ?? getCollectionPointRef(id);
+      return ref ? { id, code: ref.code, sectorName: ref.sectorName } : null;
+    });
+    return rows.filter((row): row is AssignedRow => row != null);
+  });
+
+  // Zonas (sectores) disponibles en el catálogo para elegir por día. Se agrupan por
+  // id numérico de sector cuando está disponible (persistible en sectorIds); si no,
+  // se cae al nombre como clave estable.
+  const sectorGroups = createMemo(() => {
+    const byKey = new Map<string, { name: string; ids: number[] }>();
+    for (const point of props.catalog) {
+      const name = point.sectorName ?? 'Sin sector';
+      const key = point.sectorId ? `sector:${point.sectorId}` : `name:${name}`;
+      const group = byKey.get(key) ?? { name, ids: [] };
+      group.ids.push(point.id);
+      byKey.set(key, group);
+    }
+    return Array.from(byKey.entries())
+      .map(([key, group]) => ({
+        key,
+        name: group.name,
+        ids: group.ids,
+        sectorId: key.startsWith('sector:') ? Number(key.slice('sector:'.length)) : null,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  });
+
+  const sectorIncludedCount = (ids: number[]) =>
+    ids.filter((id) => selectedIds().includes(id)).length;
+
+  const toggleSector = (group: { ids: number[]; active: boolean }) => {
+    setSelectedIds((current) => {
+      if (group.active) {
+        return current.filter((id) => !group.ids.includes(id));
+      }
+      const missing = group.ids.filter((id) => !current.includes(id));
+      return [...current, ...missing];
+    });
+  };
+
+  const togglePoint = (pointId: number) => {
+    setSelectedIds((current) =>
+      current.includes(pointId) ? current.filter((id) => id !== pointId) : [...current, pointId],
+    );
+  };
+
+  const coveredSectorIds = createMemo(() =>
+    sectorGroups()
+      .filter((group) => group.ids.length > 0 && sectorIncludedCount(group.ids) === group.ids.length)
+      .map((group) => group.sectorId)
+      .filter((id): id is number => id != null),
+  );
+
+  const handleApply = () => {
+    const fleet = expectedVehicleCount().trim();
+    props.onApply({
+      sectorIds: coveredSectorIds(),
+      collectionPointIds: selectedIds(),
+      expectedVehicleCount: fleet ? Number(fleet) : null,
+      scenarioIdOverride: scenarioOverride() || null,
+    });
+    props.onClose();
+  };
+
+  return (
+    <Drawer
+      open={props.open}
+      onClose={props.onClose}
+      title={
+        props.day
+          ? `${formatWeekdayLabel(props.day.weekday)} · ${props.day.operationDate}`
+          : 'Editar día'
+      }
+    >
+      <Show when={props.day}>
+        {(day) => (
+          <div class="space-y-5" data-testid="weekly-plan-day-editor">
+            <div>
+              <p class="text-sm font-semibold text-text-primary dark:text-white">Puntos asignados</p>
+              <Show when={props.caseStudyLinked}>
+                <p class="mt-1 text-xs text-text-muted">
+                  Heredados del caso de estudio ({day().caseStudyCode ?? weeklyPlanState.draftCaseStudy?.code ?? '—'}).
+                  No se editan manualmente en este modo.
+                </p>
+              </Show>
+              <Show
+                when={assignedPoints().length > 0}
+                fallback={<p class="mt-2 text-sm text-text-muted">Sin puntos en este día.</p>}
+              >
+                <ul class="mt-2 space-y-2">
+                  <For each={assignedPoints()}>
+                    {(point) => (
+                      <li class="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 dark:border-dark-border">
+                        <div>
+                          <p class="text-sm font-medium text-text-primary dark:text-white">{point.code}</p>
+                          <p class="text-xs text-text-muted">{point.sectorName ?? 'Sin sector'}</p>
+                        </div>
+                        <Show when={props.editable && !props.caseStudyLinked}>
+                          <Button size="sm" variant="outline" onClick={() => togglePoint(point.id)}>
+                            Quitar
+                          </Button>
+                        </Show>
+                      </li>
+                    )}
+                  </For>
+                </ul>
+              </Show>
+            </div>
+
+            <Show when={props.editable && !props.caseStudyLinked}>
+              <div class="space-y-3">
+                <div>
+                  <p class="text-sm font-semibold text-text-primary dark:text-white">
+                    Zonas que se cubren este día
+                  </p>
+                  <p class="mt-0.5 text-xs text-text-muted">
+                    Elegir una zona añade todos sus puntos al día. Puedes cubrir la misma zona en varios
+                    días de la semana.
+                  </p>
+                  <div class="mt-2 flex max-h-72 flex-wrap gap-2 overflow-y-auto pr-1">
+                    <For each={sectorGroups()}>
+                      {(group) => {
+                        const included = sectorIncludedCount(group.ids);
+                        const active = included === group.ids.length && group.ids.length > 0;
+                        return (
+                          <button
+                            type="button"
+                            aria-pressed={active}
+                            data-testid={`weekly-day-sector-${group.sectorId ?? group.name}`}
+                            onClick={() => toggleSector({ ids: group.ids, active })}
+                            class={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                              active
+                                ? 'border-fero-green/40 bg-fero-green/15 text-fero-green-dark dark:border-fero-green/60 dark:text-fero-green'
+                                : 'border-default text-text-secondary hover:bg-surface/70 dark:hover:bg-dark-surface-hover'
+                            }`}
+                          >
+                            <span>{group.name}</span>
+                            <span
+                              class={`rounded-full px-1.5 text-[10px] font-semibold ${
+                                active ? 'bg-fero-green/15' : 'bg-app/60'
+                              }`}
+                            >
+                              {included}/{group.ids.length}
+                            </span>
+                          </button>
+                        );
+                      }}
+                    </For>
+                  </div>
+                </div>
+
+                <TextField
+                  label="Buscar en catálogo"
+                  value={search()}
+                  placeholder="Código o sector"
+                  onInput={(e) => setSearch(e.currentTarget.value)}
+                />
+                <div class="max-h-56 space-y-2 overflow-y-auto rounded-lg border border-border p-2 dark:border-dark-border">
+                  <For each={filteredCatalog()}>
+                    {(point) => (
+                      <label class="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 hover:bg-surface/70 dark:hover:bg-dark-surface-hover">
+                        <input
+                          type="checkbox"
+                          class="mt-1"
+                          checked={selectedIds().includes(point.id)}
+                          onChange={() => togglePoint(point.id)}
+                        />
+                        <span>
+                          <span class="block text-sm font-medium text-text-primary dark:text-white">
+                            {point.code}
+                          </span>
+                          <span class="block text-xs text-text-muted">{point.sectorName ?? 'Sin sector'}</span>
+                        </span>
+                      </label>
+                    )}
+                  </For>
+                </div>
+              </div>
+            </Show>
+
+            <Show when={props.editable}>
+              <div class="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <TextField
+                    label="Límite de vehículos del día (opcional)"
+                    type="number"
+                    min="1"
+                    value={expectedVehicleCount()}
+                    onInput={(e) => setExpectedVehicleCount(e.currentTarget.value)}
+                  />
+                  <p class="mt-1 text-[11px] text-text-muted">
+                    Vacío = usar la flota configurada para la semana.
+                  </p>
+                </div>
+                <SelectField
+                  label="Escenario del día (opcional)"
+                  value={scenarioOverride()}
+                  onChange={(e) => setScenarioOverride(e.currentTarget.value)}
+                >
+                  <option value="">Usar condición de la semana</option>
+                  <For each={props.scenarios}>{(row) => <option value={row.id}>{row.label}</option>}</For>
+                </SelectField>
+              </div>
+
+              <div class="flex flex-wrap gap-2">
+                <Button variant="primary" onClick={handleApply}>
+                  Aplicar cambios
+                </Button>
+                <Button variant="outline" onClick={props.onClose}>
+                  Cancelar
+                </Button>
+              </div>
+            </Show>
+
+            <Show when={!props.editable}>
+              <p class="text-sm text-text-secondary">Este plan no es editable.</p>
+            </Show>
+          </div>
+        )}
+      </Show>
+    </Drawer>
+  );
+}

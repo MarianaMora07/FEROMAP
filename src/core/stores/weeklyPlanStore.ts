@@ -1,0 +1,928 @@
+import { createStore } from 'solid-js/store';
+import {
+  addWeeksToMonday,
+  approveWeeklyPlan,
+  archiveWeeklyPlan,
+  autofillWeeklyPlanFromCaseStudy,
+  autofillWeeklyPlanFromSchedules,
+  compareWeeklyPlanVersions,
+  createWeeklyPlan,
+  deleteWeeklyPlan,
+  dispatchDailyPlan,
+  fetchCurrentWeeklyPlan,
+  fetchWeeklyPlanById,
+  fetchWeeklyPlans,
+  fetchWeeklyPlanVersions,
+  downloadWeeklyPlanPdf,
+  generateWeeklyOperationalPlan,
+  isPastWeek,
+  mondayIso,
+  sanitizeWeeklyPlanDays,
+  updateWeeklyPlan,
+  validateWeeklyPlan,
+  type PlanVersion,
+  type WeeklyOperationalPlan,
+  type WeeklyPlan,
+  type WeeklyPlanDay,
+  type WeeklyPlanDayOperational,
+} from '../api/planning';
+import type { ScenarioId } from '../../data/types/simulation';
+import {
+  buildWeeklyPlanForecastFromValidation,
+  deriveWeeklyPlanFlowStep as resolveWeeklyPlanFlowStep,
+  weeklyPlanScheduledPointCount,
+} from '../planning/weeklyPlanUx';
+import type { WeeklyPlanValidationSummary } from '../planning/weeklyPlanUx';
+import {
+  addDaysToIso,
+  compactWeeklyPlanDaysForSave,
+  mergeWeekCalendarDays,
+  summarizeWeeklyPlanAssignment,
+} from '../planning/weeklyPlanCalendar';
+import { fetchActiveVisitSchedules, type VisitSchedule } from '../api/visitSchedules';
+import { fetchSimulationOptimizeJob } from '../api/simulationJobs';
+import { fetchCollectionPointsForPlanning } from '../api/collectionPoints';
+import { fetchCaseStudies, fetchCaseStudyDetail, type CaseStudyDetail } from '../api/caseStudies';
+import { todayIso } from '../planning/planningUx';
+import { globalToast } from './toastStore';
+
+interface WeeklyPlanState {
+  plan: WeeklyPlan | null;
+  history: WeeklyPlan[];
+  selectedPlanId: number | null;
+  versions: PlanVersion[];
+  versionDiff: Array<{ path: string; before: unknown; after: unknown }>;
+  collectionPoints: Array<{ id: number; code: string; sectorName?: string | null; sectorId?: number | null }>;
+  isLoading: boolean;
+  isSaving: boolean;
+  isValidating: boolean;
+  isApproving: boolean;
+  isArchiving: boolean;
+  isDeleting: boolean;
+  isCreatingWeek: boolean;
+  isGeneratingOperational: boolean;
+  operationalProgress: number;
+  operationalPhase: string;
+  validationJobId: string | null;
+  validationCompleted: boolean;
+  validationProgress: number;
+  validationSummary: WeeklyPlanValidationSummary | null;
+  visitSchedules: VisitSchedule[];
+  draftCaseStudy: CaseStudyDetail | null;
+  error: string | null;
+  notice: string | null;
+}
+
+const [state, setState] = createStore<WeeklyPlanState>({
+  plan: null,
+  history: [],
+  selectedPlanId: null,
+  versions: [],
+  versionDiff: [],
+  collectionPoints: [],
+  isLoading: false,
+  isSaving: false,
+  isValidating: false,
+  isApproving: false,
+  isArchiving: false,
+  isDeleting: false,
+  isCreatingWeek: false,
+  isGeneratingOperational: false,
+  operationalProgress: 0,
+  operationalPhase: '',
+  validationJobId: null,
+  validationCompleted: false,
+  validationProgress: 0,
+  validationSummary: null,
+  visitSchedules: [],
+  draftCaseStudy: null,
+  error: null,
+  notice: null,
+});
+
+async function refreshVisitSchedules(reference?: string): Promise<VisitSchedule[]> {
+  const items = await fetchActiveVisitSchedules(reference);
+  setState({ visitSchedules: items });
+  return items;
+}
+
+function withCalendarDays(plan: WeeklyPlan | null): WeeklyPlan | null {
+  if (!plan) return null;
+  return {
+    ...plan,
+    days: mergeWeekCalendarDays(plan.weekStartDate, plan.days ?? []),
+  };
+}
+
+export function getCollectionPointRef(pointId: number) {
+  return state.collectionPoints.find((point) => point.id === pointId);
+}
+
+async function loadCollectionPointsForPlanning() {
+  return fetchCollectionPointsForPlanning();
+}
+
+async function refreshWeeklyPlanHistory(): Promise<WeeklyPlan[]> {
+  const { items } = await fetchWeeklyPlans();
+  setState({ history: items });
+  return items;
+}
+
+async function resolvePlanFromHistory(planId: number): Promise<WeeklyPlan> {
+  const fromList = state.history.find((row) => row.id === planId);
+  if (fromList?.days?.length) return fromList;
+  return fetchWeeklyPlanById(planId);
+}
+
+async function pickDefaultPlan(history: WeeklyPlan[]): Promise<WeeklyPlan | null> {
+  const currentMonday = mondayIso();
+  const currentWeekPlan = history.find((row) => row.weekStartDate === currentMonday);
+  if (currentWeekPlan) {
+    return currentWeekPlan.days?.length
+      ? currentWeekPlan
+      : fetchWeeklyPlanById(currentWeekPlan.id);
+  }
+  try {
+    return await fetchCurrentWeeklyPlan();
+  } catch {
+    return history[0] ?? null;
+  }
+}
+
+export async function initWeeklyPlanTab(): Promise<void> {
+  setState({ isLoading: true, error: null });
+  try {
+    const [history, points] = await Promise.all([
+      refreshWeeklyPlanHistory(),
+      loadCollectionPointsForPlanning(),
+    ]);
+    setState({ collectionPoints: points });
+    const plan = withCalendarDays(await pickDefaultPlan(history));
+    // Al remontar la vista conservamos la validación ya hecha del mismo plan
+    // (el store sobrevive a la navegación SPA) para no obligar a revalidar.
+    const samePlan = plan?.id != null && plan.id === state.selectedPlanId;
+    setState({
+      plan,
+      selectedPlanId: plan?.id ?? null,
+      validationCompleted: samePlan ? state.validationCompleted : false,
+      validationSummary: samePlan ? state.validationSummary : null,
+      validationProgress: 0,
+    });
+    if (plan?.weekStartDate) {
+      await refreshVisitSchedules(plan.weekStartDate);
+    }
+  } catch (error) {
+    setState({
+      error: error instanceof Error ? error.message : 'No se pudo cargar el plan semanal',
+    });
+  } finally {
+    setState({ isLoading: false });
+  }
+}
+
+export function buildWorkdayShells(weekStart: string): WeeklyPlanDay[] {
+  return mergeWeekCalendarDays(weekStart, []).slice(0, 5).map((day) => ({
+    ...day,
+    collectionPointIds: [],
+    pointSource: 'case_study',
+  }));
+}
+
+export function buildDefaultWeekDays(weekStart: string, pointIds: number[]): WeeklyPlanDay[] {
+  const workdays = mergeWeekCalendarDays(weekStart, []).slice(0, 5);
+  const chunk = Math.max(1, Math.ceil(pointIds.length / 5));
+  return workdays.map((day, offset) => ({
+    ...day,
+    collectionPointIds: pointIds.slice(offset * chunk, (offset + 1) * chunk),
+  }));
+}
+
+export function nextWeekMonday(): string {
+  return addWeeksToMonday(mondayIso(), 1);
+}
+
+/**
+ * Lunes de la siguiente semana a crear: la posterior a la última planificada
+ * (o la próxima semana si todavía no hay ninguna). Siempre es una semana libre.
+ */
+export function nextWeekToCreate(): string {
+  const latest = [...state.history]
+    .map((row) => row.weekStartDate)
+    .sort((a, b) => b.localeCompare(a))[0];
+  return addWeeksToMonday(latest ?? mondayIso(), 1);
+}
+
+/** Indica si una semana está aprobada/archivada y por tanto es de solo lectura. */
+export function isWeeklyPlanReadOnly(): boolean {
+  const status = state.plan?.status;
+  return status === 'approved' || status === 'archived';
+}
+
+export function canCreateNextWeekDraft(): boolean {
+  const nextMonday = nextWeekMonday();
+  return !state.history.some((row) => row.weekStartDate === nextMonday);
+}
+
+export function canCreateCurrentWeekDraft(): boolean {
+  const currentMonday = mondayIso();
+  return !state.history.some((row) => row.weekStartDate === currentMonday);
+}
+
+/**
+ * Semana objetivo del botón primario de creación: la **semana en curso** mientras no
+ * tenga plan (para no bloquear la operación de hoy creando la próxima sin avisar), y en
+ * caso contrario la primera semana libre posterior a la última planificada.
+ */
+export function primaryWeekToCreate(): string {
+  return canCreateCurrentWeekDraft() ? mondayIso() : nextWeekToCreate();
+}
+
+export function canArchivePlan(plan: WeeklyPlan | null | undefined): boolean {
+  if (!plan) return false;
+  return plan.status === 'approved' && isPastWeek(plan.weekStartDate);
+}
+
+/** Solo los borradores se pueden eliminar; las semanas aprobadas se archivan. */
+export function canDeletePlan(plan: WeeklyPlan | null | undefined): boolean {
+  return plan?.status === 'draft';
+}
+
+export function deriveWeeklyFlowStep(): number {
+  return resolveWeeklyPlanFlowStep({
+    plan: state.plan,
+    isValidating: state.isValidating,
+    validationCompleted: state.validationCompleted,
+  });
+}
+
+export function isWeeklyPlanEditable(): boolean {
+  return state.plan?.status === 'draft';
+}
+
+export async function selectWeeklyPlan(
+  planId: number,
+  options?: { compareLatestVersions?: boolean },
+): Promise<void> {
+  setState({ isLoading: true, error: null, versionDiff: [], versions: [] });
+  try {
+    const plan = withCalendarDays(await resolvePlanFromHistory(planId));
+    // Reelegir el mismo plan conserva la validación (y su previsualización) ya hecha.
+    const samePlan = planId === state.selectedPlanId;
+    setState({
+      plan,
+      selectedPlanId: planId,
+      validationCompleted: samePlan ? state.validationCompleted : false,
+      notice: null,
+      validationSummary: samePlan ? state.validationSummary : null,
+      validationProgress: 0,
+    });
+    await syncDraftCaseStudyFromPlan(plan);
+    if (plan?.weekStartDate) {
+      await refreshVisitSchedules(plan.weekStartDate);
+    }
+    if (options?.compareLatestVersions) {
+      await loadWeeklyPlanVersions();
+      await compareLatestWeeklyVersions();
+    }
+  } catch (error) {
+    setState({
+      error: error instanceof Error ? error.message : 'No se pudo cargar el plan semanal',
+    });
+  } finally {
+    setState({ isLoading: false });
+  }
+}
+
+async function compareLatestWeeklyVersions(): Promise<void> {
+  if (!state.plan?.id || state.versions.length < 2) return;
+  const sorted = [...state.versions].sort((a, b) => b.versionNumber - a.versionNumber);
+  const latest = sorted[0]!;
+  const previous = sorted[1]!;
+  const diff = await compareWeeklyPlanVersions(state.plan.id, previous.versionNumber, latest.versionNumber);
+  setState({ versionDiff: diff.changes });
+}
+
+async function resolveDefaultDraftCaseStudy(): Promise<CaseStudyDetail | null> {
+  if (state.draftCaseStudy) return state.draftCaseStudy;
+  const response = await fetchCaseStudies({ limit: 1, demoOnly: true });
+  const first = response.items[0];
+  if (!first) return null;
+  const detail = await fetchCaseStudyDetail(first.id);
+  setState({ draftCaseStudy: detail });
+  return detail;
+}
+
+async function syncDraftCaseStudyFromPlan(plan: WeeklyPlan | null): Promise<void> {
+  if (!plan?.caseStudyId) {
+    return;
+  }
+  if (state.draftCaseStudy?.id === plan.caseStudyId) {
+    return;
+  }
+  try {
+    setState({ draftCaseStudy: await fetchCaseStudyDetail(plan.caseStudyId) });
+  } catch {
+    setState({ draftCaseStudy: null });
+  }
+}
+
+export function setDraftCaseStudy(detail: CaseStudyDetail | null): void {
+  setState({ draftCaseStudy: detail });
+}
+
+export async function applyWeeklyCaseStudy(detail: CaseStudyDetail | null): Promise<void> {
+  setState({ draftCaseStudy: detail });
+  if (!state.plan) return;
+  const scenarioId = detail?.defaultScenarioId ?? state.plan.scenarioId;
+  setState('plan', {
+    caseStudyId: detail?.id ?? null,
+    caseStudyCode: detail?.code ?? null,
+    caseStudyName: detail?.name ?? null,
+    scenarioId,
+  });
+  if (!state.plan.id) return;
+  if (detail) {
+    await autofillWeeklyFromCaseStudy(detail.id);
+    return;
+  }
+  await saveWeeklyPlanDraft(scenarioId, state.plan.days ?? []);
+}
+
+export async function createWeekDraft(weekStartDate: string): Promise<void> {
+  const existing = state.history.find((row) => row.weekStartDate === weekStartDate);
+  if (existing) {
+    if (existing.status === 'approved' || existing.status === 'archived') {
+      throw new Error('Ya existe un plan aprobado para esa semana. No se puede sobrescribir.');
+    }
+    await selectWeeklyPlan(existing.id);
+    setState({ notice: 'Ya hay un borrador para esa semana.' });
+    return;
+  }
+
+  setState({ isCreatingWeek: true, error: null, notice: null });
+  try {
+    const days = buildWorkdayShells(weekStartDate);
+    let plan = withCalendarDays(
+      await createWeeklyPlan({
+        weekStartDate,
+        scenarioId: 'normal',
+        caseStudyId: null,
+        days: compactWeeklyPlanDaysForSave(weekStartDate, days).map((day) => ({
+          operationDate: day.operationDate,
+          collectionPointIds: day.collectionPointIds,
+        })),
+      }),
+    );
+    if (plan?.id) {
+      plan = withCalendarDays(await autofillWeeklyPlanFromSchedules(plan.id));
+    }
+    await refreshWeeklyPlanHistory();
+    setState({
+      plan,
+      selectedPlanId: plan?.id ?? null,
+      draftCaseStudy: null,
+      validationCompleted: false,
+      validationSummary: null,
+      validationProgress: 0,
+      notice: `Borrador creado para la semana del ${weekStartDate} desde frecuencias de visita.`,
+    });
+    if (plan?.weekStartDate) {
+      await refreshVisitSchedules(plan.weekStartDate);
+    }
+  } catch (error) {
+    setState({
+      error: error instanceof Error ? error.message : 'No se pudo crear el borrador semanal',
+    });
+    throw error;
+  } finally {
+    setState({ isCreatingWeek: false });
+  }
+}
+
+export async function createNextWeekDraft(): Promise<void> {
+  await createWeekDraft(nextWeekMonday());
+}
+
+/** Crea un borrador para la primera semana libre posterior a la última planificada. */
+export async function createFollowingWeekDraft(): Promise<void> {
+  await createWeekDraft(nextWeekToCreate());
+}
+
+export async function createCurrentWeekDraft(): Promise<void> {
+  await createWeekDraft(mondayIso());
+}
+
+/**
+ * Abre la semana indicada para aprobarla: selecciona el plan existente o crea un
+ * borrador (autocompletado desde frecuencias) si aún no hay plan para esa semana.
+ * Se usa desde el deep link `?week=` y desde el CTA del plan del día.
+ */
+export async function openWeekForApproval(weekStart: string): Promise<void> {
+  const existing = state.history.find((row) => row.weekStartDate === weekStart);
+  if (existing) {
+    if (existing.id !== state.selectedPlanId) {
+      await selectWeeklyPlan(existing.id);
+    }
+    return;
+  }
+  await createWeekDraft(weekStart);
+}
+
+export async function deleteWeeklyPlanRow(planId: number): Promise<void> {
+  setState({ isDeleting: true, error: null, notice: null });
+  try {
+    await deleteWeeklyPlan(planId);
+    const history = await refreshWeeklyPlanHistory();
+    if (state.selectedPlanId === planId) {
+      const fallback = withCalendarDays(await pickDefaultPlan(history));
+      setState({
+        plan: fallback,
+        selectedPlanId: fallback?.id ?? null,
+        versions: [],
+        versionDiff: [],
+        validationCompleted: false,
+        validationSummary: null,
+        validationProgress: 0,
+      });
+    }
+    globalToast.addToast('Semana eliminada.', 'success');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'No se pudo eliminar la semana';
+    setState({ error: message });
+    globalToast.addToast(message, 'error');
+    throw error;
+  } finally {
+    setState({ isDeleting: false });
+  }
+}
+
+export async function archiveSelectedWeeklyPlan(): Promise<void> {
+  if (!state.plan?.id) throw new Error('No hay plan seleccionado');
+  if (!canArchivePlan(state.plan)) {
+    throw new Error('Solo se pueden archivar planes aprobados de semanas pasadas');
+  }
+  setState({ isArchiving: true, error: null, notice: null });
+  try {
+    const plan = withCalendarDays(await archiveWeeklyPlan(state.plan.id));
+    await refreshWeeklyPlanHistory();
+    setState({ plan, notice: 'Plan semanal archivado.' });
+  } catch (error) {
+    setState({
+      error: error instanceof Error ? error.message : 'No se pudo archivar el plan semanal',
+    });
+    throw error;
+  } finally {
+    setState({ isArchiving: false });
+  }
+}
+
+export async function saveWeeklyPlanDraft(scenarioId: ScenarioId, days: WeeklyPlanDay[]): Promise<void> {
+  setState({ isSaving: true, error: null, notice: null });
+  try {
+    const weekStart = state.plan?.weekStartDate ?? mondayIso();
+    const calendarDays = mergeWeekCalendarDays(weekStart, days);
+    const sanitizedDays = sanitizeWeeklyPlanDays(compactWeeklyPlanDaysForSave(weekStart, calendarDays));
+    const payload = {
+      weekStartDate: weekStart,
+      scenarioId,
+      caseStudyId: state.plan?.caseStudyId ?? state.draftCaseStudy?.id ?? null,
+      fleetByType: state.plan?.fleetByType ?? null,
+      days: sanitizedDays.map((day) => ({
+        operationDate: day.operationDate,
+        collectionPointIds: day.collectionPointIds,
+      })),
+    };
+    const plan = withCalendarDays(
+      state.plan?.status === 'draft' && state.plan.id
+        ? await updateWeeklyPlan(state.plan.id, {
+            scenarioId,
+            caseStudyId: payload.caseStudyId,
+            fleetByType: payload.fleetByType,
+            days: sanitizedDays,
+          })
+        : await createWeeklyPlan(payload),
+    );
+    await refreshWeeklyPlanHistory();
+    setState({
+      plan,
+      selectedPlanId: plan?.id ?? null,
+      notice: 'Plan semanal guardado en borrador.',
+      validationCompleted: false,
+      validationSummary: null,
+    });
+  } catch (error) {
+    setState({
+      error: error instanceof Error ? error.message : 'No se pudo guardar el plan semanal',
+    });
+    throw error;
+  } finally {
+    setState({ isSaving: false });
+  }
+}
+
+export async function runWeeklyValidation(): Promise<void> {
+  if (!state.plan?.id) {
+    throw new Error('Primero guarda un borrador del plan semanal');
+  }
+  // Persiste cambios pendientes (p. ej. la flota recién ajustada) antes de simular.
+  if (isWeeklyPlanEditable()) {
+    await saveWeeklyPlanDraft(state.plan.scenarioId ?? 'normal', state.plan.days ?? []);
+  }
+  const planId = state.plan.id;
+  setState({ isValidating: true, error: null, notice: null, validationCompleted: false, validationSummary: null, validationProgress: 0 });
+  try {
+    const { jobId } = await validateWeeklyPlan(planId);
+    setState({ validationJobId: jobId });
+    while (true) {
+      const snapshot = await fetchSimulationOptimizeJob(jobId);
+      setState({ validationProgress: snapshot.progress ?? 0 });
+      if (snapshot.status === 'completed' && snapshot.result) {
+        const kpis = snapshot.result.kpis;
+        const result = snapshot.result as unknown as {
+          feasible?: boolean;
+          perDay?: Array<{
+            operationDate?: string;
+            skipped?: boolean;
+            feasible?: boolean;
+            error?: string | null;
+            distanceKm?: number;
+            baselineDistanceKm?: number;
+            durationHours?: number;
+            coveragePct?: number | null;
+            servedPoints?: number;
+            uncoveredPoints?: number;
+            vehicles?: Array<{
+              vehicleCode?: string;
+              driverName?: string | null;
+              distanceKm?: number;
+              durationMin?: number;
+              stops?: number;
+            }>;
+          }>;
+        };
+        const perDay = result.perDay ?? [];
+        const problemDays = perDay
+          .filter((day) => !day.skipped && (day.feasible === false || Boolean(day.error)))
+          .map((day) => day.operationDate ?? '?');
+        const days = perDay.map((day) => ({
+          operationDate: day.operationDate ?? '?',
+          skipped: Boolean(day.skipped),
+          feasible: day.feasible !== false && !day.error,
+          error: day.error ?? null,
+          distanceKm: day.distanceKm ?? null,
+          baselineDistanceKm: day.baselineDistanceKm ?? null,
+          durationHours: day.durationHours ?? null,
+          coveragePct: day.coveragePct ?? null,
+          servedPoints: day.servedPoints ?? null,
+          uncoveredPoints: day.uncoveredPoints ?? null,
+          vehicles: (day.vehicles ?? []).map((vehicle) => ({
+            vehicleCode: vehicle.vehicleCode ?? '—',
+            driverName: vehicle.driverName ?? null,
+            distanceKm: vehicle.distanceKm ?? 0,
+            durationMin: vehicle.durationMin ?? 0,
+            stops: vehicle.stops ?? 0,
+          })),
+        }));
+        const notice =
+          problemDays.length > 0
+            ? `Validación por día: ${problemDays.length} día(s) con problemas (${problemDays.join(', ')}). Revisa cobertura o flota antes de aprobar.`
+            : `Validación completada — ${kpis.distanceKm.optimized.toFixed(1)} km estimados.`;
+        setState({
+          notice,
+          validationCompleted: true,
+          validationSummary: {
+            distanceKm: kpis.distanceKm.optimized,
+            durationHours: kpis.durationHours.optimized,
+            scheduledPoints: weeklyPlanScheduledPointCount(state.plan),
+            coveredPoints: kpis.containersServed ?? weeklyPlanScheduledPointCount(state.plan),
+            uncoveredPoints: kpis.uncoveredPoints ?? kpis.uncoveredPointCodes?.length ?? 0,
+            exceedsWorkday: kpis.exceedsWorkday?.optimized ?? false,
+            workdayHours: kpis.workdayHours ?? 12,
+            simulationId: snapshot.result.simulationId ?? null,
+            days,
+          },
+        });
+        // La validación persiste el plan operativo de la semana: refrescamos el plan
+        // para que «Ver plan» lo reutilice (una sola pasada del motor) en vez de
+        // volver a optimizar.
+        await refreshSelectedPlanPreservingValidation(planId);
+        break;
+      }
+      if (snapshot.status === 'failed') {
+        throw new Error(snapshot.error ?? 'La validación falló');
+      }
+      if (snapshot.status === 'cancelled') {
+        throw new Error('Validación cancelada');
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  } catch (error) {
+    setState({
+      error: error instanceof Error ? error.message : 'No se pudo validar el plan semanal',
+    });
+    throw error;
+  } finally {
+    setState({ isValidating: false, validationJobId: null });
+  }
+}
+
+/**
+ * Refresca el plan seleccionado sin tocar el estado de validación (a diferencia de
+ * `selectWeeklyPlan`), para poder generar/ver el plan operativo y luego aprobar.
+ */
+async function refreshSelectedPlanPreservingValidation(planId: number): Promise<void> {
+  if (state.selectedPlanId !== planId) return;
+  const plan = withCalendarDays(await fetchWeeklyPlanById(planId));
+  setState({ plan });
+}
+
+/**
+ * Genera el plan operativo de la semana (camión × día) para el plan seleccionado,
+ * sea borrador o aprobado (borrador = revisión antes de aprobar). Devuelve los días
+ * generados.
+ */
+export async function generateWeeklyOperationalPlanForWeek(
+  onProgress?: (progress: number, phase: string) => void,
+): Promise<WeeklyPlanDayOperational[]> {
+  const planId = state.plan?.id;
+  if (!planId) {
+    throw new Error('No hay plan semanal seleccionado');
+  }
+  setState({
+    isGeneratingOperational: true,
+    operationalProgress: 0,
+    operationalPhase: 'Iniciando generación…',
+    error: null,
+  });
+  try {
+    const { jobId } = await generateWeeklyOperationalPlan(planId);
+    if (jobId === 'mock-job') {
+      setState({ operationalProgress: 100, operationalPhase: 'Listo' });
+      await refreshSelectedPlanPreservingValidation(planId);
+      return [];
+    }
+    while (true) {
+      const snapshot = await fetchSimulationOptimizeJob(jobId);
+      const progress = snapshot.progress ?? 0;
+      const phase = snapshot.phase ? String(snapshot.phase) : 'Optimizando…';
+      setState({ operationalProgress: progress, operationalPhase: phase });
+      onProgress?.(progress, phase);
+      if (snapshot.status === 'completed') {
+        const days = ((snapshot.result as unknown as WeeklyOperationalPlan | null)?.days) ?? [];
+        setState({ operationalProgress: 100, operationalPhase: 'Plan operativo generado' });
+        await refreshSelectedPlanPreservingValidation(planId);
+        return days;
+      }
+      if (snapshot.status === 'failed') {
+        throw new Error(snapshot.error ?? 'La generación del plan operativo falló');
+      }
+      if (snapshot.status === 'cancelled') {
+        throw new Error('Generación cancelada');
+      }
+      await new Promise((resolve) => setTimeout(resolve, 800));
+    }
+  } catch (error) {
+    setState({
+      error: error instanceof Error ? error.message : 'No se pudo generar el plan operativo',
+    });
+    throw error;
+  } finally {
+    setState({ isGeneratingOperational: false });
+  }
+}
+
+export async function approveCurrentWeeklyPlan(referenceSimulationId?: number): Promise<void> {
+  if (!state.plan?.id) {
+    throw new Error('No hay plan semanal para aprobar');
+  }
+  setState({ isApproving: true, error: null, notice: null });
+  try {
+    // Persiste las mejoras previstas (Fase 2): el forecast por día sale de la
+    // validación ACO de esta sesión, para que sobreviva al recargar.
+    const expectedKpis = state.validationSummary
+      ? buildWeeklyPlanForecastFromValidation(
+          state.validationSummary.days,
+          state.plan.weekStartDate,
+        )
+      : null;
+    let plan = withCalendarDays(
+      await approveWeeklyPlan(state.plan.id, {
+        referenceSimulationId,
+        expectedKpis: expectedKpis ?? undefined,
+      }),
+    );
+    const notified = await autoNotifyApprovedWeek(plan);
+    if (notified > 0 && plan?.id) {
+      // Refrescar para reflejar el estado 'dispatched' real de los días notificados.
+      plan = withCalendarDays(await fetchWeeklyPlanById(plan.id));
+    }
+    await refreshWeeklyPlanHistory();
+    setState({
+      plan,
+      notice:
+        notified > 0
+          ? `Plan semanal aprobado. ${notified} día(s) notificado(s) automáticamente a conductores.`
+          : 'Plan semanal aprobado.',
+    });
+  } catch (error) {
+    setState({
+      error: error instanceof Error ? error.message : 'No se pudo aprobar el plan semanal',
+    });
+    throw error;
+  } finally {
+    setState({ isApproving: false });
+  }
+}
+
+/**
+ * Notifica (despacha) automáticamente los días optimizados de una semana recién
+ * aprobada. Omite los días pasados y es idempotente: solo actúa sobre días que
+ * siguen en estado ``optimized``.
+ */
+async function autoNotifyApprovedWeek(plan: WeeklyPlan | null): Promise<number> {
+  const today = todayIso();
+  const pending = (plan?.operationalPlan?.days ?? []).filter(
+    (day) => day.dailyPlanId != null && day.status === 'optimized' && day.operationDate >= today,
+  );
+  let notified = 0;
+  for (const day of pending) {
+    try {
+      await dispatchDailyPlan(day.dailyPlanId!);
+      notified += 1;
+    } catch {
+      // El plan del día permite reintentar manualmente la notificación desde su vista.
+    }
+  }
+  return notified;
+}
+
+export function setWeeklyPlanDays(days: WeeklyPlanDay[]): void {
+  if (!state.plan) {
+    const weekStart = mondayIso();
+    setState('plan', {
+      id: 0,
+      weekStartDate: weekStart,
+      weekEndDate: addDaysToIso(weekStart, 6),
+      status: 'draft',
+      scenarioId: 'normal',
+      days: mergeWeekCalendarDays(weekStart, days),
+    });
+    return;
+  }
+  setState('plan', 'days', mergeWeekCalendarDays(state.plan.weekStartDate, days));
+  setState({ validationCompleted: false, validationSummary: null });
+}
+
+export function updateWeeklyPlanDay(weekdayIndex: number, patch: Partial<WeeklyPlanDay>): void {
+  if (!state.plan) return;
+  const days = mergeWeekCalendarDays(state.plan.weekStartDate, state.plan.days);
+  const current = days[weekdayIndex];
+  if (!current) return;
+  days[weekdayIndex] = { ...current, ...patch };
+  setWeeklyPlanDays(days);
+}
+
+export function setWeeklyScenario(scenarioId: ScenarioId): void {
+  if (!state.plan) {
+    setState('plan', {
+      id: 0,
+      weekStartDate: mondayIso(),
+      weekEndDate: mondayIso(),
+      status: 'draft',
+      scenarioId,
+      days: [],
+    });
+    return;
+  }
+  setState('plan', 'scenarioId', scenarioId);
+}
+
+export function updateWeeklyPlanFleet(fleetByType: Record<string, number> | null): void {
+  if (!state.plan) return;
+  const resolved: Record<string, number> = {};
+  for (const [type, count] of Object.entries(fleetByType ?? {})) {
+    const value = Math.floor(Number(count));
+    if (Number.isFinite(value) && value >= 1) {
+      resolved[type] = value;
+    }
+  }
+  setState('plan', 'fleetByType', Object.keys(resolved).length > 0 ? resolved : null);
+  // La composición (o el uso de toda la flota) gobierna: se limpian límites por día
+  // heredados de autofill para que el motor use exactamente la flota indicada.
+  setState(
+    'plan',
+    'days',
+    (state.plan?.days ?? []).map((day) => ({ ...day, expectedVehicleCount: null })),
+  );
+  setState({ validationCompleted: false, validationSummary: null });
+}
+
+export async function autofillWeeklyFromCaseStudy(caseStudyId?: number | null): Promise<void> {
+  if (!state.plan?.id) {
+    throw new Error('Guarda un borrador antes de autocompletar');
+  }
+  const resolvedCaseId = caseStudyId ?? state.plan.caseStudyId ?? state.draftCaseStudy?.id;
+  if (resolvedCaseId == null) {
+    throw new Error('Selecciona un caso de estudio para autocompletar');
+  }
+  setState({ isSaving: true, error: null, notice: null });
+  try {
+    const plan = withCalendarDays(await autofillWeeklyPlanFromCaseStudy(state.plan.id, resolvedCaseId));
+    await refreshWeeklyPlanHistory();
+    setState({
+      plan,
+      validationCompleted: false,
+      validationSummary: null,
+      notice: `Días laborables configurados desde el caso ${plan?.caseStudyCode ?? ''}.`.trim(),
+    });
+  } catch (error) {
+    setState({
+      error: error instanceof Error ? error.message : 'No se pudo autocompletar desde el caso',
+    });
+    throw error;
+  } finally {
+    setState({ isSaving: false });
+  }
+}
+
+export async function autofillWeeklyFromSchedules(): Promise<void> {
+  if (!state.plan?.id) {
+    throw new Error('Guarda un borrador antes de autocompletar');
+  }
+  const before = summarizeWeeklyPlanAssignment(
+    mergeWeekCalendarDays(state.plan.weekStartDate, state.plan.days ?? []),
+  );
+  setState({ isSaving: true, error: null, notice: null });
+  try {
+    const plan = withCalendarDays(await autofillWeeklyPlanFromSchedules(state.plan.id));
+    await refreshWeeklyPlanHistory();
+    const after = summarizeWeeklyPlanAssignment(plan?.days ?? []);
+    setState({
+      plan,
+      validationCompleted: false,
+      validationSummary: null,
+      notice: `Se asignaron ${after.pointCount} puntos en ${after.activeDays} días (antes: ${before.pointCount} puntos en ${before.activeDays} días).`,
+    });
+  } catch (error) {
+    setState({
+      error: error instanceof Error ? error.message : 'No se pudo autocompletar la semana',
+    });
+    throw error;
+  } finally {
+    setState({ isSaving: false });
+  }
+}
+
+export async function loadWeeklyPlanVersions(): Promise<void> {
+  if (!state.plan?.id) return;
+  const { items } = await fetchWeeklyPlanVersions(state.plan.id);
+  setState({ versions: items });
+}
+
+export async function compareWeeklyVersions(versionA: number, versionB: number): Promise<void> {
+  if (!state.plan?.id) return;
+  const diff = await compareWeeklyPlanVersions(state.plan.id, versionA, versionB);
+  setState({ versionDiff: diff.changes });
+}
+
+export async function showLatestVersionChanges(): Promise<void> {
+  await loadWeeklyPlanVersions();
+  await compareLatestWeeklyVersions();
+}
+
+function triggerPdfDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function exportWeeklyPlanPdf(): Promise<void> {
+  if (!state.plan?.id) throw new Error('No hay plan para exportar');
+  const blob = await downloadWeeklyPlanPdf(state.plan.id);
+  triggerPdfDownload(blob, `plan-semanal-${state.plan.id}.pdf`);
+}
+
+/** Descarga el PDF de una semana concreta sin necesidad de seleccionarla. */
+export async function exportWeeklyPlanPdfById(planId: number): Promise<void> {
+  const blob = await downloadWeeklyPlanPdf(planId);
+  triggerPdfDownload(blob, `plan-semanal-${planId}.pdf`);
+}
+
+/** Carga el listado de planes semanales para la vista de consulta (solo lectura). */
+export async function initWeeklyPlansList(): Promise<void> {
+  setState({ isLoading: true, error: null, notice: null });
+  try {
+    await refreshWeeklyPlanHistory();
+  } catch (error) {
+    setState({
+      error: error instanceof Error ? error.message : 'No se pudieron cargar los planes semanales',
+    });
+  } finally {
+    setState({ isLoading: false });
+  }
+}
+
+export { state as weeklyPlanState };

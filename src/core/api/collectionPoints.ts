@@ -1,0 +1,492 @@
+import type { ContainerCollection } from '../types/geo';
+import { collectionPointsList, fillStatusFromLevel } from '../../data/mock/collectionPoints';
+import type { CollectionPoint } from '../types/collectionPoint';
+import { containersData } from '../../data/mock/containers';
+import { apiDownload, apiGet, apiPatch, apiPost, apiDelete, withMockFallback } from './client';
+import {
+  buildCollectionPointsSummary,
+  detailToCollectionPoint,
+  simulateFillHistoryForPoint,
+  type CollectionPointDetail,
+  type CollectionPointFillHistory,
+  type CollectionPointsSummary,
+  type CollectionPointOptimizationContext,
+} from '../utils/collectionPointsUtils';
+import {
+  readLastOptimizedCodes,
+  readLocalPriorityBoostCodes,
+} from '../utils/collectionPointsOptimization';
+export interface CollectionPointFilters {
+  sector?: string;
+  minFill?: number;
+}
+
+function buildQuery(filters?: CollectionPointFilters): string {
+  if (!filters) return '';
+  const params = new URLSearchParams();
+  if (filters.sector) params.set('sector', filters.sector);
+  if (filters.minFill != null) params.set('minFill', String(filters.minFill));
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+}
+
+export function fetchCollectionPoints(
+  filters?: CollectionPointFilters,
+): Promise<ContainerCollection> {
+  const path = `/api/v1/collection-points${buildQuery(filters)}`;
+  return withMockFallback(
+    'collection-points',
+    () => apiGet<ContainerCollection>(path),
+    filters?.sector
+      ? {
+          ...containersData,
+          features: containersData.features.filter(
+            (f) => f.properties.sector === filters.sector,
+          ),
+        }
+      : filters?.minFill != null
+        ? {
+            ...containersData,
+            features: containersData.features.filter(
+              (f) => f.properties.fillLevel >= (filters.minFill ?? 0),
+            ),
+          }
+        :     containersData,
+  );
+}
+
+function geoToCollectionPoints(geo: ContainerCollection): CollectionPoint[] {
+  return geo.features.map((feature) => ({
+    id: feature.properties.id,
+    numericId: feature.properties.numericId,
+    label: feature.properties.id,
+    address: feature.properties.sector,
+    sector: feature.properties.sector,
+    fillLevel: feature.properties.fillLevel,
+    status: fillStatusFromLevel(feature.properties.fillLevel),
+    active: true,
+    containerType: 'Estándar',
+    capacityL: feature.properties.capacityKg,
+    lastCollection: feature.properties.lastCollection,
+    frequency: 'Diaria',
+    lng: feature.geometry.coordinates[0],
+    lat: feature.geometry.coordinates[1],
+  }));
+}
+
+export function fetchCollectionPointsList(): Promise<CollectionPoint[]> {
+  return withMockFallback(
+    'collection-points-list',
+    () => fetchCollectionPoints().then(geoToCollectionPoints),
+    collectionPointsList,
+  );
+}
+
+export interface PlanningCollectionPointRef {
+  id: number;
+  code: string;
+  sectorName?: string | null;
+  /** Id numérico del sector (desde /collection-points/sector-options). Null si no resuelto. */
+  sectorId?: number | null;
+}
+
+function normalizeSectorName(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function resolvePlanningCollectionPointId(
+  properties: ContainerCollection['features'][number]['properties'],
+  fallbackIndex: number,
+): number | null {
+  const explicit = properties.pointId ?? properties.numericId;
+  if (typeof explicit === 'number' && Number.isFinite(explicit) && explicit > 0) {
+    return explicit;
+  }
+  const parsed = Number(properties.id);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed;
+  }
+  // Mocks sin pointId (p. ej. CNT-001): índice estable para desarrollo local.
+  return fallbackIndex + 1;
+}
+
+export async function fetchCollectionPointsForPlanning(): Promise<PlanningCollectionPointRef[]> {
+  const [geo, sectorOptions] = await Promise.all([fetchCollectionPoints(), fetchSectorOptions()]);
+  const sectorIdByName = new Map(sectorOptions.map((sector) => [normalizeSectorName(sector.name), sector.id]));
+  const rows: Array<PlanningCollectionPointRef | null> = geo.features.map((feature, index) => {
+    const id = resolvePlanningCollectionPointId(feature.properties, index);
+    if (id == null) return null;
+    const sectorName = feature.properties.sector ?? null;
+    return {
+      id,
+      code: String(feature.properties.id),
+      sectorName,
+      sectorId: sectorName ? (sectorIdByName.get(normalizeSectorName(sectorName)) ?? null) : null,
+    } satisfies PlanningCollectionPointRef;
+  });
+  return rows.filter((row): row is PlanningCollectionPointRef => row != null);
+}
+
+export interface SectorOption {
+  id: number;
+  name: string;
+  fillRateFactor?: number;
+  /** Tasa total efectiva de la zona (kg/día); null = gestionada por contenedor. */
+  generationRateKgPerDay?: number | null;
+  perCapitaKgPerDay?: number | null;
+  population?: number | null;
+  distributionMode?: DistributionMode;
+}
+
+export type DistributionMode = 'equal' | 'capacity' | 'population';
+
+/** Agregado por zona (contenedores, capacidad, generación y rebose). */
+export interface SectorSummary {
+  id: number;
+  name: string;
+  fillRateFactor: number;
+  population: number | null;
+  perCapitaKgPerDay: number | null;
+  distributionMode: DistributionMode;
+  configuredGenerationRateKgPerDay: number | null;
+  generationRateKgPerDay: number | null;
+  containerCount: number;
+  totalCapacityKg: number;
+  effectiveGenerationRateKgPerDay: number;
+  effectiveGenerationRateKgPerHour: number;
+  avgFillPct: number;
+  criticalCount: number;
+  overflowCount: number;
+}
+
+export interface SectorGenerationConfigPayload {
+  generationRateKgPerDay?: number | null;
+  perCapitaKgPerDay?: number | null;
+  distributionMode?: DistributionMode;
+}
+
+export interface CollectionPointCalibrationResult {
+  windowDays: number;
+  alpha: number;
+  calibratedCount: number;
+  skippedCount: number;
+  calibrated: { code: string; samples: number; previousRateKgPerDay: number | null; rateKgPerDay: number }[];
+  skipped: { code: string; reason: string }[];
+}
+
+export interface CollectionPointWritePayload {
+  sectorId: number;
+  code?: string;
+  latitude: number;
+  longitude: number;
+  maxCapacityKg: number;
+  currentFillLevelKg?: number;
+  status?: string;
+  fillRateFactorOverride?: number | null;
+  estimatedFillHours?: number | null;
+  generationRateKgPerDay?: number | null;
+  servedPopulation?: number | null;
+}
+
+export interface CollectionPointUpdatePayload {
+  sectorId?: number;
+  latitude?: number;
+  longitude?: number;
+  maxCapacityKg?: number;
+  currentFillLevelKg?: number;
+  status?: string;
+  priorityBoost?: boolean;
+  fillRateFactorOverride?: number | null;
+  estimatedFillHours?: number | null;
+  generationRateKgPerDay?: number | null;
+  servedPopulation?: number | null;
+}
+
+const MOCK_SECTOR_OPTIONS: SectorOption[] = [
+  { id: 1, name: 'Terrazas del caroni A-B-C' },
+  { id: 2, name: 'Terrazas del aluminio' },
+  { id: 3, name: 'Villa Betania' },
+  { id: 4, name: 'Villa Ikabaru' },
+  { id: 5, name: 'Rio negro' },
+  { id: 6, name: 'Los Bucares' },
+  { id: 7, name: 'La Pastoreña' },
+  { id: 8, name: 'Altos de Caroní' },
+  { id: 9, name: 'Manuelita Saenz' },
+  { id: 10, name: 'Las Mercedes' },
+  { id: 11, name: 'Rio Aro' },
+  { id: 12, name: 'Res Caroni plaza A-B-C-D' },
+  { id: 13, name: 'Paratepuy' },
+  { id: 14, name: 'Las Garzas' },
+  { id: 15, name: 'Las Peonias' },
+  { id: 16, name: 'Sierra Parima' },
+  { id: 17, name: 'Unare I' },
+  { id: 18, name: 'Villa Caroni' },
+  { id: 19, name: 'El tiamo Country Club' },
+  { id: 20, name: 'Isla Dorada' },
+  { id: 21, name: 'Isla Coral' },
+  { id: 22, name: 'Isla Bonita' },
+  { id: 23, name: 'Villa Guayana' },
+  { id: 24, name: 'Yuruani' },
+  { id: 25, name: 'Rio Yocoima' },
+  { id: 26, name: 'Uchire' },
+  { id: 27, name: 'Curagua B' },
+  { id: 28, name: 'Don Guillermo' },
+  { id: 29, name: 'Caujaro' },
+  { id: 30, name: 'Bloques de Curagua' },
+  { id: 31, name: 'Villa Apso' },
+  { id: 32, name: 'Las palmeras I y II' },
+  { id: 33, name: 'Yara Yara I y II' },
+  { id: 34, name: 'Guamo A-B-C' },
+  { id: 35, name: 'Barrio Guayana' },
+  { id: 36, name: 'El caimito 1-2-3-4' },
+  { id: 37, name: 'Urb. Villa del Caroní' },
+  { id: 38, name: 'Unare II' },
+  { id: 39, name: 'UD 292' },
+  { id: 40, name: 'Rio Cuyuní' },
+  { id: 41, name: 'Ventuari' },
+  { id: 42, name: 'Villa Yenisha' },
+  { id: 43, name: 'Res. Atlantico Plaza' },
+  { id: 44, name: 'Camino Real' },
+  { id: 45, name: 'Lomas del caroni' },
+  { id: 46, name: 'Los Rosales' },
+  { id: 47, name: 'Villa Victoria' },
+  { id: 48, name: 'Colegio Integral Guayana' },
+  { id: 49, name: 'Urb. Sur Aeropuerto' },
+  { id: 50, name: 'Res. Prasanthy country' },
+  { id: 51, name: 'Rio Caura' },
+];
+
+export function fetchSectorOptions(): Promise<SectorOption[]> {
+  return withMockFallback(
+    'collection-point-sector-options',
+    () => apiGet<SectorOption[]>('/api/v1/collection-points/sector-options'),
+    MOCK_SECTOR_OPTIONS,
+  );
+}
+
+/** Factores de velocidad de llenado por zona (planner/admin). */
+export function fetchSectorFillRateFactors(): Promise<SectorOption[]> {
+  return withMockFallback(
+    'collection-point-sector-options',
+    () => apiGet<SectorOption[]>('/api/v1/sectors/fill-rate-factors'),
+    MOCK_SECTOR_OPTIONS,
+  );
+}
+
+/** > 1 = la zona se llena más rápido (más poblada). */
+export function updateSectorFillRateFactor(
+  sectorId: number,
+  fillRateFactor: number,
+): Promise<SectorOption> {
+  return apiPatch<SectorOption>(`/api/v1/sectors/${sectorId}/fill-rate-factor`, { fillRateFactor });
+}
+
+/** Agregado por zona: contenedores, capacidad total y generación efectiva. */
+export function fetchSectorsSummary(): Promise<SectorSummary[]> {
+  return withMockFallback(
+    'sectors-summary',
+    () => apiGet<SectorSummary[]>('/api/v1/sectors/summary'),
+    MOCK_SECTOR_OPTIONS.map((sector) => ({
+      id: sector.id,
+      name: sector.name,
+      fillRateFactor: 1,
+      population: null,
+      perCapitaKgPerDay: null,
+      distributionMode: 'equal' as DistributionMode,
+      configuredGenerationRateKgPerDay: null,
+      generationRateKgPerDay: null,
+      containerCount: 0,
+      totalCapacityKg: 0,
+      effectiveGenerationRateKgPerDay: 0,
+      effectiveGenerationRateKgPerHour: 0,
+      avgFillPct: 0,
+      criticalCount: 0,
+      overflowCount: 0,
+    })),
+  );
+}
+
+/** Configura la generación de la zona (tasa, per cápita y modo de reparto). */
+export function updateSectorGenerationConfig(
+  sectorId: number,
+  payload: SectorGenerationConfigPayload,
+): Promise<SectorOption & { distributedContainerCount?: number }> {
+  return apiPatch<SectorOption & { distributedContainerCount?: number }>(
+    `/api/v1/sectors/${sectorId}/generation-rate`,
+    payload,
+  );
+}
+
+/** Atajo: define la tasa manual de la zona (kg/día); null la desactiva. */
+export function updateSectorGenerationRate(
+  sectorId: number,
+  generationRateKgPerDay: number | null,
+): Promise<SectorOption & { distributedContainerCount?: number }> {
+  return updateSectorGenerationConfig(sectorId, { generationRateKgPerDay });
+}
+
+/** Calibra la tasa de generación de los contenedores con los pesos recolectados. */
+export function calibrateCollectionPoints(
+  payload: { days?: number; sectorId?: number; alpha?: number } = {},
+): Promise<CollectionPointCalibrationResult> {
+  return apiPost<CollectionPointCalibrationResult>('/api/v1/collection-points/calibrate', payload);
+}
+
+export function createCollectionPoint(
+  payload: CollectionPointWritePayload & { code: string },
+): Promise<CollectionPointDetail> {
+  return apiPost<CollectionPointDetail>('/api/v1/collection-points', payload);
+}
+
+export function updateCollectionPoint(
+  code: string,
+  payload: CollectionPointUpdatePayload,
+): Promise<CollectionPointDetail> {
+  return apiPatch<CollectionPointDetail>(
+    `/api/v1/collection-points/${encodeURIComponent(code)}`,
+    payload,
+  );
+}
+
+export function deleteCollectionPoint(code: string): Promise<{ code: string; deleted: boolean }> {
+  return apiDelete<{ code: string; deleted: boolean }>(
+    `/api/v1/collection-points/${encodeURIComponent(code)}`,
+  );
+}
+
+export interface CollectionPointExportFilters {
+  sector?: string;
+  status?: string;
+}
+
+export function downloadCollectionPointsExport(
+  filters?: CollectionPointExportFilters,
+  filename = 'feromap-puntos-recoleccion.csv',
+): Promise<void> {
+  const params = new URLSearchParams({ format: 'csv' });
+  if (filters?.sector) params.set('sector', filters.sector);
+  if (filters?.status) params.set('status', filters.status);
+  return apiDownload(
+    `/api/v1/collection-points/export?${params.toString()}`,
+    filename,
+  );
+}
+
+function buildMockOptimizationContext(points: CollectionPoint[]): CollectionPointOptimizationContext {
+  const lastOptimizedCodes = readLastOptimizedCodes();
+  const fallbackCodes =
+    lastOptimizedCodes.length > 0
+      ? lastOptimizedCodes
+      : points.filter((point) => point.fillLevel >= 70).slice(0, 8).map((point) => point.id);
+  const priorityBoostCodes =
+    readLocalPriorityBoostCodes().length > 0
+      ? readLocalPriorityBoostCodes()
+      : points.filter((point) => point.priorityBoost).map((point) => point.id);
+
+  return {
+    lastOptimizedCodes: fallbackCodes,
+    lastOptimizedAt: null,
+    priorityBoostCodes,
+    criticalCount: points.filter((point) => point.status === 'critico').length,
+    overloadedCodes: [],
+  };
+}
+
+export function fetchCollectionPointsOptimizationContext(
+  points: CollectionPoint[] = [],
+): Promise<CollectionPointOptimizationContext> {
+  return withMockFallback(
+    'collection-points-optimization-context',
+    () => apiGet<CollectionPointOptimizationContext>('/api/v1/collection-points/optimization-context'),
+    buildMockOptimizationContext(points),
+  );
+}
+
+export function fetchCollectionPointsSummary(): Promise<CollectionPointsSummary> {
+  return withMockFallback(
+    'collection-points-summary',
+    () => apiGet<CollectionPointsSummary>('/api/v1/collection-points/summary'),
+    buildCollectionPointsSummary(collectionPointsList),
+  );
+}
+
+function findMockPoint(code: string): CollectionPoint | undefined {
+  return collectionPointsList.find((point) => point.id === code);
+}
+
+export function fetchCollectionPointDetail(code: string): Promise<CollectionPointDetail> {
+  return withMockFallback(
+    `collection-point-detail-${code}`,
+    () => apiGet<CollectionPointDetail>(`/api/v1/collection-points/${encodeURIComponent(code)}`),
+    (() => {
+      const point = findMockPoint(code);
+      if (!point) throw new Error(`Punto no encontrado: ${code}`);
+      return {
+        code: point.id,
+        id: point.id,
+        label: point.label,
+        address: point.address,
+        sector: point.sector,
+        sectorId: 0,
+        fillLevel: point.fillLevel,
+        status: point.status,
+        active: point.active,
+        containerType: point.containerType,
+        capacityKg: point.capacityL,
+        capacityL: point.capacityL,
+        currentFillLevelKg: Math.round((point.fillLevel / 100) * point.capacityL),
+        lastEmptiedAt: null,
+        lastCollection: point.lastCollection,
+        frequency: point.frequency,
+        latitude: point.lat,
+        longitude: point.lng,
+        priorityBoost: readLocalPriorityBoostCodes().includes(point.id),
+      } satisfies CollectionPointDetail;
+    })(),
+  );
+}
+
+export function fetchCollectionPointFillHistory(
+  code: string,
+  days = 7,
+): Promise<CollectionPointFillHistory> {
+  return withMockFallback(
+    `collection-point-fill-history-${code}`,
+    () =>
+      apiGet<CollectionPointFillHistory>(
+        `/api/v1/collection-points/${encodeURIComponent(code)}/fill-history?days=${days}`,
+      ),
+    simulateFillHistoryForPoint(
+      findMockPoint(code) ?? { id: code, fillLevel: 50 },
+      days,
+    ),
+  );
+}
+
+export {
+  apiDistributionToFillDistribution,
+  buildAnalyticsHref,
+  buildCollectionPointsCsv,
+  buildCollectionPointsSummary,
+  buildSectorFilterOptions,
+  computeCatalogKpis,
+  computeCollectionPointsKpis,
+  computeFillDistribution,
+  detailToCollectionPoint,
+  downloadCollectionPointsCsv,
+  downloadCsvContent,
+  enrichCollectionPointsWithOptimization,
+  simulateFillHistoryForPoint,
+  summaryKpisToCards,
+  type CollectionPointOptimizationContext,
+  type CollectionPointDetail,
+  type CollectionPointFillHistory,
+  type CollectionPointKpi,
+  type CollectionPointsSummary,
+  type FillDistribution,
+  type FillDistributionItem,
+} from '../utils/collectionPointsUtils';

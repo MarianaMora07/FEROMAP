@@ -1,0 +1,52 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Entorno e infra
+.env
+postgres_data/
+data/cache/
+data/uploads/
+*.mbtiles
+
+# Python (backend)
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.pytest_cache/
+backend/.venv/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+backend/cache/
+# Directorio de datos generado en dev cuando DATA_DIR cae dentro del árbol backend.
+backend/data/
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# Tesis
+tesis/
+
+# Backups de base de datos (F5)
+backups/

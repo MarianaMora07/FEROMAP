@@ -1,0 +1,168 @@
+import type {
+  CaseStudyDetail,
+  CaseStudyGeoJson,
+  CaseStudyListItem,
+  CaseStudyListResponse,
+} from '../../core/api/caseStudies';
+
+export const mockCaseStudyList: CaseStudyListItem[] = [
+  {
+    id: 1,
+    code: 'CE-UNARE-NORTE',
+    name: 'Unare Norte — subconjunto compacto',
+    description: '15 puntos en sectores norte.',
+    defaultScenarioId: 'normal',
+    defaultParameters: { acoAnts: 12, acoIterations: 20 },
+    status: 'active',
+    activePointCount: 15,
+    pointCount: 15,
+    createdAt: '2026-01-01T10:00:00+00:00',
+    updatedAt: '2026-01-01T10:00:00+00:00',
+  },
+  {
+    id: 2,
+    code: 'CE-UNARE-SUR',
+    name: 'Unare Sur — subconjunto occidental',
+    description: '15 puntos en sectores sur/occidente.',
+    defaultScenarioId: 'normal',
+    defaultParameters: { acoAnts: 12, acoIterations: 20 },
+    status: 'active',
+    activePointCount: 15,
+    pointCount: 15,
+    createdAt: '2026-01-02T10:00:00+00:00',
+    updatedAt: '2026-01-02T10:00:00+00:00',
+  },
+  {
+    id: 3,
+    code: 'CE-MULTI-VIAJE',
+    name: 'Multi-viaje — demanda alta',
+    description: '12 puntos con overrides elevados.',
+    defaultScenarioId: 'saturated',
+    defaultParameters: { acoAnts: 16, acoIterations: 25, wasteLevelPct: 30 },
+    status: 'active',
+    activePointCount: 12,
+    pointCount: 12,
+    createdAt: '2026-01-03T10:00:00+00:00',
+    updatedAt: '2026-01-03T10:00:00+00:00',
+  },
+  {
+    id: 4,
+    code: 'CE-COMBINATORIO',
+    name: 'Infierno combinatorio — 80 puntos Unare',
+    description: 'Stress test VRP: catálogo completo demo con ACO al máximo.',
+    defaultScenarioId: 'saturated',
+    defaultParameters: {
+      acoAnts: 20,
+      acoIterations: 40,
+      wasteLevelPct: 35,
+      operatorsShortage: 1,
+      priorityFillLevel: true,
+      timeWindowEnabled: true,
+    },
+    status: 'active',
+    activePointCount: 80,
+    pointCount: 80,
+    createdAt: '2026-01-04T10:00:00+00:00',
+    updatedAt: '2026-01-04T10:00:00+00:00',
+  },
+];
+
+export const mockCaseStudyDetails: Record<number, CaseStudyDetail> = {
+  1: {
+    ...mockCaseStudyList[0]!,
+    points: [
+      {
+        collectionPointId: 1,
+        code: 'CNT-001',
+        sectorName: 'Unare I',
+        activeInStudy: true,
+        fillLevelKgOverride: null,
+        demandKgOverride: null,
+        resolvedDemandKg: 420,
+        resolvedFillLevelKg: 420,
+        demandSource: 'catalog',
+        catalogFillLevelPct: 35,
+        notes: null,
+        sortOrder: 1,
+      },
+      {
+        collectionPointId: 6,
+        code: 'CNT-006',
+        sectorName: 'Unare II',
+        activeInStudy: true,
+        fillLevelKgOverride: 320,
+        demandKgOverride: null,
+        resolvedDemandKg: 320,
+        resolvedFillLevelKg: 320,
+        demandSource: 'fill_override',
+        catalogFillLevelPct: 45,
+        notes: null,
+        sortOrder: 2,
+      },
+    ],
+  },
+  2: {
+    ...mockCaseStudyList[1]!,
+    points: [
+      {
+        collectionPointId: 6,
+        code: 'CNT-006',
+        sectorName: 'Unare II',
+        activeInStudy: true,
+        fillLevelKgOverride: 880,
+        demandKgOverride: null,
+        resolvedDemandKg: 880,
+        resolvedFillLevelKg: 880,
+        demandSource: 'fill_override',
+        catalogFillLevelPct: 45,
+        notes: null,
+        sortOrder: 1,
+      },
+    ],
+  },
+  3: {
+    ...mockCaseStudyList[2]!,
+    points: [],
+  },
+  4: {
+    ...mockCaseStudyList[3]!,
+    points: [],
+  },
+};
+
+export const mockCaseStudyListResponse: CaseStudyListResponse = {
+  items: mockCaseStudyList,
+  total: mockCaseStudyList.length,
+  limit: 25,
+  offset: 0,
+};
+
+export const mockCaseStudyGeoJson: CaseStudyGeoJson = {
+  type: 'FeatureCollection',
+  features: [
+    {
+      type: 'Feature',
+      properties: {
+        caseStudyId: 1,
+        caseStudyCode: 'CE-UNARE-NORTE',
+        collectionPointId: 1,
+        id: 'CNT-001',
+        code: 'CNT-001',
+        sector: 'Unare I',
+        fillLevel: 35,
+        catalogFillLevelPct: 35,
+        resolvedDemandKg: 420,
+        demandSource: 'catalog',
+        priority: 'normal',
+        activeInStudy: true,
+        sortOrder: 1,
+      },
+      geometry: { type: 'Point', coordinates: [-62.12, 8.35] },
+    },
+  ],
+  properties: {
+    caseStudyId: 1,
+    caseStudyCode: 'CE-UNARE-NORTE',
+    featureCount: 1,
+  },
+};

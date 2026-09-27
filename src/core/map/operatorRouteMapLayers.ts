@@ -1,0 +1,187 @@
+import maplibregl, { type Map as MapLibreMap, type Marker, Popup } from 'maplibre-gl';
+import type { OperatorRouteSnapshot, OperatorRouteStop } from '../api/operator';
+import type { RouteCollection } from '../types/geo';
+import { ensureOperationalRouteLayer } from './operationalMapLayers';
+
+export const OPERATOR_ROUTE_SOURCE_ID = 'operator-my-route';
+export const OPERATOR_ROUTE_LAYER_ID = 'operator-my-route-line';
+export const OPERATOR_ROUTE_GLOW_LAYER_ID = 'operator-my-route-glow';
+
+export type OperatorRouteCollectionOptions = {
+  color?: string;
+  label?: string;
+  routeId?: number | string | null;
+};
+
+function isValidCoordinate(pair: unknown): pair is [number, number] {
+  return (
+    Array.isArray(pair) &&
+    pair.length === 2 &&
+    typeof pair[0] === 'number' &&
+    Number.isFinite(pair[0]) &&
+    typeof pair[1] === 'number' &&
+    Number.isFinite(pair[1])
+  );
+}
+
+/** Línea recta entre paradas ordenadas (fallback cuando la API no envía geometría vial). */
+export function straightLineCoordinatesFromStops(
+  stops: OperatorRouteStop[],
+): Array<[number, number]> {
+  return [...stops]
+    .sort((a, b) => a.sequenceOrder - b.sequenceOrder)
+    .filter((stop) => stop.lng != null && stop.lat != null)
+    .map((stop) => [stop.lng!, stop.lat!]);
+}
+
+function resolveOperatorRouteCoordinates(
+  snapshot: Pick<OperatorRouteSnapshot, 'stops' | 'lineCoordinates'>,
+): Array<[number, number]> {
+  const fromApi = snapshot.lineCoordinates?.filter(isValidCoordinate) ?? [];
+  if (fromApi.length >= 2) return fromApi;
+  return straightLineCoordinatesFromStops(snapshot.stops);
+}
+
+function routeCollectionFromCoordinates(
+  coordinates: Array<[number, number]>,
+  options?: OperatorRouteCollectionOptions,
+): RouteCollection {
+  const color = options?.color ?? '#1143F3';
+  if (coordinates.length < 2) {
+    return { type: 'FeatureCollection', features: [] };
+  }
+
+  return {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: {
+          id: options?.routeId != null ? String(options.routeId) : 'my-route-today',
+          routeId: options?.routeId ?? undefined,
+          color,
+          label: options?.label ?? 'Mi ruta hoy',
+        },
+        geometry: {
+          type: 'LineString',
+          coordinates,
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * Construye la capa de ruta del operador.
+ * Prefiere `lineCoordinates` de la API (misma geometría que optimización/monitoreo).
+ */
+export function routeCollectionFromOperatorSnapshot(
+  snapshot: Pick<OperatorRouteSnapshot, 'stops' | 'lineCoordinates' | 'routeId'>,
+  options?: OperatorRouteCollectionOptions,
+): RouteCollection {
+  const coordinates = resolveOperatorRouteCoordinates(snapshot);
+  return routeCollectionFromCoordinates(coordinates, {
+    ...options,
+    routeId: options?.routeId ?? snapshot.routeId,
+  });
+}
+
+/** @deprecated Usar `routeCollectionFromOperatorSnapshot` con fallback integrado. */
+export function routeCollectionFromStops(
+  stops: OperatorRouteStop[],
+  options?: OperatorRouteCollectionOptions,
+): RouteCollection {
+  return routeCollectionFromCoordinates(straightLineCoordinatesFromStops(stops), options);
+}
+
+export function ensureOperatorRouteLayer(map: MapLibreMap, routes: RouteCollection) {
+  ensureOperationalRouteLayer(map, routes, OPERATOR_ROUTE_SOURCE_ID, {
+    splitByStatus: false,
+    singleLayerId: OPERATOR_ROUTE_LAYER_ID,
+  });
+
+  if (!map.getLayer(OPERATOR_ROUTE_GLOW_LAYER_ID)) {
+    map.addLayer(
+      {
+        id: OPERATOR_ROUTE_GLOW_LAYER_ID,
+        type: 'line',
+        source: OPERATOR_ROUTE_SOURCE_ID,
+        paint: {
+          'line-color': '#1143F3',
+          'line-width': 10,
+          'line-opacity': 0.15,
+        },
+      },
+      OPERATOR_ROUTE_LAYER_ID,
+    );
+  }
+
+  if (map.getLayer(OPERATOR_ROUTE_LAYER_ID)) {
+    map.setPaintProperty(OPERATOR_ROUTE_LAYER_ID, 'line-color', '#1143F3');
+    map.setPaintProperty(OPERATOR_ROUTE_LAYER_ID, 'line-width', 5);
+  }
+}
+
+export function syncNextStopMarker(
+  map: MapLibreMap,
+  stop: OperatorRouteStop | null | undefined,
+  holder: { marker?: Marker },
+) {
+  if (holder.marker) {
+    holder.marker.remove();
+    holder.marker = undefined;
+  }
+  if (!stop || stop.lng == null || stop.lat == null) return;
+
+  const el = document.createElement('button');
+  el.type = 'button';
+  el.className = 'gis-marker';
+  el.setAttribute('aria-label', `Próxima parada ${stop.code}`);
+  el.innerHTML =
+    '<span style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9999px;background:#1143F3;box-shadow:0 0 0 6px rgba(17,67,243,.35);border:3px solid #fff;font-size:11px;font-weight:700;color:#fff">★</span>';
+
+  holder.marker = new maplibregl.Marker({ element: el })
+    .setLngLat([stop.lng, stop.lat])
+    .setPopup(
+      new Popup({ offset: 16, maxWidth: '240px' }).setHTML(
+        `<strong>Próxima parada</strong><br/><span style="font-size:12px;color:#64748b">${stop.code} · ${stop.sectorName ?? ''}</span>`,
+      ),
+    )
+    .addTo(map);
+}
+
+export function fitMapToStops(map: MapLibreMap, stops: OperatorRouteStop[], padding = 48) {
+  const bounds = new maplibregl.LngLatBounds();
+  let count = 0;
+  for (const stop of stops) {
+    if (stop.lng == null || stop.lat == null) continue;
+    bounds.extend([stop.lng, stop.lat]);
+    count += 1;
+  }
+  if (count === 0) return;
+  if (count === 1) {
+    const first = stops.find((stop) => stop.lng != null && stop.lat != null);
+    if (first?.lng != null && first.lat != null) {
+      map.flyTo({ center: [first.lng, first.lat], zoom: 14.5, essential: true });
+    }
+    return;
+  }
+  map.fitBounds(bounds, { padding, maxZoom: 15, duration: 800 });
+}
+
+export function fitMapToOperatorRoute(
+  map: MapLibreMap,
+  snapshot: Pick<OperatorRouteSnapshot, 'stops' | 'lineCoordinates'>,
+  padding = 48,
+) {
+  const coordinates = resolveOperatorRouteCoordinates(snapshot);
+  if (coordinates.length >= 2) {
+    const bounds = new maplibregl.LngLatBounds();
+    for (const [lng, lat] of coordinates) {
+      bounds.extend([lng, lat]);
+    }
+    map.fitBounds(bounds, { padding, maxZoom: 15, duration: 800 });
+    return;
+  }
+  fitMapToStops(map, snapshot.stops, padding);
+}

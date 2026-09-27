@@ -1,0 +1,605 @@
+"""Despacho de rutas y avance operativo de waypoints."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from datetime import date, datetime, timezone
+from decimal import Decimal
+from typing import Any
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session, joinedload
+
+from app.db.models import (
+    CollectionPoint,
+    OptimizedRoute,
+    RouteWaypoint,
+    Vehicle,
+    VehicleIncident,
+)
+from app.domain.criticality import is_at_risk_before_next_visit
+from app.config import settings
+from app.core.idempotency import run_idempotent
+from app.services.geo_service import fill_level_pct
+from app.services.next_visit_service import next_visits_by_point
+from app.services.seed_loader import load_seed
+
+VEHICLE_IMAGES = [
+    "https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&w=160&h=120&q=80",
+    "https://images.unsplash.com/photo-1519003722824-194d4455a60c?auto=format&fit=crop&w=160&h=120&q=80",
+    "https://images.unsplash.com/photo-1566576721346-d4a3b4eaeb55?auto=format&fit=crop&w=160&h=120&q=80",
+]
+
+STATUS_TO_UI = {
+    "in_route": "en-ruta",
+    "available": "disponible",
+    "maintenance": "mantenimiento",
+    "inactive": "fuera-de-servicio",
+}
+
+
+def route_progress_percent(waypoints: list[RouteWaypoint]) -> int:
+    if not waypoints:
+        return 0
+    completed = sum(1 for wp in waypoints if wp.status == "completed")
+    return int(round(completed / len(waypoints) * 100))
+
+
+def route_actual_distance_km(route: OptimizedRoute) -> float | None:
+    """Distancia real recorrida entre las paradas completadas de una ruta (grafo vial).
+
+    No se persiste en ``optimized_routes``: se deriva al cerrar el día desde los
+    waypoints con llegada real. Devuelve ``None`` si hay menos de dos paradas
+    completadas o si el grafo no está disponible (el llamador usa el previsto).
+    """
+    completed = sorted(
+        (
+            waypoint
+            for waypoint in route.waypoints
+            if waypoint.status in {"completed", "collected"}
+            and waypoint.collection_point is not None
+        ),
+        key=lambda waypoint: waypoint.sequence_order,
+    )
+    if len(completed) < 2:
+        return None
+    try:
+        from app.services import graph_service
+
+        graph = graph_service.load_road_graph()
+        total_meters = 0.0
+        for previous, current in zip(completed, completed[1:]):
+            start = previous.collection_point
+            end = current.collection_point
+            origin = graph_service.nearest_node(graph, float(start.longitude), float(start.latitude))
+            destination = graph_service.nearest_node(
+                graph, float(end.longitude), float(end.latitude)
+            )
+            distance_m, _seconds = graph_service.path_metrics_between_nodes(
+                graph, origin, destination
+            )
+            total_meters += float(distance_m or 0)
+        return round(total_meters / 1000.0, 2) if total_meters > 0 else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _next_pending_waypoint(db: Session, route_id: int) -> RouteWaypoint | None:
+    return db.scalar(
+        select(RouteWaypoint)
+        .where(RouteWaypoint.route_id == route_id, RouteWaypoint.status == "pending")
+        .order_by(RouteWaypoint.sequence_order)
+        .limit(1)
+    )
+
+
+def dispatch_optimized_routes(
+    db: Session,
+    *,
+    preserve_active: bool = False,
+    daily_plan_id: int | None = None,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """Despacha rutas optimizadas garantizando un único efecto por idempotency key."""
+    scope = f"dispatch:{daily_plan_id if daily_plan_id is not None else 'all'}"
+
+    def _run() -> dict[str, Any]:
+        return _dispatch_optimized_routes_impl(
+            db, preserve_active=preserve_active, daily_plan_id=daily_plan_id
+        )
+
+    return run_idempotent(
+        db,
+        scope=scope,
+        key=idempotency_key,
+        handler=_run,
+        enabled=settings.dispatch_idempotency_enabled,
+    )
+
+
+def _dispatch_optimized_routes_impl(
+    db: Session,
+    *,
+    preserve_active: bool = False,
+    daily_plan_id: int | None = None,
+) -> dict[str, Any]:
+    """Marca rutas optimizadas pendientes como en ejecución y asigna vehículos."""
+    if not preserve_active:
+        active = db.scalars(
+            select(OptimizedRoute).where(
+                OptimizedRoute.route_kind == "optimized",
+                OptimizedRoute.status == "in_progress",
+            )
+        ).all()
+        for route in active:
+            route.status = "completed"
+            vehicle = db.get(Vehicle, route.vehicle_id)
+            if vehicle and vehicle.status == "in_route":
+                vehicle.status = "available"
+
+    pending_stmt = select(OptimizedRoute).where(
+        OptimizedRoute.route_kind == "optimized",
+        OptimizedRoute.status == "pending",
+    )
+    if daily_plan_id is not None:
+        pending_stmt = pending_stmt.where(OptimizedRoute.daily_plan_id == daily_plan_id)
+    pending = db.scalars(pending_stmt.order_by(OptimizedRoute.id.desc())).all()
+
+    if not pending:
+        latest_calculated = db.scalar(
+            select(OptimizedRoute.calculated_at)
+            .where(OptimizedRoute.route_kind == "optimized")
+            .order_by(OptimizedRoute.calculated_at.desc())
+            .limit(1)
+        )
+        if latest_calculated:
+            fallback_stmt = select(OptimizedRoute).where(
+                OptimizedRoute.route_kind == "optimized",
+                OptimizedRoute.status == "pending",
+                OptimizedRoute.calculated_at == latest_calculated,
+            )
+            if daily_plan_id is not None:
+                fallback_stmt = fallback_stmt.where(OptimizedRoute.daily_plan_id == daily_plan_id)
+            pending = list(db.scalars(fallback_stmt).all())
+
+    dispatched_ids: list[int] = []
+    for route in pending:
+        route.status = "in_progress"
+        vehicle = db.get(Vehicle, route.vehicle_id)
+        if vehicle:
+            vehicle.status = "in_route"
+        dispatched_ids.append(route.id)
+
+    return {"dispatchedRouteIds": dispatched_ids, "count": len(dispatched_ids)}
+
+
+def advance_route(db: Session, route_id: int) -> dict[str, Any]:
+    """Completa la siguiente parada pendiente de una ruta en ejecución."""
+    route = db.scalar(
+        select(OptimizedRoute)
+        .where(OptimizedRoute.id == route_id)
+        .options(
+            joinedload(OptimizedRoute.waypoints).joinedload(RouteWaypoint.collection_point),
+        )
+    )
+    if route is None:
+        raise LookupError(f"Ruta no encontrada: {route_id}")
+    if route.status != "in_progress":
+        raise ValueError("La ruta no está en ejecución")
+
+    waypoint = _next_pending_waypoint(db, route_id)
+    if waypoint is None:
+        route.status = "completed"
+        vehicle = db.get(Vehicle, route.vehicle_id)
+        if vehicle:
+            vehicle.status = "available"
+        return {
+            "routeId": route_id,
+            "routeCompleted": True,
+            "progress": 100,
+            "waypoint": None,
+        }
+
+    _complete_waypoint(db, route, waypoint, outcome="visited")
+    return _advance_result(db, route, waypoint)
+
+
+def _complete_waypoint(
+    db: Session,
+    route: OptimizedRoute,
+    waypoint: RouteWaypoint,
+    *,
+    outcome: str,
+    confirmed_by_user_id: int | None = None,
+    confirmation_source: str | None = None,
+) -> None:
+    """Efectos compartidos de avanzar/confirmar una parada (F5b reutiliza esto).
+
+    Escribe exactamente los mismos campos que leen plan_vs_real, calibración e
+    historial: status completed/skipped, actual_arrival_at, collected_weight_kg
+    (solo si visitada), llenado a cero y resolución de pending_visits.
+    """
+    now = datetime.now(timezone.utc)
+    waypoint.status = "completed" if outcome == "visited" else "skipped"
+    waypoint.actual_arrival_at = now
+    if confirmed_by_user_id is not None:
+        waypoint.confirmed_by_user_id = confirmed_by_user_id
+        waypoint.confirmation_source = confirmation_source or "driver"
+
+    point = waypoint.collection_point
+    if point is not None and outcome == "visited":
+        from app.domain.waste_generation import projected_fill_level_kg
+
+        waypoint.collected_weight_kg = projected_fill_level_kg(point, at=now)
+        point.current_fill_level_kg = Decimal("0")
+        point.last_emptied_at = now
+        from app.services.planning_service import resolve_pending_visits_for_points
+
+        resolve_pending_visits_for_points(db, [point.id], operation_date=now.date())
+
+    # Sin paradas pending → la ruta se completa (mismo criterio que advance_route).
+    has_pending = db.scalar(
+        select(RouteWaypoint.id)
+        .where(RouteWaypoint.route_id == route.id, RouteWaypoint.status == "pending")
+        .limit(1)
+    )
+    if has_pending is None:
+        route.status = "completed"
+        vehicle = db.get(Vehicle, route.vehicle_id)
+        if vehicle:
+            vehicle.status = "available"
+    db.flush()
+
+
+def _advance_result(db: Session, route: OptimizedRoute, waypoint: RouteWaypoint) -> dict[str, Any]:
+    progress = route_progress_percent(list(route.waypoints))
+    point = waypoint.collection_point
+    return {
+        "routeId": route.id,
+        "routeCompleted": progress >= 100,
+        "progress": progress,
+        "waypoint": {
+            "id": waypoint.id,
+            "collectionPointCode": point.code if point else None,
+            "sequenceOrder": waypoint.sequence_order,
+            "actualArrivalAt": waypoint.actual_arrival_at.isoformat()
+            if waypoint.actual_arrival_at
+            else None,
+            "status": waypoint.status,
+        },
+    }
+
+
+def confirm_route_stop(
+    db: Session,
+    route_id: int,
+    waypoint_id: int,
+    *,
+    outcome: str,
+    note: str | None = None,
+    user_id: int | None = None,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """F5b: el conductor confirma una parada visitada u omitida (ADR-007).
+
+    Solo escribe los mismos campos que advance_route; no cambia el contrato de
+    plan_vs_real ni el cierre de día (sigue siendo de planificación).
+    """
+    if not settings.operator_stop_confirmation_enabled:
+        raise ValueError("Confirmación de parada deshabilitada (OPERATOR_STOP_CONFIRMATION_ENABLED)")
+
+    def _run() -> dict[str, Any]:
+        route = db.scalar(
+            select(OptimizedRoute)
+            .where(OptimizedRoute.id == route_id)
+            .options(
+                joinedload(OptimizedRoute.waypoints).joinedload(RouteWaypoint.collection_point),
+            )
+        )
+        if route is None:
+            raise LookupError(f"Ruta no encontrada: {route_id}")
+        if route.status != "in_progress":
+            raise ValueError("La ruta no está en ejecución")
+        waypoint = next((wp for wp in route.waypoints if wp.id == waypoint_id), None)
+        if waypoint is None:
+            raise LookupError(f"Parada no encontrada: {waypoint_id}")
+        if waypoint.status not in {"pending", "collected"}:
+            # Idempotente ante doble POST: ya confirmada, no reescribe.
+            return _advance_result(db, route, waypoint)
+        if waypoint.waypoint_type == "landfill" and outcome == "omitted":
+            raise ValueError("No se puede omitir la parada de vertedero")
+
+        _complete_waypoint(
+            db,
+            route,
+            waypoint,
+            outcome=outcome,
+            confirmed_by_user_id=user_id,
+            confirmation_source="driver",
+        )
+        if note:
+            # Nota se conserva en el historial vía confirmation_source + payload del caller;
+            # no hay columna de nota en waypoints (alcance mínimo ADR-007).
+            pass
+        return _advance_result(db, route, waypoint)
+
+    return run_idempotent(
+        db,
+        scope=f"confirm-stop:{route_id}:{waypoint_id}",
+        key=idempotency_key,
+        handler=_run,
+        enabled=True,
+    )
+
+
+def advance_active_routes(db: Session) -> dict[str, Any]:
+    """Avanza una parada en cada ruta activa (simulación de progreso)."""
+    routes = db.scalars(
+        select(OptimizedRoute).where(OptimizedRoute.status == "in_progress")
+    ).all()
+    results = []
+    for route in routes:
+        try:
+            results.append(advance_route(db, route.id))
+        except ValueError:
+            continue
+    return {"advanced": len(results), "routes": results}
+
+
+def _active_route_day_preference(route: OptimizedRoute) -> tuple[int, int]:
+    """Ordena rutas activas del mismo vehículo: hoy, luego la más próxima."""
+    today = date.today()
+    day = route.daily_plan.operation_date if route.daily_plan else None
+    if day is None:
+        return (3, 0)
+    if day == today:
+        return (0, 0)
+    if day > today:
+        return (1, (day - today).days)
+    return (2, (today - day).days)
+
+
+def _dedupe_active_routes_by_vehicle(
+    routes: Sequence[OptimizedRoute],
+) -> list[OptimizedRoute]:
+    """Mantiene una sola ruta activa por vehículo.
+
+    Tras despachar la semana completa varias rutas del mismo camión pueden
+    quedar ``in_progress`` (una por día), pero un vehículo solo ejecuta una
+    ruta a la vez: sin esta deduplicación el mapa y el dashboard mostrarían
+    entradas repetidas.
+    """
+    best: dict[int | None, OptimizedRoute] = {}
+    for route in routes:
+        current = best.get(route.vehicle_id)
+        if current is None or _active_route_day_preference(route) < _active_route_day_preference(
+            current
+        ):
+            best[route.vehicle_id] = route
+    return sorted(best.values(), key=lambda route: route.id)
+
+
+def active_routes_view(db: Session, *, driver_id: int | None = None) -> list[dict[str, Any]]:
+    stmt = (
+        select(OptimizedRoute)
+        .where(OptimizedRoute.status == "in_progress")
+        .options(
+            joinedload(OptimizedRoute.vehicle),
+            joinedload(OptimizedRoute.driver),
+            joinedload(OptimizedRoute.daily_plan),
+            joinedload(OptimizedRoute.waypoints),
+        )
+        .order_by(OptimizedRoute.id)
+    )
+    if driver_id is not None:
+        if driver_id < 0:
+            return []
+        stmt = stmt.where(OptimizedRoute.driver_id == driver_id)
+    routes = _dedupe_active_routes_by_vehicle(db.scalars(stmt).unique().all())
+    seed_vehicles = {row["code"]: row for row in load_seed("vehicles.json")}
+    items = []
+    for route in routes:
+        vehicle = route.vehicle
+        driver = route.driver
+        code = vehicle.code if vehicle else f"R-{route.id}"
+        progress = route_progress_percent(list(route.waypoints))
+        waypoints = list(route.waypoints)
+        completed = sum(1 for wp in waypoints if wp.status == "completed")
+        seed = seed_vehicles.get(code, {})
+        items.append(
+            {
+                "id": f"Ruta {code}",
+                "driver": f"{driver.first_name} {driver.last_name}" if driver else seed.get("driverName", "—"),
+                "vehicle": code,
+                "progress": progress,
+                "tone": "success" if progress >= 50 else "info",
+                "routeId": route.id,
+                "waypointsDone": completed,
+                "waypointsTotal": len(waypoints),
+            }
+        )
+    return items
+
+
+def live_fleet_view(db: Session, *, driver_id: int | None = None) -> list[dict[str, Any]]:
+    stmt = (
+        select(OptimizedRoute)
+        .where(OptimizedRoute.status == "in_progress")
+        .options(
+            joinedload(OptimizedRoute.vehicle),
+            joinedload(OptimizedRoute.driver),
+            joinedload(OptimizedRoute.daily_plan),
+            joinedload(OptimizedRoute.waypoints)
+            .joinedload(RouteWaypoint.collection_point)
+            .joinedload(CollectionPoint.sector),
+        )
+    )
+    if driver_id is not None:
+        if driver_id < 0:
+            return []
+        stmt = stmt.where(OptimizedRoute.driver_id == driver_id)
+    routes = _dedupe_active_routes_by_vehicle(db.scalars(stmt).unique().all())
+    seed_vehicles = {row["code"]: row for row in load_seed("vehicles.json")}
+    fleet: list[dict[str, Any]] = []
+
+    for index, route in enumerate(routes):
+        vehicle = route.vehicle
+        if vehicle is None:
+            continue
+        code = vehicle.code
+        seed = seed_vehicles.get(code, {})
+        waypoints = sorted(route.waypoints, key=lambda wp: wp.sequence_order)
+        progress = route_progress_percent(waypoints)
+        next_wp = next((wp for wp in waypoints if wp.status == "pending"), None)
+        next_point = "—"
+        lng, lat = -62.715, 8.295
+        if next_wp and next_wp.collection_point:
+            cp = next_wp.collection_point
+            next_point = cp.sector.name if cp.sector else cp.code
+            lng = float(cp.longitude)
+            lat = float(cp.latitude)
+        elif waypoints and waypoints[-1].collection_point:
+            cp = waypoints[-1].collection_point
+            lng = float(cp.longitude)
+            lat = float(cp.latitude)
+
+        fleet.append(
+            {
+                "id": code,
+                "status": STATUS_TO_UI.get(vehicle.status, vehicle.status),
+                "driver": seed.get("driverName")
+                or (f"{route.driver.first_name} {route.driver.last_name}" if route.driver else "—"),
+                "route": f"Ruta optimizada {code}",
+                "progress": progress,
+                "speedKmh": 32 if progress < 100 else 0,
+                "nextPoint": next_point,
+                "color": ["#34D634", "#1143F3", "#7c3aed", "#f59e0b"][index % 4],
+                "image": VEHICLE_IMAGES[index % len(VEHICLE_IMAGES)],
+                "lng": lng,
+                "lat": lat,
+                "routeId": route.id,
+            }
+        )
+
+    maintenance = db.scalars(select(Vehicle).where(Vehicle.status == "maintenance")).all()
+    for index, vehicle in enumerate(maintenance):
+        seed = seed_vehicles.get(vehicle.code, {})
+        fleet.append(
+            {
+                "id": vehicle.code,
+                "status": "mantenimiento",
+                "driver": seed.get("driverName") or "—",
+                "route": "—",
+                "progress": 0,
+                "speedKmh": None,
+                "nextPoint": "Taller Central",
+                "color": "#f59e0b",
+                "image": VEHICLE_IMAGES[(index + 1) % len(VEHICLE_IMAGES)],
+                "lng": -62.728,
+                "lat": 8.29,
+                "routeId": None,
+            }
+        )
+    return fleet
+
+
+def alerts_from_db(db: Session) -> list[dict[str, Any]]:
+    points = db.scalars(
+        select(CollectionPoint).options(joinedload(CollectionPoint.sector)).order_by(CollectionPoint.code)
+    ).all()
+    alerts: list[dict[str, Any]] = []
+    now_label = datetime.now(timezone.utc).strftime("%d/%m/%Y %I:%M %p")
+
+    for point in points:
+        pct = fill_level_pct(point)
+        if pct < 80:
+            continue
+        alerts.append(
+            {
+                "id": f"al-cp-{point.code}",
+                "priority": "critica" if pct >= 90 else "advertencia",
+                "title": "Contenedor crítico de llenado",
+                "detail": f"Nivel {pct}%",
+                "source": f"Contenedor {point.code}",
+                "location": point.sector.name if point.sector else point.code,
+                "datetime": now_label,
+                "status": "nueva",
+                "category": "contenedores",
+                "lng": float(point.longitude),
+                "lat": float(point.latitude),
+            }
+        )
+
+    visits = next_visits_by_point(db)
+
+    for point in points:
+        pct = fill_level_pct(point)
+        visit = visits.get(point.id)
+        # La alerta de agenda es para lo que rebosará antes de la próxima visita
+        # sin estar crítico aún (lo crítico ya tiene su alerta de contenedor).
+        if visit is None or pct >= 80:
+            continue
+        if is_at_risk_before_next_visit(point, next_visit_hours=visit.hours):
+            alerts.append(
+                {
+                    "id": f"al-agenda-{point.code}",
+                    "priority": "advertencia",
+                    "title": "Rebosará antes de la próxima visita",
+                    "detail": f"Nivel {pct}% sin recolección a tiempo",
+                    "source": f"Contenedor {point.code}",
+                    "location": point.sector.name if point.sector else point.code,
+                    "datetime": now_label,
+                    "status": "nueva",
+                    "category": "agenda",
+                    "lng": float(point.longitude),
+                    "lat": float(point.latitude),
+                }
+            )
+
+    vehicles = db.scalars(select(Vehicle).where(Vehicle.status == "maintenance")).all()
+    for vehicle in vehicles:
+        alerts.append(
+            {
+                "id": f"al-vh-{vehicle.code}",
+                "priority": "informativa",
+                "title": "Vehículo en mantenimiento",
+                "detail": "Unidad fuera de operación",
+                "source": f"Vehículo {vehicle.code}",
+                "location": "Taller Central",
+                "datetime": now_label,
+                "status": "en-progreso",
+                "category": "mantenimiento",
+                "lng": -62.728,
+                "lat": 8.29,
+            }
+        )
+
+    incidents = db.scalars(
+        select(VehicleIncident)
+        .options(joinedload(VehicleIncident.vehicle))
+        .where(VehicleIncident.resolved_at.is_(None))
+        .order_by(VehicleIncident.reported_at.desc())
+        .limit(5)
+    ).all()
+    for incident in incidents:
+        vehicle = incident.vehicle
+        if vehicle is None:
+            continue
+        alerts.insert(
+            0,
+            {
+                "id": f"al-inc-{incident.id}",
+                "priority": "critica" if incident.incident_type == "breakdown" else "advertencia",
+                "title": "Avería en ruta" if incident.incident_type == "breakdown" else "Incidencia operativa",
+                "detail": incident.description or "Requiere atención",
+                "source": f"Vehículo {vehicle.code}",
+                "location": "En campo",
+                "datetime": now_label,
+                "status": "nueva",
+                "category": "vehiculos",
+                "lng": -62.72,
+                "lat": 8.295,
+            },
+        )
+
+    return alerts

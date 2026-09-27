@@ -1,0 +1,133 @@
+{
+  "generatedAt": "2026-09-24T21:03:31.720892+00:00",
+  "nRuns": 30,
+  "family": [
+    "normal",
+    "peak_traffic",
+    "rain",
+    "saturated",
+    "broken_vehicle"
+  ],
+  "validations": [
+    {
+      "scenarioId": "normal",
+      "nRuns": 30,
+      "nEffective": 30,
+      "meanDistanceCurrent": 1808.7,
+      "meanDistanceOptimized": 1063.3,
+      "savingPct": 41.2,
+      "stdDistanceOptimized": 13.24,
+      "wilcoxon": {
+        "statistic": 465.0,
+        "pValue": 5.472065107714686e-07
+      },
+      "pValueHolm": 2.2485286622669612e-06,
+      "effectSize": {
+        "rankBiserial": 1.0,
+        "cohenDz": 56.29427904399265
+      },
+      "confidenceInterval": {
+        "lower": 740.6,
+        "upper": 749.8
+      },
+      "isSignificant": true,
+      "isSignificantHolm": true
+    },
+    {
+      "scenarioId": "peak_traffic",
+      "nRuns": 30,
+      "nEffective": 30,
+      "meanDistanceCurrent": 1851.4,
+      "meanDistanceOptimized": 1147.29,
+      "savingPct": 38.0,
+      "stdDistanceOptimized": 9.92,
+      "wilcoxon": {
+        "statistic": 465.0,
+        "pValue": 8.386798246005949e-07
+      },
+      "pValueHolm": 2.2485286622669612e-06,
+      "effectSize": {
+        "rankBiserial": 1.0,
+        "cohenDz": 71.00320015928902
+      },
+      "confidenceInterval": {
+        "lower": 700.75,
+        "upper": 707.74
+      },
+      "isSignificant": true,
+      "isSignificantHolm": true
+    },
+    {
+      "scenarioId": "rain",
+      "nRuns": 30,
+      "nEffective": 30,
+      "meanDistanceCurrent": 1795.0,
+      "meanDistanceOptimized": 1099.41,
+      "savingPct": 38.8,
+      "stdDistanceOptimized": 17.36,
+      "wilcoxon": {
+        "statistic": 465.0,
+        "pValue": 7.294736112174368e-07
+      },
+      "pValueHolm": 2.2485286622669612e-06,
+      "effectSize": {
+        "rankBiserial": 1.0,
+        "cohenDz": 40.058328363650205
+      },
+      "confidenceInterval": {
+        "lower": 689.6,
+        "upper": 701.65
+      },
+      "isSignificant": true,
+      "isSignificantHolm": true
+    },
+    {
+      "scenarioId": "saturated",
+      "nRuns": 30,
+      "nEffective": 30,
+      "meanDistanceCurrent": 1973.4,
+      "meanDistanceOptimized": 1230.66,
+      "savingPct": 37.6,
+      "stdDistanceOptimized": 14.58,
+      "wilcoxon": {
+        "statistic": 465.0,
+        "pValue": 4.497057324533923e-07
+      },
+      "pValueHolm": 2.2485286622669612e-06,
+      "effectSize": {
+        "rankBiserial": 1.0,
+        "cohenDz": 50.95849693865538
+      },
+      "confidenceInterval": {
+        "lower": 737.9,
+        "upper": 748.1
+      },
+      "isSignificant": true,
+      "isSignificantHolm": true
+    },
+    {
+      "scenarioId": "broken_vehicle",
+      "nRuns": 30,
+      "nEffective": 30,
+      "meanDistanceCurrent": 1823.8,
+      "meanDistanceOptimized": 1132.56,
+      "savingPct": 37.9,
+      "stdDistanceOptimized": 15.32,
+      "wilcoxon": {
+        "statistic": 465.0,
+        "pValue": 8.29699922016864e-07
+      },
+      "pValueHolm": 2.2485286622669612e-06,
+      "effectSize": {
+        "rankBiserial": 1.0,
+        "cohenDz": 45.11320380315467
+      },
+      "confidenceInterval": {
+        "lower": 685.83,
+        "upper": 696.67
+      },
+      "isSignificant": true,
+      "isSignificantHolm": true
+    }
+  ]
+}

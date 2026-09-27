@@ -1,0 +1,233 @@
+"""Recálculo operativo sin avería (contenedor crítico → pendientes restantes del día)."""
+
+from __future__ import annotations
+
+from datetime import date
+from typing import Any
+
+from fastapi import HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.orm import Session, joinedload
+
+from app.db.models import CollectionPoint, DailyPlan, OptimizedRoute, RouteWaypoint
+from app.domain.criticality import is_critical_now
+from app.services.geo_service import fill_level_pct
+from app.services.notification_service import notify_routes_dispatched
+from app.services.optimization_service import run_optimization_engine
+from app.services.planning_service import get_daily_plan_execution_context
+from app.services.route_playback_service import route_features_to_playback_models
+
+# Escenarios válidos en data/seeds/scenarios.json (el motor lanza ValueError si el
+# id no existe). La UI traduce "contenedor crítico" al escenario "saturated".
+_KNOWN_SCENARIO_IDS = {"normal", "peak_traffic", "rain", "saturated", "broken_vehicle"}
+
+
+def _resolve_collection_point(db: Session, collection_point_code: str) -> CollectionPoint:
+    point = db.scalar(select(CollectionPoint).where(CollectionPoint.code == collection_point_code))
+    if point is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Punto de recolección no encontrado: {collection_point_code}",
+        )
+    return point
+
+
+def _resolve_daily_plan(db: Session, *, daily_plan_id: int | None, operation_date: date) -> DailyPlan:
+    if daily_plan_id is not None:
+        plan = db.get(DailyPlan, daily_plan_id)
+    else:
+        plan = db.scalar(select(DailyPlan).where(DailyPlan.operation_date == operation_date))
+    if plan is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No hay plan del día abierto para recalcular",
+        )
+    if plan.status in {"completed", "partial"} and plan.closed_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El plan del día ya fue cerrado",
+        )
+    return plan
+
+
+def collect_remaining_day_point_ids(db: Session, daily_plan_id: int) -> list[int]:
+    routes = db.scalars(
+        select(OptimizedRoute)
+        .where(
+            OptimizedRoute.daily_plan_id == daily_plan_id,
+            OptimizedRoute.route_kind == "optimized",
+        )
+        .options(joinedload(OptimizedRoute.waypoints))
+    ).unique().all()
+    point_ids: list[int] = []
+    for route in routes:
+        for waypoint in route.waypoints:
+            # Los waypoints de vertedero no tienen punto de recolección.
+            if waypoint.status == "pending" and waypoint.collection_point_id is not None:
+                point_ids.append(waypoint.collection_point_id)
+    return list(dict.fromkeys(point_ids))
+
+
+def handle_critical_container_recalc(
+    db: Session,
+    *,
+    collection_point_code: str,
+    daily_plan_id: int | None = None,
+    operation_date: date | None = None,
+) -> dict[str, Any]:
+    """Recálculo real por contenedor crítico: persiste cambios y notifica."""
+    outcome = _run_critical_container_recalc(
+        db,
+        collection_point_code=collection_point_code,
+        daily_plan_id=daily_plan_id,
+        operation_date=operation_date,
+        dry_run=False,
+    )
+    db.commit()
+    return outcome
+
+
+def simulate_critical_container_recalc(
+    db: Session,
+    *,
+    collection_point_code: str,
+    daily_plan_id: int | None = None,
+    operation_date: date | None = None,
+) -> dict[str, Any]:
+    """Simulación **dry-run**: calcula el recálculo alternativo y revierte la sesión."""
+    try:
+        return _run_critical_container_recalc(
+            db,
+            collection_point_code=collection_point_code,
+            daily_plan_id=daily_plan_id,
+            operation_date=operation_date,
+            dry_run=True,
+        )
+    finally:
+        db.rollback()
+
+
+def run_critical_container_recalc_dry_run(
+    db: Session,
+    *,
+    collection_point_code: str,
+    daily_plan_id: int | None = None,
+    operation_date: date | None = None,
+) -> dict[str, Any]:
+    """Contenedor crítico dry-run **sin revertir** (encadenable).
+
+    Complementa ``simulate_critical_container_recalc``: no hace rollback para poder
+    encadenar la secuencia de simulación del día en una sola transacción.
+    """
+    return _run_critical_container_recalc(
+        db,
+        collection_point_code=collection_point_code,
+        daily_plan_id=daily_plan_id,
+        operation_date=operation_date,
+        dry_run=True,
+    )
+
+
+def _run_critical_container_recalc(
+    db: Session,
+    *,
+    collection_point_code: str,
+    daily_plan_id: int | None,
+    operation_date: date | None,
+    dry_run: bool,
+) -> dict[str, Any]:
+    point = _resolve_collection_point(db, collection_point_code)
+    fill_level = fill_level_pct(point)
+    # En simulación se admite cualquier punto ("¿y si este contenedor se llena?");
+    # el recálculo real solo aplica a contenedores ya en nivel crítico.
+    if not is_critical_now(fill_level) and not dry_run:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"El contenedor {collection_point_code} no está en nivel crítico ({fill_level}%)",
+        )
+
+    plan = _resolve_daily_plan(
+        db,
+        daily_plan_id=daily_plan_id,
+        operation_date=operation_date or date.today(),
+    )
+    remaining_ids = collect_remaining_day_point_ids(db, plan.id)
+    if point.id not in remaining_ids:
+        remaining_ids.append(point.id)
+
+    if not remaining_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No hay paradas pendientes restantes para optimizar hoy",
+        )
+
+    exec_ctx = get_daily_plan_execution_context(db, plan.id)
+    scenario_id = exec_ctx.get("scenarioId")
+    if fill_level >= 90 or scenario_id not in _KNOWN_SCENARIO_IDS:
+        # Un contenedor ≥90% implica condiciones saturadas; un id de escenario
+        # desconocido (p. ej. "critical_bin") haría fallar al motor con 500.
+        scenario_id = "saturated"
+
+    recalc = run_optimization_engine(
+        db,
+        scenario_id,
+        collection_point_ids=remaining_ids,
+        auto_dispatch=not dry_run,
+        planning_level="operational",
+        daily_plan_id=plan.id,
+        weekly_plan_id=plan.weekly_plan_id,
+        operation_date=plan.operation_date,
+        fleet_limit=exec_ctx.get("fleetLimit"),
+        fleet_by_type=exec_ctx.get("fleetByType"),
+        sector_partition=exec_ctx.get("sectorPartition"),
+        contingency_meta={
+            "recalcType": "critical_container",
+            "collectionPointCode": collection_point_code,
+            "collectionPointId": point.id,
+            "fillLevel": fill_level,
+            "remainingPointsCount": len(remaining_ids),
+            "dailyPlanId": plan.id,
+            "simulated": dry_run,
+        },
+        auto_commit=False,
+        include_per_vehicle_routes=True,
+        # Contingencia: priorizar contenedores críticos / en riesgo (Fase 4 / ADR-003).
+        priority_fill_level=True,
+    )
+
+    dispatch = recalc.get("dispatch") or {}
+    route_ids = dispatch.get("dispatchedRouteIds") or []
+    notifications = (
+        []
+        if dry_run
+        else notify_routes_dispatched(db, route_ids, event_type="critical_recalc")
+    )
+
+    alternative_routes = route_features_to_playback_models(
+        (recalc.get("routesPerVehicle") or {}).get("optimized") or []
+    )
+
+    return {
+        "collectionPoint": {
+            "code": point.code,
+            "fillLevel": fill_level,
+            "id": point.id,
+        },
+        "dailyPlanId": plan.id,
+        "operationDate": plan.operation_date.isoformat(),
+        "remainingPoints": len(remaining_ids),
+        "recalculation": recalc,
+        "notifications": notifications,
+        "alternativeRoutes": alternative_routes,
+        "resolution": "reassigned" if alternative_routes else "no_change",
+        "droppedPoints": [],
+        "droppedDetails": [],
+        "simulated": dry_run,
+        "message": (
+            f"Recálculo operativo: {len(remaining_ids)} punto(s) pendiente(s) "
+            f"reoptimizado(s) incluyendo {collection_point_code}."
+            if not dry_run
+            else f"Simulación: {len(remaining_ids)} punto(s) se reoptimizarían incluyendo "
+            f"{collection_point_code}."
+        ),
+    }

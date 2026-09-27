@@ -1,0 +1,461 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * =============================================================================
+ * FEROMAP — Paleta semántica (modo claro + oscuro integrado)
+ * Fase 0–3 — Tokens semánticos + shell integrado (sidebar #0b1220 · app #0f172a).
+ * Referencia: docs/design-system/dark-mode-palette.md
+ * =============================================================================
+ *
+ * | Token (--fero-*)              | Light              | Dark (integrado)   |
+ * |-------------------------------|--------------------|--------------------|
+ * | bg-app                        | #f8fafc            | #0f172a            |
+ * | bg-elevated                   | #ffffff            | #1e293b            |
+ * | bg-sidebar                    | #232AB6 (marca)    | #0b1220            |
+ * | bg-sidebar-elevated           | rgba(255,255,255,.1)| #111827           |
+ * | border-default                | #e2e8f0            | #334155            |
+ * | text-primary                  | #0f172a            | #f1f5f9            |
+ * | text-muted                    | #94a3b8            | #94a3b8            |
+ * | nav-active-bg                 | #34D634            | #34D634            |
+ * | nav-active-text               | #0b1220            | #0b1220            |
+ * | nav-hover-bg                  | rgba(255,255,255,.1)| #1e293b           |
+ * | nav-text (sidebar)            | rgba(255,255,255,.65)| #cbd5e1          |
+ * | nav-text-muted                | rgba(255,255,255,.4)| #64748b           |
+ * | nav-section                   | rgba(255,255,255,.35)| #475569          |
+ * | sidebar-border                | transparent        | #334155            |
+ * | sidebar-divider               | rgba(255,255,255,.1)| #334155           |
+ *
+ * Logo sidebar dark: FERO #fff · MAP #93F555 (--color-fero-green)
+ * =============================================================================
+ */
+
+:root {
+  --fero-bg-app: #f8fafc;
+  --fero-bg-elevated: #ffffff;
+  --fero-bg-sidebar: #232ab6;
+  --fero-bg-sidebar-elevated: rgba(255, 255, 255, 0.1);
+  --fero-border-default: #e2e8f0;
+  --fero-text-primary: #0f172a;
+  --fero-text-secondary: #475569;
+  --fero-text-muted: #94a3b8;
+  --fero-nav-active-bg: #34d634;
+  --fero-nav-active-text: #0b1220;
+  --fero-nav-hover-bg: rgba(255, 255, 255, 0.1);
+  --fero-nav-text: rgba(255, 255, 255, 0.65);
+  --fero-nav-text-muted: rgba(255, 255, 255, 0.4);
+  --fero-nav-section: rgba(255, 255, 255, 0.35);
+  --fero-sidebar-border: transparent;
+  --fero-sidebar-divider: rgba(255, 255, 255, 0.1);
+  --fero-surface-hover: #f8fafc;
+  --fero-surface-active: #f1f5f9;
+  --fero-border-light: #f1f5f9;
+  --fero-glass-bg: rgba(255, 255, 255, 0.8);
+  --fero-glass-border: rgba(255, 255, 255, 0.2);
+}
+
+html.dark {
+  --fero-bg-app: #0f172a;
+  --fero-bg-elevated: #1e293b;
+  --fero-bg-sidebar: #0b1220;
+  --fero-bg-sidebar-elevated: #111827;
+  --fero-border-default: #334155;
+  --fero-text-primary: #f1f5f9;
+  --fero-text-secondary: #cbd5e1;
+  --fero-text-muted: #94a3b8;
+  --fero-nav-active-bg: #34d634;
+  --fero-nav-active-text: #0b1220;
+  --fero-nav-hover-bg: #1e293b;
+  --fero-nav-text: #cbd5e1;
+  --fero-nav-text-muted: #64748b;
+  --fero-nav-section: #475569;
+  --fero-sidebar-border: #334155;
+  --fero-sidebar-divider: #334155;
+  --fero-surface-hover: #334155;
+  --fero-surface-active: #475569;
+  --fero-border-light: #334155;
+  --fero-glass-bg: rgba(15, 23, 42, 0.8);
+  --fero-glass-border: rgba(51, 65, 85, 0.5);
+}
+
+@theme inline {
+  /* Brand */
+  --color-fero-green: #93f555;
+  --color-fero-green-mid: #56e93d;
+  --color-fero-green-dark: #34d634;
+  --color-fero-blue: #1143f3;
+  --color-fero-blue-dark: #232ab6;
+
+  /*
+   * Semantic utilities (Fase 1): bg-app, bg-elevated, bg-sidebar,
+   * bg-sidebar-elevated, border-default, border-sidebar, text-nav, text-nav-muted
+   */
+  --color-app: var(--fero-bg-app);
+  --color-elevated: var(--fero-bg-elevated);
+  --color-bg-app: var(--fero-bg-app);
+  --color-bg-elevated: var(--fero-bg-elevated);
+  --color-bg-sidebar: var(--fero-bg-sidebar);
+  --color-bg-sidebar-elevated: var(--fero-bg-sidebar-elevated);
+  --color-default: var(--fero-border-default);
+  --color-border-default: var(--fero-border-default);
+  --color-border-sidebar: var(--fero-sidebar-border);
+  --color-sidebar-divider: var(--fero-sidebar-divider);
+
+  /* Sidebar — bg-sidebar lee --color-bg-sidebar (criterio Fase 1) */
+  --color-sidebar: var(--color-bg-sidebar);
+  --color-sidebar-elevated: var(--fero-bg-sidebar-elevated);
+
+  /* Navigation (sidebar) */
+  --color-nav: var(--fero-nav-text);
+  --color-nav-muted: var(--fero-nav-text-muted);
+  --color-nav-active-bg: var(--fero-nav-active-bg);
+  --color-nav-active-text: var(--fero-nav-active-text);
+  --color-nav-hover: var(--fero-nav-hover-bg);
+  --color-nav-text: var(--fero-nav-text);
+  --color-nav-text-muted: var(--fero-nav-text-muted);
+  --color-nav-section: var(--fero-nav-section);
+
+  /* Legacy aliases — migrar gradualmente a tokens semánticos */
+  --color-success: #93f555;
+  --color-primary: #56e93d;
+  --color-important: #34d634;
+  --color-info: #1143f3;
+  --color-surface: var(--fero-bg-elevated);
+  --color-surface-hover: var(--fero-surface-hover);
+  --color-surface-active: var(--fero-surface-active);
+  --color-border: var(--fero-border-default);
+  --color-border-light: var(--fero-border-light);
+  --color-text-primary: var(--fero-text-primary);
+  --color-text-secondary: var(--fero-text-secondary);
+  --color-text-muted: var(--fero-text-muted);
+
+  /* @deprecated — alias a tokens semánticos; evitar en código nuevo.
+   * Decisión Fase 2: se conservan para no romper consumidores existentes y se
+   * migran de forma incremental (ver docs/design-system/contratos-ui.md §3). */
+  --color-dark-surface: var(--fero-bg-app);
+  --color-dark-surface-hover: var(--fero-bg-elevated);
+  --color-dark-border: var(--fero-border-default);
+
+  --color-glass-bg: var(--fero-glass-bg);
+  --color-glass-border: var(--fero-glass-border);
+
+  --font-heading: "Poppins", sans-serif;
+  --font-body: "Inter", sans-serif;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+
+  --sidebar-width: 260px;
+  --header-height: 64px;
+}
+
+/* Base Styles */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--fero-bg-app);
+  color: var(--fero-text-primary);
+}
+
+.font-heading {
+  font-family: var(--font-heading);
+}
+
+.font-body {
+  font-family: var(--font-body);
+}
+
+.glass {
+  background: var(--fero-glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--fero-glass-border);
+}
+
+/* MapLibre Popup Overrides */
+.maplibregl-popup-content {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--fero-border-default);
+  padding: 12px;
+  font-size: 14px;
+  background-color: var(--fero-bg-elevated);
+  color: var(--fero-text-primary);
+}
+
+.maplibregl-popup-close-button {
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px 8px;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Sidebar nav — scrollbar acoplado al panel */
+.sidebar-nav-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-nav-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-nav-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.sidebar-nav-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.dark .sidebar-nav-scroll::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+
+.dark .sidebar-nav-scroll::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Simulación — marcadores animados en ejecución */
+.sim-marker--pulse > span {
+  animation: sim-marker-pulse 1.15s ease-in-out infinite;
+}
+
+@keyframes sim-marker-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  }
+  50% {
+    transform: scale(1.12);
+    box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.28);
+  }
+}
+
+.sim-truck-marker {
+  pointer-events: none;
+  transition: transform 0.2s linear;
+}
+
+.route-playback-truck-marker {
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.route-playback-truck-marker__label {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  font-size: 10px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: 0.01em;
+}
+
+.route-playback-truck-marker__rotate {
+  transition: transform 0.15s linear;
+  transform-origin: center center;
+}
+
+.route-playback-truck-marker__body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
+  color: #fff;
+}
+
+.route-playback-stop-marker {
+  pointer-events: none;
+}
+
+.route-playback-stop-marker__dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  border: 2px solid currentColor;
+  background: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  color: #334155;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.route-playback-stop-marker--completed .route-playback-stop-marker__dot {
+  background: #ecfdf5;
+  color: #15803d;
+  border-color: #22c55e !important;
+}
+
+.route-playback-stop-marker--next .route-playback-stop-marker__dot {
+  animation: route-playback-stop-pulse 1.2s ease-in-out infinite;
+  color: #1143f3;
+  background: #eff6ff;
+}
+
+.route-playback-scrubber {
+  width: 100%;
+  height: 6px;
+  cursor: pointer;
+  accent-color: var(--fero-blue, #1143f3);
+  border-radius: 9999px;
+}
+
+.route-playback-scrubber:focus-visible {
+  outline: 2px solid var(--fero-blue, #1143f3);
+  outline-offset: 2px;
+}
+
+@keyframes route-playback-stop-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(17, 67, 243, 0.35);
+  }
+  50% {
+    transform: scale(1.08);
+    box-shadow: 0 0 0 6px rgba(17, 67, 243, 0.12);
+  }
+}
+
+html.dark .route-playback-truck-marker__label {
+  background: rgba(15, 23, 42, 0.92);
+  border-color: rgba(148, 163, 184, 0.35);
+  color: #f8fafc;
+}
+
+html.dark .route-playback-truck-marker__body {
+  border-color: var(--fero-bg-elevated);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.55);
+}
+
+html.dark .route-playback-stop-marker__dot {
+  background: var(--fero-bg-elevated);
+  color: var(--fero-text-secondary);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
+}
+
+html.dark .route-playback-stop-marker--completed .route-playback-stop-marker__dot {
+  background: rgba(22, 101, 52, 0.2);
+  color: #86efac;
+}
+
+html.dark .route-playback-stop-marker--next .route-playback-stop-marker__dot {
+  color: #60a5fa;
+  background: rgba(37, 99, 235, 0.15);
+}
+
+.route-playback-stop-marker--landfill .route-playback-stop-marker__dot {
+  background: #f5f5f4;
+  border-color: #78716c !important;
+  color: #44403c;
+  width: 24px;
+  height: 24px;
+  font-size: 12px;
+}
+
+.landfill-map-marker__pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9999px;
+  border: 2px solid #fff;
+  background: #78716c;
+  color: #fff;
+  font-size: 16px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
+  cursor: grab;
+}
+
+.route-landfill-stop-marker__dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  border: 2px solid #78716c;
+  background: #f5f5f4;
+  color: #44403c;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+/*
+ * Accesibilidad (Fase 2): respeta la preferencia de movimiento reducido del SO.
+ * Neutraliza animaciones/transiciones decorativas sin ocultar contenido.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

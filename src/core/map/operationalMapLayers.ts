@@ -1,0 +1,369 @@
+import maplibregl, { type FilterSpecification, type Map as MapLibreMap, type Marker, Popup } from 'maplibre-gl';
+import type { ContainerCollection, RouteCollection } from '../types/geo';
+import type { LiveVehicle } from '../api/monitoring';
+import { OPERATIONAL_ROUTE_MAP_STYLES } from '../types/operationalRoute';
+
+export const CONTAINER_BUCKET_COLORS: Record<string, string> = {
+  critical: '#ef4444',
+  full: '#f59e0b',
+  normal: '#34D634',
+  partial: '#94a3b8',
+};
+
+export const OPERATIONAL_ROUTES_SOURCE_ID = 'operational-routes';
+export const OPERATIONAL_ROUTES_PENDING_LAYER_ID = 'operational-routes-pending';
+export const OPERATIONAL_ROUTES_ACTIVE_LAYER_ID = 'operational-routes-active';
+
+export type OperationalRouteFeatureProps = {
+  id?: string;
+  routeId?: number | string;
+  label?: string;
+  color?: string;
+  status?: string;
+  vehicleId?: string;
+  routeKind?: string;
+  type?: string;
+  kind?: string;
+};
+
+export const PENDING_ROUTE_STATUS_FILTER: FilterSpecification = ['==', ['get', 'status'], 'pending'];
+/** Cualquier ruta que no sea planificada (incluye status ausente o del API). */
+export const ACTIVE_ROUTE_STATUS_FILTER: FilterSpecification = ['!=', ['get', 'status'], 'pending'];
+
+/** MapLibre no serializa proxies de Solid Store; hay que pasar JSON plano. */
+export function toPlainRouteCollection(routes: RouteCollection): RouteCollection {
+  return JSON.parse(JSON.stringify(routes)) as RouteCollection;
+}
+
+export function routeDisplayKind(
+  props: Pick<OperationalRouteFeatureProps, 'kind' | 'type' | 'routeKind'>,
+): 'current' | 'optimized' {
+  const raw = props.kind ?? props.type ?? props.routeKind;
+  return raw === 'current' ? 'current' : 'optimized';
+}
+
+export function resolveOperationalRouteStatus(
+  props: Pick<OperationalRouteFeatureProps, 'status' | 'type' | 'routeKind' | 'kind'>,
+): 'pending' | 'in_progress' | 'completed' {
+  if (props.status === 'pending' || props.status === 'in_progress' || props.status === 'completed') {
+    return props.status;
+  }
+  return 'in_progress';
+}
+
+export type EnsureOperationalRouteLayerOptions = {
+  splitByStatus?: boolean;
+  singleLayerId?: string;
+};
+
+export function operationalRouteLayerIds(sourceId: string) {
+  return {
+    pending: `${sourceId}-pending`,
+    active: `${sourceId}-active`,
+  };
+}
+
+export function routeLayerStateKey(routeId: number | string): string {
+  return `route-${routeId}`;
+}
+
+export function normalizeOperationalRoutes(routes: RouteCollection): RouteCollection {
+  const plain = toPlainRouteCollection(routes);
+  return {
+    ...plain,
+    features: plain.features.map((feature) => {
+      const props = feature.properties as OperationalRouteFeatureProps;
+      return {
+        ...feature,
+        properties: {
+          ...props,
+          status: resolveOperationalRouteStatus(props),
+          kind: routeDisplayKind(props),
+        },
+      };
+    }),
+  };
+}
+
+export function enabledOperationalRouteIds(
+  routes: RouteCollection,
+  layerState: Record<string, boolean>,
+): Array<number | string> | null {
+  if (!layerState.routes) return [];
+  const features = routes.features;
+  if (features.length === 0) return [];
+
+  const enabled: Array<number | string> = [];
+  for (const feature of features) {
+    const props = feature.properties as OperationalRouteFeatureProps;
+    const routeId = props.routeId ?? props.id;
+    if (routeId == null) continue;
+    const key = routeLayerStateKey(routeId);
+    if (layerState[key] === false) continue;
+    enabled.push(routeId);
+  }
+  if (enabled.length === features.length) return null;
+  return enabled;
+}
+
+function routeIdVisibilityFilter(
+  enabledRouteIds: Array<number | string> | null,
+): FilterSpecification | null {
+  if (enabledRouteIds === null) return null;
+  if (enabledRouteIds.length === 0) {
+    return ['==', ['get', 'routeId'], '__none__'];
+  }
+  return ['in', ['to-string', ['coalesce', ['get', 'routeId'], ['get', 'id']]], ['literal', enabledRouteIds.map(String)]];
+}
+
+function combineFilters(
+  statusFilter: FilterSpecification,
+  routeFilter: FilterSpecification | null,
+): FilterSpecification {
+  if (!routeFilter) return statusFilter;
+  return ['all', statusFilter, routeFilter];
+}
+
+export function syncOperationalRouteLayerFilters(
+  map: MapLibreMap,
+  sourceId: string,
+  options: {
+    routesVisible: boolean;
+    enabledRouteIds: Array<number | string> | null;
+    splitByStatus?: boolean;
+    singleLayerId?: string;
+  },
+) {
+  const visibility = options.routesVisible ? 'visible' : 'none';
+  const routeFilter = routeIdVisibilityFilter(options.enabledRouteIds);
+  const splitByStatus = options.splitByStatus ?? sourceId === OPERATIONAL_ROUTES_SOURCE_ID;
+
+  if (splitByStatus) {
+    const { pending, active } = operationalRouteLayerIds(sourceId);
+    for (const layerId of [pending, active]) {
+      if (!map.getLayer(layerId)) continue;
+      map.setLayoutProperty(layerId, 'visibility', visibility);
+    }
+    if (!options.routesVisible) return;
+
+    if (map.getLayer(pending)) {
+      map.setFilter(pending, combineFilters(PENDING_ROUTE_STATUS_FILTER, routeFilter));
+    }
+    if (map.getLayer(active)) {
+      map.setFilter(active, combineFilters(ACTIVE_ROUTE_STATUS_FILTER, routeFilter));
+    }
+    return;
+  }
+
+  const layerId = options.singleLayerId;
+  if (!layerId || !map.getLayer(layerId)) return;
+  map.setLayoutProperty(layerId, 'visibility', visibility);
+  if (routeFilter) map.setFilter(layerId, routeFilter);
+}
+
+export function containerBucket(fillLevel: number): 'critical' | 'full' | 'normal' | 'partial' {
+  if (fillLevel >= 80) return 'critical';
+  if (fillLevel >= 60) return 'full';
+  if (fillLevel >= 40) return 'normal';
+  return 'partial';
+}
+
+export function vehicleStatusKey(status: string): string {
+  return status.replace('-', '_');
+}
+
+function addSplitOperationalRouteLayers(map: MapLibreMap, sourceId: string) {
+  const { pending, active } = operationalRouteLayerIds(sourceId);
+  const pendingStyle = OPERATIONAL_ROUTE_MAP_STYLES.pending;
+  const activeStyle = OPERATIONAL_ROUTE_MAP_STYLES.in_progress;
+
+  if (!map.getLayer(pending)) {
+    map.addLayer({
+      id: pending,
+      type: 'line',
+      source: sourceId,
+      filter: PENDING_ROUTE_STATUS_FILTER,
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: {
+        'line-color': ['coalesce', ['get', 'color'], '#1143F3'],
+        'line-width': 4,
+        'line-opacity': pendingStyle.opacity,
+        'line-dasharray': [2, 2],
+      },
+    });
+  }
+  if (!map.getLayer(active)) {
+    map.addLayer({
+      id: active,
+      type: 'line',
+      source: sourceId,
+      filter: ACTIVE_ROUTE_STATUS_FILTER,
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: {
+        'line-color': ['coalesce', ['get', 'color'], '#34D634'],
+        'line-width': 4,
+        'line-opacity': activeStyle.opacity,
+      },
+    });
+  }
+}
+
+export function ensureOperationalRouteLayer(
+  map: MapLibreMap,
+  routes: RouteCollection,
+  sourceId = OPERATIONAL_ROUTES_SOURCE_ID,
+  options: EnsureOperationalRouteLayerOptions | string = {},
+) {
+  const resolved: EnsureOperationalRouteLayerOptions =
+    typeof options === 'string' ? { splitByStatus: false, singleLayerId: options } : options;
+
+  const splitByStatus =
+    resolved.splitByStatus ??
+    (sourceId === OPERATIONAL_ROUTES_SOURCE_ID || sourceId === 'live-routes');
+  const data = normalizeOperationalRoutes(routes);
+
+  if (!map.getSource(sourceId)) {
+    map.addSource(sourceId, { type: 'geojson', data });
+  } else {
+    (map.getSource(sourceId) as maplibregl.GeoJSONSource).setData(data);
+  }
+
+  if (splitByStatus) {
+    addSplitOperationalRouteLayers(map, sourceId);
+    return;
+  }
+
+  const layerId = resolved.singleLayerId ?? `${sourceId}-line`;
+  if (!map.getLayer(layerId)) {
+    map.addLayer({
+      id: layerId,
+      type: 'line',
+      source: sourceId,
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: {
+        'line-color': ['coalesce', ['get', 'color'], '#34D634'],
+        'line-width': 4,
+        'line-opacity': 0.9,
+      },
+    });
+  }
+}
+
+export function operationalRouteLayerIdsToFront(map: MapLibreMap, sourceId = OPERATIONAL_ROUTES_SOURCE_ID) {
+  const { pending, active } = operationalRouteLayerIds(sourceId);
+  const single = `${sourceId}-line`;
+  for (const layerId of [pending, active, single]) {
+    if (!map.getLayer(layerId)) continue;
+    map.moveLayer(layerId);
+  }
+}
+
+export interface FleetMarkerOptions {
+  onSelect?: (vehicle: LiveVehicle) => void;
+  buildPopupHtml?: (vehicle: LiveVehicle) => string;
+  createMarkerElement: (vehicle: LiveVehicle) => HTMLElement;
+}
+
+export function syncFleetMarkers(
+  map: MapLibreMap,
+  fleet: LiveVehicle[],
+  markersById: Map<string, Marker>,
+  options: FleetMarkerOptions,
+) {
+  if (!map.isStyleLoaded()) return;
+
+  const nextIds = new Set(fleet.map((vehicle) => vehicle.id));
+  for (const [id, marker] of markersById.entries()) {
+    if (!nextIds.has(id)) {
+      marker.remove();
+      markersById.delete(id);
+    }
+  }
+
+  for (const vehicle of fleet) {
+    const existing = markersById.get(vehicle.id);
+    if (existing) {
+      existing.setLngLat([vehicle.lng, vehicle.lat]);
+      continue;
+    }
+
+    const element = options.createMarkerElement(vehicle);
+    element.addEventListener('click', (event) => {
+      event.stopPropagation();
+      options.onSelect?.(vehicle);
+    });
+
+    const marker = new maplibregl.Marker({ element }).setLngLat([vehicle.lng, vehicle.lat]);
+
+    if (options.buildPopupHtml) {
+      marker.setPopup(
+        new Popup({ offset: 18, maxWidth: '280px' }).setHTML(options.buildPopupHtml(vehicle)),
+      );
+    }
+
+    marker.addTo(map);
+    markersById.set(vehicle.id, marker);
+  }
+}
+
+export interface ContainerMarkerOptions {
+  visibleBuckets?: Set<string>;
+  createMarkerElement: (color: string) => HTMLElement;
+  buildPopupHtml?: (feature: ContainerCollection['features'][number]) => string;
+}
+
+export function syncContainerMarkers(
+  map: MapLibreMap,
+  containers: ContainerCollection,
+  markersById: Map<string, Marker>,
+  options: ContainerMarkerOptions,
+) {
+  if (!map.isStyleLoaded()) return;
+
+  const visible: Array<{ id: string; bucket: string; feature: ContainerCollection['features'][number] }> = [];
+  for (const feature of containers.features) {
+    const id = feature.properties.id;
+    const bucket =
+      (feature.properties as { bucket?: string }).bucket ??
+      containerBucket(feature.properties.fillLevel);
+    if (options.visibleBuckets && !options.visibleBuckets.has(bucket)) continue;
+    visible.push({ id, bucket, feature });
+  }
+
+  const nextIds = new Set(visible.map((row) => row.id));
+  for (const [id, marker] of markersById.entries()) {
+    if (!nextIds.has(id)) {
+      marker.remove();
+      markersById.delete(id);
+    }
+  }
+
+  for (const { id, bucket, feature } of visible) {
+    const coords = feature.geometry.coordinates as [number, number];
+    const existing = markersById.get(id);
+    if (existing) {
+      const prevBucket = existing.getElement().dataset.bucket;
+      if (prevBucket === bucket) {
+        existing.setLngLat(coords);
+        continue;
+      }
+      existing.remove();
+      markersById.delete(id);
+    }
+
+    const color = CONTAINER_BUCKET_COLORS[bucket] ?? CONTAINER_BUCKET_COLORS.normal;
+    const element = options.createMarkerElement(color);
+    element.dataset.bucket = bucket;
+    element.dataset.containerId = id;
+    const marker = new maplibregl.Marker({ element }).setLngLat(coords);
+
+    if (options.buildPopupHtml) {
+      marker.setPopup(
+        new Popup({ offset: 18, maxWidth: '280px' }).setHTML(options.buildPopupHtml(feature)),
+      );
+    }
+
+    marker.addTo(map);
+    markersById.set(id, marker);
+  }
+}
