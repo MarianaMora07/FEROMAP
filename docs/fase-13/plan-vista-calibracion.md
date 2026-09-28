@@ -52,9 +52,6 @@ La ruta se centraliza en una constante para poder moverla sin tocar componentes.
 **Excluido**
 
 - Editar la configuración de Administración desde esta vista (sigue en `/settings`).
-<<<<<<< HEAD
-- Escribir el markdown de evidencia desde la UI (sigue siendo server-side).
-=======
 - Escribir el **markdown** de evidencia desde la UI (lo genera el CLI; la vista escribe la caché JSON).
 - Barridos con interacciones entre parámetros (el diseño es OFAT / un factor a la vez).
 
