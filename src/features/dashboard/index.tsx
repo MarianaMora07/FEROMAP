@@ -3,6 +3,8 @@ import { canOptimize, isConductor, isResident } from '../../core/auth/permission
 import { authUser } from '../../core/stores/authStore';
 import { loadDashboardData, dashboardState, dashboardSummary } from '../../core/stores/dashboardStore';
 import { PlannerHubSection } from '../planning/PlannerHubSection';
+import { DashboardAnalyticsSection } from './DashboardAnalyticsSection';
+import { SectorHeatmap } from './components/SectorHeatmap';
 import { PlannerOverviewSection } from './PlannerOverviewSection';
 import { OperationalSituationPanel } from './OperationalSituationPanel';
 import { OperatorHubSection } from '../operator/OperatorHubSection';
@@ -61,6 +63,8 @@ export default function DashboardPage() {
         </Show>
 
         <PlannerOverviewSection />
+        <SectorHeatmap height={350} />
+        <DashboardAnalyticsSection />
         <PlannerHubSection />
         <OperationalSituationPanel />
       </Show>

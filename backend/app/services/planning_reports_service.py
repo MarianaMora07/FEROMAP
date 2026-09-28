@@ -5,13 +5,27 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.db.models import CollectionPoint, Sector
 from app.services.planning_service import get_daily_plan_by_date, get_weekly_plan
 
 
 def _pdf_safe(text: str) -> str:
     return text.encode("latin-1", errors="replace").decode("latin-1")
+
+
+def _get_sector_names_by_point_ids(db: Session, point_ids: list[int]) -> dict[int, str]:
+    """Obtiene un mapa de point_id -> nombre del sector para una lista de IDs de puntos."""
+    if not point_ids:
+        return {}
+    rows = db.execute(
+        select(CollectionPoint.id, Sector.name)
+        .join(Sector, CollectionPoint.sector_id == Sector.id)
+        .where(CollectionPoint.id.in_(point_ids))
+    ).all()
+    return {pid: sector_name for pid, sector_name in rows}
 
 
 def export_weekly_plan_pdf(db: Session, plan_id: int) -> bytes:
@@ -24,7 +38,7 @@ def export_weekly_plan_pdf(db: Session, plan_id: int) -> bytes:
     pdf.set_font("Helvetica", "B", 16)
     pdf.cell(0, 10, _pdf_safe("FEROMAP - Plan semanal"), ln=True)
     pdf.set_font("Helvetica", "", 10)
-    pdf.cell(0, 8, _pdf_safe(f"Semana: {plan['weekStartDate']} — {plan['weekEndDate']}"), ln=True)
+    pdf.cell(0, 8, _pdf_safe(f"Semana: {plan['weekStartDate']} a {plan['weekEndDate']}"), ln=True)
     pdf.cell(0, 8, _pdf_safe(f"Estado: {plan['status']} | Escenario: {plan['scenarioId']}"), ln=True)
     pdf.ln(4)
 
@@ -38,13 +52,22 @@ def export_weekly_plan_pdf(db: Session, plan_id: int) -> bytes:
             0,
             8,
             _pdf_safe(
-                f"{day['operationDate']} — {len(day['collectionPointIds'])} puntos{fleet_label}{override_label}"
+                f"{day['operationDate']} a {len(day['collectionPointIds'])} puntos{fleet_label}{override_label}"
             ),
             ln=True,
         )
         pdf.set_font("Helvetica", "", 9)
         if day["collectionPointIds"]:
-            pdf.multi_cell(0, 5, _pdf_safe("Puntos: " + ", ".join(str(pid) for pid in day["collectionPointIds"])))
+            sector_names = _get_sector_names_by_point_ids(db, day["collectionPointIds"])
+            # Agrupar puntos por sector y contar
+            sector_counts: dict[str, int] = {}
+            for pid in day["collectionPointIds"]:
+                sector_name = sector_names.get(pid, "—")
+                sector_counts[sector_name] = sector_counts.get(sector_name, 0) + 1
+            lines = []
+            for sector_name, count in sector_counts.items():
+                lines.append(f"{sector_name}: {count}")
+            pdf.multi_cell(0, 5, _pdf_safe("Puntos por sector:\n" + "\n".join(lines)))
         pdf.ln(2)
 
     return bytes(pdf.output(dest="S"))

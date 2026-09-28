@@ -3,6 +3,14 @@
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "design-system/*": ["src/design-system/*"],
+      "core/*": ["src/core/*"],
+      "features/*": ["src/features/*"]
+    },
+    "ignoreDeprecations": "6.0",
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "jsx": "preserve",
@@ -14,5 +22,5 @@
     "resolveJsonModule": true,
     "types": ["vite/client"]
   },
-  "include": ["src"]
+  "include": ["src", "src/global.d.ts"]
 }
