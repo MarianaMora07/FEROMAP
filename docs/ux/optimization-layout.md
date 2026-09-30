@@ -214,7 +214,7 @@ flowchart TD
 >    `optimizationHrefFrom` preserva el query al navegar). `‹ ›`, el calendario y el gate conservan
 >    la pestaña y reinician la sub-vista a **Balance**.
 > 3. **Menú ⋯ agrupado (I).** Secciones con encabezado (`role="group"`): **Simulación** (Simular día,
->    Simular contingencia, Simular ejecución del día), **Notificación y exportación** (Reenviar, Exportar PDF) y **Navegación**
+>    Simular contingencia), **Notificación y exportación** (Reenviar, Exportar PDF) y **Navegación**
 >    (Ver en mapa operativo). Se retira «Historial de planificación» por duplicar el sidebar
 >    («Historial unificado»).
 > 4. **Pendientes en un solo nivel (J).** La pestaña **Pendientes** muestra
@@ -346,13 +346,13 @@ flowchart TD
 > ya se calculó; el comparativo previsto vs. real aparecerá al cerrar el día») para no leerse como
 > si la simulación no hubiera hecho nada.
 >
-> **Ejecución simulada del día (2026-09-26).** `simulate_day_execution` (ya existente en el backend,
-> antes sin exponer) se publica en `POST /planning/daily/{id}/simulate-execution` y en la UI como
-> **⋯ → Simulación → Simular ejecución del día** (`optimization-menu-simulate-execution`) y botón en
-> **Resultados → Real** cuando el día tiene `servedPoints = 0` (`optimization-simulate-execution`).
-> Marca las paradas como visitadas (con `confirmation_source='simulated'`), consolida `actualKpis`
-> y **no cierra el día**. Resuelve el «previsto vs. real» todo a 0 de un cierre sin datos de campo:
-> sin ejecución registrada no hay distancia, duración ni peso reales.
+> **Unificación previsto vs. real (2026-09-28).** El disparador único **Simular día**
+> (`optimization-simulate-day`) reutiliza la simulación guionada (dry-run) y, además, registra la
+> ejecución del día (`POST /planning/daily/{id}/simulate-execution`, `confirmation_source='simulated'`):
+> marca las paradas como visitadas, consolida `actualKpis` (bloque **Real**) y **no cierra el día**. Se
+> retira el disparador separado «Simular ejecución del día» (menú ⋯ y botón en Resultados) por quedar
+> redundante. Resuelve el «previsto vs. real» todo a 0 de un cierre sin datos de campo; se omite si el
+> día ya está cerrado.
 >
 > **DoD global (actualizado)** — **Plan · Rutas por vehículo · Resultados · Pendientes** (4 destinos de
 > primer nivel); cada métrica

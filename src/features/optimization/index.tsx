@@ -2,7 +2,6 @@ import { For, Show, createEffect, createMemo, createResource, createSignal, onCl
 import { A, useNavigate, useSearchParams } from '@solidjs/router';
 import {
   Download,
-  ListChecks,
   MapPin,
   MoreVertical,
   Route,
@@ -37,7 +36,6 @@ import {
   optimizationState,
   refreshDailyPlan,
   selectOperationDate,
-  simulateDayExecution,
 } from '../../core/stores/optimizationStore';
 import {
   buildDaySummaryRows,
@@ -450,25 +448,6 @@ export default function OptimizationPage() {
     }
   };
 
-  // Ejecución simulada (demo): registra el "real" del día para poder contrastarlo con el plan.
-  const [isSimulatingExecution, setIsSimulatingExecution] = createSignal(false);
-  const handleSimulateExecution = async () => {
-    setIsSimulatingExecution(true);
-    try {
-      const executed = await simulateDayExecution();
-      globalToast.addToast(
-        `Ejecución simulada: ${executed} parada(s) marcadas como visitadas.`,
-        'success',
-      );
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'No se pudo simular la ejecución del día';
-      globalToast.addToast(message, 'error');
-    } finally {
-      setIsSimulatingExecution(false);
-    }
-  };
-
   const handleDownloadDailyPdf = async () => {
     if (!dailyPlan()?.id) return;
     const blob = await downloadDailyPlanPdf(dailyPlan()!.id);
@@ -643,20 +622,7 @@ export default function OptimizationPage() {
                   <AlertTriangle size={15} class="shrink-0 text-text-muted" />
                   Simular contingencia
                 </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  class="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-text-primary hover:bg-app disabled:opacity-40"
-                  disabled={!hasResults() || dayStatusKey() === 'closed' || isSimulatingExecution()}
-                  data-testid="optimization-menu-simulate-execution"
-                  onClick={() => {
-                    setPageMenuOpen(false);
-                    void handleSimulateExecution();
-                  }}
-                >
-                  <ListChecks size={15} class="shrink-0 text-text-muted" />
-                  Simular ejecución del día
-                </button>
+
               </div>
 
               <div
@@ -827,8 +793,8 @@ export default function OptimizationPage() {
               </Show>
               <p class="text-base font-semibold text-text-primary">Aún no hay resultados</p>
               <p class="mx-auto mt-1 max-w-md text-sm text-text-muted">
-                Simula el día para ver el previsto del plan frente a la operación actual y, al
-                terminar la jornada, ciérrala para ver el previsto frente al real.
+                Simula el día para ver el previsto del plan frente a la operación actual y el
+                real consolidado de la jornada.
               </p>
               <div class="mt-4 flex flex-wrap justify-center gap-2">
                 <Show
@@ -896,30 +862,7 @@ export default function OptimizationPage() {
                 Real · previsto vs. real · {humanDateShort(selectedDate())}
               </p>
               <OptimizationDayActualsPanel />
-              <Show
-                when={
-                  (dailyPlan()?.actualKpis?.servedPoints ?? 0) === 0 && dayStatusKey() !== 'closed'
-                }
-              >
-                <div class="flex flex-wrap items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    class="gap-1.5"
-                    icon={<Play size={14} />}
-                    loading={isSimulatingExecution()}
-                    disabled={isSimulatingExecution()}
-                    data-testid="optimization-simulate-execution"
-                    onClick={() => void handleSimulateExecution()}
-                  >
-                    Simular ejecución del día
-                  </Button>
-                  <span class="text-xs text-text-muted">
-                    Registra una ejecución de demo (paradas visitadas) para contrastar previsto vs.
-                    real.
-                  </span>
-                </div>
-              </Show>
+
               <Show when={!dailyPlan()?.actualKpis}>
                 <p class="text-sm text-text-muted" data-testid="optimization-results-consolidating">
                   Aún no hay consolidación previsto vs. real para este día.
@@ -945,13 +888,14 @@ export default function OptimizationPage() {
                 Real · previsto vs. real
               </p>
               <p class="mt-1 text-sm text-text-muted">
-                La simulación del día ya se calculó. El comparativo{' '}
-                <span class="font-semibold text-text-secondary">previsto vs. real</span> aparecerá al
-                cerrar el día
+                La simulación del día ya se calculó. Vuelve a ejecutar{' '}
+                <span class="font-semibold text-text-secondary">Simular día</span> para consolidar el
+                comparativo previsto vs. real.
                 <Show when={isInCourse()}>
                   {' '}
-                  — usa <span class="font-semibold text-text-secondary">Cerrar día</span> en la
-                  barra superior cuando termine.
+                  Cuando termine la jornada, ciérrala con{' '}
+                  <span class="font-semibold text-text-secondary">Cerrar día</span> en la barra
+                  superior.
                 </Show>
               </p>
             </div>

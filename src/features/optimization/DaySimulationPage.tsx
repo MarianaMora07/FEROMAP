@@ -7,7 +7,7 @@ import { OperationalMap } from '../../core/map/OperationalMap';
 import { fitMapToOperationalData } from '../../core/map/operationalMapConfig';
 import { fetchDaySimulation } from '../../core/api/daySimulation';
 import { optimizationHref } from '../../core/planning/operationalLinks';
-import { useDaySimulation } from '../route-playback/useDaySimulation';
+import { DAY_SIMULATION_SPEED, useDaySimulation } from '../route-playback/useDaySimulation';
 import { buildDayVehicleOptions, filterPlaybackRoutesByLabels, inPlayVehicleLabels } from '../route-playback/daySimulationUx';
 import { RoutePlaybackLayer } from '../route-playback/RoutePlaybackLayer';
 import { RoutePlaybackLegend } from '../route-playback/RoutePlaybackLegend';
@@ -50,6 +50,10 @@ export default function DaySimulationPage() {
   });
 
   const controller = useDaySimulation(() => filteredSimulation());
+
+  // Duración real de la animación tras aplicar el factor de velocidad del día.
+  const playbackMinutes = () =>
+    Math.round((filteredSimulation()?.playbackDurationMinutes ?? 5) / DAY_SIMULATION_SPEED);
 
   const [mapInstance, setMapInstance] = createSignal<MapLibreMap | undefined>();
   let fitted = false;
@@ -123,7 +127,7 @@ export default function DaySimulationPage() {
         <div>
           <h1 id="page-title" class="font-heading text-xl font-bold text-text-primary">Simulación de recorrido</h1>
           <p class="flex flex-wrap items-center gap-2 text-sm text-text-muted">
-            <span>{operationDate() || 'Plan del día'} · animación comprimida (~5 min)</span>
+            <span>{operationDate() || 'Plan del día'} · animación comprimida (~{playbackMinutes()} min)</span>
             <span
               class={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
                 condition() === 'none'

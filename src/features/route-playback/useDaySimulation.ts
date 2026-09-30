@@ -19,7 +19,8 @@ import {
 } from './daySimulationUx';
 
 /**
- * Controlador de la animación del día: reproduce la jornada comprimida (~5 min) y
+ * Controlador de la animación del día: reproduce la jornada comprimida (el backend la
+ * comprime a ~5 min; `DAY_SIMULATION_SPEED` la frena para apreciar el avance simultáneo) y
  * **pausa** en cada contingencia guionada. Al continuar, el paso **fusiona** su plan
  * alternativo con el tramo actual: se conservan las rutas no afectadas.
  *
@@ -41,6 +42,14 @@ export interface DaySimulationController extends RoutePlaybackController {
 function clamp01(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
+
+/**
+ * Factor de velocidad de la animación del día (`1` = ritmo objetivo del backend, ~5 min).
+ *
+ * El backend comprime la jornada completa en ~5 min, demasiado rápido para apreciar el
+ * avance simultáneo de los camiones: con `0.5` la animación dura el doble.
+ */
+export const DAY_SIMULATION_SPEED = 0.5;
 
 export function useDaySimulation(
   simulation: () => DaySimulation | null,
@@ -88,7 +97,7 @@ export function useDaySimulation(
     lastTimestamp = timestamp;
 
     const total = totalMs();
-    const nextElapsed = Math.min(elapsedMs() + delta, total);
+    const nextElapsed = Math.min(elapsedMs() + delta * DAY_SIMULATION_SPEED, total);
     const nextProgress = clamp01(nextElapsed / total);
 
     // Pausa en el próximo evento guionado alcanzado.

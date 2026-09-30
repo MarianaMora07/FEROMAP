@@ -2,7 +2,8 @@ import { For, Show, createSignal } from 'solid-js';
 import { AlertTriangle, CheckCircle2, Eye, ListChecks, Loader2 } from 'lucide-solid';
 import { Button, SelectField } from '../../design-system/components';
 import { fetchDaySimulation, type DaySimulation, type DaySimulationStep } from '../../core/api/daySimulation';
-import { optimizationState, markDaySimulated } from '../../core/stores/optimizationStore';
+import { optimizationState, markDaySimulated, simulateDayExecution } from '../../core/stores/optimizationStore';
+import { globalToast } from '../../core/stores/toastStore';
 import type { DaySimulationCondition } from '../../core/planning/operationalLinks';
 
 type SimulationMode = 'watch' | 'background';
@@ -26,8 +27,32 @@ function stepTitle(step: DaySimulationStep): string {
  * - **Ver la animación** → abre `/optimization/simulation` (recorrido del día).
  * - **Calcular en 2º plano** → calcula la secuencia y muestra solo los resultados aquí.
  *
- * Es de **solo lectura**: reutiliza la simulación guionada (dry-run) del backend.
+ * Unifica «Simular día» con el antiguo «Simular ejecución del día»: además de reutilizar la
+ * simulación guionada (dry-run) del backend, **registra la ejecución del día** (paradas
+ * visitadas, `confirmation_source='simulated'`) para dejar consolidado el previsto vs. real.
  */
+
+/**
+ * Registra la ejecución simulada del día y deja el «real» consolidado (previsto vs. real).
+ *
+ * Se omite si el día ya está cerrado: el backend rechaza re-marcar paradas y el real ya quedó
+ * escrito al cerrar. Los fallos no bloquean la simulación: solo se avisan por toast.
+ */
+async function registerDayExecution(): Promise<void> {
+  const plan = optimizationState.dailyPlan;
+  if (!plan || plan.closedAt) return;
+  try {
+    const executed = await simulateDayExecution();
+    globalToast.addToast(
+      `Ejecución simulada: ${executed} parada(s) marcadas como visitadas.`,
+      'success',
+    );
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'No se pudo registrar la ejecución del día';
+    globalToast.addToast(message, 'error');
+  }
+}
 export function DaySimulationDialog(props: {
   onWatch: (condition: DaySimulationCondition, scenario: string | null) => void;
   onClose: () => void;
@@ -72,6 +97,13 @@ export function DaySimulationDialog(props: {
       // Ver la animación abre el recorrido (que recalcula en su propia página):
       // se marca el día como simulado al iniciar el flujo.
       if (operationDate) markDaySimulated(operationDate);
+      // Unificado: «Simular día» también deja el real consolidado antes de navegar.
+      setLoading(true);
+      try {
+        await registerDayExecution();
+      } finally {
+        setLoading(false);
+      }
       props.onWatch(condition(), scenarioOverride());
       return;
     }
@@ -85,6 +117,8 @@ export function DaySimulationDialog(props: {
     try {
       setSimulation(await fetchDaySimulation(dailyPlanId, scenarioOverride()));
       if (operationDate) markDaySimulated(operationDate);
+      // Unificado: «Simular día» también deja el real consolidado.
+      await registerDayExecution();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo calcular la simulación del día');
     } finally {
@@ -102,8 +136,9 @@ export function DaySimulationDialog(props: {
   return (
     <div class="space-y-5" data-testid="day-simulation-dialog">
       <p class="text-sm text-text-secondary">
-        Simula la jornada antes de comprometer rutas. Elige el escenario del día, indica si hay
-        condiciones extraordinarias y cómo quieres ver el resultado.
+        Simula la jornada y registra su ejecución (paradas visitadas) para consolidar el previsto
+        vs. real. Elige el escenario del día, indica si hay condiciones extraordinarias y cómo
+        quieres ver el resultado.
       </p>
 
       <div class="space-y-2">
